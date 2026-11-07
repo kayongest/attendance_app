@@ -1,91 +1,100 @@
--- Identity AttendanceApp — MySQL Schema & Seed Data (XAMPP)
-CREATE DATABASE IF NOT EXISTS `attendance_app`
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
+-- aBility Manager (id_badges.php#pane-kiosk) — Standalone Database Schema & Seed
+-- Can be imported into `ability_db` or `attendance_app` in XAMPP phpMyAdmin.
 
+CREATE DATABASE IF NOT EXISTS `attendance_app` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `attendance_app`;
 
--- 1. Workspace & Live Event Summary Metrics
-CREATE TABLE IF NOT EXISTS `workspace_metrics` (
-  `id` INT PRIMARY KEY,
-  `event_name` VARCHAR(160) NOT NULL DEFAULT 'Form & Future Summit 2026',
-  `total_people` INT NOT NULL DEFAULT 1338,
-  `registered` INT NOT NULL DEFAULT 1284,
-  `checked_in` INT NOT NULL DEFAULT 964,
-  `waitlist` INT NOT NULL DEFAULT 42,
-  `cancelled` INT NOT NULL DEFAULT 12,
-  `checked_in_delta` INT NOT NULL DEFAULT 186,
-  `ticket_revenue` INT NOT NULL DEFAULT 128400,
-  `last_arrival_time` VARCHAR(32) NOT NULL DEFAULT '10:06 AM',
-  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+CREATE TABLE IF NOT EXISTS `users` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `username` VARCHAR(64) NOT NULL UNIQUE,
+    `full_name` VARCHAR(120) NOT NULL,
+    `email` VARCHAR(150) DEFAULT NULL,
+    `phone` VARCHAR(50) DEFAULT '+250 788 100 200',
+    `role` VARCHAR(50) NOT NULL DEFAULT 'technician',
+    `department` VARCHAR(80) DEFAULT 'Audio',
+    `profile_image` VARCHAR(255) DEFAULT NULL,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 2. Attendees Directory Table
-CREATE TABLE IF NOT EXISTS `attendees` (
-  `id` VARCHAR(64) PRIMARY KEY,
-  `initials` VARCHAR(8) NOT NULL,
-  `bg_overview` VARCHAR(16) NOT NULL,
-  `bg_directory` VARCHAR(16) NOT NULL,
-  `color` VARCHAR(16) NOT NULL,
-  `color_directory` VARCHAR(16) NOT NULL,
-  `name` VARCHAR(120) NOT NULL,
-  `email` VARCHAR(160) NOT NULL,
-  `company` VARCHAR(120) NOT NULL,
-  `role` VARCHAR(120) NOT NULL,
-  `ticket` VARCHAR(64) NOT NULL,
-  `ticket_price` INT NOT NULL DEFAULT 100,
-  `ticket_highlight` TINYINT(1) NOT NULL DEFAULT 0,
-  `registered_date` VARCHAR(32) NOT NULL,
-  `status` VARCHAR(32) NOT NULL DEFAULT 'Registered',
-  `checked_in` TINYINT(1) NOT NULL DEFAULT 0,
-  `checkin_time` VARCHAR(32) DEFAULT NULL,
-  `checkin_station` VARCHAR(64) DEFAULT 'North Foyer Kiosk 01',
-  `sort_order` INT NOT NULL DEFAULT 100,
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE IF NOT EXISTS `user_badges` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NOT NULL UNIQUE,
+    `badge_code` VARCHAR(32) NOT NULL UNIQUE,
+    `rfid_uid` VARCHAR(64) DEFAULT NULL,
+    `clearance_level` VARCHAR(50) NOT NULL DEFAULT 'L1_VENUE_BASIC',
+    `stock_access_mode` VARCHAR(32) NOT NULL DEFAULT 'none',
+    `allowed_stock_ids` TEXT DEFAULT NULL,
+    `venue_access_mode` VARCHAR(32) NOT NULL DEFAULT 'assigned_only',
+    `allowed_event_ids` TEXT DEFAULT NULL,
+    `badge_status` VARCHAR(32) NOT NULL DEFAULT 'active',
+    `emergency_contact` VARCHAR(100) DEFAULT '+250 788 000 112',
+    `blood_group` VARCHAR(10) DEFAULT 'O+',
+    `issued_at` DATE NOT NULL,
+    `expires_at` DATE NOT NULL,
+    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 3. Events Directory Table
+CREATE TABLE IF NOT EXISTS `stock_locations` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(120) NOT NULL,
+    `code` VARCHAR(32) DEFAULT 'NDR-STK',
+    `location_code` VARCHAR(32) DEFAULT 'NDR',
+    `location` VARCHAR(160) DEFAULT 'Kigali, Rwanda',
+    `open_time` VARCHAR(16) DEFAULT '08:00:00',
+    `close_time` VARCHAR(16) DEFAULT '18:00:00',
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS `events` (
-  `id` VARCHAR(64) PRIMARY KEY,
-  `month_label` VARCHAR(8) NOT NULL,
-  `day_label` VARCHAR(8) NOT NULL,
-  `name` VARCHAR(160) NOT NULL,
-  `type` VARCHAR(80) NOT NULL,
-  `date_label` VARCHAR(64) NOT NULL,
-  `time_label` VARCHAR(64) NOT NULL,
-  `venue` VARCHAR(120) NOT NULL,
-  `city` VARCHAR(120) NOT NULL,
-  `registered_count` INT NOT NULL DEFAULT 0,
-  `capacity_count` INT NOT NULL DEFAULT 100,
-  `bar_width_px` INT NOT NULL DEFAULT 0,
-  `is_past_bar` TINYINT(1) NOT NULL DEFAULT 0,
-  `status` VARCHAR(32) NOT NULL DEFAULT 'Upcoming',
-  `action_label` VARCHAR(64) NOT NULL DEFAULT 'Manage event →',
-  `action_target` VARCHAR(32) NOT NULL DEFAULT 'attendees',
-  `sort_order` INT NOT NULL DEFAULT 100,
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `id` VARCHAR(64) PRIMARY KEY,
+    `title` VARCHAR(160) NOT NULL,
+    `location` VARCHAR(160) DEFAULT 'Kigali Convention Centre',
+    `date` DATE DEFAULT NULL,
+    `call_time` VARCHAR(32) DEFAULT '08:00',
+    `project_manager` VARCHAR(120) DEFAULT 'Operations PM',
+    `tech_lead` VARCHAR(120) DEFAULT 'Tech Lead',
+    `assigned_technician` TEXT DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 4. 30-Minute Check-in Velocity Intervals
-CREATE TABLE IF NOT EXISTS `checkin_intervals` (
-  `id` INT PRIMARY KEY,
-  `slot_label` VARCHAR(16) NOT NULL,
-  `guest_count` INT NOT NULL,
-  `bar_height_px` DECIMAL(5,1) NOT NULL,
-  `is_peak` TINYINT(1) NOT NULL DEFAULT 0
+CREATE TABLE IF NOT EXISTS `attendance_logs` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NOT NULL,
+    `badge_code` VARCHAR(32) NOT NULL,
+    `checkpoint_type` VARCHAR(32) NOT NULL DEFAULT 'event_venue',
+    `checkpoint_id` INT NOT NULL DEFAULT 1,
+    `checkpoint_name` VARCHAR(160) NOT NULL,
+    `event_id` INT DEFAULT NULL,
+    `scan_action` VARCHAR(32) NOT NULL DEFAULT 'check_in',
+    `access_status` VARCHAR(32) NOT NULL DEFAULT 'granted',
+    `denial_reason` VARCHAR(255) DEFAULT NULL,
+    `scheduled_call_time` VARCHAR(32) DEFAULT '08:00',
+    `punctuality_status` VARCHAR(32) NOT NULL DEFAULT 'on_time',
+    `scanned_by` INT DEFAULT 1,
+    `notes` VARCHAR(255) DEFAULT NULL,
+    `scanned_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 5. Real-time Check-in Activity Logs (for Analytics Live Feed & Kiosk Telemetry)
-CREATE TABLE IF NOT EXISTS `checkin_logs` (
-  `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `attendee_id` VARCHAR(64) NOT NULL,
-  `attendee_name` VARCHAR(120) NOT NULL,
-  `initials` VARCHAR(8) NOT NULL,
-  `avatar_bg` VARCHAR(16) NOT NULL,
-  `avatar_color` VARCHAR(16) NOT NULL,
-  `company` VARCHAR(120) NOT NULL,
-  `ticket` VARCHAR(64) NOT NULL,
-  `station` VARCHAR(64) NOT NULL,
-  `checkin_time` VARCHAR(32) NOT NULL,
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE IF NOT EXISTS `stock_movements` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `batch_number` VARCHAR(64) NOT NULL,
+    `movement_type` VARCHAR(32) DEFAULT 'dispatch',
+    `source_name` VARCHAR(120) DEFAULT 'Ndera Warehouse',
+    `destination_name` VARCHAR(120) DEFAULT 'Kigali Convention Centre',
+    `destination_room` VARCHAR(120) DEFAULT 'Main Auditorium',
+    `technician_id` INT DEFAULT NULL,
+    `submitted_by` VARCHAR(120) DEFAULT NULL,
+    `stock_controller_name` VARCHAR(120) DEFAULT 'Mirene',
+    `status` VARCHAR(32) DEFAULT 'approved',
+    `approval_status` VARCHAR(32) DEFAULT 'approved',
+    `event_name` VARCHAR(160) DEFAULT 'World Bank Summit',
+    `job_sheet` VARCHAR(64) DEFAULT 'JS-2026-104',
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `batch_items` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `batch_id` INT NOT NULL,
+    `item_name` VARCHAR(160) DEFAULT 'L-Acoustics Kara II Line Array',
+    `quantity` INT NOT NULL DEFAULT 4
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

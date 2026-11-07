@@ -1,599 +1,81 @@
 /**
- * Identity AttendanceApp — Interactive UI & PHP/MySQL Persistence Logic
- * Connects all 4 screens (Overview, Events, Attendees, Analytics)
- * to the XAMPP PHP/MySQL backend (`api.php` + `db.php`).
+ * aBility Manager (id_badges.php#pane-kiosk) — Interactive Gate Terminal & 4-Tier Access Matrix Controller
  */
-
 (function () {
   'use strict';
 
-  // --- Initial State (Hydrated from MySQL via `api.php?action=bootstrap`) ---
   const state = {
-    currentScreen: 'overview', // 'overview' | 'events' | 'attendees' | 'analytics'
-    mysqlConnected: false,
-    stats: {
-      totalPeople: 1338,
-      registered: 1284,
-      checkedIn: 964,
-      waitlist: 42,
-      cancelled: 12,
-      checkedInDelta: 186,
-      ticketRevenue: 128400,
-      lastArrivalTime: '10:06 AM'
+    activeScreen: 'overview',
+    checkpointType: 'stock_warehouse',
+    checkpointId: 1,
+    stationLocked: localStorage.getItem('ability_station_locked') === '1',
+    scanMode: 'auto',
+    dbSource: 'ability_db',
+    clearanceMatrix: [],
+    checkpoints: {
+      stock_warehouses: [],
+      event_venues: [],
+      directory: [],
     },
-    overviewTable: {
-      tab: 'all',
-      search: '',
-      ticketFilter: 'all',
-      statusFilter: 'all',
-      checkinFilter: 'all',
-      sortAsc: true
+    activeCheckpoint: {
+      id: 1,
+      type: 'stock_warehouse',
+      name: 'Ndera Warehouse',
+      location: 'Ndera Central Logistics Hub',
+      call_time: '08:00',
+      min_clearance: 'L2 / L3 / L4 Required (L1 Blocked)',
     },
-    directoryTable: {
-      tab: 'all',
-      search: '',
-      ticketFilter: 'all',
-      statusFilter: 'all',
-      checkinFilter: 'all',
-      sortAsc: true
+    kpis: {
+      activeBadges: 14,
+      totalStaff: 14,
+      tierCounts: { L1: 4, L2: 5, L3: 2, L4: 3 },
+      currentlyOnSite: 4,
+      venueCheckinsToday: 3,
+      stockCheckinsToday: 2,
+      totalGrantedToday: 5,
+      lateArrivalsToday: 1,
+      deniedScansToday: 1,
     },
-    eventsTable: {
-      tab: 'all',
-      search: '',
-      typeFilter: 'all',
-      sortAsc: true
-    },
-    intervals: [
-      { id: 1, slotLabel: '08:00', guestCount: 18, barHeightPx: 10.8, isPeak: false },
-      { id: 2, slotLabel: '08:30', guestCount: 46, barHeightPx: 27.6, isPeak: false },
-      { id: 3, slotLabel: '09:00', guestCount: 112, barHeightPx: 67.2, isPeak: false },
-      { id: 4, slotLabel: '09:30', guestCount: 176, barHeightPx: 105.6, isPeak: true },
-      { id: 5, slotLabel: '10:00', guestCount: 154, barHeightPx: 92.4, isPeak: false },
-      { id: 6, slotLabel: '10:30', guestCount: 113, barHeightPx: 67.8, isPeak: false },
-      { id: 7, slotLabel: '11:00', guestCount: 89, barHeightPx: 53.4, isPeak: false },
-      { id: 8, slotLabel: '11:30', guestCount: 62, barHeightPx: 37.2, isPeak: false },
-      { id: 9, slotLabel: '12:00', guestCount: 42, barHeightPx: 25.2, isPeak: false },
-      { id: 10, slotLabel: '12:30', guestCount: 28, barHeightPx: 16.8, isPeak: false },
-      { id: 11, slotLabel: '13:00', guestCount: 24, barHeightPx: 14.4, isPeak: false }
-    ],
-    analytics: {
-      peakGuests: 176,
-      peakTime: '09:30 AM',
-      avgCheckinSeconds: '4.2s',
-      vipRemaining: 25,
-      ticketTiers: [
-        {
-          tier: 'General admission',
-          registered: 912,
-          checkedIn: 689,
-          rate: 75.5,
-          revenue: 86640,
-          priceLabel: '$95',
-          badgeType: 'neutral'
-        },
-        {
-          tier: 'VIP pass',
-          registered: 310,
-          checkedIn: 221,
-          rate: 71.3,
-          revenue: 41760,
-          priceLabel: '$240',
-          badgeType: 'purple'
-        },
-        {
-          tier: 'Speaker & Press',
-          registered: 62,
-          checkedIn: 54,
-          rate: 87.1,
-          revenue: 0,
-          priceLabel: 'Comp',
-          badgeType: 'green'
-        }
-      ],
-      stations: [
-        {
-          name: 'North Foyer Kiosk 01',
-          location: 'Main Entrance · Terminal A',
-          processed: 342,
-          avgSpeed: '4.1s',
-          status: 'Online',
-          sharePct: 36
-        },
-        {
-          name: 'North Foyer Kiosk 02',
-          location: 'Main Entrance · Terminal B',
-          processed: 318,
-          avgSpeed: '4.4s',
-          status: 'Online',
-          sharePct: 33
-        },
-        {
-          name: 'VIP Express Desk 03',
-          location: 'West Lounge · Fast Track',
-          processed: 221,
-          avgSpeed: '3.6s',
-          status: 'Online',
-          sharePct: 23
-        },
-        {
-          name: 'Speaker & Press Desk 04',
-          location: 'Green Room · Backstage',
-          processed: 83,
-          avgSpeed: '3.2s',
-          status: 'Online',
-          sharePct: 8
-        }
-      ],
-      roleDistribution: [
-        { role: 'Product & UX Designers', count: 540, pct: 42 },
-        { role: 'Design Directors & Heads', count: 334, pct: 26 },
-        { role: 'Founders & Executives', count: 244, pct: 19 },
-        { role: 'Design Engineers & PMs', count: 166, pct: 13 }
-      ],
-      recentLogs: [
-        {
-          id: 7,
-          attendeeId: 'att-3',
-          name: 'Lana Steiner',
-          initials: 'LS',
-          avatarBg: '#f5ece5',
-          avatarColor: '#ac7b53',
-          company: 'Catalog',
-          ticket: 'General admission',
-          station: 'North Foyer Kiosk 02',
-          checkinTime: '10:06 AM'
-        },
-        {
-          id: 6,
-          attendeeId: 'att-10',
-          name: 'Noah Williams',
-          initials: 'NW',
-          avatarBg: '#ececf6',
-          avatarColor: '#787b9d',
-          company: 'Notion',
-          ticket: 'VIP pass',
-          station: 'VIP Express Desk 03',
-          checkinTime: '09:45 AM'
-        },
-        {
-          id: 5,
-          attendeeId: 'att-5',
-          name: 'Drew Cano',
-          initials: 'DC',
-          avatarBg: '#ececf3',
-          avatarColor: '#797a94',
-          company: 'Hourglass',
-          ticket: 'General admission',
-          station: 'North Foyer Kiosk 01',
-          checkinTime: '09:38 AM'
-        },
-        {
-          id: 4,
-          attendeeId: 'att-9',
-          name: 'Ava Thompson',
-          initials: 'AT',
-          avatarBg: '#e7f1ec',
-          avatarColor: '#53856a',
-          company: 'Linear',
-          ticket: 'General admission',
-          station: 'North Foyer Kiosk 02',
-          checkinTime: '09:26 AM'
-        },
-        {
-          id: 3,
-          attendeeId: 'att-1',
-          name: 'Olivia Rhye',
-          initials: 'OR',
-          avatarBg: '#f0eafa',
-          avatarColor: '#8862b4',
-          company: 'Layers',
-          ticket: 'General admission',
-          station: 'North Foyer Kiosk 01',
-          checkinTime: '09:12 AM'
-        }
-      ]
-    },
-    attendees: [
-      {
-        id: 'att-1',
-        initials: 'OR',
-        bgOverview: '#f0eafa',
-        bgDirectory: '#f0ebff',
-        color: '#8862b4',
-        name: 'Olivia Rhye',
-        email: 'olivia@layers.design',
-        company: 'Layers',
-        role: 'Product Designer',
-        ticket: 'General admission',
-        ticketHighlight: false,
-        registeredDate: 'Oct 12, 2026',
-        status: 'Registered',
-        checkedIn: true,
-        checkinTime: '09:12 AM',
-        selected: false
-      },
-      {
-        id: 'att-2',
-        initials: 'PB',
-        bgOverview: '#eaf0f8',
-        bgDirectory: '#eaf0fa',
-        color: '#5578a1',
-        colorDirectory: '#517eaf',
-        name: 'Phoenix Baker',
-        email: 'phoenix@sisyphus.com',
-        company: 'Sisyphus',
-        role: 'Design Director',
-        ticket: 'VIP pass',
-        ticketHighlight: true,
-        registeredDate: 'Oct 13, 2026',
-        status: 'Registered',
-        checkedIn: true,
-        checkinTime: '08:54 AM',
-        selected: false
-      },
-      {
-        id: 'att-3',
-        initials: 'LS',
-        bgOverview: '#f5ece5',
-        bgDirectory: '#f5ede5',
-        color: '#ac7b53',
-        colorDirectory: '#b67f51',
-        name: 'Lana Steiner',
-        email: 'lana@catalog.studio',
-        company: 'Catalog',
-        role: 'Creative Director',
-        ticket: 'General admission',
-        ticketHighlight: false,
-        registeredDate: 'Oct 14, 2026',
-        status: 'Registered',
-        checkedIn: true,
-        checkinTime: '10:06 AM',
-        selected: false
-      },
-      {
-        id: 'att-4',
-        initials: 'DW',
-        bgOverview: '#e8f1eb',
-        bgDirectory: '#e7f1ec',
-        color: '#59856a',
-        colorDirectory: '#53856a',
-        name: 'Demi Wilkinson',
-        email: 'demi@circooles.io',
-        company: 'Circooles',
-        role: 'Co-founder',
-        ticket: 'VIP pass',
-        ticketHighlight: true,
-        registeredDate: 'Oct 15, 2026',
-        status: 'Registered',
-        checkedIn: false,
-        checkinTime: null,
-        selected: false
-      },
-      {
-        id: 'att-5',
-        initials: 'DC',
-        bgOverview: '#ececf3',
-        bgDirectory: '#ececf6',
-        color: '#797a94',
-        colorDirectory: '#787b9d',
-        name: 'Drew Cano',
-        email: 'drew@hourglass.app',
-        company: 'Hourglass',
-        role: 'Product Manager',
-        ticket: 'General admission',
-        ticketHighlight: false,
-        registeredDate: 'Oct 18, 2026',
-        status: 'Registered',
-        checkedIn: true,
-        checkinTime: '09:38 AM',
-        selected: false
-      },
-      {
-        id: 'att-6',
-        initials: 'NC',
-        bgOverview: '#f0eafa',
-        bgDirectory: '#f0ebff',
-        color: '#8862b4',
-        name: 'Natali Craig',
-        email: 'natali@command.design',
-        company: 'Command',
-        role: 'Brand Designer',
-        ticket: 'General admission',
-        ticketHighlight: false,
-        registeredDate: 'Oct 22, 2026',
-        status: 'Waitlisted',
-        checkedIn: false,
-        checkinTime: null,
-        selected: false
-      },
-      {
-        id: 'att-7',
-        initials: 'OD',
-        bgOverview: '#eaf0f8',
-        bgDirectory: '#eaf0fa',
-        color: '#5578a1',
-        colorDirectory: '#517eaf',
-        name: 'Orlando Diggs',
-        email: 'orlando@feather.co',
-        company: 'Feather',
-        role: 'Head of Design',
-        ticket: 'VIP pass',
-        ticketHighlight: true,
-        registeredDate: 'Oct 24, 2026',
-        status: 'Registered',
-        checkedIn: false,
-        checkinTime: null,
-        selected: false
-      },
-      {
-        id: 'att-8',
-        initials: 'AL',
-        bgOverview: '#f5ece5',
-        bgDirectory: '#f5ede5',
-        color: '#ac7b53',
-        colorDirectory: '#b67f51',
-        name: 'Andi Lane',
-        email: 'andi@quotient.co',
-        company: 'Quotient',
-        role: 'UX Researcher',
-        ticket: 'General admission',
-        ticketHighlight: false,
-        registeredDate: 'Oct 28, 2026',
-        status: 'Cancelled',
-        checkedIn: false,
-        checkinTime: null,
-        selected: false
-      },
-      {
-        id: 'att-9',
-        initials: 'AT',
-        bgOverview: '#e7f1ec',
-        bgDirectory: '#e7f1ec',
-        color: '#53856a',
-        name: 'Ava Thompson',
-        email: 'ava@linear.app',
-        company: 'Linear',
-        role: 'Product Designer',
-        ticket: 'General admission',
-        ticketHighlight: false,
-        registeredDate: 'Oct 29, 2026',
-        status: 'Registered',
-        checkedIn: true,
-        checkinTime: '09:26 AM',
-        selected: false
-      },
-      {
-        id: 'att-10',
-        initials: 'NW',
-        bgOverview: '#ececf6',
-        bgDirectory: '#ececf6',
-        color: '#787b9d',
-        name: 'Noah Williams',
-        email: 'noah@notion.so',
-        company: 'Notion',
-        role: 'Design Engineer',
-        ticket: 'VIP pass',
-        ticketHighlight: true,
-        registeredDate: 'Nov 1, 2026',
-        status: 'Registered',
-        checkedIn: true,
-        checkinTime: '09:45 AM',
-        selected: false
-      },
-      {
-        id: 'att-11',
-        initials: 'MC',
-        bgOverview: '#f0ebff',
-        bgDirectory: '#f0ebff',
-        color: '#8862b4',
-        name: 'Mia Chen',
-        email: 'mia@figma.com',
-        company: 'Figma',
-        role: 'Design Advocate',
-        ticket: 'Speaker',
-        ticketHighlight: true,
-        registeredDate: 'Nov 2, 2026',
-        status: 'Registered',
-        checkedIn: true,
-        checkinTime: '08:32 AM',
-        selected: false
-      },
-      {
-        id: 'att-12',
-        initials: 'EP',
-        bgOverview: '#eaf0fa',
-        bgDirectory: '#eaf0fa',
-        color: '#517eaf',
-        name: 'Ethan Park',
-        email: 'ethan@read.cv',
-        company: 'Read.cv',
-        role: 'Co-founder',
-        ticket: 'General admission',
-        ticketHighlight: false,
-        registeredDate: 'Nov 4, 2026',
-        status: 'Registered',
-        checkedIn: false,
-        checkinTime: null,
-        selected: false
-      }
-    ],
-    events: [
-      {
-        id: 'evt-1',
-        month: 'NOV',
-        day: '07',
-        name: 'Form & Future Summit 2026',
-        type: 'Conference',
-        date: 'Nov 7, 2026',
-        time: '8:00 AM – 6:00 PM',
-        venue: 'Fort Mason Center',
-        city: 'San Francisco, CA',
-        registeredText: '1,284',
-        capacityText: ' / 1,500',
-        barWidthPx: 86,
-        isPastBar: false,
-        status: 'Live',
-        actionLabel: 'Manage event →',
-        actionTarget: 'overview',
-        selected: false
-      },
-      {
-        id: 'evt-2',
-        month: 'NOV',
-        day: '19',
-        name: 'Design Leaders Dinner',
-        type: 'Networking dinner',
-        date: 'Nov 19, 2026',
-        time: '6:30 PM – 9:30 PM',
-        venue: 'The Pearl',
-        city: 'San Francisco, CA',
-        registeredText: '48',
-        capacityText: ' / 60',
-        barWidthPx: 80,
-        isPastBar: false,
-        status: 'Upcoming',
-        actionLabel: 'Manage event →',
-        actionTarget: 'attendees',
-        selected: false
-      },
-      {
-        id: 'evt-3',
-        month: 'DEC',
-        day: '03',
-        name: 'Design Systems Workshop',
-        type: 'Workshop',
-        date: 'Dec 3, 2026',
-        time: '9:00 AM – 4:00 PM',
-        venue: 'Forma studio',
-        city: 'San Francisco, CA',
-        registeredText: '86',
-        capacityText: ' / 120',
-        barWidthPx: 72,
-        isPastBar: false,
-        status: 'Upcoming',
-        actionLabel: 'Manage event →',
-        actionTarget: 'attendees',
-        selected: false
-      },
-      {
-        id: 'evt-4',
-        month: 'DEC',
-        day: '10',
-        name: 'Creative Community Meetup',
-        type: 'Community meetup',
-        date: 'Dec 10, 2026',
-        time: '5:30 PM – 8:00 PM',
-        venue: 'The Assembly',
-        city: 'San Francisco, CA',
-        registeredText: '128',
-        capacityText: ' / 200',
-        barWidthPx: 64,
-        isPastBar: false,
-        status: 'Upcoming',
-        actionLabel: 'Manage event →',
-        actionTarget: 'attendees',
-        selected: false
-      },
-      {
-        id: 'evt-5',
-        month: 'OCT',
-        day: '22',
-        name: 'Product Futures Forum',
-        type: 'Conference',
-        date: 'Oct 22, 2026',
-        time: '9:00 AM – 5:00 PM',
-        venue: 'Pier 27',
-        city: 'San Francisco, CA',
-        registeredText: '642',
-        capacityText: ' / 700',
-        barWidthPx: 92,
-        isPastBar: true,
-        status: 'Past',
-        actionLabel: 'View report →',
-        actionTarget: 'analytics',
-        selected: false
-      },
-      {
-        id: 'evt-6',
-        month: 'SEP',
-        day: '24',
-        name: 'The Shape of AI',
-        type: 'Panel & networking',
-        date: 'Sep 24, 2026',
-        time: '5:00 PM – 8:00 PM',
-        venue: 'Gray Area',
-        city: 'San Francisco, CA',
-        registeredText: '286',
-        capacityText: ' / 300',
-        barWidthPx: 95,
-        isPastBar: true,
-        status: 'Past',
-        actionLabel: 'View report →',
-        actionTarget: 'analytics',
-        selected: false
-      },
-      {
-        id: 'evt-7',
-        month: 'AUG',
-        day: '20',
-        name: 'Summer Studio Social',
-        type: 'Community meetup',
-        date: 'Aug 20, 2026',
-        time: '4:00 PM – 7:00 PM',
-        venue: 'Forma studio',
-        city: 'San Francisco, CA',
-        registeredText: '158',
-        capacityText: ' / 180',
-        barWidthPx: 88,
-        isPastBar: true,
-        status: 'Past',
-        actionLabel: 'View report →',
-        actionTarget: 'analytics',
-        selected: false
-      },
-      {
-        id: 'evt-8',
-        month: 'FEB',
-        day: '18',
-        name: 'Form & Future: New York',
-        type: 'Conference',
-        date: 'Feb 18, 2027',
-        time: 'Schedule not published',
-        venue: 'Venue to be confirmed',
-        city: 'New York, NY',
-        registeredText: '0',
-        capacityText: ' / 800',
-        barWidthPx: 0,
-        isPastBar: false,
-        status: 'Draft',
-        actionLabel: 'Continue setup →',
-        actionTarget: 'events',
-        selected: false
-      }
-    ]
+    rollCallList: [],
+    crew: [],
+    hourlyTraffic: [],
+    activityTimeline: [],
+    batches: [],
+    currentVerification: null,
+    selectedCrewId: 6,
+
+    // Table filters
+    overviewTab: 'all',
+    directoryTab: 'all',
+    overviewSearch: '',
+    directorySearch: '',
+    tierFilter: 'all',
+    gateStateFilter: 'all',
+
+    // Checkpoints directory filters
+    checkpointTab: 'all',
+    checkpointSearch: '',
+
+    // User Activity Timeline pagination (5 items per page)
+    timelineSearch: '',
+    timelineScope: 'all',
+    timelinePage: 1,
+    timelinePerPage: 5,
+
+    // Currently inspected batch in modal
+    inspectedBatchId: null,
   };
 
-  // --- Utility Helpers ---
+  const TIER_CYCLE = ['all', 'L1', 'L2', 'L3', 'L4'];
+  const GATE_STATE_CYCLE = ['all', 'ready', 'checked_in', 'checked_out'];
+
   function escapeHtml(str) {
-    return String(str)
+    return String(str ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  function formatNumber(n) {
-    return Number(n).toLocaleString('en-US');
-  }
-
-  function getCurrentFormattedTime() {
-    const now = new Date();
-    let hours = now.getHours();
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    if (hours === 0) hours = 12;
-    return String(hours).padStart(2, '0') + ':' + minutes + ' ' + ampm;
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   let toastTimer = null;
@@ -603,1402 +85,1650 @@
     toast.textContent = message;
     toast.classList.add('visible');
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () {
+    toastTimer = setTimeout(() => {
       toast.classList.remove('visible');
-    }, 2800);
+    }, 3200);
   }
 
-  // --- Apply Payload from PHP/MySQL API (`api.php`) ---
-  function applyServerPayload(payload) {
-    if (!payload || !payload.ok) return;
-    state.mysqlConnected = true;
-    if (payload.stats) state.stats = payload.stats;
-    if (Array.isArray(payload.attendees)) state.attendees = payload.attendees;
-    if (Array.isArray(payload.events)) state.events = payload.events;
-    if (Array.isArray(payload.intervals)) state.intervals = payload.intervals;
-    if (payload.analytics) state.analytics = payload.analytics;
+  function applyBootstrapPayload(data, preserveCurrentVerification = false) {
+    if (!data || !data.ok) return;
+    state.dbSource = data.dbSource || 'ability_db';
+    state.clearanceMatrix = Array.isArray(data.clearanceMatrix) ? data.clearanceMatrix : [];
+    state.checkpoints = data.checkpoints || { stock_warehouses: [], event_venues: [], directory: [] };
+    if (data.activeCheckpoint) {
+      state.activeCheckpoint = data.activeCheckpoint;
+      state.checkpointType = data.activeCheckpoint.type;
+      state.checkpointId = Number(data.activeCheckpoint.id);
+    }
+    if (data.kpis) {
+      state.kpis = data.kpis;
+    }
+    state.rollCallList = Array.isArray(data.rollCallList) ? data.rollCallList : [];
+    state.crew = Array.isArray(data.crew) ? data.crew : [];
+    state.hourlyTraffic = Array.isArray(data.hourlyTraffic) ? data.hourlyTraffic : [];
+    state.activityTimeline = Array.isArray(data.activityTimeline) ? data.activityTimeline : [];
+    state.batches = Array.isArray(data.batches) ? data.batches : [];
 
-    const syncBadge = document.getElementById('mysql-sync-badge');
-    const syncText = document.getElementById('mysql-sync-text');
-    if (syncBadge) syncBadge.classList.remove('offline');
-    if (syncText) syncText.textContent = 'MySQL synced · XAMPP';
+    if (!preserveCurrentVerification || !state.currentVerification) {
+      const selectedMember = state.crew.find((c) => Number(c.id) === Number(state.selectedCrewId));
+      if (selectedMember) {
+        state.currentVerification = buildClientVerificationFromMember(selectedMember);
+      } else if (data.defaultVerification) {
+        state.currentVerification = data.defaultVerification;
+        if (data.defaultVerification.badge && data.defaultVerification.badge.user_id) {
+          state.selectedCrewId = Number(data.defaultVerification.badge.user_id);
+        }
+      }
+    }
 
     renderAll();
   }
 
-  function syncFromMySql() {
-    fetch('api.php?action=bootstrap', { cache: 'no-store' })
-      .then(function (res) {
-        return res.json();
-      })
-      .then(function (data) {
-        if (data && data.ok) {
-          applyServerPayload(data);
-        }
-      })
-      .catch(function () {
-        const syncBadge = document.getElementById('mysql-sync-badge');
-        const syncText = document.getElementById('mysql-sync-text');
-        if (syncBadge) syncBadge.classList.add('offline');
-        if (syncText) syncText.textContent = 'Local memory mode';
-      });
+  function buildClientVerificationFromMember(member) {
+    const cp = state.activeCheckpoint;
+    const isStock = cp.type === 'stock_warehouse';
+    const isAllowed = member.badge_status === 'active' && (!isStock || member.clearance_code !== 'L1');
+    const reason = !isAllowed
+      ? (member.badge_status !== 'active'
+          ? `ID Badge is currently ${String(member.badge_status).toUpperCase()}`
+          : 'Level 1 (Venue Crew) is not authorized for Stock Warehouses')
+      : `Authorized for ${isStock ? 'Stock Warehouse' : 'Event Venue'} access (${member.clearance_code} — ${member.clearance_short})`;
+
+    const roleUpper = String(member.role || 'technician').replace(/_/g, ' ').toUpperCase();
+    const deptUpper = String(member.department || 'OPERATIONS').toUpperCase();
+
+    return {
+      ok: true,
+      allowed: isAllowed,
+      reason: reason,
+      action: member.daily_state === 'checked_out' ? 'check_out' : 'check_in',
+      punctuality: member.punctuality_code || 'on_time',
+      punctuality_label: isAllowed ? (member.punctuality || 'ON TIME') : 'ACCESS RESTRICTED',
+      checkpoint_type: cp.type,
+      checkpoint_id: cp.id,
+      checkpoint_name: cp.name,
+      scanned_at: new Date().toLocaleTimeString(),
+      check_in_time: member.check_in_full || member.check_in_time || null,
+      check_out_time: member.check_out_full || member.check_out_time || null,
+      linked_batches: member.linked_batches || [],
+      badge: {
+        user_id: member.id,
+        full_name: member.full_name,
+        username: member.username,
+        role: member.role,
+        role_pill: `${roleUpper} - ${deptUpper}`,
+        department: member.department,
+        phone: member.phone,
+        profile_image: member.profile_image_url,
+        initials: member.initials,
+        badge_code: member.badge_code,
+        raw_badge_code: member.raw_badge_code,
+        staff_code: member.staff_code,
+        clearance_level: member.clearance_level,
+        clearance_code: member.clearance_code,
+        clearance_title: member.clearance_title,
+        clearance_short: member.clearance_short,
+        clearance_color: member.clearance_color,
+        badge_status: member.badge_status,
+        daily_state: member.daily_state,
+      },
+    };
   }
 
-  function postToApi(action, bodyObj, onSuccessToast) {
-    return fetch('api.php?action=' + encodeURIComponent(action), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyObj || {})
-    })
-      .then(function (res) {
-        return res.json();
-      })
-      .then(function (data) {
-        if (data && data.ok) {
-          applyServerPayload(data);
-          if (onSuccessToast) showToast(onSuccessToast);
-        }
-      })
-      .catch(function () {
-        // Fallback already applied optimistically
-      });
+  async function fetchBootstrap(preserveVerification = false) {
+    try {
+      const url = `api.php?action=bootstrap&checkpoint_type=${encodeURIComponent(state.checkpointType)}&checkpoint_id=${encodeURIComponent(state.checkpointId)}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (data && data.ok) {
+        applyBootstrapPayload(data, preserveVerification);
+      }
+    } catch (err) {
+      console.warn('Bootstrap fetch fallback:', err);
+    }
   }
 
-  // --- Screen Navigation (Overview, Events, Attendees, Analytics) ---
-  function switchScreen(screenName) {
-    if (!['overview', 'events', 'attendees', 'analytics'].includes(screenName)) return;
-    state.currentScreen = screenName;
+  async function triggerGateScan(scanInput, forcedMode = null) {
+    const modeToUse = forcedMode || state.scanMode || 'auto';
+    try {
+      const res = await fetch('api.php?action=process_gate_scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'process_gate_scan',
+          scan_input: scanInput,
+          checkpoint_type: state.checkpointType,
+          checkpoint_id: state.checkpointId,
+          scan_mode: modeToUse,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok && data.error) {
+        showToast(data.error);
+        return;
+      }
 
-    document.querySelectorAll('.screen-view').forEach(function (view) {
-      view.classList.remove('active');
+      if (data.badge && data.badge.user_id) {
+        state.selectedCrewId = Number(data.badge.user_id);
+      }
+      state.currentVerification = data;
+
+      if (data.bootstrap) {
+        applyBootstrapPayload(data.bootstrap, true);
+      } else {
+        renderAll();
+      }
+
+      const statusTxt = data.allowed
+        ? `ACCESS GRANTED (${data.action === 'check_out' ? 'Checked Out' : 'Checked In'})`
+        : `ACCESS DENIED — ${data.reason}`;
+      showToast(`${data.badge ? data.badge.full_name : scanInput}: ${statusTxt}`);
+    } catch (err) {
+      showToast('Error communicating with Gate Terminal API');
+    }
+  }
+
+  function switchScreen(screenKey, scrollToId = null) {
+    state.activeScreen = screenKey;
+    const screens = {
+      overview: document.getElementById('screen-overview'),
+      events: document.getElementById('screen-events'),
+      attendees: document.getElementById('screen-attendees'),
+      analytics: document.getElementById('screen-analytics'),
+    };
+    Object.keys(screens).forEach((k) => {
+      if (screens[k]) {
+        screens[k].classList.toggle('active', k === screenKey);
+      }
     });
-    const targetView = document.getElementById('screen-' + screenName);
-    if (targetView) targetView.classList.add('active');
 
-    document.querySelectorAll('.nav-item[data-nav-target]').forEach(function (btn) {
+    // Update sidebar active state
+    document.querySelectorAll('.sidebar .nav-item[data-nav-target]').forEach((btn) => {
       const target = btn.getAttribute('data-nav-target');
-      btn.classList.toggle('active', target === screenName);
+      btn.classList.toggle('active', target === screenKey);
     });
 
-    const iconOverview = document.getElementById('nav-icon-overview');
-    const iconEvents = document.getElementById('nav-icon-events');
-    const iconAttendees = document.getElementById('nav-icon-attendees');
-    const iconAnalytics = document.getElementById('nav-icon-analytics');
+    // Update nav icons
+    const ovIcon = document.getElementById('nav-icon-overview');
+    const evIcon = document.getElementById('nav-icon-events');
+    const atIcon = document.getElementById('nav-icon-attendees');
+    if (ovIcon) ovIcon.src = screenKey === 'overview' ? 'assets/nav-overview-active.svg' : 'assets/nav-overview-inactive.svg';
+    if (evIcon) evIcon.src = screenKey === 'events' ? 'assets/nav-events-active.svg' : 'assets/nav-events-inactive.svg';
+    if (atIcon) atIcon.src = screenKey === 'attendees' ? 'assets/nav-attendees-active.svg' : 'assets/nav-attendees-inactive.svg';
 
-    if (iconOverview) {
-      iconOverview.src =
-        screenName === 'overview'
-          ? 'assets/nav-overview-active.svg'
-          : 'assets/nav-overview-inactive.svg';
-    }
-    if (iconEvents) {
-      iconEvents.src =
-        screenName === 'events'
-          ? 'assets/nav-events-active.svg'
-          : 'assets/nav-events-inactive.svg';
-    }
-    if (iconAttendees) {
-      iconAttendees.src =
-        screenName === 'attendees'
-          ? 'assets/nav-attendees-active.svg'
-          : 'assets/nav-attendees-inactive.svg';
-    }
-    if (iconAnalytics) {
-      iconAnalytics.src =
-        screenName === 'analytics'
-          ? 'assets/nav-analytics-active.svg'
-          : 'assets/nav-analytics.svg';
-    }
+    const pageTitles = {
+      overview: 'Gate Operations Dashboard',
+      events: 'Venues & Stock Gates',
+      attendees: 'Staff ID Badges & Gate Terminal (#pane-kiosk)',
+      analytics: 'Stock Batch Approvals & 4-Tier Access Matrix',
+    };
+    const bc = document.getElementById('breadcrumb-page');
+    if (bc) bc.textContent = pageTitles[screenKey] || 'Gate Dashboard';
 
-    const breadcrumbPage = document.getElementById('breadcrumb-page');
-    if (breadcrumbPage) {
-      const labels = {
-        overview: 'Overview',
-        events: 'Events',
-        attendees: 'Attendees',
-        analytics: 'Analytics'
-      };
-      breadcrumbPage.textContent = labels[screenName] || 'Overview';
-    }
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  // --- Update Shared Metrics Across All 4 Screens ---
-  function updateDashboardStats() {
-    const remaining = Math.max(0, state.stats.registered - state.stats.checkedIn);
-    const rate = ((state.stats.checkedIn / Math.max(1, state.stats.registered)) * 100).toFixed(1) + '%';
-    const revenueFormatted = '$' + formatNumber(state.stats.ticketRevenue || 128400);
-
-    document.querySelectorAll('.js-stat-total-people').forEach(function (el) {
-      el.textContent = formatNumber(state.stats.totalPeople);
-    });
-    document.querySelectorAll('.js-stat-registered').forEach(function (el) {
-      el.textContent = formatNumber(state.stats.registered);
-    });
-    document.querySelectorAll('.js-stat-checkedin').forEach(function (el) {
-      el.textContent = formatNumber(state.stats.checkedIn);
-    });
-    document.querySelectorAll('.js-stat-remaining').forEach(function (el) {
-      el.textContent = formatNumber(remaining);
-    });
-    document.querySelectorAll('.js-stat-rate').forEach(function (el) {
-      el.textContent = rate;
-    });
-    document.querySelectorAll('.js-stat-revenue').forEach(function (el) {
-      el.textContent = revenueFormatted;
-    });
-
-    const overviewRevEl = document.getElementById('overview-revenue-val');
-    if (overviewRevEl) overviewRevEl.textContent = revenueFormatted;
-
-    const deltaEl = document.getElementById('overview-checkedin-delta');
-    if (deltaEl) {
-      deltaEl.textContent = '↗ ' + formatNumber(state.stats.checkedInDelta);
-    }
-
-    const eventsCheckedSub = document.getElementById('events-live-checkedin-sub');
-    if (eventsCheckedSub) {
-      eventsCheckedSub.textContent = 'checked in · ' + rate;
-    }
-
-    const eventsRemainingLabel = document.getElementById('events-live-remaining-label');
-    if (eventsRemainingLabel) {
-      eventsRemainingLabel.textContent = formatNumber(remaining) + ' yet to arrive';
-    }
-
-    const eventsProgressBar = document.getElementById('events-live-progress-bar');
-    if (eventsProgressBar) {
-      eventsProgressBar.style.width = rate;
-    }
-
-    const attendeesContext = document.getElementById('attendees-checkedin-context');
-    if (attendeesContext) {
-      attendeesContext.textContent = rate + ' of registered guests have arrived';
-    }
-
-    const bannerDetail = document.getElementById('checkin-banner-detail-text');
-    if (bannerDetail) {
-      bannerDetail.textContent =
-        '4 check-in stations online · Last arrival at ' +
-        state.stats.lastArrivalTime +
-        ' · Badges printing normally';
-    }
-
-    const totalEventsStr = String(state.events.length).padStart(2, '0');
-    const sidebarCount = document.getElementById('sidebar-events-count');
-    const kpiTotal = document.getElementById('events-total-kpi');
-    const dirBadge = document.getElementById('events-directory-badge');
-    const tabAll = document.getElementById('events-tab-count-all');
-    if (sidebarCount) sidebarCount.textContent = totalEventsStr;
-    if (kpiTotal) kpiTotal.textContent = totalEventsStr;
-    if (dirBadge) dirBadge.textContent = totalEventsStr;
-    if (tabAll) tabAll.textContent = totalEventsStr;
-  }
-
-  // --- Render 30-Minute Arrival Velocity Bars (Overview + Analytics) ---
-  function renderVelocityCharts() {
-    const html = state.intervals
-      .map(function (item) {
-        const barClass = item.isPeak ? 'chart-bar peak' : 'chart-bar';
-        const title = item.slotLabel + ' — ' + item.guestCount + ' guests';
-        return (
-          '<div class="chart-bar-col">' +
-          '<div class="' +
-          barClass +
-          '" style="height: ' +
-          item.barHeightPx +
-          'px;" title="' +
-          escapeHtml(title) +
-          '"></div>' +
-          '</div>'
-        );
-      })
-      .join('');
-
-    const overviewBars = document.getElementById('overview-chart-bars');
-    if (overviewBars) overviewBars.innerHTML = html;
-
-    const analyticsBars = document.getElementById('analytics-chart-bars');
-    if (analyticsBars) analyticsBars.innerHTML = html;
-  }
-
-  // --- Render Analytics Screen (Screen 4) ---
-  function renderAnalyticsView() {
-    const analytics = state.analytics || {};
-
-    const convSub = document.getElementById('analytics-kpi-conversion-sub');
-    if (convSub) {
-      convSub.textContent =
-        formatNumber(state.stats.checkedIn) +
-        ' of ' +
-        formatNumber(state.stats.registered) +
-        ' registered guests arrived';
-    }
-
-    const lastUpd = document.getElementById('analytics-last-updated');
-    if (lastUpd) {
-      lastUpd.textContent = 'Last arrival at ' + state.stats.lastArrivalTime;
-    }
-
-    const peakVal = document.getElementById('analytics-kpi-peak-val');
-    if (peakVal && analytics.peakGuests) {
-      peakVal.textContent = analytics.peakGuests + ' / 30m';
-    }
-
-    // 1. Role distribution list
-    const roleListEl = document.getElementById('analytics-role-list');
-    if (roleListEl && Array.isArray(analytics.roleDistribution)) {
-      roleListEl.innerHTML = analytics.roleDistribution
-        .map(function (r) {
-          return (
-            '<div class="role-item">' +
-            '<div class="role-item-header">' +
-            '<span class="role-item-name">' +
-            escapeHtml(r.role) +
-            '</span>' +
-            '<span class="role-item-meta">' +
-            formatNumber(r.count) +
-            ' · ' +
-            r.pct +
-            '%</span>' +
-            '</div>' +
-            '<div class="role-progress-track">' +
-            '<div class="role-progress-fill" style="width: ' +
-            r.pct +
-            '%;"></div>' +
-            '</div>' +
-            '</div>'
-          );
-        })
-        .join('');
-    }
-
-    // 2. Ticket tier breakdown rows
-    const tierRowsEl = document.getElementById('analytics-tier-rows');
-    if (tierRowsEl && Array.isArray(analytics.ticketTiers)) {
-      tierRowsEl.innerHTML = analytics.ticketTiers
-        .map(function (t) {
-          let badgeClass = 'status-badge status-badge-neutral-sm';
-          if (t.badgeType === 'purple') badgeClass = 'status-badge status-badge-purple-sm';
-          if (t.badgeType === 'green') badgeClass = 'status-badge status-badge-green-sm';
-
-          const revText = t.revenue > 0 ? '$' + formatNumber(t.revenue) : 'Complimentary';
-
-          return (
-            '<div class="tier-table-row">' +
-            '<div class="col-tier-name">' +
-            '<span class="event-row-title">' +
-            escapeHtml(t.tier) +
-            '</span>' +
-            '<span class="' +
-            badgeClass +
-            '">' +
-            escapeHtml(t.priceLabel) +
-            '</span>' +
-            '</div>' +
-            '<div class="col-tier-num">' +
-            formatNumber(t.registered) +
-            '</div>' +
-            '<div class="col-tier-num">' +
-            formatNumber(t.checkedIn) +
-            '</div>' +
-            '<div class="col-tier-rate">' +
-            '<div style="display:flex; justify-content:space-between; font-size:10px;">' +
-            '<span style="color:var(--text-secondary);">Arrived</span>' +
-            '<span style="color:var(--brand-primary); font-weight:600;">' +
-            t.rate +
-            '%</span>' +
-            '</div>' +
-            '<div class="capacity-track" style="width:100%;">' +
-            '<div class="capacity-fill" style="width:' +
-            Math.min(100, t.rate) +
-            '%;"></div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="col-tier-rev">' +
-            escapeHtml(revText) +
-            '</div>' +
-            '</div>'
-          );
-        })
-        .join('');
-    }
-
-    // 3. Check-in kiosk stations grid
-    const stationsGrid = document.getElementById('analytics-stations-grid');
-    if (stationsGrid && Array.isArray(analytics.stations)) {
-      stationsGrid.innerHTML = analytics.stations
-        .map(function (st) {
-          return (
-            '<div class="station-box">' +
-            '<div class="station-box-top">' +
-            '<span class="station-name">' +
-            escapeHtml(st.name) +
-            '</span>' +
-            '<span class="status-badge status-badge-green-sm">' +
-            '<img src="assets/status-dot-green-4.svg" alt="" class="svg-icon" />' +
-            '<span>' +
-            escapeHtml(st.status) +
-            '</span>' +
-            '</span>' +
-            '</div>' +
-            '<span class="station-loc">' +
-            escapeHtml(st.location) +
-            '</span>' +
-            '<div class="station-stats">' +
-            '<span class="station-count">' +
-            formatNumber(st.processed) +
-            ' <span style="font-size:10px; color:var(--text-secondary); font-weight:400;">checked in</span></span>' +
-            '<span class="station-speed">Avg ' +
-            escapeHtml(st.avgSpeed) +
-            '</span>' +
-            '</div>' +
-            '</div>'
-          );
-        })
-        .join('');
-    }
-
-    // 4. Live Check-in Logs (MySQL `checkin_logs`)
-    const liveLogsEl = document.getElementById('analytics-live-logs');
-    if (liveLogsEl && Array.isArray(analytics.recentLogs)) {
-      if (analytics.recentLogs.length === 0) {
-        liveLogsEl.innerHTML =
-          '<div style="padding:16px 0; font-size:11px; color:var(--text-secondary);">No recent check-in logs.</div>';
-      } else {
-        liveLogsEl.innerHTML = analytics.recentLogs
-          .map(function (log) {
-            return (
-              '<div class="live-log-item">' +
-              '<div class="live-log-left">' +
-              '<div class="avatar-circle" style="background-color:' +
-              escapeHtml(log.avatarBg) +
-              '; color:' +
-              escapeHtml(log.avatarColor) +
-              ';">' +
-              escapeHtml(log.initials) +
-              '</div>' +
-              '<div class="cell-stack">' +
-              '<span class="attendee-name">' +
-              escapeHtml(log.name) +
-              '</span>' +
-              '<span class="attendee-email">' +
-              escapeHtml(log.company) +
-              ' · ' +
-              escapeHtml(log.station) +
-              '</span>' +
-              '</div>' +
-              '</div>' +
-              '<div class="live-log-right">' +
-              '<span class="checkin-time-text" style="font-weight:500; color:var(--text-primary);">' +
-              escapeHtml(log.checkinTime) +
-              '</span>' +
-              '<button type="button" class="undo-checkin-link js-undo-checkin" data-attendee-id="' +
-              escapeHtml(log.attendeeId) +
-              '" data-attendee-name="' +
-              escapeHtml(log.name) +
-              '">Undo</button>' +
-              '</div>' +
-              '</div>'
-            );
-          })
-          .join('');
-      }
-    }
-  }
-
-  // --- Filter & Sort Attendees ---
-  function getFilteredAttendees(tableConfig, maxDefaultRows) {
-    const query = tableConfig.search.trim().toLowerCase();
-    let list = state.attendees.filter(function (att) {
-      if (tableConfig.tab === 'checked-in' && !att.checkedIn) return false;
-      if (
-        tableConfig.tab === 'not-checked-in' &&
-        (att.checkedIn || att.status !== 'Registered')
-      ) {
-        return false;
-      }
-      if (tableConfig.tab === 'waitlist' && att.status !== 'Waitlisted') return false;
-      if (tableConfig.tab === 'cancelled' && att.status !== 'Cancelled') return false;
-
-      if (tableConfig.ticketFilter !== 'all' && att.ticket !== tableConfig.ticketFilter) {
-        return false;
-      }
-
-      if (tableConfig.statusFilter !== 'all' && att.status !== tableConfig.statusFilter) {
-        return false;
-      }
-
-      if (tableConfig.checkinFilter === 'checked-in' && !att.checkedIn) return false;
-      if (
-        tableConfig.checkinFilter === 'not-checked-in' &&
-        (att.checkedIn || att.status !== 'Registered')
-      ) {
-        return false;
-      }
-
-      if (query) {
-        const hay = (
-          att.name +
-          ' ' +
-          att.email +
-          ' ' +
-          att.company +
-          ' ' +
-          att.role +
-          ' ' +
-          att.ticket
-        ).toLowerCase();
-        if (!hay.includes(query)) return false;
-      }
-
-      return true;
-    });
-
-    if (!tableConfig.sortAsc) {
-      list = list.slice().reverse();
-    }
-
-    const isUnfilteredDefault =
-      tableConfig.tab === 'all' &&
-      !query &&
-      tableConfig.ticketFilter === 'all' &&
-      tableConfig.statusFilter === 'all' &&
-      tableConfig.checkinFilter === 'all' &&
-      tableConfig.sortAsc;
-
-    if (maxDefaultRows && isUnfilteredDefault) {
-      return list.slice(0, maxDefaultRows);
-    }
-    return list;
-  }
-
-  // --- Render Attendee Row HTML ---
-  function renderAttendeeRowHtml(att, isOverview) {
-    const avatarBg = isOverview ? att.bgOverview : att.bgDirectory || att.bgOverview;
-    const avatarColor = isOverview ? att.color : att.colorDirectory || att.color;
-    const checkboxClass = isOverview
-      ? 'custom-checkbox custom-checkbox-14' + (att.selected ? ' checked' : '')
-      : 'custom-checkbox' + (att.selected ? ' checked' : '');
-
-    let statusBadgeHtml = '';
-    if (att.status === 'Registered') {
-      const badgeClass = isOverview ? 'status-badge status-badge-green-md' : 'status-badge status-badge-green-sm';
-      const dotAsset = isOverview ? 'assets/status-dot-green-5.svg' : 'assets/status-dot-green-4.svg';
-      statusBadgeHtml =
-        '<div class="' +
-        badgeClass +
-        '">' +
-        '<img src="' +
-        dotAsset +
-        '" alt="" class="svg-icon" />' +
-        '<span>Registered</span>' +
-        '</div>';
-    } else if (att.status === 'Waitlisted') {
-      const badgeClass = isOverview ? 'status-badge status-badge-amber-md' : 'status-badge status-badge-amber-sm';
-      const dotAsset = isOverview ? 'assets/status-dot-amber-5.svg' : 'assets/status-dot-amber-4.svg';
-      statusBadgeHtml =
-        '<div class="' +
-        badgeClass +
-        '">' +
-        '<img src="' +
-        dotAsset +
-        '" alt="" class="svg-icon" />' +
-        '<span>Waitlisted</span>' +
-        '</div>';
+    if (scrollToId) {
+      setTimeout(() => {
+        const el = document.getElementById(scrollToId);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
     } else {
-      const badgeClass = isOverview ? 'status-badge status-badge-red-md' : 'status-badge status-badge-red-sm';
-      const dotAsset = isOverview ? 'assets/status-dot-red-5.svg' : 'assets/status-dot-red-4.svg';
-      statusBadgeHtml =
-        '<div class="' +
-        badgeClass +
-        '">' +
-        '<img src="' +
-        dotAsset +
-        '" alt="" class="svg-icon" />' +
-        '<span>Cancelled</span>' +
-        '</div>';
-    }
-
-    let checkinHtml = '';
-    if (att.checkedIn) {
-      const checkIcon = isOverview ? 'assets/circle-check-14.svg' : 'assets/circle-check-13.svg';
-      const statusTextClass = isOverview
-        ? 'checkin-status-text checkin-status-text-med'
-        : 'checkin-status-text';
-      checkinHtml =
-        '<div class="checkin-arrived">' +
-        '<img src="' +
-        checkIcon +
-        '" alt="" class="svg-icon" />' +
-        '<div class="checkin-arrived-stack">' +
-        '<span class="' +
-        statusTextClass +
-        '">Checked in</span>' +
-        '<span class="checkin-time-text">' +
-        escapeHtml(att.checkinTime || '09:30 AM') +
-        '</span>' +
-        '</div>' +
-        '</div>';
-    } else if (att.status === 'Registered') {
-      const btnClass = isOverview ? 'btn btn-secondary-32' : 'btn btn-secondary-32-sm';
-      checkinHtml =
-        '<button type="button" class="' +
-        btnClass +
-        ' js-checkin-btn" data-attendee-id="' +
-        escapeHtml(att.id) +
-        '">Check in</button>';
-    } else {
-      checkinHtml = '<span class="checkin-na">—</span>';
-    }
-
-    const personalStackClass = isOverview ? 'cell-stack' : 'cell-stack-6';
-    const ticketClass = att.ticketHighlight ? 'ticket-label highlight' : 'ticket-label';
-
-    return (
-      '<div class="data-table-row" data-attendee-row="' +
-      escapeHtml(att.id) +
-      '">' +
-      '<div class="col-checkbox">' +
-      '<div class="' +
-      checkboxClass +
-      ' js-row-checkbox" data-attendee-id="' +
-      escapeHtml(att.id) +
-      '" role="checkbox" aria-checked="' +
-      (att.selected ? 'true' : 'false') +
-      '" tabindex="0"></div>' +
-      '</div>' +
-      '<div class="col-attendee">' +
-      '<div class="avatar-circle" style="background-color: ' +
-      avatarBg +
-      '; color: ' +
-      avatarColor +
-      ';">' +
-      escapeHtml(att.initials) +
-      '</div>' +
-      '<div class="' +
-      personalStackClass +
-      '">' +
-      '<span class="attendee-name">' +
-      escapeHtml(att.name) +
-      '</span>' +
-      '<span class="attendee-email">' +
-      escapeHtml(att.email) +
-      '</span>' +
-      '</div>' +
-      '</div>' +
-      '<div class="col-company cell-stack">' +
-      '<span class="company-name">' +
-      escapeHtml(att.company) +
-      '</span>' +
-      '<span class="company-role">' +
-      escapeHtml(att.role) +
-      '</span>' +
-      '</div>' +
-      '<div class="col-ticket">' +
-      '<span class="' +
-      ticketClass +
-      '">' +
-      escapeHtml(att.ticket) +
-      '</span>' +
-      '</div>' +
-      '<div class="col-reg-date">' +
-      '<span class="reg-date-label">' +
-      escapeHtml(att.registeredDate) +
-      '</span>' +
-      '</div>' +
-      '<div class="col-reg-status">' +
-      statusBadgeHtml +
-      '</div>' +
-      '<div class="col-checkin">' +
-      checkinHtml +
-      '</div>' +
-      '<div class="col-actions">' +
-      '<button type="button" class="icon-btn js-attendee-menu" data-attendee-id="' +
-      escapeHtml(att.id) +
-      '" data-attendee-name="' +
-      escapeHtml(att.name) +
-      '" title="More options">' +
-      '<img src="assets/ellipsis.svg" alt="" class="svg-icon" />' +
-      '</button>' +
-      '</div>' +
-      '</div>'
-    );
-  }
-
-  function renderAttendeeTables() {
-    const overviewContainer = document.getElementById('overview-attendee-rows');
-    if (overviewContainer) {
-      const overviewRows = getFilteredAttendees(state.overviewTable, 8);
-      if (overviewRows.length === 0) {
-        overviewContainer.innerHTML =
-          '<div class="data-table-row" style="justify-content:center; color:var(--text-secondary); font-size:12px;">No matching attendees found.</div>';
-      } else {
-        overviewContainer.innerHTML = overviewRows
-          .map(function (att) {
-            return renderAttendeeRowHtml(att, true);
-          })
-          .join('');
-      }
-      const overviewCountEl = document.getElementById('overview-results-count');
-      if (overviewCountEl) {
-        overviewCountEl.textContent =
-          'Showing 1–' +
-          overviewRows.length +
-          ' of ' +
-          formatNumber(state.stats.totalPeople) +
-          ' people';
-      }
-    }
-
-    const directoryContainer = document.getElementById('directory-attendee-rows');
-    if (directoryContainer) {
-      const directoryRows = getFilteredAttendees(state.directoryTable, 12);
-      if (directoryRows.length === 0) {
-        directoryContainer.innerHTML =
-          '<div class="data-table-row" style="justify-content:center; color:var(--text-secondary); font-size:12px;">No matching attendees found.</div>';
-      } else {
-        directoryContainer.innerHTML = directoryRows
-          .map(function (att) {
-            return renderAttendeeRowHtml(att, false);
-          })
-          .join('');
-      }
-      const directoryCountEl = document.getElementById('directory-results-count');
-      if (directoryCountEl) {
-        directoryCountEl.textContent =
-          'Showing 1–' +
-          directoryRows.length +
-          ' of ' +
-          formatNumber(state.stats.totalPeople) +
-          ' people';
-      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 
-  // --- Render Events Table ---
-  function renderEventsTable() {
-    const container = document.getElementById('events-table-rows');
-    if (!container) return;
-
-    const query = state.eventsTable.search.trim().toLowerCase();
-    let filtered = state.events.filter(function (evt) {
-      if (state.eventsTable.tab === 'upcoming' && evt.status !== 'Upcoming') return false;
-      if (state.eventsTable.tab === 'live' && evt.status !== 'Live') return false;
-      if (state.eventsTable.tab === 'past' && evt.status !== 'Past') return false;
-      if (state.eventsTable.tab === 'draft' && evt.status !== 'Draft') return false;
-
-      if (state.eventsTable.typeFilter !== 'all' && evt.type !== state.eventsTable.typeFilter) {
-        return false;
-      }
-
-      if (query) {
-        const hay = (evt.name + ' ' + evt.type + ' ' + evt.venue + ' ' + evt.city).toLowerCase();
-        if (!hay.includes(query)) return false;
-      }
-      return true;
-    });
-
-    if (!state.eventsTable.sortAsc) {
-      filtered = filtered.slice().reverse();
-    }
-
-    if (filtered.length === 0) {
-      container.innerHTML =
-        '<div class="data-table-row data-table-row-event" style="justify-content:center; color:var(--text-secondary); font-size:12px;">No matching events found.</div>';
-    } else {
-      container.innerHTML = filtered
-        .map(function (evt) {
-          let badgeHtml = '';
-          if (evt.status === 'Live') {
-            badgeHtml =
-              '<div class="status-badge status-badge-green-sm">' +
-              '<img src="assets/status-dot-green-4.svg" alt="" class="svg-icon" />' +
-              '<span>Live</span>' +
-              '</div>';
-          } else if (evt.status === 'Upcoming') {
-            badgeHtml = '<div class="status-badge status-badge-purple-sm">Upcoming</div>';
-          } else if (evt.status === 'Past') {
-            badgeHtml = '<div class="status-badge status-badge-neutral-sm">Past</div>';
-          } else {
-            badgeHtml = '<div class="status-badge status-badge-neutral-sm">Draft</div>';
-          }
-
-          const fillBarHtml =
-            evt.barWidthPx > 0
-              ? '<div class="capacity-fill' +
-                (evt.isPastBar ? ' past' : '') +
-                '" style="width: ' +
-                evt.barWidthPx +
-                'px;"></div>'
-              : '';
-
-          return (
-            '<div class="data-table-row data-table-row-event" data-event-row="' +
-            escapeHtml(evt.id) +
-            '">' +
-            '<div class="col-checkbox-event">' +
-            '<div class="custom-checkbox' +
-            (evt.selected ? ' checked' : '') +
-            ' js-event-checkbox" data-event-id="' +
-            escapeHtml(evt.id) +
-            '" role="checkbox" aria-checked="' +
-            (evt.selected ? 'true' : 'false') +
-            '" tabindex="0"></div>' +
-            '</div>' +
-            '<div class="col-event-identity">' +
-            '<div class="date-tile">' +
-            '<span class="date-tile-month">' +
-            escapeHtml(evt.month) +
-            '</span>' +
-            '<span class="date-tile-day">' +
-            escapeHtml(evt.day) +
-            '</span>' +
-            '</div>' +
-            '<div class="cell-stack-6">' +
-            '<span class="event-row-title">' +
-            escapeHtml(evt.name) +
-            '</span>' +
-            '<span class="event-row-type">' +
-            escapeHtml(evt.type) +
-            '</span>' +
-            '</div>' +
-            '</div>' +
-            '<div class="col-event-schedule cell-stack-6">' +
-            '<span class="company-name">' +
-            escapeHtml(evt.date) +
-            '</span>' +
-            '<span class="company-role">' +
-            escapeHtml(evt.time) +
-            '</span>' +
-            '</div>' +
-            '<div class="col-event-location cell-stack-6">' +
-            '<span class="company-name">' +
-            escapeHtml(evt.venue) +
-            '</span>' +
-            '<span class="company-role">' +
-            escapeHtml(evt.city) +
-            '</span>' +
-            '</div>' +
-            '<div class="col-event-registrations capacity-cell">' +
-            '<p class="capacity-numbers">' +
-            '<span>' +
-            escapeHtml(evt.registeredText) +
-            '</span>' +
-            '<span class="capacity-total">' +
-            escapeHtml(evt.capacityText) +
-            '</span>' +
-            '</p>' +
-            '<div class="capacity-track">' +
-            fillBarHtml +
-            '</div>' +
-            '</div>' +
-            '<div class="col-event-status">' +
-            badgeHtml +
-            '</div>' +
-            '<div class="col-event-action">' +
-            '<span class="event-action-link js-event-row-action" data-target-screen="' +
-            escapeHtml(evt.actionTarget) +
-            '" data-event-title="' +
-            escapeHtml(evt.name) +
-            '">' +
-            escapeHtml(evt.actionLabel) +
-            '</span>' +
-            '</div>' +
-            '<div class="col-actions">' +
-            '<button type="button" class="icon-btn js-event-menu" data-event-title="' +
-            escapeHtml(evt.name) +
-            '" title="More options">' +
-            '<img src="assets/ellipsis.svg" alt="" class="svg-icon" />' +
-            '</button>' +
-            '</div>' +
-            '</div>'
-          );
-        })
-        .join('');
-    }
-
-    const countEl = document.getElementById('events-results-count');
-    if (countEl) {
-      countEl.textContent =
-        'Showing all ' + filtered.length + ' events in Forma studio';
-    }
-  }
+  // =========================================================================
+  // RENDER FUNCTIONS
+  // =========================================================================
 
   function renderAll() {
-    updateDashboardStats();
-    renderVelocityCharts();
-    renderAttendeeTables();
-    renderEventsTable();
-    renderAnalyticsView();
+    renderTopbarAndKpis();
+    renderCheckpointSelectors();
+    renderVerificationDeck();
+    renderHourlyTrafficChart();
+    renderActivityTimeline();
+    renderCrewTables();
+    renderCheckpointsDirectory();
+    renderBatchesAndMatrixScreen();
+    renderRollCallModalList();
   }
 
-  // --- Check-in & Undo Handlers (Persisted in MySQL) ---
-  function handleCheckInAttendee(attendeeId) {
-    const attendee = state.attendees.find(function (a) {
-      return a.id === attendeeId;
-    });
-    if (!attendee || attendee.checkedIn) return;
-
-    const formattedTime = getCurrentFormattedTime();
-    attendee.checkedIn = true;
-    attendee.checkinTime = formattedTime;
-    state.stats.checkedIn += 1;
-    state.stats.checkedInDelta += 1;
-    state.stats.lastArrivalTime = formattedTime;
-
-    renderAll();
-    postToApi(
-      'checkin',
-      { attendeeId: attendeeId, checkinTime: formattedTime },
-      attendee.name + ' checked in at ' + formattedTime + ' (saved to MySQL)'
-    );
-  }
-
-  function handleUndoCheckIn(attendeeId, attendeeName) {
-    const attendee = state.attendees.find(function (a) {
-      return a.id === attendeeId;
-    });
-    if (attendee && attendee.checkedIn) {
-      attendee.checkedIn = false;
-      attendee.checkinTime = null;
-      state.stats.checkedIn = Math.max(0, state.stats.checkedIn - 1);
-      state.stats.checkedInDelta = Math.max(0, state.stats.checkedInDelta - 1);
-      renderAll();
+  function renderTopbarAndKpis() {
+    const dbText = document.getElementById('topbar-db-text');
+    if (dbText) {
+      dbText.textContent = state.dbSource === 'ability_db'
+        ? 'Connected: ability_db (Live)'
+        : 'Connected: attendance_app (Standalone)';
     }
-    postToApi(
-      'undo_checkin',
-      { attendeeId: attendeeId },
-      'Reverted check-in for ' + (attendeeName || 'guest') + ' in MySQL'
+
+    const k = state.kpis;
+    document.querySelectorAll('.js-kpi-active-badges').forEach((el) => {
+      el.textContent = String(k.activeBadges ?? 14);
+    });
+    document.querySelectorAll('.js-stat-total-people').forEach((el) => {
+      el.textContent = String(k.totalStaff ?? state.crew.length);
+    });
+    document.querySelectorAll('.js-stat-onsite').forEach((el) => {
+      el.textContent = String(k.currentlyOnSite ?? state.rollCallList.length);
+    });
+    document.querySelectorAll('.js-kpi-total-granted').forEach((el) => {
+      el.textContent = String(k.totalGrantedToday ?? 0);
+    });
+    document.querySelectorAll('.js-kpi-venue-checkins').forEach((el) => {
+      el.textContent = String(k.venueCheckinsToday ?? 0);
+    });
+    document.querySelectorAll('.js-kpi-stock-checkins').forEach((el) => {
+      el.textContent = String(k.stockCheckinsToday ?? 0);
+    });
+    document.querySelectorAll('.js-kpi-venue-vs-stock').forEach((el) => {
+      el.textContent = `${k.venueCheckinsToday ?? 0} Venue · ${k.stockCheckinsToday ?? 0} Stock Gate`;
+    });
+    document.querySelectorAll('.js-kpi-late-denied').forEach((el) => {
+      el.textContent = String((k.lateArrivalsToday ?? 0) + (k.deniedScansToday ?? 0));
+    });
+    document.querySelectorAll('.js-kpi-late-denied-sub').forEach((el) => {
+      el.textContent = `${k.lateArrivalsToday ?? 0} Late · ${k.deniedScansToday ?? 0} Denied`;
+    });
+
+    const tc = k.tierCounts || { L1: 0, L2: 0, L3: 0, L4: 0 };
+    const breakdownEl = document.getElementById('overview-tier-breakdown');
+    if (breakdownEl) {
+      breakdownEl.textContent = `L1:${tc.L1 || 0} · L2:${tc.L2 || 0} · L3:${tc.L3 || 0} · L4:${tc.L4 || 0}`;
+    }
+
+    // Tab counts
+    const checkedInCount = state.crew.filter((c) => c.daily_state === 'checked_in').length;
+    const checkedOutCount = state.crew.filter((c) => c.daily_state === 'checked_out').length;
+    const stockAuthCount = state.crew.filter((c) => c.stock_authorized).length;
+    const restrictedCount = state.crew.filter((c) => !c.stock_authorized).length;
+
+    document.querySelectorAll('.js-tab-count-all').forEach((el) => (el.textContent = String(state.crew.length)));
+    document.querySelectorAll('.js-tab-count-in').forEach((el) => (el.textContent = String(checkedInCount)));
+    document.querySelectorAll('.js-tab-count-out').forEach((el) => (el.textContent = String(checkedOutCount)));
+    document.querySelectorAll('.js-tab-count-stock').forEach((el) => (el.textContent = String(stockAuthCount)));
+    document.querySelectorAll('.js-tab-count-l1').forEach((el) => (el.textContent = String(restrictedCount)));
+  }
+
+  function renderCheckpointSelectors() {
+    const isStock = state.checkpointType === 'stock_warehouse';
+    document.querySelectorAll('.js-cp-type-btn').forEach((btn) => {
+      const btnType = btn.getAttribute('data-cp-type');
+      btn.classList.remove('active-stock', 'active-venue');
+      if (btnType === state.checkpointType) {
+        btn.classList.add(isStock ? 'active-stock' : 'active-venue');
+      }
+      btn.disabled = state.stationLocked;
+    });
+
+    const optionsList = isStock
+      ? state.checkpoints.stock_warehouses || []
+      : state.checkpoints.event_venues || [];
+
+    document.querySelectorAll('.js-checkpoint-select').forEach((sel) => {
+      sel.innerHTML = optionsList
+        .map(
+          (cp) =>
+            `<option value="${cp.id}" ${Number(cp.id) === Number(state.checkpointId) ? 'selected' : ''}>${escapeHtml(
+              cp.name
+            )} (Call: ${escapeHtml(cp.call_time || '08:00')})</option>`
+        )
+        .join('');
+      sel.disabled = state.stationLocked;
+    });
+
+    document.querySelectorAll('.js-station-lock-btn').forEach((btn) => {
+      btn.classList.toggle('locked', state.stationLocked);
+      btn.classList.toggle('unlocked', !state.stationLocked);
+    });
+
+    document.querySelectorAll('.js-station-lock-label').forEach((lbl) => {
+      lbl.textContent = state.stationLocked
+        ? `ENTRANCE STATION LOCKED (${state.activeCheckpoint.name}) · Unlock (PIN: 1234)`
+        : 'MULTI-CHECKPOINT MODE · Lock Station (PIN: 1234)';
+    });
+
+    document.querySelectorAll('.js-active-cp-meta').forEach((el) => {
+      el.textContent = `${state.activeCheckpoint.name} · Call Time ${state.activeCheckpoint.call_time || '08:00'} · ${
+        state.activeCheckpoint.min_clearance || ''
+      }`;
+    });
+
+    // Update Screen 2 Spotlight
+    const spType = document.querySelector('.js-spotlight-cp-type');
+    const spHours = document.querySelector('.js-spotlight-cp-hours');
+    const spName = document.querySelector('.js-spotlight-cp-name');
+    const spLoc = document.querySelector('.js-spotlight-cp-loc');
+    const spRule = document.querySelector('.js-spotlight-rule-text');
+    if (spType) spType.textContent = isStock ? 'STOCK WAREHOUSE GATE' : 'EVENT VENUE ENTRANCE';
+    if (spHours) spHours.textContent = `CALL TIME: ${state.activeCheckpoint.call_time || '08:00'} · KIGALI`;
+    if (spName) spName.textContent = state.activeCheckpoint.name;
+    if (spLoc) spLoc.textContent = `${state.activeCheckpoint.location || 'Kigali'} · ${state.activeCheckpoint.lead_label || ''}`;
+    if (spRule) spRule.textContent = state.activeCheckpoint.min_clearance || '4-Tier Access Matrix Active';
+
+    // Update Featured Equipment Batch Card on Screen 2 from state.batches[0]
+    if (state.batches && state.batches.length > 0) {
+      const fb = state.batches[0];
+      const bCodeEl = document.getElementById('spotlight-batch-code');
+      const bStatEl = document.getElementById('spotlight-batch-status');
+      const bRouteEl = document.getElementById('spotlight-batch-route');
+      const bTechEl = document.getElementById('spotlight-batch-tech');
+      const bCtrlEl = document.getElementById('spotlight-batch-controller');
+      if (bCodeEl) bCodeEl.textContent = fb.batch_number;
+      if (bStatEl) bStatEl.textContent = fb.status.toUpperCase();
+      if (bRouteEl) bRouteEl.textContent = `${fb.source_name} → ${fb.destination_name}`;
+      if (bTechEl) bTechEl.textContent = `${fb.technician_name} (${fb.technician_badge} · ${fb.technician_clearance})`;
+      if (bCtrlEl) bCtrlEl.textContent = `Controller: ${fb.stock_controller_name}`;
+    }
+
+    // Dynamically update Quick Test Scan Preset Buttons to match live DB crew
+    const presetContainer = document.querySelector('.kiosk-preset-pills');
+    if (presetContainer && state.crew.length > 0) {
+      const l2WithBatch = state.crew.find((c) => c.clearance_code === 'L2' && c.linked_batches && c.linked_batches.length > 0) || state.crew.find((c) => c.clearance_code === 'L2');
+      const l1Member = state.crew.find((c) => c.clearance_code === 'L1');
+      const l3Member = state.crew.find((c) => c.clearance_code === 'L3');
+      const l4Member = state.crew.find((c) => c.clearance_code === 'L4');
+      const presets = [
+        l2WithBatch ? { m: l2WithBatch, tag: 'Tech + Batch' } : null,
+        l1Member ? { m: l1Member, tag: 'Venue Crew' } : null,
+        l3Member ? { m: l3Member, tag: 'Stock Ctrl' } : null,
+        l4Member ? { m: l4Member, tag: 'Exec All-Access' } : null,
+      ].filter(Boolean);
+
+      if (presets.length > 0) {
+        presetContainer.innerHTML =
+          `<span class="kiosk-preset-label">Quick Test Scans:</span>` +
+          presets
+            .map(
+              (p) => `
+              <button type="button" class="kiosk-preset-btn js-quick-scan" data-badge="${escapeHtml(p.m.badge_code)}">
+                <span class="tier-code-badge tier-code-${escapeHtml(p.m.clearance_code)}">${escapeHtml(p.m.clearance_code)}</span>
+                <span>${escapeHtml(p.m.full_name.split(' ')[0])} (${escapeHtml(p.tag)})</span>
+              </button>
+            `
+            )
+            .join('');
+      }
+    }
+  }
+
+  function renderVerificationDeck() {
+    const v = state.currentVerification;
+    if (!v || !v.badge) return;
+    const b = v.badge;
+
+    const staffCodeEl = document.getElementById('kiosk-staff-code');
+    const cpTagEl = document.getElementById('kiosk-checkpoint-tag');
+    const portraitImg = document.getElementById('kiosk-portrait-img');
+    const initialsEl = document.getElementById('kiosk-initials-avatar');
+    const phoneEl = document.getElementById('kiosk-staff-phone');
+    const rolePillEl = document.getElementById('kiosk-role-pill');
+
+    if (staffCodeEl) staffCodeEl.textContent = b.staff_code || 'ABL-006';
+    if (cpTagEl) cpTagEl.textContent = String(v.checkpoint_name || state.activeCheckpoint.name).toUpperCase();
+
+    if (b.profile_image && portraitImg && initialsEl) {
+      portraitImg.src = b.profile_image;
+      portraitImg.style.display = 'block';
+      initialsEl.style.display = 'none';
+      portraitImg.onerror = function () {
+        portraitImg.style.display = 'none';
+        initialsEl.style.display = 'flex';
+      };
+    } else if (portraitImg && initialsEl) {
+      portraitImg.style.display = 'none';
+      initialsEl.style.display = 'flex';
+      initialsEl.textContent = b.initials || 'CR';
+    }
+
+    if (phoneEl) phoneEl.textContent = `${b.phone || '+250 788 100 000'} · @${b.username}`;
+    if (rolePillEl) rolePillEl.textContent = b.role_pill || 'TECHNICIAN - PRODUCTION';
+
+    const nameEl = document.getElementById('kiosk-staff-name');
+    const titleEl = document.getElementById('kiosk-clearance-title');
+    const circleEl = document.getElementById('kiosk-clearance-circle');
+    if (nameEl) nameEl.textContent = b.full_name;
+    if (titleEl) titleEl.textContent = b.clearance_title;
+    if (circleEl) {
+      circleEl.textContent = b.clearance_code || 'L2';
+      circleEl.style.backgroundColor = b.clearance_color || '#2563eb';
+    }
+
+    const bannerEl = document.getElementById('kiosk-status-banner');
+    const ringEl = document.getElementById('kiosk-status-ring');
+    const svgEl = document.getElementById('kiosk-status-svg');
+    const headlineEl = document.getElementById('kiosk-status-headline');
+    const punctEl = document.getElementById('kiosk-punctuality-pill');
+    const reasonEl = document.getElementById('kiosk-status-reason');
+
+    const granted = Boolean(v.allowed);
+    if (bannerEl) {
+      bannerEl.classList.toggle('granted', granted);
+      bannerEl.classList.toggle('denied', !granted);
+    }
+    if (ringEl) {
+      ringEl.classList.toggle('granted', granted);
+      ringEl.classList.toggle('denied', !granted);
+    }
+    if (svgEl) {
+      svgEl.innerHTML = granted
+        ? '<polyline points="20 6 9 17 4 12"></polyline>'
+        : '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>';
+    }
+    if (headlineEl) {
+      headlineEl.textContent = granted ? 'ACCESS GRANTED' : 'ACCESS DENIED';
+      headlineEl.classList.toggle('granted', granted);
+      headlineEl.classList.toggle('denied', !granted);
+    }
+    if (punctEl) {
+      punctEl.textContent = v.punctuality_label || (granted ? 'ON TIME' : 'RESTRICTED');
+      punctEl.className = `kiosk-punctuality-pill ${granted ? (v.punctuality || 'on_time') : 'restricted'}`;
+    }
+    if (reasonEl) {
+      reasonEl.textContent = v.reason || '';
+    }
+
+    // Inbound & Outbound Timestamps
+    const inTrigger = document.getElementById('kiosk-trigger-in');
+    const outTrigger = document.getElementById('kiosk-trigger-out');
+    const inTimeEl = document.getElementById('kiosk-in-time');
+    const outTimeEl = document.getElementById('kiosk-out-time');
+
+    if (inTimeEl) {
+      inTimeEl.textContent = v.check_in_time ? `In: ${v.check_in_time}` : 'Click to Record Check-In';
+    }
+    if (outTimeEl) {
+      outTimeEl.textContent = v.check_out_time ? `Out: ${v.check_out_time}` : 'Click to Record Check-Out';
+    }
+    if (inTrigger) {
+      inTrigger.classList.toggle('in-active', Boolean(v.check_in_time));
+    }
+    if (outTrigger) {
+      outTrigger.classList.toggle('out-active', Boolean(v.check_out_time));
+    }
+
+    // Linked Stock Batch Custody Bar
+    const batchBar = document.getElementById('kiosk-batch-bar');
+    const batchNumEl = document.getElementById('kiosk-batch-number');
+    const batchRouteEl = document.getElementById('kiosk-batch-route');
+    const inspectBtn = document.getElementById('kiosk-inspect-batch-btn');
+
+    const batches = Array.isArray(v.linked_batches) && v.linked_batches.length > 0
+      ? v.linked_batches
+      : state.batches.filter((bt) => Number(bt.technician_id) === Number(b.user_id));
+
+    if (batchBar) {
+      if (batches.length > 0) {
+        const firstBatch = batches[0];
+        batchBar.style.display = 'flex';
+        if (batchNumEl) batchNumEl.textContent = firstBatch.batch_number;
+        if (batchRouteEl) {
+          batchRouteEl.textContent = `${firstBatch.source_name} → ${firstBatch.destination_name} [${firstBatch.status}]`;
+        }
+        if (inspectBtn) {
+          inspectBtn.onclick = function () {
+            openBatchModal(firstBatch.id);
+          };
+        }
+      } else {
+        batchBar.style.display = 'flex';
+        if (batchNumEl) batchNumEl.textContent = 'NO ACTIVE BATCH';
+        if (batchRouteEl) {
+          batchRouteEl.textContent = state.checkpointType === 'stock_warehouse'
+            ? 'No equipment dispatch batch assigned to this badge'
+            : 'Venue crew shift entry (no stock batch required)';
+        }
+        if (inspectBtn) {
+          inspectBtn.onclick = function () {
+            if (state.batches.length > 0) openBatchModal(state.batches[0].id);
+          };
+        }
+      }
+    }
+
+    // Footer Bar
+    const footerBadgeEl = document.getElementById('kiosk-footer-badge');
+    const footerStatusEl = document.getElementById('kiosk-footer-status');
+    if (footerBadgeEl) {
+      footerBadgeEl.textContent = `BADGE #: ${b.badge_code}`;
+    }
+    if (footerStatusEl) {
+      footerStatusEl.textContent = `${v.checkpoint_name || state.activeCheckpoint.name} Clearance - ${
+        granted ? 'Verified' : 'Denied'
+      }`;
+      footerStatusEl.className = `kiosk-footer-clearance-status ${granted ? 'verified' : 'denied'}`;
+    }
+  }
+
+  function renderHourlyTrafficChart() {
+    const container = document.getElementById('overview-chart-bars');
+    if (!container) return;
+
+    const buckets = state.hourlyTraffic && state.hourlyTraffic.length > 0
+      ? state.hourlyTraffic
+      : [
+          { hour: '07:00', venueCount: 1, stockCount: 1 },
+          { hour: '08:00', venueCount: 2, stockCount: 1 },
+          { hour: '09:00', venueCount: 1, stockCount: 0 },
+          { hour: '10:00', venueCount: 0, stockCount: 0 },
+          { hour: '11:00', venueCount: 0, stockCount: 0 },
+          { hour: '12:00', venueCount: 0, stockCount: 0 },
+          { hour: '14:00', venueCount: 0, stockCount: 0 },
+          { hour: '16:00', venueCount: 0, stockCount: 0 },
+        ];
+
+    const maxVal = Math.max(
+      4,
+      ...buckets.map((b) => Math.max(Number(b.venueCount || 0), Number(b.stockCount || 0)))
     );
+
+    container.innerHTML = buckets
+      .map((b) => {
+        const vCount = Number(b.venueCount || 0);
+        const sCount = Number(b.stockCount || 0);
+        const vHeight = Math.max(6, Math.round((vCount / maxVal) * 108));
+        const sHeight = Math.max(6, Math.round((sCount / maxVal) * 108));
+        return `
+          <div class="dual-bar-group" title="${escapeHtml(b.hour)} — Venue: ${vCount} | Stock: ${sCount}">
+            <div class="chart-bar-venue" style="height: ${vHeight}px;"></div>
+            <div class="chart-bar-stock" style="height: ${sHeight}px;"></div>
+          </div>
+        `;
+      })
+      .join('');
   }
 
-  // --- Export CSV Helper ---
-  function exportAttendeesCsv() {
-    const headers = ['Name', 'Email', 'Company', 'Role', 'Ticket', 'Registered On', 'Status', 'Check-in'];
-    const rows = state.attendees.map(function (a) {
-      return [
-        a.name,
-        a.email,
-        a.company,
-        a.role,
-        a.ticket,
-        a.registeredDate,
-        a.status,
-        a.checkedIn ? 'Checked in (' + a.checkinTime + ')' : 'Not checked in'
-      ]
-        .map(function (cell) {
-          return '"' + String(cell).replace(/"/g, '""') + '"';
+  function renderActivityTimeline() {
+    const listEl = document.getElementById('timeline-feed-list');
+    const pageInfoEl = document.getElementById('timeline-page-info');
+    const prevBtn = document.getElementById('timeline-prev-btn');
+    const nextBtn = document.getElementById('timeline-next-btn');
+    if (!listEl) return;
+
+    const q = state.timelineSearch.trim().toLowerCase();
+    const scope = state.timelineScope;
+
+    const filtered = state.activityTimeline.filter((item) => {
+      if (scope === 'event_venue' && item.checkpoint_type !== 'event_venue') return false;
+      if (scope === 'stock_warehouse' && item.checkpoint_type !== 'stock_warehouse') return false;
+      if (scope === 'granted' && item.access_status !== 'granted') return false;
+      if (scope === 'denied' && item.access_status !== 'denied') return false;
+
+      if (q) {
+        const hay = `${item.full_name} ${item.badge_code} ${item.checkpoint_name} ${item.action_title} ${item.department} ${item.role_display}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / state.timelinePerPage));
+    if (state.timelinePage > totalPages) state.timelinePage = totalPages;
+    if (state.timelinePage < 1) state.timelinePage = 1;
+
+    const startIdx = (state.timelinePage - 1) * state.timelinePerPage;
+    const pageItems = filtered.slice(startIdx, startIdx + state.timelinePerPage);
+
+    if (pageItems.length === 0) {
+      listEl.innerHTML = `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-secondary);">No gate activity logs match your filter.</div>`;
+    } else {
+      listEl.innerHTML = pageItems
+        .map((item) => {
+          const isDenied = item.access_status === 'denied';
+          const isStock = item.checkpoint_type === 'stock_warehouse';
+          return `
+            <div class="timeline-event-card" data-timeline-uid="${item.user_id}">
+              <div class="timeline-event-left">
+                <div class="timeline-action-title">${escapeHtml(item.action_title)}</div>
+                <div class="timeline-time-sub">${escapeHtml(item.formatted_time)} · ${escapeHtml(item.badge_code)}</div>
+                <div class="timeline-staff-mini">
+                  <div class="timeline-mini-avatar">${escapeHtml(item.initials)}</div>
+                  <span class="timeline-mini-name">${escapeHtml(item.full_name)}</span>
+                  <span class="tier-code-badge tier-code-${escapeHtml(item.clearance_code)}">${escapeHtml(item.clearance_code)}</span>
+                  <span class="timeline-mini-role">${escapeHtml(item.role_display)} · ${escapeHtml(item.department)}</span>
+                </div>
+              </div>
+              <div class="timeline-event-right">
+                ${
+                  !isDenied && item.in_pill
+                    ? `<span class="ts-mini-pill in">${escapeHtml(item.in_pill)}</span>`
+                    : ''
+                }
+                ${
+                  !isDenied && item.out_pill
+                    ? `<span class="ts-mini-pill out">${escapeHtml(item.out_pill)}</span>`
+                    : ''
+                }
+                <span class="status-badge ${isDenied ? 'status-badge-red-sm' : 'status-badge-green-sm'}">
+                  ${isDenied ? 'Denied' : 'Granted'}
+                </span>
+                <span class="status-badge status-badge-neutral-sm">
+                  ${isStock ? 'Stock Gate' : 'Event Venue'}
+                </span>
+              </div>
+            </div>
+          `;
         })
-        .join(',');
-    });
-    const csvContent = [headers.join(',')].concat(rows).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'form-and-future-attendees.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showToast('Exported attendee directory (CSV)');
+        .join('');
+    }
+
+    if (pageInfoEl) {
+      pageInfoEl.textContent = `Page ${state.timelinePage} of ${totalPages} (${filtered.length} logs)`;
+    }
+    if (prevBtn) prevBtn.disabled = state.timelinePage <= 1;
+    if (nextBtn) nextBtn.disabled = state.timelinePage >= totalPages;
   }
 
-  // --- Event Listeners Setup ---
-  function initEventListeners() {
-    document.querySelectorAll('.nav-item[data-nav-target]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const target = btn.getAttribute('data-nav-target');
-        switchScreen(target);
-      });
+  function filterCrewList(tabKey, searchStr) {
+    const q = searchStr.trim().toLowerCase();
+    return state.crew.filter((c) => {
+      if (tabKey === 'checked_in' && c.daily_state !== 'checked_in') return false;
+      if (tabKey === 'checked_out' && c.daily_state !== 'checked_out') return false;
+      if (tabKey === 'stock_auth' && !c.stock_authorized) return false;
+      if (tabKey === 'restricted' && c.stock_authorized) return false;
+
+      if (state.tierFilter !== 'all' && c.clearance_code !== state.tierFilter) return false;
+      if (state.gateStateFilter !== 'all' && c.daily_state !== state.gateStateFilter) return false;
+
+      if (q) {
+        const hay = `${c.full_name} ${c.username} ${c.badge_code} ${c.staff_code} ${c.department} ${c.role_display}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderCrewRowsHtml(list) {
+    if (list.length === 0) {
+      return `<div style="padding: 28px; text-align: center; font-size: 12px; color: var(--text-secondary);">No crew members match the selected filter criteria.</div>`;
+    }
+
+    return list
+      .map((c) => {
+        const isSelected = Number(c.id) === Number(state.selectedCrewId);
+        const canCheckIn = c.daily_state === 'ready';
+        const canCheckOut = c.daily_state === 'checked_in';
+        const hasBatch = Array.isArray(c.linked_batches) && c.linked_batches.length > 0;
+
+        return `
+          <div class="attendee-table-row ${isSelected ? 'kiosk-selected-row' : ''}" data-crew-id="${c.id}">
+            <div class="col-checkbox">
+              <div class="custom-checkbox" role="checkbox" aria-checked="${isSelected ? 'true' : 'false'}" tabindex="0"></div>
+            </div>
+            <div class="col-attendee">
+              <div class="avatar-circle avatar-jl">${escapeHtml(c.initials)}</div>
+              <div class="attendee-identity">
+                <span class="attendee-name">${escapeHtml(c.full_name)}</span>
+                <span class="attendee-email">@${escapeHtml(c.username)} · ${escapeHtml(c.phone)}</span>
+              </div>
+            </div>
+            <div class="col-company">
+              <div class="company-stack">
+                <span class="company-name">${escapeHtml(c.department)}</span>
+                <span class="company-role">${escapeHtml(c.role_display)}${hasBatch ? ' · 📦 Batch Linked' : ''}</span>
+              </div>
+            </div>
+            <div class="col-ticket">
+              <span class="tier-pill-soft ${escapeHtml(c.clearance_code)}">
+                <span class="tier-code-badge tier-code-${escapeHtml(c.clearance_code)}">${escapeHtml(c.clearance_code)}</span>
+                <span>${escapeHtml(c.clearance_short)}</span>
+              </span>
+            </div>
+            <div class="col-reg-date">
+              <div class="badge-code-mono-pill">
+                <span class="badge-code-primary">${escapeHtml(c.badge_code)}</span>
+                <span class="badge-code-sub">${escapeHtml(c.staff_code)} · ${escapeHtml(c.rfid_uid)}</span>
+              </div>
+            </div>
+            <div class="col-reg-status">
+              <div class="paired-timestamps-cell">
+                ${
+                  c.checkpoint_authorized
+                    ? `<span class="status-badge status-badge-green-sm">Authorized (${escapeHtml(c.punctuality)})</span>`
+                    : `<span class="status-badge status-badge-red-sm">Stock Restricted (L1)</span>`
+                }
+                ${c.check_in_time ? `<span class="ts-mini-pill in">In: ${escapeHtml(c.check_in_time)}</span>` : ''}
+                ${c.check_out_time ? `<span class="ts-mini-pill out">Out: ${escapeHtml(c.check_out_time)}</span>` : ''}
+              </div>
+            </div>
+            <div class="col-checkin">
+              <div class="paired-gate-actions">
+                <button
+                  type="button"
+                  class="gate-btn gate-btn-checkin js-row-gate-action"
+                  data-badge="${escapeHtml(c.badge_code)}"
+                  data-mode="check_in"
+                  ${canCheckIn ? '' : 'disabled'}
+                >
+                  Checkin
+                </button>
+                <button
+                  type="button"
+                  class="gate-btn gate-btn-checkout js-row-gate-action"
+                  data-badge="${escapeHtml(c.badge_code)}"
+                  data-mode="check_out"
+                  ${canCheckOut ? '' : 'disabled'}
+                >
+                  Checkout
+                </button>
+              </div>
+            </div>
+            <div class="col-actions">
+              <button
+                type="button"
+                class="icon-btn js-inspect-crew-kiosk"
+                data-crew-id="${c.id}"
+                title="Load in #pane-kiosk Verification Deck"
+              >
+                <img src="assets/scan-line-13.svg" alt="Kiosk" class="svg-icon" />
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  function renderCrewTables() {
+    const overviewRowsEl = document.getElementById('overview-attendee-rows');
+    const overviewCountEl = document.getElementById('overview-results-count');
+    if (overviewRowsEl) {
+      const ovList = filterCrewList(state.overviewTab, state.overviewSearch);
+      overviewRowsEl.innerHTML = renderCrewRowsHtml(ovList);
+      if (overviewCountEl) {
+        overviewCountEl.textContent = `Showing ${ovList.length} of ${state.crew.length} badged production crew`;
+      }
+    }
+
+    const dirRowsEl = document.getElementById('directory-attendee-rows');
+    const dirCountEl = document.getElementById('directory-results-count');
+    if (dirRowsEl) {
+      const dirList = filterCrewList(state.directoryTab, state.directorySearch);
+      dirRowsEl.innerHTML = renderCrewRowsHtml(dirList);
+      if (dirCountEl) {
+        dirCountEl.textContent = `Showing ${dirList.length} of ${state.crew.length} badged production crew`;
+      }
+    }
+  }
+
+  function renderCheckpointsDirectory() {
+    const rowsEl = document.getElementById('events-table-rows');
+    if (!rowsEl) return;
+
+    const allCps = state.checkpoints.directory || [];
+    const stocksCount = (state.checkpoints.stock_warehouses || []).length;
+    const venuesCount = (state.checkpoints.event_venues || []).length;
+
+    const totalKpi = document.getElementById('events-total-kpi');
+    const stockKpi = document.getElementById('events-stock-kpi');
+    const venueKpi = document.getElementById('events-venue-kpi');
+    const batchKpi = document.getElementById('events-batches-kpi');
+    const sidebarCount = document.getElementById('sidebar-events-count');
+    const dirBadge = document.getElementById('events-directory-badge');
+
+    if (totalKpi) totalKpi.textContent = String(allCps.length).padStart(2, '0');
+    if (stockKpi) stockKpi.textContent = String(stocksCount).padStart(2, '0');
+    if (venueKpi) venueKpi.textContent = String(venuesCount).padStart(2, '0');
+    if (batchKpi) batchKpi.textContent = String(state.batches.length).padStart(2, '0');
+    if (sidebarCount) sidebarCount.textContent = String(allCps.length).padStart(2, '0');
+    if (dirBadge) dirBadge.textContent = String(allCps.length).padStart(2, '0');
+
+    const tabAll = document.getElementById('events-tab-count-all');
+    const tabStock = document.getElementById('events-tab-count-stock');
+    const tabVenue = document.getElementById('events-tab-count-venue');
+    if (tabAll) tabAll.textContent = String(allCps.length).padStart(2, '0');
+    if (tabStock) tabStock.textContent = String(stocksCount).padStart(2, '0');
+    if (tabVenue) tabVenue.textContent = String(venuesCount).padStart(2, '0');
+
+    const q = state.checkpointSearch.trim().toLowerCase();
+    const filtered = allCps.filter((cp) => {
+      if (state.checkpointTab !== 'all' && cp.type !== state.checkpointTab) return false;
+      if (q) {
+        const hay = `${cp.name} ${cp.location} ${cp.lead_label} ${cp.min_clearance}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
     });
 
-    document.querySelectorAll('.nav-item[data-nav-toast]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        showToast(btn.getAttribute('data-nav-toast'));
+    rowsEl.innerHTML = filtered
+      .map((cp) => {
+        const isStock = cp.type === 'stock_warehouse';
+        const isActive = cp.type === state.checkpointType && Number(cp.id) === Number(state.checkpointId);
+        return `
+          <div class="event-table-row" style="${isActive ? 'background-color: #f5f3ff;' : ''}">
+            <div class="col-checkbox-event">
+              <div class="custom-checkbox" role="checkbox" aria-checked="${isActive ? 'true' : 'false'}"></div>
+            </div>
+            <div class="col-event-name">
+              <div class="date-tile" style="background-color: ${isStock ? '#dcfce7' : '#e0f2fe'};">
+                <span class="date-tile-month" style="color: ${isStock ? '#15803d' : '#0369a1'};">${isStock ? 'STOCK' : 'VENUE'}</span>
+                <span class="date-tile-day" style="font-size: 13px; font-weight: 700; color: ${isStock ? '#15803d' : '#0369a1'};">#${cp.id}</span>
+              </div>
+              <div class="attendee-identity">
+                <span class="event-row-title">${escapeHtml(cp.name)}</span>
+                <span class="event-row-type">${escapeHtml(cp.location)}</span>
+              </div>
+            </div>
+            <div class="col-event-schedule">
+              <div class="company-stack">
+                <span class="company-name">Call Time: ${escapeHtml(cp.call_time || '08:00')}</span>
+                <span class="company-role">${escapeHtml(cp.lead_label || '')}</span>
+              </div>
+            </div>
+            <div class="col-event-location">
+              <span class="status-badge ${isStock ? 'status-badge-amber-sm' : 'status-badge-green-sm'}">
+                ${escapeHtml(cp.min_clearance)}
+              </span>
+            </div>
+            <div class="col-event-registrations">
+              <div class="capacity-cell">
+                <span class="capacity-numbers">
+                  <strong>${cp.on_site_now || 0} On-Site</strong>
+                  <span class="capacity-total"> · ${cp.checked_in_today || 0} Check-ins today</span>
+                </span>
+              </div>
+            </div>
+            <div class="col-event-status">
+              <span class="status-badge ${isStock ? 'status-badge-green-sm' : 'status-badge-purple-sm'}">
+                ${isStock ? 'Stock Warehouse' : 'Event Venue'}
+              </span>
+            </div>
+            <div class="col-event-action">
+              <button
+                type="button"
+                class="btn btn-primary-32 js-activate-checkpoint-btn"
+                data-cp-type="${cp.type}"
+                data-cp-id="${cp.id}"
+              >
+                ${isActive ? 'Active Terminal (#pane-kiosk)' : 'Open Gate Terminal'}
+              </button>
+            </div>
+            <div class="col-actions"></div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  function renderBatchesAndMatrixScreen() {
+    // 1. 4-Tier Matrix Overview Cards
+    const matrixGrid = document.getElementById('matrix-tier-cards-grid');
+    if (matrixGrid && state.clearanceMatrix.length > 0) {
+      matrixGrid.innerHTML = state.clearanceMatrix
+        .map(
+          (m) => `
+          <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color)};">
+            <div class="metric-heading">
+              <span class="tier-code-badge tier-code-${escapeHtml(m.code)}">${escapeHtml(m.code)}</span>
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">${m.member_count || 0} Staff</span>
+            </div>
+            <span style="font-size: 15px; font-weight: 700; color: var(--text-primary);">${escapeHtml(m.title)}</span>
+            <span class="metric-context">
+              Venue Access: <strong>${escapeHtml(m.venue_Rule)}</strong> · Stock Access: <strong>${escapeHtml(m.stock_rule)}</strong>
+            </span>
+          </div>
+        `
+        )
+        .join('');
+    }
+
+    // 2. Equipment Batches Custody Table
+    const batchesRowsEl = document.getElementById('batches-table-rows');
+    const batchesBadge = document.getElementById('batches-count-badge');
+    if (batchesBadge) batchesBadge.textContent = String(state.batches.length).padStart(2, '0');
+
+    if (batchesRowsEl) {
+      batchesRowsEl.innerHTML = state.batches
+        .map((b) => {
+          const isApproved = b.status === 'approved';
+          return `
+            <div class="tier-table-row" style="height: 68px;">
+              <div style="width: 210px; display: flex; flex-direction: column; gap: 3px;">
+                <span class="badge-code-primary">${escapeHtml(b.batch_number)}</span>
+                <span style="font-size: 10px; color: var(--text-secondary);">Job Sheet: ${escapeHtml(b.job_sheet)} · ${escapeHtml(b.event_name)}</span>
+              </div>
+              <div style="width: 220px; display: flex; flex-direction: column; gap: 3px;">
+                <span style="font-size: 11px; font-weight: 600;">${escapeHtml(b.source_name)} → ${escapeHtml(b.destination_name)}</span>
+                <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(b.destination_room)} (${escapeHtml(b.movement_type)})</span>
+              </div>
+              <div style="width: 200px; display: flex; flex-direction: column; gap: 3px;">
+                <span style="font-size: 11px; font-weight: 600;">${escapeHtml(b.technician_name)}</span>
+                <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(b.technician_badge)} · Tier ${escapeHtml(b.technician_clearance)}</span>
+              </div>
+              <div style="width: 140px; font-size: 11px;">
+                ${escapeHtml(b.stock_controller_name)}
+              </div>
+              <div style="width: 120px;">
+                <span class="status-badge ${isApproved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">
+                  ${escapeHtml(b.status.toUpperCase())}
+                </span>
+              </div>
+              <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
+                <button type="button" class="btn btn-secondary-32-sm js-open-batch-modal" data-batch-id="${b.id}">
+                  Inspect Manifest
+                </button>
+                ${
+                  !isApproved
+                    ? `<button type="button" class="btn btn-primary-32 js-approve-batch-btn" data-batch-id="${b.id}">Approve Batch</button>`
+                    : ''
+                }
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+    }
+
+    // 3. 4-Tier Access Matrix Crew Assignment Rows
+    const matrixRowsEl = document.getElementById('matrix-config-rows');
+    if (matrixRowsEl) {
+      matrixRowsEl.innerHTML = state.crew
+        .map(
+          (c) => `
+          <div class="tier-table-row" style="height: 60px;">
+            <div style="width: 220px; display: flex; align-items: center; gap: 10px;">
+              <div class="avatar-circle avatar-jl">${escapeHtml(c.initials)}</div>
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-size: 12px; font-weight: 600;">${escapeHtml(c.full_name)}</span>
+                <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(c.role_display)} · ${escapeHtml(c.department)}</span>
+              </div>
+            </div>
+            <div style="width: 160px;">
+              <span class="badge-code-primary">${escapeHtml(c.badge_code)}</span>
+            </div>
+            <div style="width: 220px;">
+              <span class="tier-pill-soft ${escapeHtml(c.clearance_code)}">
+                <span class="tier-code-badge tier-code-${escapeHtml(c.clearance_code)}">${escapeHtml(c.clearance_code)}</span>
+                <span>${escapeHtml(c.clearance_short)}</span>
+              </span>
+            </div>
+            <div style="width: 180px; font-size: 11px;">
+              ${
+                c.clearance_code === 'L1'
+                  ? 'Venue: YES · <strong style="color:#dc2626;">Stock: NO</strong>'
+                  : 'Venue: YES · <strong style="color:#16a34a;">Stock: YES</strong>'
+              }
+            </div>
+            <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
+              <select class="form-select js-clearance-select" data-user-id="${c.id}" style="height: 30px; font-size: 11px;">
+                <option value="L1_VENUE_BASIC" ${c.clearance_code === 'L1' ? 'selected' : ''}>L1 — Event Venue Crew (No Stock)</option>
+                <option value="L2_TECH_STAGE" ${c.clearance_code === 'L2' ? 'selected' : ''}>L2 — Technical & Stage (Stock + Venue)</option>
+                <option value="L3_STOCK_WAREHOUSE" ${c.clearance_code === 'L3' ? 'selected' : ''}>L3 — Stock Controller (Full Stock)</option>
+                <option value="L4_ALL_ACCESS" ${c.clearance_code === 'L4' ? 'selected' : ''}>L4 — Executive & All-Access</option>
+              </select>
+              <button type="button" class="btn btn-secondary-32-sm js-test-in-kiosk" data-crew-id="${c.id}">
+                Test in Kiosk ↗
+              </button>
+            </div>
+          </div>
+        `
+        )
+        .join('');
+    }
+  }
+
+  function renderRollCallModalList() {
+    const listEl = document.getElementById('rollcall-modal-list');
+    if (!listEl) return;
+
+    if (state.rollCallList.length === 0) {
+      listEl.innerHTML = `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-secondary);">No crew members are currently checked in on-site.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = state.rollCallList
+      .map(
+        (rc) => `
+        <div class="timeline-event-card" style="align-items: center;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="avatar-circle avatar-jl">${escapeHtml(rc.initials)}</div>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 12px; font-weight: 700;">${escapeHtml(rc.full_name)}</span>
+                <span class="tier-code-badge tier-code-${escapeHtml(rc.clearance_code)}">${escapeHtml(rc.clearance_code)}</span>
+                <span class="badge-code-primary">${escapeHtml(rc.badge_code)}</span>
+              </div>
+              <span style="font-size: 11px; color: var(--text-secondary);">
+                ${escapeHtml(rc.role_display)} (${escapeHtml(rc.department)}) · At <strong>${escapeHtml(rc.checkpoint_name)}</strong>
+              </span>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="ts-mini-pill in">In: ${escapeHtml(rc.check_in_time)}</span>
+            <button
+              type="button"
+              class="gate-btn gate-btn-checkout js-rollcall-checkout-btn"
+              data-badge="${escapeHtml(rc.badge_code)}"
+            >
+              Checkout Now
+            </button>
+          </div>
+        </div>
+      `
+      )
+      .join('');
+  }
+
+  function openBatchModal(batchId) {
+    const batch = state.batches.find((b) => Number(b.id) === Number(batchId)) || state.batches[0];
+    if (!batch) return;
+    state.inspectedBatchId = batch.id;
+
+    const modal = document.getElementById('batch-custody-modal');
+    const statusEl = document.getElementById('batch-modal-status');
+    const bodyEl = document.getElementById('batch-modal-body');
+    const approveBtn = document.getElementById('approve-batch-modal-btn');
+
+    if (statusEl) {
+      statusEl.textContent = batch.status.toUpperCase();
+      statusEl.className = `status-badge ${batch.status === 'approved' ? 'status-badge-green-md' : 'status-badge-amber-md'}`;
+    }
+
+    const itemsHtml =
+      Array.isArray(batch.items) && batch.items.length > 0
+        ? batch.items
+            .map(
+              (it) =>
+                `<div style="display:flex; justify-content:space-between; padding:6px 10px; background:var(--bg-canvas); border-radius:6px; border:1px solid var(--border-color);">
+                  <span>${escapeHtml(it.item_name)}</span>
+                  <strong>Qty: ${it.quantity}</strong>
+                </div>`
+            )
+            .join('')
+        : `<div style="padding:8px; color:var(--text-secondary);">Standard Production Rigging & Audio Package</div>`;
+
+    if (bodyEl) {
+      bodyEl.innerHTML = `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px; background:var(--bg-canvas); border-radius:8px; border:1px solid var(--border-color);">
+          <div><strong>Batch Number:</strong> <span class="badge-code-primary">${escapeHtml(batch.batch_number)}</span></div>
+          <div><strong>Job Sheet:</strong> ${escapeHtml(batch.job_sheet)}</div>
+          <div><strong>Origin Warehouse:</strong> ${escapeHtml(batch.source_name)}</div>
+          <div><strong>Destination Venue:</strong> ${escapeHtml(batch.destination_name)} (${escapeHtml(batch.destination_room)})</div>
+          <div><strong>Assigned Technician:</strong> ${escapeHtml(batch.technician_name)} (${escapeHtml(batch.technician_badge)})</div>
+          <div><strong>Stock Controller:</strong> ${escapeHtml(batch.stock_controller_name)}</div>
+        </div>
+        <div style="font-weight:600; margin-top:4px;">Equipment Manifest Items:</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">${itemsHtml}</div>
+      `;
+    }
+
+    if (approveBtn) {
+      approveBtn.style.display = batch.status === 'approved' ? 'none' : 'inline-flex';
+    }
+
+    if (modal) modal.classList.add('open');
+  }
+
+  // =========================================================================
+  // EVENT LISTENERS
+  // =========================================================================
+
+  function bindEvents() {
+    // Sidebar navigation
+    document.querySelectorAll('.sidebar .nav-item[data-nav-target]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        switchScreen(btn.getAttribute('data-nav-target'));
       });
     });
 
     const brandHome = document.getElementById('brand-home-btn');
-    if (brandHome) {
-      brandHome.addEventListener('click', function () {
-        switchScreen('overview');
+    if (brandHome) brandHome.addEventListener('click', () => switchScreen('overview'));
+
+    // Venue Security Portal nav shortcut
+    const venueSecBtn = document.getElementById('nav-venue-security-btn');
+    if (venueSecBtn) {
+      venueSecBtn.addEventListener('click', () => {
+        if (state.stationLocked && state.checkpointType !== 'event_venue') {
+          showToast('Station is locked. Unlock with PIN 1234 first.');
+          return;
+        }
+        state.checkpointType = 'event_venue';
+        const firstVenue = (state.checkpoints.event_venues || [])[0];
+        if (firstVenue) state.checkpointId = Number(firstVenue.id);
+        switchScreen('attendees', 'pane-kiosk');
+        fetchBootstrap(false);
+        showToast('Switched to Event Venue Security Portal (#pane-kiosk)');
       });
     }
-    const breadcrumbRoot = document.getElementById('breadcrumb-workspace');
-    if (breadcrumbRoot) {
-      breadcrumbRoot.addEventListener('click', function () {
-        switchScreen('overview');
+
+    // 4-Tier Access Matrix nav shortcut
+    const matrixNavBtn = document.getElementById('nav-access-matrix-btn');
+    if (matrixNavBtn) {
+      matrixNavBtn.addEventListener('click', () => {
+        switchScreen('analytics', 'matrix-config-section');
       });
     }
 
-    // Delegated clicks
-    document.addEventListener('click', function (e) {
-      const actionEl = e.target.closest('[data-action]');
-      if (actionEl) {
-        const act = actionEl.getAttribute('data-action');
-        if (act === 'go-overview') switchScreen('overview');
-        if (act === 'go-events') switchScreen('events');
-        if (act === 'go-attendees') switchScreen('attendees');
-        if (act === 'go-analytics') switchScreen('analytics');
-        return;
-      }
-
-      const checkinBtn = e.target.closest('.js-checkin-btn');
-      if (checkinBtn) {
-        const attId = checkinBtn.getAttribute('data-attendee-id');
-        handleCheckInAttendee(attId);
-        return;
-      }
-
-      const undoBtn = e.target.closest('.js-undo-checkin');
-      if (undoBtn) {
-        const attId = undoBtn.getAttribute('data-attendee-id');
-        const attName = undoBtn.getAttribute('data-attendee-name');
-        handleUndoCheckIn(attId, attName);
-        return;
-      }
-
-      const rowCheckbox = e.target.closest('.js-row-checkbox');
-      if (rowCheckbox) {
-        const attId = rowCheckbox.getAttribute('data-attendee-id');
-        const att = state.attendees.find(function (a) {
-          return a.id === attId;
-        });
-        if (att) {
-          att.selected = !att.selected;
-          renderAttendeeTables();
+    // Generic data-action buttons
+    document.body.addEventListener('click', (e) => {
+      const actionBtn = e.target.closest('[data-action]');
+      if (actionBtn) {
+        const act = actionBtn.getAttribute('data-action');
+        if (act === 'go-kiosk' || act === 'go-attendees') {
+          switchScreen('attendees', 'pane-kiosk');
+        } else if (act === 'go-events') {
+          switchScreen('events');
+        } else if (act === 'go-overview') {
+          switchScreen('overview');
+        } else if (act === 'go-analytics') {
+          switchScreen('analytics');
         }
-        return;
-      }
-
-      const eventCheckbox = e.target.closest('.js-event-checkbox');
-      if (eventCheckbox) {
-        const evtId = eventCheckbox.getAttribute('data-event-id');
-        const evt = state.events.find(function (ev) {
-          return ev.id === evtId;
-        });
-        if (evt) {
-          evt.selected = !evt.selected;
-          renderEventsTable();
-        }
-        return;
-      }
-
-      const eventRowAction = e.target.closest('.js-event-row-action');
-      if (eventRowAction) {
-        const targetScreen = eventRowAction.getAttribute('data-target-screen');
-        const eventTitle = eventRowAction.getAttribute('data-event-title');
-        if (targetScreen && ['overview', 'attendees', 'analytics'].includes(targetScreen)) {
-          switchScreen(targetScreen);
-          showToast('Viewing ' + eventTitle);
-        } else {
-          showToast('Opening setup for ' + eventTitle);
-        }
-        return;
-      }
-
-      const attendeeMenu = e.target.closest('.js-attendee-menu');
-      if (attendeeMenu) {
-        const attId = attendeeMenu.getAttribute('data-attendee-id');
-        const attName = attendeeMenu.getAttribute('data-attendee-name');
-        const att = state.attendees.find(function (a) {
-          return a.id === attId;
-        });
-        if (att && att.checkedIn) {
-          handleUndoCheckIn(attId, attName);
-        } else if (att && att.status === 'Registered') {
-          handleCheckInAttendee(attId);
-        } else {
-          showToast('Guest status: ' + (att ? att.status : 'N/A'));
-        }
-        return;
-      }
-
-      const eventMenu = e.target.closest('.js-event-menu');
-      if (eventMenu) {
-        showToast('Event options for ' + eventMenu.getAttribute('data-event-title'));
       }
     });
 
-    // Reset Demo Database Button
-    const resetDemoBtn = document.getElementById('reset-demo-db-btn');
-    if (resetDemoBtn) {
-      resetDemoBtn.addEventListener('click', function () {
-        postToApi('reset_demo', {}, 'MySQL database reset to initial Figma snapshot');
+    // Checkpoint Type Toggle Buttons (`Stock Warehouse` vs `Event Venue`)
+    document.querySelectorAll('.js-cp-type-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (state.stationLocked) {
+          showToast('Entrance Station is LOCKED. Unlock with PIN 1234 to switch checkpoints.');
+          return;
+        }
+        const newType = btn.getAttribute('data-cp-type');
+        if (newType === state.checkpointType) return;
+        state.checkpointType = newType;
+        const list =
+          newType === 'stock_warehouse'
+            ? state.checkpoints.stock_warehouses || []
+            : state.checkpoints.event_venues || [];
+        if (list.length > 0) {
+          state.checkpointId = Number(list[0].id);
+        }
+        fetchBootstrap(false);
+        showToast(
+          newType === 'stock_warehouse'
+            ? 'Checkpoint Mode: Stock Warehouse Gate (L2–L4 Required; L1 Blocked)'
+            : 'Checkpoint Mode: Event Venue Main Entrance (L1–L4 Authorized)'
+        );
+      });
+    });
+
+    // Target Checkpoint Dropdown
+    document.querySelectorAll('.js-checkpoint-select').forEach((sel) => {
+      sel.addEventListener('change', (e) => {
+        if (state.stationLocked) return;
+        state.checkpointId = Number(e.target.value);
+        fetchBootstrap(false);
+      });
+    });
+
+    // Scan Mode Select
+    const scanModeSel = document.getElementById('kiosk-scan-mode-select');
+    if (scanModeSel) {
+      scanModeSel.addEventListener('change', (e) => {
+        state.scanMode = e.target.value;
+        showToast(`Scan Mode set to: ${e.target.options[e.target.selectedIndex].text}`);
       });
     }
 
-    // Overview Attendee Tabs
-    const overviewTabs = document.getElementById('overview-attendee-tabs');
-    if (overviewTabs) {
-      overviewTabs.addEventListener('click', function (e) {
-        const tabBtn = e.target.closest('.status-tab[data-tab]');
-        if (!tabBtn) return;
-        overviewTabs.querySelectorAll('.status-tab').forEach(function (t) {
-          t.classList.remove('active');
-        });
-        tabBtn.classList.add('active');
-        state.overviewTable.tab = tabBtn.getAttribute('data-tab');
-        renderAttendeeTables();
+    // Focus Badge Scanner button
+    const focusBtn = document.getElementById('focus-kiosk-scanner-btn');
+    if (focusBtn) {
+      focusBtn.addEventListener('click', () => {
+        const inp = document.getElementById('kiosk-badge-input');
+        if (inp) {
+          inp.focus();
+          inp.select();
+        }
       });
     }
 
-    // Directory Attendee Tabs
-    const directoryTabs = document.getElementById('directory-attendee-tabs');
-    if (directoryTabs) {
-      directoryTabs.addEventListener('click', function (e) {
-        const tabBtn = e.target.closest('.status-tab[data-tab]');
-        if (!tabBtn) return;
-        directoryTabs.querySelectorAll('.status-tab').forEach(function (t) {
-          t.classList.remove('active');
-        });
-        tabBtn.classList.add('active');
-        state.directoryTable.tab = tabBtn.getAttribute('data-tab');
-        renderAttendeeTables();
+    // Kiosk Scan Form Submit
+    const scanForm = document.getElementById('kiosk-scan-form');
+    if (scanForm) {
+      scanForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const inp = document.getElementById('kiosk-badge-input');
+        const val = inp ? inp.value.trim() : '';
+        if (!val) {
+          showToast('Enter or scan a Badge Code (e.g. REW-BADGE-0006)');
+          return;
+        }
+        triggerGateScan(val);
       });
     }
 
-    // Events Status Tabs
-    const eventsTabs = document.getElementById('events-status-tabs');
-    if (eventsTabs) {
-      eventsTabs.addEventListener('click', function (e) {
-        const tabBtn = e.target.closest('.status-tab[data-event-tab]');
-        if (!tabBtn) return;
-        eventsTabs.querySelectorAll('.status-tab').forEach(function (t) {
-          t.classList.remove('active');
+    // Topbar Quick Search (`⌘K`)
+    const topSearch = document.getElementById('topbar-search-input');
+    if (topSearch) {
+      topSearch.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const val = topSearch.value.trim();
+          if (val) {
+            switchScreen('attendees', 'pane-kiosk');
+            triggerGateScan(val);
+            topSearch.value = '';
+          }
+        }
+      });
+    }
+
+    // Inbound (`In`) & Outbound (`Out`) Timestamp Triggers inside `#pane-kiosk`
+    const inTrigger = document.getElementById('kiosk-trigger-in');
+    if (inTrigger) {
+      inTrigger.addEventListener('click', () => {
+        if (state.currentVerification && state.currentVerification.badge) {
+          triggerGateScan(state.currentVerification.badge.badge_code, 'check_in');
+        }
+      });
+    }
+
+    const outTrigger = document.getElementById('kiosk-trigger-out');
+    if (outTrigger) {
+      outTrigger.addEventListener('click', () => {
+        if (state.currentVerification && state.currentVerification.badge) {
+          triggerGateScan(state.currentVerification.badge.badge_code, 'check_out');
+        }
+      });
+    }
+
+    // Delegated clicks for Quick Scan Presets, Crew Rows, Paired Checkin/Checkout buttons, Timeline items, Checkpoint activation, and Matrix config
+    document.body.addEventListener('click', async (e) => {
+      // 0. Quick Preset Scan button
+      const quickScanBtn = e.target.closest('.js-quick-scan');
+      if (quickScanBtn) {
+        const badgeCode = quickScanBtn.getAttribute('data-badge');
+        const inp = document.getElementById('kiosk-badge-input');
+        if (inp) inp.value = badgeCode;
+        if (badgeCode) triggerGateScan(badgeCode);
+        return;
+      }
+
+      // 1. Paired Checkin / Checkout button in Crew Roster table
+      const gateBtn = e.target.closest('.js-row-gate-action');
+      if (gateBtn) {
+        e.stopPropagation();
+        const badge = gateBtn.getAttribute('data-badge');
+        const mode = gateBtn.getAttribute('data-mode');
+        if (badge) triggerGateScan(badge, mode);
+        return;
+      }
+
+      // 2. Inspect icon in Crew Roster row
+      const inspectCrewBtn = e.target.closest('.js-inspect-crew-kiosk');
+      if (inspectCrewBtn) {
+        e.stopPropagation();
+        const cid = Number(inspectCrewBtn.getAttribute('data-crew-id'));
+        const member = state.crew.find((m) => Number(m.id) === cid);
+        if (member) {
+          state.selectedCrewId = cid;
+          state.currentVerification = buildClientVerificationFromMember(member);
+          switchScreen('attendees', 'pane-kiosk');
+          renderAll();
+        }
+        return;
+      }
+
+      // 3. Crew Roster Row Click -> Load member in `#pane-kiosk`
+      const crewRow = e.target.closest('.attendee-table-row[data-crew-id]');
+      if (crewRow) {
+        const cid = Number(crewRow.getAttribute('data-crew-id'));
+        const member = state.crew.find((m) => Number(m.id) === cid);
+        if (member) {
+          state.selectedCrewId = cid;
+          state.currentVerification = buildClientVerificationFromMember(member);
+          const inp = document.getElementById('kiosk-badge-input');
+          if (inp) inp.value = member.badge_code;
+          renderAll();
+          showToast(`Loaded ${member.full_name} (${member.badge_code} · ${member.clearance_code}) into Kiosk Deck`);
+        }
+        return;
+      }
+
+      // 4. User Activity Timeline Card Click
+      const tlCard = e.target.closest('.timeline-event-card[data-timeline-uid]');
+      if (tlCard) {
+        const uid = Number(tlCard.getAttribute('data-timeline-uid'));
+        const member = state.crew.find((m) => Number(m.id) === uid);
+        if (member) {
+          state.selectedCrewId = uid;
+          state.currentVerification = buildClientVerificationFromMember(member);
+          switchScreen('attendees', 'pane-kiosk');
+          renderAll();
+        }
+        return;
+      }
+
+      // 5. Activate Checkpoint from Screen 2 Directory
+      const actCpBtn = e.target.closest('.js-activate-checkpoint-btn');
+      if (actCpBtn) {
+        if (state.stationLocked) {
+          showToast('Station is locked. Unlock with PIN 1234 first.');
+          return;
+        }
+        state.checkpointType = actCpBtn.getAttribute('data-cp-type');
+        state.checkpointId = Number(actCpBtn.getAttribute('data-cp-id'));
+        await fetchBootstrap(false);
+        switchScreen('attendees', 'pane-kiosk');
+        showToast(`Switched Active Gate Terminal to ${state.activeCheckpoint.name}`);
+        return;
+      }
+
+      // 6. Roll-Call Modal Checkout Now button
+      const rcOutBtn = e.target.closest('.js-rollcall-checkout-btn');
+      if (rcOutBtn) {
+        const badge = rcOutBtn.getAttribute('data-badge');
+        if (badge) triggerGateScan(badge, 'check_out');
+        return;
+      }
+
+      // 7. Open Batch Modal button
+      const openBatchBtn = e.target.closest('.js-open-batch-modal');
+      if (openBatchBtn) {
+        openBatchModal(Number(openBatchBtn.getAttribute('data-batch-id')));
+        return;
+      }
+
+      // 8. Approve Batch button
+      const approveBatchBtn = e.target.closest('.js-approve-batch-btn');
+      if (approveBatchBtn) {
+        const bid = Number(approveBatchBtn.getAttribute('data-batch-id'));
+        await fetch('api.php?action=approve_batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'approve_batch', batch_id: bid, status: 'approved' }),
         });
-        tabBtn.classList.add('active');
-        state.eventsTable.tab = tabBtn.getAttribute('data-event-tab');
-        renderEventsTable();
+        await fetchBootstrap(true);
+        showToast(`Batch #${bid} approved for warehouse dispatch`);
+        return;
+      }
+
+      // 9. Test in Kiosk from Matrix screen
+      const testKioskBtn = e.target.closest('.js-test-in-kiosk');
+      if (testKioskBtn) {
+        const cid = Number(testKioskBtn.getAttribute('data-crew-id'));
+        const member = state.crew.find((m) => Number(m.id) === cid);
+        if (member) {
+          state.selectedCrewId = cid;
+          state.currentVerification = buildClientVerificationFromMember(member);
+          switchScreen('attendees', 'pane-kiosk');
+          renderAll();
+        }
+      }
+    });
+
+    // Clearance Tier Change in Matrix Config Table
+    document.body.addEventListener('change', async (e) => {
+      const clrSelect = e.target.closest('.js-clearance-select');
+      if (clrSelect) {
+        const uid = Number(clrSelect.getAttribute('data-user-id'));
+        const newLevel = clrSelect.value;
+        const res = await fetch('api.php?action=update_clearance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update_clearance',
+            user_id: uid,
+            clearance_level: newLevel,
+            badge_status: 'active',
+          }),
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          applyBootstrapPayload(data, false);
+          showToast(`Updated staff #${uid} clearance tier to ${newLevel}`);
+        }
+      }
+    });
+
+    // Status Tabs (Overview & Directory)
+    const ovTabs = document.getElementById('overview-attendee-tabs');
+    if (ovTabs) {
+      ovTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.status-tab[data-tab]');
+        if (!tab) return;
+        state.overviewTab = tab.getAttribute('data-tab');
+        ovTabs.querySelectorAll('.status-tab').forEach((t) => t.classList.toggle('active', t === tab));
+        renderCrewTables();
+      });
+    }
+
+    const dirTabs = document.getElementById('directory-attendee-tabs');
+    if (dirTabs) {
+      dirTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.status-tab[data-tab]');
+        if (!tab) return;
+        state.directoryTab = tab.getAttribute('data-tab');
+        dirTabs.querySelectorAll('.status-tab').forEach((t) => t.classList.toggle('active', t === tab));
+        renderCrewTables();
+      });
+    }
+
+    // Checkpoints Tabs (Screen 2)
+    const evTabs = document.getElementById('events-status-tabs');
+    if (evTabs) {
+      evTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.status-tab[data-event-tab]');
+        if (!tab) return;
+        state.checkpointTab = tab.getAttribute('data-event-tab');
+        evTabs.querySelectorAll('.status-tab').forEach((t) => t.classList.toggle('active', t === tab));
+        renderCheckpointsDirectory();
       });
     }
 
     // Search Inputs
-    const overviewSearch = document.getElementById('overview-attendee-search');
-    if (overviewSearch) {
-      overviewSearch.addEventListener('input', function () {
-        state.overviewTable.search = overviewSearch.value;
-        renderAttendeeTables();
+    const ovSearch = document.getElementById('overview-attendee-search');
+    if (ovSearch) {
+      ovSearch.addEventListener('input', (e) => {
+        state.overviewSearch = e.target.value;
+        renderCrewTables();
       });
     }
 
-    const directorySearch = document.getElementById('directory-attendee-search');
-    if (directorySearch) {
-      directorySearch.addEventListener('input', function () {
-        state.directoryTable.search = directorySearch.value;
-        renderAttendeeTables();
+    const dirSearch = document.getElementById('directory-attendee-search');
+    if (dirSearch) {
+      dirSearch.addEventListener('input', (e) => {
+        state.directorySearch = e.target.value;
+        renderCrewTables();
       });
     }
 
-    const eventsSearch = document.getElementById('events-search-input');
-    if (eventsSearch) {
-      eventsSearch.addEventListener('input', function () {
-        state.eventsTable.search = eventsSearch.value;
-        renderEventsTable();
+    const evSearch = document.getElementById('events-search-input');
+    if (evSearch) {
+      evSearch.addEventListener('input', (e) => {
+        state.checkpointSearch = e.target.value;
+        renderCheckpointsDirectory();
       });
     }
 
-    // Topbar Quick Search
-    const topbarSearch = document.getElementById('topbar-search-input');
-    if (topbarSearch) {
-      topbarSearch.addEventListener('input', function () {
-        const q = topbarSearch.value;
-        if (state.currentScreen === 'overview') {
-          state.overviewTable.search = q;
-          if (overviewSearch) overviewSearch.value = q;
-          renderAttendeeTables();
-        } else if (state.currentScreen === 'attendees') {
-          state.directoryTable.search = q;
-          if (directorySearch) directorySearch.value = q;
-          renderAttendeeTables();
-        } else if (state.currentScreen === 'events') {
-          state.eventsTable.search = q;
-          if (eventsSearch) eventsSearch.value = q;
-          renderEventsTable();
+    // Clearance & Gate State filter pills
+    ['overview-ticket-filter', 'directory-ticket-filter'].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          const idx = (TIER_CYCLE.indexOf(state.tierFilter) + 1) % TIER_CYCLE.length;
+          state.tierFilter = TIER_CYCLE[idx];
+          const lbl = state.tierFilter === 'all' ? 'Clearance: All Tiers' : `Clearance: Tier ${state.tierFilter}`;
+          ['overview-ticket-filter-label', 'directory-ticket-filter-label'].forEach((lid) => {
+            const el = document.getElementById(lid);
+            if (el) el.textContent = lbl;
+          });
+          renderCrewTables();
+        });
+      }
+    });
+
+    ['overview-checkin-filter', 'directory-checkin-filter'].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          const idx = (GATE_STATE_CYCLE.indexOf(state.gateStateFilter) + 1) % GATE_STATE_CYCLE.length;
+          state.gateStateFilter = GATE_STATE_CYCLE[idx];
+          const lbl =
+            state.gateStateFilter === 'all'
+              ? 'Gate State: All'
+              : `Gate State: ${state.gateStateFilter.replace('_', ' ')}`;
+          ['overview-checkin-filter-label', 'directory-checkin-filter-label'].forEach((lid) => {
+            const el = document.getElementById(lid);
+            if (el) el.textContent = lbl;
+          });
+          renderCrewTables();
+        });
+      }
+    });
+
+    // User Activity Timeline Filters & Pagination
+    const tlSearch = document.getElementById('timeline-search-input');
+    if (tlSearch) {
+      tlSearch.addEventListener('input', (e) => {
+        state.timelineSearch = e.target.value;
+        state.timelinePage = 1;
+        renderActivityTimeline();
+      });
+    }
+
+    const tlScope = document.getElementById('timeline-scope-select');
+    if (tlScope) {
+      tlScope.addEventListener('change', (e) => {
+        state.timelineScope = e.target.value;
+        state.timelinePage = 1;
+        renderActivityTimeline();
+      });
+    }
+
+    const tlPrev = document.getElementById('timeline-prev-btn');
+    if (tlPrev) {
+      tlPrev.addEventListener('click', () => {
+        if (state.timelinePage > 1) {
+          state.timelinePage--;
+          renderActivityTimeline();
         }
       });
     }
 
-    document.addEventListener('keydown', function (e) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    const tlNext = document.getElementById('timeline-next-btn');
+    if (tlNext) {
+      tlNext.addEventListener('click', () => {
+        state.timelinePage++;
+        renderActivityTimeline();
+      });
+    }
+
+    // Modals: Roll-Call Modal
+    const rollcallModal = document.getElementById('rollcall-modal');
+    document.querySelectorAll('.js-open-rollcall-modal, #sidebar-rollcall-btn, #topbar-help-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        renderRollCallModalList();
+        if (rollcallModal) rollcallModal.classList.add('open');
+      });
+    });
+    const closeRc = document.getElementById('close-rollcall-modal');
+    if (closeRc && rollcallModal) {
+      closeRc.addEventListener('click', () => rollcallModal.classList.remove('open'));
+    }
+
+    // Modals: Station Lock PIN Modal (`PIN: 1234`)
+    const lockModal = document.getElementById('station-lock-modal');
+    document.querySelectorAll('.js-station-lock-btn, #sidebar-station-lock-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (lockModal) lockModal.classList.add('open');
+      });
+    });
+    const cancelLock = document.getElementById('cancel-station-lock');
+    if (cancelLock && lockModal) {
+      cancelLock.addEventListener('click', () => lockModal.classList.remove('open'));
+    }
+    const lockForm = document.getElementById('station-lock-form');
+    if (lockForm && lockModal) {
+      lockForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        if (topbarSearch) topbarSearch.focus();
-      }
-    });
-
-    // Filter Pills
-    function setupCycleFilter(btnId, labelId, options, onSelect) {
-      const btn = document.getElementById(btnId);
-      const labelEl = document.getElementById(labelId);
-      if (!btn || !labelEl) return;
-      let idx = 0;
-      btn.addEventListener('click', function () {
-        idx = (idx + 1) % options.length;
-        const chosen = options[idx];
-        labelEl.textContent = chosen.label;
-        btn.classList.toggle('active-filter', chosen.value !== 'all');
-        onSelect(chosen.value);
-      });
-    }
-
-    const ticketOptions = [
-      { value: 'all', label: 'Ticket type' },
-      { value: 'General admission', label: 'Ticket: General' },
-      { value: 'VIP pass', label: 'Ticket: VIP pass' },
-      { value: 'Speaker', label: 'Ticket: Speaker' }
-    ];
-    const regStatusOptions = [
-      { value: 'all', label: 'Registration status' },
-      { value: 'Registered', label: 'Status: Registered' },
-      { value: 'Waitlisted', label: 'Status: Waitlisted' },
-      { value: 'Cancelled', label: 'Status: Cancelled' }
-    ];
-    const checkinStatusOptions = [
-      { value: 'all', label: 'Check-in status' },
-      { value: 'checked-in', label: 'Arrived: Checked in' },
-      { value: 'not-checked-in', label: 'Arrived: Not checked in' }
-    ];
-
-    setupCycleFilter(
-      'overview-ticket-filter',
-      'overview-ticket-filter-label',
-      ticketOptions,
-      function (val) {
-        state.overviewTable.ticketFilter = val;
-        renderAttendeeTables();
-      }
-    );
-    setupCycleFilter(
-      'overview-status-filter',
-      'overview-status-filter-label',
-      regStatusOptions,
-      function (val) {
-        state.overviewTable.statusFilter = val;
-        renderAttendeeTables();
-      }
-    );
-    setupCycleFilter(
-      'overview-checkin-filter',
-      'overview-checkin-filter-label',
-      checkinStatusOptions,
-      function (val) {
-        state.overviewTable.checkinFilter = val;
-        renderAttendeeTables();
-      }
-    );
-
-    setupCycleFilter(
-      'directory-ticket-filter',
-      'directory-ticket-filter-label',
-      ticketOptions,
-      function (val) {
-        state.directoryTable.ticketFilter = val;
-        renderAttendeeTables();
-      }
-    );
-    setupCycleFilter(
-      'directory-status-filter',
-      'directory-status-filter-label',
-      regStatusOptions,
-      function (val) {
-        state.directoryTable.statusFilter = val;
-        renderAttendeeTables();
-      }
-    );
-    setupCycleFilter(
-      'directory-checkin-filter',
-      'directory-checkin-filter-label',
-      checkinStatusOptions,
-      function (val) {
-        state.directoryTable.checkinFilter = val;
-        renderAttendeeTables();
-      }
-    );
-
-    setupCycleFilter(
-      'events-type-filter',
-      'events-type-filter-label',
-      [
-        { value: 'all', label: 'All event types' },
-        { value: 'Conference', label: 'Conference' },
-        { value: 'Networking dinner', label: 'Networking dinner' },
-        { value: 'Workshop', label: 'Workshop' },
-        { value: 'Community meetup', label: 'Community meetup' }
-      ],
-      function (val) {
-        state.eventsTable.typeFilter = val;
-        renderEventsTable();
-      }
-    );
-
-    // Sort headers
-    const overviewSort = document.getElementById('overview-sort-attendee');
-    if (overviewSort) {
-      overviewSort.addEventListener('click', function () {
-        state.overviewTable.sortAsc = !state.overviewTable.sortAsc;
-        renderAttendeeTables();
-      });
-    }
-    const directorySort = document.getElementById('directory-sort-attendee');
-    if (directorySort) {
-      directorySort.addEventListener('click', function () {
-        state.directoryTable.sortAsc = !state.directoryTable.sortAsc;
-        renderAttendeeTables();
-      });
-    }
-    const eventsSort = document.getElementById('events-sort-name');
-    if (eventsSort) {
-      eventsSort.addEventListener('click', function () {
-        state.eventsTable.sortAsc = !state.eventsTable.sortAsc;
-        renderEventsTable();
-      });
-    }
-
-    // Select-all checkboxes
-    const overviewSelectAll = document.getElementById('overview-select-all');
-    if (overviewSelectAll) {
-      overviewSelectAll.addEventListener('click', function () {
-        const isChecked = overviewSelectAll.classList.toggle('checked');
-        state.attendees.forEach(function (a) {
-          a.selected = isChecked;
-        });
-        renderAttendeeTables();
-      });
-    }
-    const directorySelectAll = document.getElementById('directory-select-all');
-    if (directorySelectAll) {
-      directorySelectAll.addEventListener('click', function () {
-        const isChecked = directorySelectAll.classList.toggle('checked');
-        state.attendees.forEach(function (a) {
-          a.selected = isChecked;
-        });
-        renderAttendeeTables();
-      });
-    }
-    const eventsSelectAll = document.getElementById('events-select-all');
-    if (eventsSelectAll) {
-      eventsSelectAll.addEventListener('click', function () {
-        const isChecked = eventsSelectAll.classList.toggle('checked');
-        state.events.forEach(function (ev) {
-          ev.selected = isChecked;
-        });
-        renderEventsTable();
-      });
-    }
-
-    // Export buttons
-    document.querySelectorAll('.js-export-attendees').forEach(function (btn) {
-      btn.addEventListener('click', exportAttendeesCsv);
-    });
-    const eventsExportBtn = document.getElementById('events-export-btn');
-    if (eventsExportBtn) {
-      eventsExportBtn.addEventListener('click', function () {
-        showToast('Exported ' + state.events.length + ' events from Forma studio');
-      });
-    }
-
-    // Add Attendee Modal (Persisted in MySQL)
-    const addAttendeeModal = document.getElementById('add-attendee-modal');
-    const addAttendeeForm = document.getElementById('add-attendee-form');
-    document.querySelectorAll('.js-open-add-attendee').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        if (addAttendeeModal) addAttendeeModal.classList.add('open');
-      });
-    });
-    const cancelAddAttendee = document.getElementById('cancel-add-attendee');
-    if (cancelAddAttendee && addAttendeeModal) {
-      cancelAddAttendee.addEventListener('click', function () {
-        addAttendeeModal.classList.remove('open');
-      });
-    }
-    if (addAttendeeForm && addAttendeeModal) {
-      addAttendeeForm.addEventListener('submit', function (e) {
-        e.preventDefault();
-        const name = document.getElementById('input-attendee-name').value.trim();
-        const email = document.getElementById('input-attendee-email').value.trim();
-        const company = document.getElementById('input-attendee-company').value.trim();
-        const role = document.getElementById('input-attendee-role').value.trim();
-        const ticket = document.getElementById('input-attendee-ticket').value;
-        if (!name || !email) return;
-
-        addAttendeeForm.reset();
-        addAttendeeModal.classList.remove('open');
-        postToApi(
-          'add_attendee',
-          { name: name, email: email, company: company, role: role, ticket: ticket },
-          'Added ' + name + ' to MySQL attendee directory'
+        const pinInput = document.getElementById('station-pin-input');
+        const pin = pinInput ? pinInput.value.trim() : '';
+        if (pin !== '1234') {
+          showToast('Invalid Station PIN. Use default supervisor PIN: 1234');
+          return;
+        }
+        state.stationLocked = !state.stationLocked;
+        localStorage.setItem('ability_station_locked', state.stationLocked ? '1' : '0');
+        lockModal.classList.remove('open');
+        renderCheckpointSelectors();
+        showToast(
+          state.stationLocked
+            ? `Terminal LOCKED to ${state.activeCheckpoint.name}`
+            : 'Terminal UNLOCKED — Multi-Checkpoint Mode enabled'
         );
       });
     }
 
-    // Create Event Modal (Persisted in MySQL)
-    const createEventModal = document.getElementById('create-event-modal');
-    const createEventForm = document.getElementById('create-event-form');
-    document.querySelectorAll('.js-open-create-event').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        if (createEventModal) createEventModal.classList.add('open');
+    // Modals: Batch Custody Modal
+    const batchModal = document.getElementById('batch-custody-modal');
+    const closeBatch = document.getElementById('close-batch-modal');
+    if (closeBatch && batchModal) {
+      closeBatch.addEventListener('click', () => batchModal.classList.remove('open'));
+    }
+    const approveModalBtn = document.getElementById('approve-batch-modal-btn');
+    if (approveModalBtn && batchModal) {
+      approveModalBtn.addEventListener('click', async () => {
+        if (!state.inspectedBatchId) return;
+        await fetch('api.php?action=approve_batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'approve_batch',
+            batch_id: state.inspectedBatchId,
+            status: 'approved',
+          }),
+        });
+        batchModal.classList.remove('open');
+        await fetchBootstrap(true);
+        showToast(`Batch #${state.inspectedBatchId} approved`);
+      });
+    }
+
+    // Reset Today's Scans
+    ['reset-demo-db-btn', 'sidebar-reset-demo-btn'].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          const res = await fetch('api.php?action=reset_demo', { method: 'POST' });
+          const data = await res.json();
+          if (data && data.ok) {
+            applyBootstrapPayload(data, false);
+            showToast('Today’s gate scans reset and re-seeded in MySQL');
+          }
+        });
+      }
+    });
+
+    // Export CSV
+    document.querySelectorAll('.js-export-attendees').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const headers = ['Badge Code', 'Staff Code', 'Full Name', 'Role', 'Department', 'Clearance', 'State', 'Check-In', 'Check-Out'];
+        const rows = state.crew.map((c) => [
+          c.badge_code,
+          c.staff_code,
+          `"${c.full_name}"`,
+          c.role_display,
+          c.department,
+          c.clearance_code,
+          c.daily_state,
+          c.check_in_time || '',
+          c.check_out_time || '',
+        ]);
+        const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ability_gate_roster_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Exported aBility Gate Roster CSV');
       });
     });
-    const cancelCreateEvent = document.getElementById('cancel-create-event');
-    if (cancelCreateEvent && createEventModal) {
-      cancelCreateEvent.addEventListener('click', function () {
-        createEventModal.classList.remove('open');
-      });
-    }
-    if (createEventForm && createEventModal) {
-      createEventForm.addEventListener('submit', function (e) {
+
+    // Support Center #pane-kiosk link
+    const supLink = document.getElementById('support-center-link');
+    if (supLink) {
+      supLink.addEventListener('click', (e) => {
         e.preventDefault();
-        const title = document.getElementById('input-event-name').value.trim();
-        const category = document.getElementById('input-event-type').value;
-        const venue = document.getElementById('input-event-venue').value.trim();
-        const cap = document.getElementById('input-event-capacity').value;
-        if (!title) return;
-
-        createEventForm.reset();
-        createEventModal.classList.remove('open');
-        postToApi(
-          'add_event',
-          { name: title, type: category, venue: venue, capacity: cap },
-          'Created event "' + title + '" in MySQL'
-        ).then(function () {
-          switchScreen('events');
-        });
-      });
-    }
-
-    // Auxiliary interactive buttons
-    const openScannerBtn = document.getElementById('open-checkin-scanner-btn');
-    if (openScannerBtn) {
-      openScannerBtn.addEventListener('click', function () {
-        showToast('QR Check-in Scanner ready — 4 stations online');
-      });
-    }
-    const manageStationsBtn = document.getElementById('manage-stations-btn');
-    if (manageStationsBtn) {
-      manageStationsBtn.addEventListener('click', function () {
-        switchScreen('analytics');
-        showToast('Viewing live check-in station telemetry');
-      });
-    }
-    const sendMsgBtn = document.getElementById('attendees-send-msg-btn');
-    if (sendMsgBtn) {
-      sendMsgBtn.addEventListener('click', function () {
-        showToast('Broadcast composer ready for ' + formatNumber(state.stats.totalPeople) + ' attendees');
-      });
-    }
-    const importBtn = document.getElementById('attendees-import-btn');
-    if (importBtn) {
-      importBtn.addEventListener('click', function () {
-        showToast('CSV / Luma / Eventbrite guest importer ready');
+        switchScreen('attendees', 'pane-kiosk');
       });
     }
   }
 
-  // --- Initialize Application ---
-  renderAll();
-  initEventListeners();
-  syncFromMySql();
+  // Initialize
+  document.addEventListener('DOMContentLoaded', async () => {
+    bindEvents();
+    if (window.location.hash === '#pane-kiosk') {
+      switchScreen('attendees', 'pane-kiosk');
+    }
+    await fetchBootstrap(false);
+  });
 })();

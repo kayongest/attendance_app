@@ -1,434 +1,1077 @@
 <?php
 /**
- * Identity AttendanceApp — REST JSON API (PHP + MySQL on XAMPP)
- * Endpoints:
- *   GET  api.php?action=bootstrap
- *   POST api.php?action=checkin
- *   POST api.php?action=undo_checkin
- *   POST api.php?action=add_attendee
- *   POST api.php?action=add_event
- *   POST api.php?action=reset_demo
+ * aBility Manager (id_badges.php#pane-kiosk) — Gate Terminal & Access Matrix API
+ * Powers the 4-Tier Access Matrix (L1-L4), Dual Checkpoint Selector (Stock Warehouse vs Event Venue),
+ * Paired Check-In / Check-Out State Machine, Linked Equipment Batches, and User Activity Timeline.
  */
 
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
 
 require_once __DIR__ . '/db.php';
 
-function buildFullPayload(PDO $pdo): array
+function normalizeClearanceTier(string $rawLevel, string $role = 'user'): array
 {
-    // 1. Workspace metrics
-    $metricsRow = $pdo->query("SELECT * FROM `workspace_metrics` WHERE `id` = 1")->fetch();
-    $totalPeople = (int) ($metricsRow['total_people'] ?? 1338);
-    $registered = (int) ($metricsRow['registered'] ?? 1284);
-    $checkedIn = (int) ($metricsRow['checked_in'] ?? 964);
-    $waitlist = (int) ($metricsRow['waitlist'] ?? 42);
-    $cancelled = (int) ($metricsRow['cancelled'] ?? 12);
-    $checkedInDelta = (int) ($metricsRow['checked_in_delta'] ?? 186);
-    $ticketRevenue = (int) ($metricsRow['ticket_revenue'] ?? 128400);
-    $lastArrivalTime = (string) ($metricsRow['last_arrival_time'] ?? '10:06 AM');
+    $matrix = getFourTierMatrixSpec();
+    $upper = strtoupper(trim($rawLevel));
+    if (isset($matrix[$upper])) {
+        return $matrix[$upper];
+    }
+    if (strpos($upper, 'L4') === 0) {
+        return $matrix['L4_ALL_ACCESS'];
+    }
+    if (strpos($upper, 'L3') === 0) {
+        return $matrix['L3_STOCK_WAREHOUSE'];
+    }
+    if (strpos($upper, 'L2') === 0) {
+        return $matrix['L2_TECH_STAGE'];
+    }
+    if (strpos($upper, 'L1') === 0) {
+        return $matrix['L1_VENUE_BASIC'];
+    }
 
-    // 2. Attendees list
-    $attendeeRows = $pdo->query("SELECT * FROM `attendees` ORDER BY `sort_order` ASC, `created_at` DESC")->fetchAll();
-    $attendees = [];
-    foreach ($attendeeRows as $row) {
-        $attendees[] = [
-            'id' => $row['id'],
-            'initials' => $row['initials'],
-            'bgOverview' => $row['bg_overview'],
-            'bgDirectory' => $row['bg_directory'],
-            'color' => $row['color'],
-            'colorDirectory' => $row['color_directory'],
-            'name' => $row['name'],
-            'email' => $row['email'],
-            'company' => $row['company'],
-            'role' => $row['role'],
-            'ticket' => $row['ticket'],
-            'ticketPrice' => (int) $row['ticket_price'],
-            'ticketHighlight' => ((int) $row['ticket_highlight']) === 1,
-            'registeredDate' => $row['registered_date'],
-            'status' => $row['status'],
-            'checkedIn' => ((int) $row['checked_in']) === 1,
-            'checkinTime' => $row['checkin_time'],
-            'checkinStation' => $row['checkin_station'] ?? 'North Foyer Kiosk 01',
-            'selected' => false,
+    $r = strtolower(trim($role));
+    if (in_array($r, ['admin', 'manager', 'stock_manager', 'tech_lead'], true)) {
+        return $matrix['L4_ALL_ACCESS'];
+    }
+    if ($r === 'stock_controller') {
+        return $matrix['L3_STOCK_WAREHOUSE'];
+    }
+    if ($r === 'technician') {
+        return $matrix['L2_TECH_STAGE'];
+    }
+    return $matrix['L1_VENUE_BASIC'];
+}
+
+function formatRewBadgeCode(int $userId, ?string $dbBadgeCode = null): string
+{
+    $trimmed = strtoupper(trim((string) $dbBadgeCode));
+    if (strpos($trimmed, 'REW-BADGE-') === 0) {
+        return $trimmed;
+    }
+    return 'REW-BADGE-' . str_pad((string) $userId, 4, '0', STR_PAD_LEFT);
+}
+
+function formatStaffCode(int $userId): string
+{
+    return 'ABL-' . str_pad((string) $userId, 3, '0', STR_PAD_LEFT);
+}
+
+function resolveProfileImageUrl(?string $profileImage): ?string
+{
+    $rel = trim((string) $profileImage);
+    if ($rel === '') {
+        return null;
+    }
+    if (strpos($rel, 'http://') === 0 || strpos($rel, 'https://') === 0 || strpos($rel, 'assets/') === 0) {
+        return $rel;
+    }
+    $cleanRel = ltrim(str_replace('\\', '/', $rel), '/');
+    $abilityPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'ability_app_main' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $cleanRel);
+    if (file_exists($abilityPath)) {
+        return '/ability_app_main/' . $cleanRel;
+    }
+    $localPath = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $cleanRel);
+    if (file_exists($localPath)) {
+        return $cleanRel;
+    }
+    return null;
+}
+
+function computeInitials(string $fullName): string
+{
+    $parts = preg_split('/\s+/', trim($fullName)) ?: [];
+    if (count($parts) >= 2) {
+        return strtoupper(substr($parts[0], 0, 1) . substr($parts[count($parts) - 1], 0, 1));
+    }
+    return strtoupper(substr(trim($fullName), 0, 2) ?: 'CR');
+}
+
+function evaluateCheckpointAccess(array $userBadgeRow, string $checkpointType, int $checkpointId): array
+{
+    $badgeStatus = strtolower(trim((string) ($userBadgeRow['badge_status'] ?? 'active')));
+    $tier = normalizeClearanceTier(
+        (string) ($userBadgeRow['clearance_level'] ?? ''),
+        (string) ($userBadgeRow['role'] ?? 'user')
+    );
+
+    if ($badgeStatus !== 'active') {
+        return [
+            'allowed' => false,
+            'reason' => 'ID Badge is currently ' . strtoupper($badgeStatus) . ' — Contact System Admin',
+            'tier' => $tier,
         ];
     }
 
-    // 3. Events list
-    $eventRows = $pdo->query("SELECT * FROM `events` ORDER BY `sort_order` ASC, `created_at` DESC")->fetchAll();
-    $events = [];
-    foreach ($eventRows as $row) {
-        $regCount = (int) $row['registered_count'];
-        $capCount = (int) $row['capacity_count'];
-        $events[] = [
-            'id' => $row['id'],
-            'month' => $row['month_label'],
-            'day' => $row['day_label'],
-            'name' => $row['name'],
-            'type' => $row['type'],
-            'date' => $row['date_label'],
-            'time' => $row['time_label'],
-            'venue' => $row['venue'],
-            'city' => $row['city'],
-            'registeredCount' => $regCount,
-            'capacityCount' => $capCount,
-            'registeredText' => number_format($regCount),
-            'capacityText' => ' / ' . number_format($capCount),
-            'barWidthPx' => (int) $row['bar_width_px'],
-            'isPastBar' => ((int) $row['is_past_bar']) === 1,
-            'status' => $row['status'],
-            'actionLabel' => $row['action_label'],
-            'actionTarget' => $row['action_target'],
-            'selected' => false,
-        ];
-    }
-
-    // 4. 30-Minute Check-in Intervals
-    $intervalRows = $pdo->query("SELECT * FROM `checkin_intervals` ORDER BY `id` ASC")->fetchAll();
-    $intervals = [];
-    $peakCount = 0;
-    $peakLabel = '09:30 AM';
-    foreach ($intervalRows as $row) {
-        $gCount = (int) $row['guest_count'];
-        if ($gCount >= $peakCount) {
-            $peakCount = $gCount;
-            $peakLabel = $row['slot_label'] . ' AM';
+    if ($checkpointType === 'stock_warehouse') {
+        $stockMode = strtolower(trim((string) ($userBadgeRow['stock_access_mode'] ?? '')));
+        if ($tier['code'] === 'L1' || $stockMode === 'none') {
+            return [
+                'allowed' => false,
+                'reason' => 'Level 1 (Venue Crew) is not authorized for Stock Warehouses',
+                'tier' => $tier,
+            ];
         }
-        $intervals[] = [
-            'id' => (int) $row['id'],
-            'slotLabel' => $row['slot_label'],
-            'guestCount' => $gCount,
-            'barHeightPx' => (float) $row['bar_height_px'],
-            'isPeak' => ((int) $row['is_peak']) === 1,
+        if ($stockMode === 'selected') {
+            $allowedIds = json_decode((string) ($userBadgeRow['allowed_stock_ids'] ?? '[]'), true);
+            if (is_array($allowedIds) && !empty($allowedIds) && !in_array($checkpointId, array_map('intval', $allowedIds), true)) {
+                return [
+                    'allowed' => false,
+                    'reason' => 'Badge restricted to specific Stock Warehouses only',
+                    'tier' => $tier,
+                ];
+            }
+        }
+        return [
+            'allowed' => true,
+            'reason' => 'Authorized for Stock Warehouse access (' . $tier['code'] . ' — ' . $tier['short'] . ')',
+            'tier' => $tier,
         ];
     }
 
-    // 5. Recent Check-in Logs (latest 8)
-    $logRows = $pdo->query("SELECT * FROM `checkin_logs` ORDER BY `id` DESC LIMIT 8")->fetchAll();
-    $recentLogs = [];
-    foreach ($logRows as $row) {
-        $recentLogs[] = [
-            'id' => (int) $row['id'],
-            'attendeeId' => $row['attendee_id'],
-            'name' => $row['attendee_name'],
-            'initials' => $row['initials'],
-            'avatarBg' => $row['avatar_bg'],
-            'avatarColor' => $row['avatar_color'],
-            'company' => $row['company'],
-            'ticket' => $row['ticket'],
-            'station' => $row['station'],
-            'checkinTime' => $row['checkin_time'],
+    // Event Venue access
+    $venueMode = strtolower(trim((string) ($userBadgeRow['venue_access_mode'] ?? 'all')));
+    if ($venueMode === 'none' && $tier['code'] !== 'L4') {
+        return [
+            'allowed' => false,
+            'reason' => 'Badge has Venue Access disabled',
+            'tier' => $tier,
         ];
     }
 
-    // 6. Compute Live Analytics Breakdown from MySQL
-    // Scale sample tier counts proportionally with live check-ins
-    $extraCheckins = max(0, $checkedIn - 964);
-    $extraReg = max(0, $registered - 1284);
-
-    // Count VIP vs General vs Speaker in the live DB directory
-    $vipCheckedDb = (int) $pdo->query("SELECT COUNT(*) FROM `attendees` WHERE `ticket` = 'VIP pass' AND `checked_in` = 1")->fetchColumn();
-    $genCheckedDb = (int) $pdo->query("SELECT COUNT(*) FROM `attendees` WHERE `ticket` = 'General admission' AND `checked_in` = 1")->fetchColumn();
-    $spkCheckedDb = (int) $pdo->query("SELECT COUNT(*) FROM `attendees` WHERE `ticket` = 'Speaker' AND `checked_in` = 1")->fetchColumn();
-
-    $vipExtra = max(0, $vipCheckedDb - 2);
-    $genExtra = max(0, $genCheckedDb - 4);
-    $spkExtra = max(0, $spkCheckedDb - 1);
-
-    $genTotal = 912 + $extraReg;
-    $genChecked = 689 + $genExtra;
-    $vipTotal = 310;
-    $vipChecked = 221 + $vipExtra;
-    $spkTotal = 62;
-    $spkChecked = 54 + $spkExtra;
-
-    $ticketTiers = [
-        [
-            'tier' => 'General admission',
-            'registered' => $genTotal,
-            'checkedIn' => $genChecked,
-            'rate' => round(($genChecked / max(1, $genTotal)) * 100, 1),
-            'revenue' => 86640 + ($extraReg * 95),
-            'priceLabel' => '$95',
-            'badgeType' => 'neutral',
-        ],
-        [
-            'tier' => 'VIP pass',
-            'registered' => $vipTotal,
-            'checkedIn' => $vipChecked,
-            'rate' => round(($vipChecked / max(1, $vipTotal)) * 100, 1),
-            'revenue' => 41760,
-            'priceLabel' => '$240',
-            'badgeType' => 'purple',
-        ],
-        [
-            'tier' => 'Speaker & Press',
-            'registered' => $spkTotal,
-            'checkedIn' => $spkChecked,
-            'rate' => round(($spkChecked / max(1, $spkTotal)) * 100, 1),
-            'revenue' => 0,
-            'priceLabel' => 'Comp',
-            'badgeType' => 'green',
-        ],
+    return [
+        'allowed' => true,
+        'reason' => 'Authorized for Event Venue access (' . $tier['code'] . ' — ' . $tier['short'] . ')',
+        'tier' => $tier,
     ];
+}
 
-    // Station telemetry computed from checkin_logs
-    $stationCountsStmt = $pdo->query("SELECT `station`, COUNT(*) AS `cnt` FROM `checkin_logs` GROUP BY `station`")->fetchAll();
-    $stationBoost = [];
-    foreach ($stationCountsStmt as $stRow) {
-        $stationBoost[$stRow['station']] = (int) $stRow['cnt'];
+function getLinkedBatchesForUser(PDO $pdo, int $userId, string $fullName = '', string $username = ''): array
+{
+    $batches = [];
+    try {
+        $sql = "
+            SELECT
+                sm.`id`,
+                sm.`batch_number`,
+                sm.`movement_type`,
+                sm.`source_name`,
+                sm.`destination_name`,
+                sm.`destination_room`,
+                sm.`technician_id`,
+                sm.`submitted_by`,
+                sm.`stock_controller_name`,
+                sm.`status`,
+                sm.`approval_status`,
+                sm.`event_name`,
+                sm.`job_sheet`,
+                sm.`created_at`
+            FROM `stock_movements` sm
+            WHERE sm.`technician_id` = :uid
+               OR (sm.`submitted_by` IS NOT NULL AND sm.`submitted_by` != '' AND (LOWER(sm.`submitted_by`) = LOWER(:fname) OR LOWER(sm.`submitted_by`) = LOWER(:uname)))
+            ORDER BY sm.`id` DESC
+            LIMIT 5
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':uid' => $userId,
+            ':fname' => $fullName,
+            ':uname' => $username,
+        ]);
+        $rows = $stmt->fetchAll();
+
+        $itemStmt = $pdo->prepare("SELECT `item_name`, `quantity` FROM `batch_items` WHERE `batch_id` = ? LIMIT 10");
+        foreach ($rows as $r) {
+            $bid = (int) $r['id'];
+            $items = [];
+            try {
+                $itemStmt->execute([$bid]);
+                $items = $itemStmt->fetchAll();
+            } catch (Throwable $e) {
+                $items = [];
+            }
+            $batches[] = [
+                'id' => $bid,
+                'batch_number' => (string) ($r['batch_number'] ?? ('BATCH-' . $bid)),
+                'movement_type' => (string) ($r['movement_type'] ?? 'dispatch'),
+                'source_name' => (string) ($r['source_name'] ?? 'Ndera Warehouse'),
+                'destination_name' => (string) ($r['destination_name'] ?? 'Kigali Convention Centre'),
+                'destination_room' => (string) ($r['destination_room'] ?? 'Main Stage'),
+                'technician_id' => (int) ($r['technician_id'] ?? $userId),
+                'submitted_by' => (string) ($r['submitted_by'] ?? $fullName),
+                'stock_controller_name' => (string) ($r['stock_controller_name'] ?? 'Mirene'),
+                'status' => (string) ($r['status'] ?? $r['approval_status'] ?? 'approved'),
+                'event_name' => (string) ($r['event_name'] ?? 'World Bank Summit'),
+                'job_sheet' => (string) ($r['job_sheet'] ?? 'JS-2026-104'),
+                'created_at' => (string) ($r['created_at'] ?? date('Y-m-d H:i:s')),
+                'items' => $items,
+            ];
+        }
+    } catch (Throwable $e) {
+        // Fallback if stock_movements in ability_db has slightly different columns
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM `stock_movements` WHERE `technician_id` = ? ORDER BY `id` DESC LIMIT 5");
+            $stmt->execute([$userId]);
+            foreach ($stmt->fetchAll() as $r) {
+                $batches[] = [
+                    'id' => (int) $r['id'],
+                    'batch_number' => (string) ($r['batch_number'] ?? ('BATCH-' . $r['id'])),
+                    'movement_type' => (string) ($r['movement_type'] ?? 'dispatch'),
+                    'source_name' => (string) ($r['source_name'] ?? 'Ndera Warehouse'),
+                    'destination_name' => (string) ($r['destination_name'] ?? 'Kigali Convention Centre'),
+                    'destination_room' => (string) ($r['destination_room'] ?? ''),
+                    'technician_id' => $userId,
+                    'submitted_by' => (string) ($r['submitted_by'] ?? $fullName),
+                    'stock_controller_name' => (string) ($r['stock_controller_name'] ?? 'Mirene'),
+                    'status' => (string) ($r['status'] ?? $r['approval_status'] ?? 'approved'),
+                    'event_name' => (string) ($r['event_name'] ?? 'Active Production'),
+                    'job_sheet' => (string) ($r['job_sheet'] ?? ''),
+                    'created_at' => (string) ($r['created_at'] ?? ''),
+                    'items' => [],
+                ];
+            }
+        } catch (Throwable $e2) {
+        }
     }
 
-    $stations = [
-        [
-            'name' => 'North Foyer Kiosk 01',
-            'location' => 'Main Entrance · Terminal A',
-            'processed' => 342 + max(0, ($stationBoost['North Foyer Kiosk 01'] ?? 3) - 3),
-            'avgSpeed' => '4.1s',
-            'status' => 'Online',
-            'sharePct' => 36,
-        ],
-        [
-            'name' => 'North Foyer Kiosk 02',
-            'location' => 'Main Entrance · Terminal B',
-            'processed' => 318 + max(0, ($stationBoost['North Foyer Kiosk 02'] ?? 3) - 3),
-            'avgSpeed' => '4.4s',
-            'status' => 'Online',
-            'sharePct' => 33,
-        ],
-        [
-            'name' => 'VIP Express Desk 03',
-            'location' => 'West Lounge · Fast Track',
-            'processed' => 221 + max(0, ($stationBoost['VIP Express Desk 03'] ?? 2) - 2),
-            'avgSpeed' => '3.6s',
-            'status' => 'Online',
-            'sharePct' => 23,
-        ],
-        [
-            'name' => 'Speaker & Press Desk 04',
-            'location' => 'Green Room · Backstage',
-            'processed' => 83 + max(0, ($stationBoost['Speaker & Press Desk 04'] ?? 1) - 1),
-            'avgSpeed' => '3.2s',
-            'status' => 'Online',
-            'sharePct' => 8,
-        ],
-    ];
+    return $batches;
+}
 
-    // Role distribution
-    $roleDistribution = [
-        ['role' => 'Product & UX Designers', 'count' => 540 + $extraCheckins, 'pct' => 42],
-        ['role' => 'Design Directors & Heads', 'count' => 334, 'pct' => 26],
-        ['role' => 'Founders & Executives', 'count' => 244, 'pct' => 19],
-        ['role' => 'Design Engineers & PMs', 'count' => 166, 'pct' => 13],
-    ];
+function buildVerificationCardPayload(
+    PDO $pdo,
+    array $crewMember,
+    string $checkpointType,
+    int $checkpointId,
+    string $checkpointName,
+    ?array $overrideScanResult = null
+): array {
+    $eval = evaluateCheckpointAccess($crewMember, $checkpointType, $checkpointId);
+    $allowed = $overrideScanResult['allowed'] ?? $eval['allowed'];
+    $reason = $overrideScanResult['reason'] ?? $eval['reason'];
+    $action = $overrideScanResult['action'] ?? ($crewMember['daily_state'] === 'checked_out' ? 'check_out' : 'check_in');
+    $punctuality = $overrideScanResult['punctuality'] ?? strtolower((string) ($crewMember['punctuality_code'] ?? 'on_time'));
+    $punctualityLabel = $overrideScanResult['punctuality_label'] ?? (string) ($crewMember['punctuality'] ?? 'ON TIME');
+
+    $checkInFull = $overrideScanResult['check_in_time'] ?? ($crewMember['check_in_full'] ?? null);
+    $checkOutFull = $overrideScanResult['check_out_time'] ?? ($crewMember['check_out_full'] ?? null);
+
+    $roleUpper = strtoupper(str_replace('_', ' ', (string) ($crewMember['role'] ?? 'TECHNICIAN')));
+    $deptUpper = strtoupper(trim((string) ($crewMember['department'] ?? 'OPERATIONS')));
+    $rolePill = $roleUpper . ' - ' . $deptUpper;
 
     return [
         'ok' => true,
-        'dbEngine' => 'MySQL / MariaDB (XAMPP)',
-        'stats' => [
-            'totalPeople' => $totalPeople,
-            'registered' => $registered,
-            'checkedIn' => $checkedIn,
-            'waitlist' => $waitlist,
-            'cancelled' => $cancelled,
-            'checkedInDelta' => $checkedInDelta,
-            'ticketRevenue' => $ticketRevenue,
-            'lastArrivalTime' => $lastArrivalTime,
-        ],
-        'attendees' => $attendees,
-        'events' => $events,
-        'intervals' => $intervals,
-        'analytics' => [
-            'peakGuests' => $peakCount,
-            'peakTime' => $peakLabel,
-            'avgCheckinSeconds' => '4.2s',
-            'vipRemaining' => max(0, 25 - $vipExtra),
-            'ticketTiers' => $ticketTiers,
-            'stations' => $stations,
-            'roleDistribution' => $roleDistribution,
-            'recentLogs' => $recentLogs,
+        'allowed' => (bool) $allowed,
+        'reason' => (string) $reason,
+        'action' => (string) $action,
+        'punctuality' => (string) $punctuality,
+        'punctuality_label' => (string) $punctualityLabel,
+        'checkpoint_type' => $checkpointType,
+        'checkpoint_id' => $checkpointId,
+        'checkpoint_name' => $checkpointName,
+        'scanned_at' => $overrideScanResult['scanned_at'] ?? date('H:i:s'),
+        'check_in_time' => $checkInFull,
+        'check_out_time' => $checkOutFull,
+        'linked_batches' => $crewMember['linked_batches'] ?? [],
+        'badge' => [
+            'user_id' => (int) $crewMember['id'],
+            'full_name' => (string) $crewMember['full_name'],
+            'username' => (string) $crewMember['username'],
+            'role' => (string) $crewMember['role'],
+            'role_pill' => $rolePill,
+            'department' => (string) $crewMember['department'],
+            'phone' => (string) $crewMember['phone'],
+            'profile_image' => $crewMember['profile_image_url'],
+            'initials' => (string) $crewMember['initials'],
+            'badge_code' => (string) $crewMember['badge_code'],
+            'raw_badge_code' => (string) $crewMember['raw_badge_code'],
+            'staff_code' => (string) $crewMember['staff_code'],
+            'clearance_level' => (string) $crewMember['clearance_level'],
+            'clearance_code' => (string) $crewMember['clearance_code'],
+            'clearance_title' => (string) $crewMember['clearance_title'],
+            'clearance_short' => (string) $crewMember['clearance_short'],
+            'clearance_color' => (string) $crewMember['clearance_color'],
+            'badge_status' => (string) $crewMember['badge_status'],
+            'daily_state' => (string) $crewMember['daily_state'],
         ],
     ];
 }
 
+function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
+{
+    $todayStr = date('Y-m-d');
+
+    // 1. Load Stock Warehouses
+    $stockRows = $pdo->query("SELECT * FROM `stock_locations` WHERE `is_active` = 1 ORDER BY `id` ASC")->fetchAll();
+    $stockWarehouses = [];
+    foreach ($stockRows as $sr) {
+        $sid = (int) $sr['id'];
+        $stockWarehouses[] = [
+            'id' => $sid,
+            'type' => 'stock_warehouse',
+            'name' => (string) ($sr['name'] ?? 'Stock Warehouse'),
+            'code' => (string) ($sr['code'] ?? $sr['location_code'] ?? 'STK-0' . $sid),
+            'location' => (string) ($sr['location'] ?? 'Kigali Logistics Hub'),
+            'open_time' => substr((string) ($sr['open_time'] ?? '08:00:00'), 0, 5),
+            'close_time' => substr((string) ($sr['close_time'] ?? '18:00:00'), 0, 5),
+            'call_time' => substr((string) ($sr['open_time'] ?? '08:00:00'), 0, 5),
+            'lead_label' => 'Stock Controller: Mirene Uwase',
+            'min_clearance' => 'L2 / L3 / L4 Required (L1 Blocked)',
+        ];
+    }
+
+    // 2. Load Event Venues
+    $eventRows = $pdo->query("SELECT * FROM `events` ORDER BY `date` DESC, `id` DESC LIMIT 12")->fetchAll();
+    $eventVenues = [];
+    $fallbackIdx = 1001;
+    foreach ($eventRows as $er) {
+        $rawId = (string) ($er['id'] ?? $fallbackIdx);
+        $numId = is_numeric($rawId) ? (int) $rawId : crc32($rawId);
+        $title = (string) ($er['title'] ?? 'Production Event');
+        $loc = (string) ($er['location'] ?? 'Kigali Convention Centre');
+        $callTime = substr((string) ($er['call_time'] ?? '08:00'), 0, 5) ?: '08:00';
+        $pm = (string) ($er['project_manager'] ?? 'Operations PM');
+        $tl = (string) ($er['tech_lead'] ?? 'Tech Lead');
+        $eventVenues[] = [
+            'id' => $numId,
+            'raw_id' => $rawId,
+            'type' => 'event_venue',
+            'name' => $title . ($loc && stripos($title, $loc) === false ? ' — ' . $loc : ''),
+            'title' => $title,
+            'location' => $loc,
+            'date' => (string) ($er['date'] ?? $todayStr),
+            'call_time' => $callTime,
+            'lead_label' => 'Tech Lead: ' . ($tl ?: $pm ?: 'Jean Paul'),
+            'min_clearance' => 'L1 / L2 / L3 / L4 Authorized',
+        ];
+        $fallbackIdx++;
+    }
+
+    // Resolve Active Checkpoint
+    $checkpointType = in_array($reqCheckpointType, ['stock_warehouse', 'event_venue'], true)
+        ? $reqCheckpointType
+        : 'stock_warehouse';
+
+    $activeCheckpoint = null;
+    if ($checkpointType === 'stock_warehouse') {
+        foreach ($stockWarehouses as $sw) {
+            if ($sw['id'] === $reqCheckpointId) {
+                $activeCheckpoint = $sw;
+                break;
+            }
+        }
+        if (!$activeCheckpoint && !empty($stockWarehouses)) {
+            $activeCheckpoint = $stockWarehouses[0];
+        }
+    } else {
+        foreach ($eventVenues as $ev) {
+            if ($ev['id'] === $reqCheckpointId) {
+                $activeCheckpoint = $ev;
+                break;
+            }
+        }
+        if (!$activeCheckpoint && !empty($eventVenues)) {
+            $activeCheckpoint = $eventVenues[0];
+        }
+    }
+
+    if (!$activeCheckpoint) {
+        $activeCheckpoint = [
+            'id' => 1,
+            'type' => 'stock_warehouse',
+            'name' => 'Ndera Warehouse',
+            'location' => 'Ndera Central Logistics Hub',
+            'call_time' => '08:00',
+            'lead_label' => 'Stock Controller: Mirene Uwase',
+            'min_clearance' => 'L2 / L3 / L4 Required',
+        ];
+    }
+
+    $activeCpType = (string) $activeCheckpoint['type'];
+    $activeCpId = (int) $activeCheckpoint['id'];
+    $activeCpName = (string) $activeCheckpoint['name'];
+
+    // 3. Load Today's Attendance Logs
+    $todayLogsStmt = $pdo->prepare("
+        SELECT * FROM `attendance_logs`
+        WHERE DATE(`scanned_at`) = ?
+        ORDER BY `scanned_at` ASC, `id` ASC
+    ");
+    $todayLogsStmt->execute([$todayStr]);
+    $todayLogs = $todayLogsStmt->fetchAll();
+
+    // Compute per-user daily state and timestamps
+    $userDailyMap = [];
+    $checkpointStats = [];
+    $hourlyBuckets = [
+        '07:00' => ['hour' => '07:00', 'label' => '07:00 AM', 'venueCount' => 0, 'stockCount' => 0],
+        '08:00' => ['hour' => '08:00', 'label' => '08:00 AM', 'venueCount' => 0, 'stockCount' => 0],
+        '09:00' => ['hour' => '09:00', 'label' => '09:00 AM', 'venueCount' => 0, 'stockCount' => 0],
+        '10:00' => ['hour' => '10:00', 'label' => '10:00 AM', 'venueCount' => 0, 'stockCount' => 0],
+        '11:00' => ['hour' => '11:00', 'label' => '11:00 AM', 'venueCount' => 0, 'stockCount' => 0],
+        '12:00' => ['hour' => '12:00', 'label' => '12:00 PM', 'venueCount' => 0, 'stockCount' => 0],
+        '14:00' => ['hour' => '14:00', 'label' => '02:00 PM', 'venueCount' => 0, 'stockCount' => 0],
+        '16:00' => ['hour' => '16:00', 'label' => '04:00 PM', 'venueCount' => 0, 'stockCount' => 0],
+    ];
+
+    $venueCheckinsToday = 0;
+    $stockCheckinsToday = 0;
+    $lateArrivalsToday = 0;
+    $deniedScansToday = 0;
+
+    foreach ($todayLogs as $log) {
+        $uid = (int) $log['user_id'];
+        $cpType = (string) ($log['checkpoint_type'] ?? 'event_venue');
+        $cpId = (int) ($log['checkpoint_id'] ?? 1);
+        $cpKey = $cpType . ':' . $cpId;
+        $action = (string) ($log['scan_action'] ?? 'check_in');
+        $status = (string) ($log['access_status'] ?? 'granted');
+        $punct = strtolower((string) ($log['punctuality_status'] ?? 'on_time'));
+        $ts = strtotime((string) $log['scanned_at']) ?: time();
+
+        if (!isset($checkpointStats[$cpKey])) {
+            $checkpointStats[$cpKey] = [
+                'checked_in_today' => 0,
+                'checked_out_today' => 0,
+                'denied_today' => 0,
+                'active_users' => [],
+            ];
+        }
+
+        if ($status === 'denied') {
+            $deniedScansToday++;
+            $checkpointStats[$cpKey]['denied_today']++;
+        } else {
+            if ($action === 'check_in') {
+                if ($cpType === 'stock_warehouse') {
+                    $stockCheckinsToday++;
+                } else {
+                    $venueCheckinsToday++;
+                }
+                if ($punct === 'late') {
+                    $lateArrivalsToday++;
+                }
+                $checkpointStats[$cpKey]['checked_in_today']++;
+                $checkpointStats[$cpKey]['active_users'][$uid] = true;
+
+                // Map to hourly bucket
+                $h = (int) date('G', $ts);
+                if ($h <= 7) {
+                    $bKey = '07:00';
+                } elseif ($h === 8) {
+                    $bKey = '08:00';
+                } elseif ($h === 9) {
+                    $bKey = '09:00';
+                } elseif ($h === 10) {
+                    $bKey = '10:00';
+                } elseif ($h === 11) {
+                    $bKey = '11:00';
+                } elseif ($h <= 13) {
+                    $bKey = '12:00';
+                } elseif ($h <= 15) {
+                    $bKey = '14:00';
+                } else {
+                    $bKey = '16:00';
+                }
+                if ($cpType === 'stock_warehouse') {
+                    $hourlyBuckets[$bKey]['stockCount']++;
+                } else {
+                    $hourlyBuckets[$bKey]['venueCount']++;
+                }
+            } elseif ($action === 'check_out') {
+                $checkpointStats[$cpKey]['checked_out_today']++;
+                unset($checkpointStats[$cpKey]['active_users'][$uid]);
+            }
+        }
+
+        if (!isset($userDailyMap[$uid])) {
+            $userDailyMap[$uid] = [
+                'state' => 'ready',
+                'check_in_short' => null,
+                'check_in_full' => null,
+                'check_out_short' => null,
+                'check_out_full' => null,
+                'punctuality_code' => 'on_time',
+                'punctuality_label' => 'READY',
+                'last_checkpoint_type' => $cpType,
+                'last_checkpoint_id' => $cpId,
+                'last_checkpoint_name' => (string) ($log['checkpoint_name'] ?? ''),
+                'last_scanned_at' => (string) ($log['scanned_at'] ?? ''),
+                'denied_count' => 0,
+                'last_denial_reason' => null,
+            ];
+        }
+
+        if ($status === 'denied') {
+            $userDailyMap[$uid]['denied_count']++;
+            $userDailyMap[$uid]['last_denial_reason'] = (string) ($log['denial_reason'] ?? 'Access Denied');
+        } elseif ($action === 'check_in') {
+            $userDailyMap[$uid]['state'] = 'checked_in';
+            $userDailyMap[$uid]['check_in_short'] = date('h:i A', $ts);
+            $userDailyMap[$uid]['check_in_full'] = date('h:i:s A', $ts);
+            $userDailyMap[$uid]['check_out_short'] = null;
+            $userDailyMap[$uid]['check_out_full'] = null;
+            $userDailyMap[$uid]['punctuality_code'] = $punct;
+            $userDailyMap[$uid]['punctuality_label'] = $punct === 'late'
+                ? 'LATE CALL-TIME'
+                : ($punct === 'early' ? 'EARLY ARRIVAL' : 'ON TIME');
+            $userDailyMap[$uid]['last_checkpoint_type'] = $cpType;
+            $userDailyMap[$uid]['last_checkpoint_id'] = $cpId;
+            $userDailyMap[$uid]['last_checkpoint_name'] = (string) ($log['checkpoint_name'] ?? '');
+            $userDailyMap[$uid]['last_scanned_at'] = (string) ($log['scanned_at'] ?? '');
+        } elseif ($action === 'check_out') {
+            $userDailyMap[$uid]['state'] = 'checked_out';
+            $userDailyMap[$uid]['check_out_short'] = date('h:i A', $ts);
+            $userDailyMap[$uid]['check_out_full'] = date('h:i:s A', $ts);
+            $userDailyMap[$uid]['last_checkpoint_type'] = $cpType;
+            $userDailyMap[$uid]['last_checkpoint_id'] = $cpId;
+            $userDailyMap[$uid]['last_checkpoint_name'] = (string) ($log['checkpoint_name'] ?? '');
+            $userDailyMap[$uid]['last_scanned_at'] = (string) ($log['scanned_at'] ?? '');
+        }
+    }
+
+    // 4. Load Users & Badges
+    $usersSql = "
+        SELECT
+            u.`id`,
+            u.`username`,
+            u.`full_name`,
+            u.`email`,
+            u.`phone`,
+            u.`role`,
+            u.`department`,
+            u.`profile_image`,
+            u.`is_active`,
+            ub.`badge_code` AS `raw_badge_code`,
+            ub.`rfid_uid`,
+            ub.`clearance_level`,
+            ub.`stock_access_mode`,
+            ub.`allowed_stock_ids`,
+            ub.`venue_access_mode`,
+            ub.`allowed_event_ids`,
+            ub.`badge_status`,
+            ub.`emergency_contact`,
+            ub.`blood_group`,
+            ub.`issued_at`,
+            ub.`expires_at`
+        FROM `users` u
+        LEFT JOIN `user_badges` ub ON ub.`user_id` = u.`id`
+        ORDER BY u.`id` ASC
+    ";
+    $userRows = $pdo->query($usersSql)->fetchAll();
+
+    $crew = [];
+    $crewById = [];
+    $rollCallList = [];
+    $tierCounts = ['L1' => 0, 'L2' => 0, 'L3' => 0, 'L4' => 0];
+    $activeBadgesCount = 0;
+
+    foreach ($userRows as $ur) {
+        $uid = (int) $ur['id'];
+        $fullName = trim((string) ($ur['full_name'] ?: $ur['username']));
+        $username = (string) ($ur['username'] ?? ('user' . $uid));
+        $role = strtolower(trim((string) ($ur['role'] ?? 'technician')));
+        $dept = trim((string) ($ur['department'] ?: 'Production'));
+        $tier = normalizeClearanceTier((string) ($ur['clearance_level'] ?? ''), $role);
+        $tierCode = $tier['code'];
+        if (isset($tierCounts[$tierCode])) {
+            $tierCounts[$tierCode]++;
+        }
+
+        $badgeStatus = strtolower(trim((string) ($ur['badge_status'] ?? 'active')));
+        if ($badgeStatus === 'active') {
+            $activeBadgesCount++;
+        }
+
+        $rewBadge = formatRewBadgeCode($uid, $ur['raw_badge_code'] ?? null);
+        $staffCode = formatStaffCode($uid);
+
+        $cpEval = evaluateCheckpointAccess(array_merge($ur, ['clearance_level' => $tier['key']]), $activeCpType, $activeCpId);
+        $uDaily = $userDailyMap[$uid] ?? null;
+        $dailyState = $uDaily['state'] ?? 'ready';
+
+        $linkedBatches = getLinkedBatchesForUser($pdo, $uid, $fullName, $username);
+
+        $member = [
+            'id' => $uid,
+            'username' => $username,
+            'full_name' => $fullName,
+            'email' => (string) ($ur['email'] ?? ($username . '@ability.rw')),
+            'phone' => (string) ($ur['phone'] ?: '+250 788 100 ' . str_pad((string) $uid, 3, '0', STR_PAD_LEFT)),
+            'role' => $role,
+            'role_display' => ucwords(str_replace('_', ' ', $role)),
+            'department' => $dept,
+            'profile_image_url' => resolveProfileImageUrl($ur['profile_image'] ?? null),
+            'initials' => computeInitials($fullName),
+            'badge_code' => $rewBadge,
+            'raw_badge_code' => (string) ($ur['raw_badge_code'] ?: $rewBadge),
+            'staff_code' => $staffCode,
+            'rfid_uid' => (string) ($ur['rfid_uid'] ?: ('RFID-88' . str_pad((string) $uid, 2, '0', STR_PAD_LEFT))),
+            'badge_status' => $badgeStatus,
+            'clearance_level' => $tier['key'],
+            'clearance_code' => $tier['code'],
+            'clearance_title' => $tier['title'],
+            'clearance_short' => $tier['short'],
+            'clearance_color' => $tier['color'],
+            'stock_access_mode' => (string) ($ur['stock_access_mode'] ?? ($tier['code'] === 'L1' ? 'none' : 'all')),
+            'venue_access_mode' => (string) ($ur['venue_access_mode'] ?? 'all'),
+            'stock_authorized' => $tier['code'] !== 'L1' && $badgeStatus === 'active',
+            'checkpoint_authorized' => (bool) $cpEval['allowed'],
+            'checkpoint_auth_reason' => (string) $cpEval['reason'],
+            'daily_state' => $dailyState,
+            'check_in_time' => $uDaily['check_in_short'] ?? null,
+            'check_in_full' => $uDaily['check_in_full'] ?? null,
+            'check_out_time' => $uDaily['check_out_short'] ?? null,
+            'check_out_full' => $uDaily['check_out_full'] ?? null,
+            'punctuality_code' => $uDaily['punctuality_code'] ?? 'on_time',
+            'punctuality' => $uDaily['punctuality_label'] ?? 'READY',
+            'last_checkpoint_type' => $uDaily['last_checkpoint_type'] ?? null,
+            'last_checkpoint_name' => $uDaily['last_checkpoint_name'] ?? null,
+            'linked_batches' => $linkedBatches,
+        ];
+
+        $crew[] = $member;
+        $crewById[$uid] = $member;
+
+        if ($dailyState === 'checked_in') {
+            $rollCallList[] = [
+                'user_id' => $uid,
+                'full_name' => $fullName,
+                'role_display' => $member['role_display'],
+                'department' => $dept,
+                'badge_code' => $rewBadge,
+                'staff_code' => $staffCode,
+                'clearance_code' => $tier['code'],
+                'clearance_color' => $tier['color'],
+                'checkpoint_type' => $uDaily['last_checkpoint_type'] ?? 'event_venue',
+                'checkpoint_name' => $uDaily['last_checkpoint_name'] ?: $activeCpName,
+                'check_in_time' => $uDaily['check_in_short'] ?? '08:00 AM',
+                'punctuality' => $uDaily['punctuality_label'] ?? 'ON TIME',
+                'initials' => $member['initials'],
+                'profile_image_url' => $member['profile_image_url'],
+            ];
+        }
+    }
+
+    // 5. Enrich Checkpoints Directory (for Frame 2: Venues & Stock Gates)
+    $allCheckpointsDirectory = [];
+    foreach ($stockWarehouses as &$sw) {
+        $cpKey = 'stock_warehouse:' . $sw['id'];
+        $st = $checkpointStats[$cpKey] ?? ['checked_in_today' => 0, 'checked_out_today' => 0, 'denied_today' => 0, 'active_users' => []];
+        $sw['checked_in_today'] = (int) $st['checked_in_today'];
+        $sw['on_site_now'] = count($st['active_users']);
+        $sw['denied_today'] = (int) $st['denied_today'];
+        $sw['station_mode'] = 'Stock Controller Gate';
+        $allCheckpointsDirectory[] = $sw;
+    }
+    unset($sw);
+
+    foreach ($eventVenues as &$ev) {
+        $cpKey = 'event_venue:' . $ev['id'];
+        $st = $checkpointStats[$cpKey] ?? ['checked_in_today' => 0, 'checked_out_today' => 0, 'denied_today' => 0, 'active_users' => []];
+        $ev['checked_in_today'] = (int) $st['checked_in_today'];
+        $ev['on_site_now'] = count($st['active_users']);
+        $ev['denied_today'] = (int) $st['denied_today'];
+        $ev['station_mode'] = 'Locked Entrance Station (PIN: 1234)';
+        $allCheckpointsDirectory[] = $ev;
+    }
+    unset($ev);
+
+    // 6. Load All Equipment Batches (`stock_movements`)
+    $allBatches = [];
+    try {
+        $bRows = $pdo->query("SELECT * FROM `stock_movements` ORDER BY `id` DESC LIMIT 25")->fetchAll();
+        $itemStmt = $pdo->prepare("SELECT `item_name`, `quantity` FROM `batch_items` WHERE `batch_id` = ? LIMIT 10");
+        foreach ($bRows as $br) {
+            $bid = (int) $br['id'];
+            $techId = (int) ($br['technician_id'] ?? 0);
+            $techMember = $crewById[$techId] ?? null;
+            $items = [];
+            try {
+                $itemStmt->execute([$bid]);
+                $items = $itemStmt->fetchAll();
+            } catch (Throwable $e) {
+                $items = [];
+            }
+            $allBatches[] = [
+                'id' => $bid,
+                'batch_number' => (string) ($br['batch_number'] ?? ('BATCH-' . $bid)),
+                'movement_type' => (string) ($br['movement_type'] ?? 'dispatch'),
+                'source_name' => (string) ($br['source_name'] ?? 'Ndera Warehouse'),
+                'destination_name' => (string) ($br['destination_name'] ?? 'Kigali Convention Centre'),
+                'destination_room' => (string) ($br['destination_room'] ?? 'Main Auditorium'),
+                'technician_id' => $techId,
+                'technician_name' => $techMember ? $techMember['full_name'] : (string) ($br['submitted_by'] ?: 'Eric Havugimana'),
+                'technician_badge' => $techMember ? $techMember['badge_code'] : 'REW-BADGE-0006',
+                'technician_clearance' => $techMember ? $techMember['clearance_code'] : 'L2',
+                'stock_controller_name' => (string) ($br['stock_controller_name'] ?: 'Mirene Uwase'),
+                'status' => strtolower((string) ($br['status'] ?? $br['approval_status'] ?? 'approved')),
+                'event_name' => (string) ($br['event_name'] ?: 'World Bank Summit'),
+                'job_sheet' => (string) ($br['job_sheet'] ?: 'JS-2026-104'),
+                'created_at' => (string) ($br['created_at'] ?: date('Y-m-d H:i:s')),
+                'items' => $items,
+            ];
+        }
+    } catch (Throwable $e) {
+    }
+
+    // 7. Build User Activity Timeline (from `attendance_logs` newest first)
+    $timelineRows = $pdo->query("SELECT * FROM `attendance_logs` ORDER BY `scanned_at` DESC, `id` DESC LIMIT 60")->fetchAll();
+    $activityTimeline = [];
+    foreach ($timelineRows as $tr) {
+        $uid = (int) $tr['user_id'];
+        $member = $crewById[$uid] ?? ($crew[0] ?? null);
+        $cpType = (string) ($tr['checkpoint_type'] ?? 'event_venue');
+        $cpName = (string) ($tr['checkpoint_name'] ?: ($cpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre'));
+        $scanAction = (string) ($tr['scan_action'] ?? 'check_in');
+        $accessStatus = (string) ($tr['access_status'] ?? 'granted');
+        $ts = strtotime((string) $tr['scanned_at']) ?: time();
+
+        if ($accessStatus === 'denied') {
+            $actionTitle = 'Access Denied at ' . ($cpType === 'stock_warehouse' ? 'Stock — ' : 'Venue — ') . $cpName;
+        } elseif ($scanAction === 'check_out') {
+            $actionTitle = ($cpType === 'stock_warehouse' ? 'Signed out from stock — ' : 'Checked out from Venue — ') . $cpName;
+        } elseif ($scanAction === 'access_verify') {
+            $actionTitle = 'Verified clearance at ' . $cpName;
+        } else {
+            $actionTitle = ($cpType === 'stock_warehouse' ? 'Checked in to Stock — ' : 'Entered Venue — ') . $cpName;
+        }
+
+        $uDaily = $userDailyMap[$uid] ?? null;
+        $inTime = $scanAction === 'check_in' ? date('h:i A', $ts) : ($uDaily['check_in_short'] ?? date('h:i A', $ts));
+        $outTime = $scanAction === 'check_out' ? date('h:i A', $ts) : ($uDaily['check_out_short'] ?? null);
+
+        $activityTimeline[] = [
+            'id' => (int) $tr['id'],
+            'user_id' => $uid,
+            'full_name' => $member ? $member['full_name'] : 'Production Crew',
+            'role_display' => $member ? $member['role_display'] : 'Technician',
+            'department' => $member ? $member['department'] : 'Audio',
+            'badge_code' => $member ? $member['badge_code'] : (string) $tr['badge_code'],
+            'staff_code' => $member ? $member['staff_code'] : formatStaffCode($uid),
+            'clearance_code' => $member ? $member['clearance_code'] : 'L2',
+            'clearance_color' => $member ? $member['clearance_color'] : '#2563eb',
+            'profile_image_url' => $member ? $member['profile_image_url'] : null,
+            'initials' => $member ? $member['initials'] : 'CR',
+            'checkpoint_type' => $cpType,
+            'checkpoint_id' => (int) ($tr['checkpoint_id'] ?? 1),
+            'checkpoint_name' => $cpName,
+            'scan_action' => $scanAction,
+            'access_status' => $accessStatus,
+            'denial_reason' => (string) ($tr['denial_reason'] ?? ''),
+            'punctuality_status' => (string) ($tr['punctuality_status'] ?? 'on_time'),
+            'notes' => (string) ($tr['notes'] ?? ''),
+            'action_title' => $actionTitle,
+            'scanned_at' => (string) $tr['scanned_at'],
+            'formatted_time' => date('M j, Y • h:i:s A', $ts),
+            'in_pill' => $inTime ? ('In: ' . $inTime) : null,
+            'out_pill' => $outTime ? ('Out: ' . $outTime) : null,
+        ];
+    }
+
+    // 8. Build Default Verification Deck Payload (Prefer Eric `id=6` or first technician with a linked batch)
+    $featuredMember = $crewById[6] ?? null;
+    if (!$featuredMember) {
+        foreach ($crew as $cm) {
+            if (!empty($cm['linked_batches'])) {
+                $featuredMember = $cm;
+                break;
+            }
+        }
+    }
+    if (!$featuredMember && !empty($crew)) {
+        $featuredMember = $crew[0];
+    }
+
+    $defaultVerification = $featuredMember
+        ? buildVerificationCardPayload($pdo, $featuredMember, $activeCpType, $activeCpId, $activeCpName)
+        : null;
+
+    // 9. Build 4-Tier Matrix Summary
+    $rawMatrix = getFourTierMatrixSpec();
+    $clearanceMatrix = [];
+    foreach (['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L3_STOCK_WAREHOUSE', 'L4_ALL_ACCESS'] as $mKey) {
+        $m = $rawMatrix[$mKey];
+        $m['member_count'] = $tierCounts[$m['code']] ?? 0;
+        $clearanceMatrix[] = $m;
+    }
+
+    return [
+        'ok' => true,
+        'dbSource' => $activeDb,
+        'clearanceMatrix' => $clearanceMatrix,
+        'checkpoints' => [
+            'stock_warehouses' => $stockWarehouses,
+            'event_venues' => $eventVenues,
+            'directory' => $allCheckpointsDirectory,
+        ],
+        'activeCheckpoint' => $activeCheckpoint,
+        'kpis' => [
+            'activeBadges' => $activeBadgesCount,
+            'totalStaff' => count($crew),
+            'tierCounts' => $tierCounts,
+            'currentlyOnSite' => count($rollCallList),
+            'venueCheckinsToday' => $venueCheckinsToday,
+            'stockCheckinsToday' => $stockCheckinsToday,
+            'totalGrantedToday' => $venueCheckinsToday + $stockCheckinsToday,
+            'lateArrivalsToday' => $lateArrivalsToday,
+            'deniedScansToday' => $deniedScansToday,
+        ],
+        'rollCallList' => $rollCallList,
+        'crew' => $crew,
+        'hourlyTraffic' => array_values($hourlyBuckets),
+        'activityTimeline' => $activityTimeline,
+        'batches' => $allBatches,
+        'defaultVerification' => $defaultVerification,
+    ];
+}
+
+function findCrewMemberByScanInput(array $crew, string $scanInput): ?array
+{
+    $needle = trim($scanInput);
+    if ($needle === '') {
+        return null;
+    }
+    $upper = strtoupper($needle);
+    $lower = strtolower($needle);
+
+    // 1. Exact badge_code, raw_badge_code, staff_code, rfid_uid, or numeric user_id
+    foreach ($crew as $cm) {
+        if (
+            strtoupper($cm['badge_code']) === $upper ||
+            strtoupper($cm['raw_badge_code']) === $upper ||
+            strtoupper($cm['staff_code']) === $upper ||
+            strtoupper($cm['rfid_uid']) === $upper ||
+            (is_numeric($needle) && (int) $needle === (int) $cm['id'])
+        ) {
+            return $cm;
+        }
+    }
+
+    // 2. Match trailing digits on REW-BADGE-XXXX / ABL-BDG-XXXX / ABL-XXX
+    if (preg_match('/(\d{1,4})$/', $upper, $m)) {
+        $parsedId = (int) $m[1];
+        foreach ($crew as $cm) {
+            if ((int) $cm['id'] === $parsedId) {
+                return $cm;
+            }
+        }
+    }
+
+    // 3. Exact or partial username / full_name match
+    foreach ($crew as $cm) {
+        if (strtolower($cm['username']) === $lower || strtolower($cm['full_name']) === $lower) {
+            return $cm;
+        }
+    }
+    foreach ($crew as $cm) {
+        if (
+            strpos(strtolower($cm['full_name']), $lower) !== false ||
+            strpos(strtolower($cm['username']), $lower) !== false ||
+            strpos(strtoupper($cm['badge_code']), $upper) !== false
+        ) {
+            return $cm;
+        }
+    }
+
+    return null;
+}
+
 try {
-    $pdo = getDbConnection();
-    $action = $_GET['action'] ?? 'bootstrap';
+    $activeDb = '';
+    $pdo = getDbConnection($activeDb);
+
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $rawBody = file_get_contents('php://input');
-    $input = $rawBody ? (json_decode($rawBody, true) ?? []) : [];
+    $jsonBody = ($rawBody !== false && $rawBody !== '') ? json_decode($rawBody, true) : [];
+    if (!is_array($jsonBody)) {
+        $jsonBody = [];
+    }
 
-    if ($action === 'bootstrap') {
-        echo json_encode(buildFullPayload($pdo));
+    $action = (string) ($_GET['action'] ?? $_POST['action'] ?? $_POST['ajax_action'] ?? $jsonBody['action'] ?? $jsonBody['ajax_action'] ?? 'bootstrap');
+    $reqCpType = (string) ($_GET['checkpoint_type'] ?? $_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse');
+    $reqCpId = (int) ($_GET['checkpoint_id'] ?? $_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? 1);
+
+    if ($method === 'GET' || $action === 'bootstrap') {
+        echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
         exit;
     }
 
-    if ($action === 'checkin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $attendeeId = trim((string) ($input['attendeeId'] ?? ''));
-        $checkinTime = trim((string) ($input['checkinTime'] ?? date('h:i A')));
+    if ($action === 'process_gate_scan') {
+        $scanInput = trim((string) ($_POST['scan_input'] ?? $jsonBody['scan_input'] ?? ''));
+        $scanMode = strtolower(trim((string) ($_POST['scan_mode'] ?? $jsonBody['scan_mode'] ?? 'auto')));
 
-        $stmt = $pdo->prepare("SELECT * FROM `attendees` WHERE `id` = ?");
-        $stmt->execute([$attendeeId]);
-        $att = $stmt->fetch();
+        $currentPayload = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        $activeCp = $currentPayload['activeCheckpoint'];
+        $cpType = (string) $activeCp['type'];
+        $cpId = (int) $activeCp['id'];
+        $cpName = (string) $activeCp['name'];
+        $callTime = (string) ($activeCp['call_time'] ?? '08:00');
 
-        if ($att && (int) $att['checked_in'] === 0 && $att['status'] === 'Registered') {
-            $station = $att['ticket'] === 'VIP pass'
-                ? 'VIP Express Desk 03'
-                : ($att['ticket'] === 'Speaker' ? 'Speaker & Press Desk 04' : 'North Foyer Kiosk 01');
-
-            $pdo->beginTransaction();
-
-            $upd = $pdo->prepare("UPDATE `attendees` SET `checked_in` = 1, `checkin_time` = ?, `checkin_station` = ? WHERE `id` = ?");
-            $upd->execute([$checkinTime, $station, $attendeeId]);
-
-            $pdo->prepare("
-                UPDATE `workspace_metrics`
-                SET `checked_in` = `checked_in` + 1,
-                    `checked_in_delta` = `checked_in_delta` + 1,
-                    `last_arrival_time` = ?
-                WHERE `id` = 1
-            ")->execute([$checkinTime]);
-
-            // Increment the 10:30 interval bucket so the chart reflects real-time check-ins
-            $pdo->exec("
-                UPDATE `checkin_intervals`
-                SET `guest_count` = `guest_count` + 1,
-                    `bar_height_px` = LEAST(120.0, ROUND((`guest_count` + 1) * 0.6, 1))
-                WHERE `id` = 6
-            ");
-
-            // Insert into checkin_logs
-            $logIns = $pdo->prepare("
-                INSERT INTO `checkin_logs`
-                  (`attendee_id`, `attendee_name`, `initials`, `avatar_bg`, `avatar_color`, `company`, `ticket`, `station`, `checkin_time`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $logIns->execute([
-                $att['id'],
-                $att['name'],
-                $att['initials'],
-                $att['bg_overview'],
-                $att['color'],
-                $att['company'],
-                $att['ticket'],
-                $station,
-                $checkinTime,
+        $targetMember = findCrewMemberByScanInput($currentPayload['crew'], $scanInput);
+        if (!$targetMember) {
+            echo json_encode([
+                'ok' => false,
+                'allowed' => false,
+                'error' => "No staff badge or crew member matched '{$scanInput}'. Try REW-BADGE-0006, REW-BADGE-0004, or a staff name.",
+                'reason' => "Unrecognized Badge Code ({$scanInput})",
             ]);
-
-            $pdo->commit();
+            exit;
         }
 
-        echo json_encode(buildFullPayload($pdo));
-        exit;
-    }
+        $eval = evaluateCheckpointAccess($targetMember, $cpType, $cpId);
+        $allowed = (bool) $eval['allowed'];
+        $reason = (string) $eval['reason'];
 
-    if ($action === 'undo_checkin' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $attendeeId = trim((string) ($input['attendeeId'] ?? ''));
-
-        $stmt = $pdo->prepare("SELECT * FROM `attendees` WHERE `id` = ?");
-        $stmt->execute([$attendeeId]);
-        $att = $stmt->fetch();
-
-        if ($att && (int) $att['checked_in'] === 1) {
-            $pdo->beginTransaction();
-
-            $pdo->prepare("UPDATE `attendees` SET `checked_in` = 0, `checkin_time` = NULL WHERE `id` = ?")->execute([$attendeeId]);
-            $pdo->exec("
-                UPDATE `workspace_metrics`
-                SET `checked_in` = GREATEST(0, `checked_in` - 1),
-                    `checked_in_delta` = GREATEST(0, `checked_in_delta` - 1)
-                WHERE `id` = 1
-            ");
-            $pdo->prepare("DELETE FROM `checkin_logs` WHERE `attendee_id` = ?")->execute([$attendeeId]);
-
-            $pdo->commit();
+        // Determine scan_action
+        if (!$allowed) {
+            $resolvedAction = 'access_verify';
+            $accessStatus = 'denied';
+            $denialReason = $reason;
+        } else {
+            $accessStatus = 'granted';
+            $denialReason = null;
+            if ($scanMode === 'verify_only') {
+                $resolvedAction = 'access_verify';
+            } elseif ($scanMode === 'check_in') {
+                $resolvedAction = 'check_in';
+            } elseif ($scanMode === 'check_out') {
+                $resolvedAction = 'check_out';
+            } else {
+                // Auto Smart Check-In / Check-Out
+                $resolvedAction = ($targetMember['daily_state'] === 'checked_in') ? 'check_out' : 'check_in';
+            }
         }
 
-        echo json_encode(buildFullPayload($pdo));
-        exit;
-    }
-
-    if ($action === 'add_attendee' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $name = trim((string) ($input['name'] ?? ''));
-        $email = trim((string) ($input['email'] ?? ''));
-        $company = trim((string) ($input['company'] ?? 'Independent'));
-        $role = trim((string) ($input['role'] ?? 'Guest'));
-        $ticket = trim((string) ($input['ticket'] ?? 'General admission'));
-
-        if ($name !== '' && $email !== '') {
-            $parts = preg_split('/\s+/', $name) ?: [$name];
-            $initials = count($parts) >= 2
-                ? strtoupper(substr($parts[0], 0, 1) . substr($parts[count($parts) - 1], 0, 1))
-                : strtoupper(substr($name, 0, 2));
-
-            $id = 'att-' . time() . '-' . random_int(100, 999);
-            $price = $ticket === 'VIP pass' ? 240 : ($ticket === 'Speaker' ? 0 : 95);
-            $highlight = $ticket !== 'General admission' ? 1 : 0;
-
-            $pdo->beginTransaction();
-
-            $minSort = (int) $pdo->query("SELECT COALESCE(MIN(`sort_order`), 1) FROM `attendees`")->fetchColumn();
-            $ins = $pdo->prepare("
-                INSERT INTO `attendees`
-                  (`id`, `initials`, `bg_overview`, `bg_directory`, `color`, `color_directory`, `name`, `email`, `company`, `role`, `ticket`, `ticket_price`, `ticket_highlight`, `registered_date`, `status`, `checked_in`, `checkin_time`, `checkin_station`, `sort_order`)
-                VALUES
-                  (?, ?, '#f0eafa', '#f0ebff', '#8862b4', '#8862b4', ?, ?, ?, ?, ?, ?, ?, 'Nov 7, 2026', 'Registered', 0, NULL, 'North Foyer Kiosk 01', ?)
-            ");
-            $ins->execute([$id, $initials, $name, $email, $company, $role, $ticket, $price, $highlight, $minSort - 1]);
-
-            $pdo->prepare("
-                UPDATE `workspace_metrics`
-                SET `total_people` = `total_people` + 1,
-                    `registered` = `registered` + 1,
-                    `ticket_revenue` = `ticket_revenue` + ?
-                WHERE `id` = 1
-            ")->execute([$price]);
-
-            $pdo->exec("
-                UPDATE `events`
-                SET `registered_count` = `registered_count` + 1
-                WHERE `id` = 'evt-1'
-            ");
-
-            $pdo->commit();
+        // Calculate call-time punctuality
+        $nowTs = time();
+        $scheduledTs = strtotime(date('Y-m-d') . ' ' . $callTime . ':00') ?: strtotime(date('Y-m-d 08:00:00'));
+        if (!$allowed) {
+            $punctuality = 'n/a';
+            $punctualityLabel = 'ACCESS RESTRICTED';
+        } elseif ($resolvedAction === 'check_out') {
+            $punctuality = 'on_time';
+            $punctualityLabel = 'SHIFT CHECK-OUT';
+        } else {
+            $diffMinutes = ($nowTs - $scheduledTs) / 60;
+            if ($diffMinutes < -10) {
+                $punctuality = 'early';
+                $punctualityLabel = 'EARLY ARRIVAL';
+            } elseif ($diffMinutes <= 15) {
+                $punctuality = 'on_time';
+                $punctualityLabel = 'ON TIME';
+            } else {
+                $punctuality = 'late';
+                $punctualityLabel = 'LATE CALL-TIME';
+            }
         }
 
-        echo json_encode(buildFullPayload($pdo));
+        $noteText = $allowed
+            ? ($resolvedAction === 'check_out'
+                ? "Gate Check-Out recorded at {$cpName}"
+                : ($resolvedAction === 'access_verify'
+                    ? "Clearance verified at {$cpName}"
+                    : "Gate Check-In recorded at {$cpName}"))
+            : "Denied at {$cpName}: {$reason}";
+
+        $insStmt = $pdo->prepare("
+            INSERT INTO `attendance_logs`
+              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `scheduled_call_time`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW())
+        ");
+        $insStmt->execute([
+            (int) $targetMember['id'],
+            (string) $targetMember['badge_code'],
+            $cpType,
+            $cpId,
+            $cpName,
+            $resolvedAction,
+            $accessStatus,
+            $denialReason,
+            $callTime,
+            $punctuality,
+            $noteText,
+        ]);
+
+        // Rebuild full payload so all KPIs, crew states, and timeline reflect the new scan
+        $updatedPayload = buildFullPayload($pdo, $activeDb, $cpType, $cpId);
+        $updatedMember = findCrewMemberByScanInput($updatedPayload['crew'], (string) $targetMember['id']) ?? $targetMember;
+
+        $verification = buildVerificationCardPayload(
+            $pdo,
+            $updatedMember,
+            $cpType,
+            $cpId,
+            $cpName,
+            [
+                'allowed' => $allowed,
+                'reason' => $reason,
+                'action' => $resolvedAction,
+                'punctuality' => $punctuality,
+                'punctuality_label' => $punctualityLabel,
+                'scanned_at' => date('H:i:s'),
+                'check_in_time' => $updatedMember['check_in_full'] ?? ($resolvedAction === 'check_in' ? date('h:i:s A') : null),
+                'check_out_time' => $updatedMember['check_out_full'] ?? ($resolvedAction === 'check_out' ? date('h:i:s A') : null),
+            ]
+        );
+
+        $verification['bootstrap'] = $updatedPayload;
+        echo json_encode($verification);
         exit;
     }
 
-    if ($action === 'add_event' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $title = trim((string) ($input['name'] ?? ''));
-        $type = trim((string) ($input['type'] ?? 'Conference'));
-        $venue = trim((string) ($input['venue'] ?? 'Forma studio'));
-        $capacity = max(10, (int) ($input['capacity'] ?? 250));
+    if ($action === 'update_clearance') {
+        $userId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
+        $newLevel = trim((string) ($_POST['clearance_level'] ?? $jsonBody['clearance_level'] ?? 'L2_TECH_STAGE'));
+        $badgeStatus = trim((string) ($_POST['badge_status'] ?? $jsonBody['badge_status'] ?? 'active'));
 
-        if ($title !== '') {
-            $id = 'evt-' . time();
-            $minSort = (int) $pdo->query("SELECT COALESCE(MIN(`sort_order`), 1) FROM `events`")->fetchColumn();
-            $ins = $pdo->prepare("
-                INSERT INTO `events`
-                  (`id`, `month_label`, `day_label`, `name`, `type`, `date_label`, `time_label`, `venue`, `city`, `registered_count`, `capacity_count`, `bar_width_px`, `is_past_bar`, `status`, `action_label`, `action_target`, `sort_order`)
-                VALUES
-                  (?, 'DEC', '18', ?, ?, 'Dec 18, 2026', '6:00 PM – 9:00 PM', ?, 'San Francisco, CA', 1, ?, 6, 0, 'Upcoming', 'Manage event →', 'attendees', ?)
+        if ($userId > 0) {
+            $tier = normalizeClearanceTier($newLevel);
+            $stockMode = ($tier['code'] === 'L1') ? 'none' : 'all';
+            $upd = $pdo->prepare("
+                UPDATE `user_badges`
+                SET `clearance_level` = ?, `stock_access_mode` = ?, `badge_status` = ?
+                WHERE `user_id` = ?
             ");
-            $ins->execute([$id, $title, $type, $venue, $capacity, $minSort - 1]);
+            $upd->execute([$tier['key'], $stockMode, $badgeStatus, $userId]);
         }
 
-        echo json_encode(buildFullPayload($pdo));
+        echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
         exit;
     }
 
-    if ($action === 'reset_demo' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        ensureSchemaAndSeed($pdo, true);
-        echo json_encode(buildFullPayload($pdo));
+    if ($action === 'approve_batch') {
+        $batchId = (int) ($_POST['batch_id'] ?? $jsonBody['batch_id'] ?? 0);
+        $newStatus = trim((string) ($_POST['status'] ?? $jsonBody['status'] ?? 'approved'));
+        if ($batchId > 0) {
+            try {
+                $upd = $pdo->prepare("UPDATE `stock_movements` SET `status` = ?, `approval_status` = ? WHERE `id` = ?");
+                $upd->execute([$newStatus, $newStatus, $batchId]);
+            } catch (Throwable $e) {
+                $upd = $pdo->prepare("UPDATE `stock_movements` SET `status` = ? WHERE `id` = ?");
+                $upd->execute([$newStatus, $batchId]);
+            }
+        }
+        echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
         exit;
     }
 
-    http_response_code(400);
-    echo json_encode(['ok' => false, 'error' => 'Unknown action']);
+    if ($action === 'reset_demo') {
+        ensureAbilitySchemaAndSeed($pdo, true);
+        echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
+        exit;
+    }
+
+    echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode([
