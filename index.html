@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>identity — Forma studio Event Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell" data-node-id="2:3269">
+    <!-- Left Sidebar (224px) -->
+    <aside class="sidebar" data-node-id="2:3270">
+      <div class="brand-header" id="brand-home-btn" data-node-id="2:3271">
+        <div class="brand-mark-wrap" data-node-id="2:3272">
+          <img src="assets/brand-mark.svg" alt="identity" class="svg-icon" />
+        </div>
+        <span class="brand-name" data-node-id="2:3276">identity</span>
+      </div>
+
+      <button type="button" class="workspace-switcher" id="workspace-switcher-btn" data-node-id="2:3277">
+        <div class="workspace-monogram" data-node-id="2:3278">F</div>
+        <div class="workspace-info" data-node-id="2:3280">
+          <span class="workspace-name" data-node-id="2:3281">Forma studio</span>
+          <span class="workspace-plan" data-node-id="2:3282">Pro workspace</span>
+        </div>
+        <img src="assets/chevrons-up-down.svg" alt="" class="svg-icon" />
+      </button>
+
+      <!-- Main Navigation -->
+      <nav class="nav-group" aria-label="Main navigation" data-node-id="2:3284">
+        <button type="button" class="nav-item active" data-nav-target="overview" data-node-id="2:3285">
+          <img src="assets/nav-overview-active.svg" alt="" class="svg-icon" id="nav-icon-overview" />
+          <span class="nav-item-label">Overview</span>
+        </button>
+        <button type="button" class="nav-item" data-nav-target="events" data-node-id="2:3288">
+          <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" id="nav-icon-events" />
+          <span class="nav-item-label">Events</span>
+          <span class="nav-item-count" id="sidebar-events-count">08</span>
+        </button>
+        <button type="button" class="nav-item" data-nav-target="attendees" data-node-id="2:3292">
+          <img src="assets/nav-attendees-inactive.svg" alt="" class="svg-icon" id="nav-icon-attendees" />
+          <span class="nav-item-label">Attendees</span>
+        </button>
+        <button type="button" class="nav-item" data-nav-toast="Campaigns module coming soon" data-node-id="2:3295">
+          <img src="assets/nav-campaigns.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Campaigns</span>
+        </button>
+        <button type="button" class="nav-item" data-nav-target="analytics" data-node-id="2:3298">
+          <img src="assets/nav-analytics.svg" alt="" class="svg-icon" id="nav-icon-analytics" />
+          <span class="nav-item-label">Analytics</span>
+        </button>
+        <button type="button" class="nav-item" data-nav-toast="Payments module coming soon" data-node-id="2:3301">
+          <img src="assets/nav-payments.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Payments</span>
+        </button>
+      </nav>
+
+      <!-- Workspace Navigation -->
+      <nav class="nav-group-workspace" aria-label="Workspace navigation" data-node-id="2:3304">
+        <span class="nav-section-label" data-node-id="2:3306">WORKSPACE</span>
+        <button type="button" class="nav-item" data-nav-toast="Team members settings" data-node-id="2:3307">
+          <img src="assets/nav-team-members.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Team members</span>
+        </button>
+        <button type="button" class="nav-item" data-nav-toast="Integrations directory" data-node-id="2:3310">
+          <img src="assets/nav-integrations.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Integrations</span>
+        </button>
+        <button type="button" class="nav-item" data-nav-toast="Workspace settings" data-node-id="2:3313">
+          <img src="assets/nav-settings.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Settings</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-spacer" data-node-id="2:3316"></div>
+
+      <!-- Support Card -->
+      <div class="support-card" data-node-id="2:3317">
+        <img src="assets/sparkles.svg" alt="" class="svg-icon" />
+        <p class="support-card-title" data-node-id="2:3319">A little help, a better event.</p>
+        <p class="support-card-desc" data-node-id="2:3320">Your next great event starts with the right support.</p>
+        <a href="#help" class="support-card-link" id="support-center-link" data-node-id="2:3321">Visit help center ↗</a>
+      </div>
+
+      <!-- Account Footer -->
+      <div class="account-footer" id="account-footer-btn" data-node-id="2:3322">
+        <div class="avatar-circle avatar-jl" data-node-id="2:3323">JL</div>
+        <div class="account-details" data-node-id="2:3325">
+          <span class="account-name" data-node-id="2:3326">Jamie Lee</span>
+          <span class="account-role" data-node-id="2:3327">Workspace admin</span>
+        </div>
+        <img src="assets/chevrons-up-down.svg" alt="" class="svg-icon" />
+      </div>
+    </aside>
+
+    <!-- Main Workspace Column -->
+    <div class="workspace-main" data-node-id="2:3329">
+      <!-- Top Bar (76px) -->
+      <header class="topbar" data-node-id="2:3330">
+        <div class="breadcrumb" data-node-id="2:3331">
+          <span class="breadcrumb-root" id="breadcrumb-workspace" data-node-id="2:3332">Workspace</span>
+          <img src="assets/chevron-right.svg" alt="" class="svg-icon" />
+          <span class="breadcrumb-current" id="breadcrumb-page" data-node-id="2:3334">Overview</span>
+        </div>
+
+        <div class="topbar-utilities" data-node-id="2:3335">
+          <label class="quick-search" for="topbar-search-input" data-node-id="2:3336">
+            <img src="assets/search-topbar.svg" alt="" class="svg-icon" />
+            <input
+              type="text"
+              id="topbar-search-input"
+              class="quick-search-input"
+              placeholder="Search anything..."
+              autocomplete="off"
+            />
+            <span class="quick-search-shortcut" data-node-id="2:3339">⌘ K</span>
+          </label>
+          <div class="topbar-divider" data-node-id="2:3340"></div>
+          <button type="button" class="icon-btn" id="topbar-help-btn" title="Help" data-node-id="2:3844">
+            <img src="assets/circle-help.svg" alt="Help" class="svg-icon" />
+          </button>
+          <button type="button" class="icon-btn notifications-btn" id="topbar-notif-btn" title="Notifications" data-node-id="2:3342">
+            <img src="assets/notifications.svg" alt="Notifications" class="svg-icon" />
+          </button>
+          <div class="avatar-circle avatar-jl" id="topbar-avatar" data-node-id="2:3345">JL</div>
+        </div>
+      </header>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 1: OVERVIEW DASHBOARD (Node 2:3269)                         -->
+      <!-- ================================================================== -->
+      <main class="screen-view active" id="screen-overview" data-node-id="2:3347">
+        <div class="overview-top-block" data-node-id="2:3348">
+          <!-- Page Introduction -->
+          <div class="page-intro" data-node-id="2:3349">
+            <div class="page-intro-heading" data-node-id="2:3350">
+              <h1 class="page-title" data-node-id="2:3351">Make every connection count.</h1>
+              <p class="page-subtitle" data-node-id="2:3352">Here’s what’s happening across your event today, Jamie.</p>
+            </div>
+            <button type="button" class="btn btn-primary-38 js-open-create-event" data-node-id="2:3353">
+              <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+              <span>Create event</span>
+            </button>
+          </div>
+
+          <!-- Event Controls -->
+          <div class="event-controls" data-node-id="2:3356">
+            <div class="event-selector" data-node-id="2:3357">
+              <div class="event-selector-trigger" data-action="go-events">
+                <div class="event-icon-box" data-node-id="2:3358">
+                  <img src="assets/aperture.svg" alt="" class="svg-icon" />
+                </div>
+                <span class="selected-event-name" data-node-id="2:3360">Form &amp; Future Summit 2026</span>
+                <img src="assets/chevron-down-14.svg" alt="" class="svg-icon" />
+              </div>
+              <div class="status-badge status-badge-green-md" data-node-id="2:3362">
+                <img src="assets/status-dot-green-5.svg" alt="" class="svg-icon" />
+                <span>Live today</span>
+              </div>
+              <span class="event-date-meta" data-node-id="2:3365">Nov 7, 2026 · San Francisco</span>
+            </div>
+
+            <div class="controls-right" data-node-id="2:3366">
+              <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+              <span class="updated-text" id="overview-updated-text" data-node-id="2:3368">Updated just now</span>
+              <button type="button" class="btn btn-secondary-32" id="overview-date-btn" data-node-id="2:3369">
+                <img src="assets/calendar-days-15.svg" alt="" class="svg-icon" />
+                <span>Today, Nov 7</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 4 KPI Metric Cards with 10-Bar Sparklines -->
+          <div class="metrics-grid" data-node-id="2:3372">
+            <!-- Metric 1: Total registrations -->
+            <div class="metric-card metric-card-overview" data-node-id="2:3373">
+              <div class="metric-heading" data-node-id="2:3374">
+                <span class="metric-label-md" data-node-id="2:3375">Total registrations</span>
+                <img src="assets/info.svg" alt="" class="svg-icon" />
+              </div>
+              <div class="metric-value-trend" data-node-id="2:3377">
+                <span class="metric-value-31 js-stat-registered" data-node-id="2:3378">1,284</span>
+                <div class="sparkline-bars" data-node-id="2:3379">
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 9px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 14px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 10px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 19px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 17px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 23px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 20px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 27px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 25px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 31px;"></div>
+                </div>
+              </div>
+              <div class="metric-comparison" data-node-id="2:3390">
+                <span class="metric-change-up">↗ 12.8%</span>
+                <span class="metric-context">vs. previous event</span>
+              </div>
+            </div>
+
+            <!-- Metric 2: Checked in -->
+            <div class="metric-card metric-card-overview" data-node-id="2:3393">
+              <div class="metric-heading" data-node-id="2:3394">
+                <span class="metric-label-md" data-node-id="2:3395">Checked in</span>
+                <img src="assets/info.svg" alt="" class="svg-icon" />
+              </div>
+              <div class="metric-value-trend" data-node-id="2:3397">
+                <span class="metric-value-31 js-stat-checkedin" data-node-id="2:3398">964</span>
+                <div class="sparkline-bars" data-node-id="2:3399">
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 5px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 8px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 7px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 12px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 16px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 14px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 22px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 24px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 28px;"></div>
+                  <div class="sparkline-bar sparkline-bar-primary" style="height: 31px;"></div>
+                </div>
+              </div>
+              <div class="metric-comparison" data-node-id="2:3410">
+                <span class="metric-change-up" id="overview-checkedin-delta">↗ 186</span>
+                <span class="metric-context">vs. previous event</span>
+              </div>
+            </div>
+
+            <!-- Metric 3: Attendance rate -->
+            <div class="metric-card metric-card-overview" data-node-id="2:3413">
+              <div class="metric-heading" data-node-id="2:3414">
+                <span class="metric-label-md" data-node-id="2:3415">Attendance rate</span>
+                <img src="assets/info.svg" alt="" class="svg-icon" />
+              </div>
+              <div class="metric-value-trend" data-node-id="2:3417">
+                <span class="metric-value-31 js-stat-rate" data-node-id="2:3418">75.1%</span>
+                <div class="sparkline-bars" data-node-id="2:3419">
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 8px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 13px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 10px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 16px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 13px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 23px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 19px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 27px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 24px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 29px;"></div>
+                </div>
+              </div>
+              <div class="metric-comparison" data-node-id="2:3430">
+                <span class="metric-change-up">↗ 8.4 pts</span>
+                <span class="metric-context">vs. previous event</span>
+              </div>
+            </div>
+
+            <!-- Metric 4: Ticket revenue -->
+            <div class="metric-card metric-card-overview" data-node-id="2:3433">
+              <div class="metric-heading" data-node-id="2:3434">
+                <span class="metric-label-md" data-node-id="2:3435">Ticket revenue</span>
+                <img src="assets/info.svg" alt="" class="svg-icon" />
+              </div>
+              <div class="metric-value-trend" data-node-id="2:3437">
+                <span class="metric-value-31" id="overview-revenue-val" data-node-id="2:3438">$128,400</span>
+                <div class="sparkline-bars" data-node-id="2:3439">
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 6px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 10px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 8px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 13px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 18px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 16px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 22px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 25px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 23px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 31px;"></div>
+                </div>
+              </div>
+              <div class="metric-comparison" data-node-id="2:3450">
+                <span class="metric-change-up">↗ 18.2%</span>
+                <span class="metric-context">vs. previous event</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Event Insights & Upcoming Event Row -->
+        <div class="split-row" data-node-id="2:3453">
+          <!-- Left: Attendance Insights Card -->
+          <div class="insights-card" data-node-id="2:3454">
+            <div class="chart-header" data-node-id="2:3455">
+              <div class="chart-heading" data-node-id="2:3456">
+                <h2 class="chart-title" data-node-id="2:3457">Attendance insights</h2>
+                <p class="chart-subtitle" data-node-id="2:3458">A steady flow of good company.</p>
+              </div>
+              <div class="chart-legend" data-node-id="2:3459">
+                <span class="legend-marker" data-node-id="2:3460"></span>
+                <span class="legend-label" data-node-id="2:3461">Check-ins</span>
+                <span class="legend-interval" data-node-id="2:3462"> · Every 30 minutes</span>
+              </div>
+            </div>
+
+            <div class="attendance-summary-row" data-node-id="2:3463">
+              <div class="summary-stat-pair" data-node-id="2:3464">
+                <span class="summary-count-primary js-stat-checkedin" data-node-id="2:3465">964</span>
+                <span class="summary-stat-label" data-node-id="2:3466">checked in</span>
+              </div>
+              <div class="summary-divider" data-node-id="2:3467"></div>
+              <div class="summary-stat-pair" data-node-id="2:3468">
+                <span class="summary-count-muted js-stat-remaining" data-node-id="2:3469">320</span>
+                <span class="summary-stat-label" data-node-id="2:3470">yet to arrive</span>
+              </div>
+              <div class="peak-insight" data-node-id="2:3471">
+                <img src="assets/trending-up.svg" alt="" class="svg-icon" />
+                <span class="peak-insight-text" data-node-id="2:3473">Peak arrival · 09:30 AM</span>
+              </div>
+            </div>
+
+            <div class="attendance-chart" data-node-id="2:3474">
+              <div class="chart-y-axis" data-node-id="2:3475">
+                <span>200</span>
+                <span>100</span>
+                <span>0</span>
+              </div>
+              <div class="chart-plot-wrap" data-node-id="2:3479">
+                <div class="chart-plot" data-node-id="2:3480">
+                  <div class="peak-tooltip" id="overview-peak-tooltip" data-node-id="2:3507">176 guests</div>
+                  <div class="chart-bars-container" id="overview-chart-bars" data-node-id="2:3484">
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 10.8px;" title="08:00 AM — 18 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 27.6px;" title="08:30 AM — 46 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 67.2px;" title="09:00 AM — 112 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar peak" style="height: 105.6px;" title="09:30 AM — 176 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 92.4px;" title="10:00 AM — 154 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 67.8px;" title="10:30 AM — 113 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 53.4px;" title="11:00 AM — 89 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 37.2px;" title="11:30 AM — 62 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 25.2px;" title="12:00 PM — 42 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 16.8px;" title="12:30 PM — 28 guests"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar" style="height: 14.4px;" title="01:00 PM — 24 guests"></div></div>
+                  </div>
+                  <div class="chart-grid-line" style="top: 0px;"></div>
+                  <div class="chart-grid-line" style="top: 61px;"></div>
+                  <div class="chart-grid-line" style="top: 121px;"></div>
+                </div>
+                <div class="chart-x-axis" data-node-id="2:3509">
+                  <span>08:00</span>
+                  <span>09:00</span>
+                  <span>10:00</span>
+                  <span>11:00</span>
+                  <span>12:00</span>
+                  <span>13:00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Next on your calendar Card (354px) -->
+          <div class="upcoming-card upcoming-card-overview" data-node-id="2:3516">
+            <div class="upcoming-heading" data-node-id="2:3517">
+              <span class="upcoming-heading-title" data-node-id="2:3518">Next on your calendar</span>
+              <button type="button" class="icon-btn" data-action="go-events" title="View all events">
+                <img src="assets/arrow-up-right.svg" alt="" class="svg-icon" />
+              </button>
+            </div>
+            <div class="upcoming-venue-banner" data-node-id="2:3520">
+              <img src="assets/event-venue.png" alt="The Pearl, San Francisco" class="upcoming-venue-img" />
+            </div>
+            <div class="upcoming-details" data-node-id="2:3521">
+              <div class="upcoming-meta" data-node-id="2:3522">
+                <span class="upcoming-schedule" data-node-id="2:3523">THU, NOV 19 · 6:30 PM</span>
+                <span class="status-badge status-badge-neutral-md" data-node-id="2:3524">In 12 days</span>
+              </div>
+              <h3 class="upcoming-name" data-node-id="2:3526">Design Leaders Dinner</h3>
+              <div class="upcoming-location" data-node-id="2:3527">
+                <img src="assets/map-pin-12.svg" alt="" class="svg-icon" />
+                <span data-node-id="2:3529">The Pearl, San Francisco</span>
+              </div>
+              <div class="upcoming-capacity" data-node-id="2:3530">
+                <span class="upcoming-spots" data-node-id="2:3531">48 of 60 spots filled</span>
+                <span class="upcoming-link" data-action="go-events" data-node-id="2:3532">View event →</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attendee Management Table Section (Overview) -->
+        <section class="directory-card" data-node-id="2:3533">
+          <div class="directory-header" data-node-id="2:3534">
+            <div class="directory-heading" data-node-id="2:3535">
+              <div class="directory-title-row" data-node-id="2:3536">
+                <h2 class="directory-title-17" data-node-id="2:3537">Attendees</h2>
+                <span class="status-badge status-badge-purple-md js-stat-total-people" data-node-id="2:3538">1,338</span>
+              </div>
+              <p class="directory-desc" data-node-id="2:3540">
+                The people behind your event. Manage registrations and keep arrivals moving.
+              </p>
+            </div>
+            <div class="directory-actions" data-node-id="2:3541">
+              <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:3542">
+                <img src="assets/download.svg" alt="" class="svg-icon" />
+                <span>Export</span>
+              </button>
+              <button type="button" class="btn btn-primary-38 js-open-add-attendee" data-node-id="2:3545">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>Add attendee</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Status Tabs -->
+          <div class="status-tabs status-tabs-overview" id="overview-attendee-tabs" data-node-id="2:3548">
+            <button type="button" class="status-tab active" data-tab="all" data-node-id="2:3549">
+              <span class="status-tab-label">All attendees</span>
+              <span class="status-tab-count js-stat-total-people">1,338</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="checked-in" data-node-id="2:3552">
+              <span class="status-tab-label">Checked in</span>
+              <span class="status-tab-count js-stat-checkedin">964</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="not-checked-in" data-node-id="2:3555">
+              <span class="status-tab-label">Not checked in</span>
+              <span class="status-tab-count js-stat-remaining">320</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="waitlist" data-node-id="2:3558">
+              <span class="status-tab-label">Waitlist</span>
+              <span class="status-tab-count">42</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="cancelled" data-node-id="2:3561">
+              <span class="status-tab-label">Cancelled</span>
+              <span class="status-tab-count">12</span>
+            </button>
+          </div>
+
+          <!-- Table Tools -->
+          <div class="table-tools" data-node-id="2:3564">
+            <label class="table-search-box table-search-box-overview" for="overview-attendee-search" data-node-id="2:3565">
+              <img src="assets/search-table.svg" alt="" class="svg-icon" />
+              <input
+                type="text"
+                id="overview-attendee-search"
+                class="table-search-input"
+                placeholder="Search by name, email or company..."
+                autocomplete="off"
+              />
+            </label>
+            <div class="table-filters" data-node-id="2:3568">
+              <button type="button" class="filter-pill filter-pill-overview" id="overview-ticket-filter" data-node-id="2:3569">
+                <span id="overview-ticket-filter-label">Ticket type</span>
+                <img src="assets/chevron-down-12.svg" alt="" class="svg-icon" />
+              </button>
+              <button type="button" class="filter-pill filter-pill-overview" id="overview-status-filter" data-node-id="2:3572">
+                <span id="overview-status-filter-label">Registration status</span>
+                <img src="assets/chevron-down-12.svg" alt="" class="svg-icon" />
+              </button>
+              <button type="button" class="filter-pill filter-pill-overview" id="overview-checkin-filter" data-node-id="2:3575">
+                <span id="overview-checkin-filter-label">Check-in status</span>
+                <img src="assets/chevron-down-12.svg" alt="" class="svg-icon" />
+              </button>
+              <button type="button" class="btn btn-secondary-32" id="overview-more-filters" data-node-id="2:3578">
+                <img src="assets/sliders-horizontal-15.svg" alt="" class="svg-icon" />
+                <span>More filters</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Table Header -->
+          <div class="data-table-header" data-node-id="2:3581">
+            <div class="col-checkbox">
+              <div class="custom-checkbox custom-checkbox-14" id="overview-select-all" role="checkbox" aria-checked="false" tabindex="0"></div>
+            </div>
+            <div class="col-sort-header" id="overview-sort-attendee" data-node-id="2:3584">
+              <span class="th-label th-label-med">Attendee</span>
+              <img src="assets/arrow-down-11.svg" alt="" class="svg-icon" />
+            </div>
+            <div class="col-company"><span class="th-label th-label-med">Company</span></div>
+            <div class="col-ticket"><span class="th-label th-label-med">Ticket type</span></div>
+            <div class="col-reg-date"><span class="th-label th-label-med">Registered on</span></div>
+            <div class="col-reg-status"><span class="th-label th-label-med">Registration</span></div>
+            <div class="col-checkin"><span class="th-label th-label-med">Check-in status</span></div>
+            <div class="col-actions"></div>
+          </div>
+
+          <!-- Table Body (Rendered by JS) -->
+          <div id="overview-attendee-rows"></div>
+
+          <!-- Table Footer & Pagination -->
+          <div class="table-footer" data-node-id="2:3783">
+            <span class="results-count" id="overview-results-count" data-node-id="2:3784">Showing 1–8 of 1,338 people</span>
+            <div class="page-controls" data-node-id="2:3785">
+              <button type="button" class="btn btn-secondary-32" data-action="go-attendees" data-node-id="2:3786">
+                <img src="assets/chevron-left-15.svg" alt="" class="svg-icon" />
+                <span>Previous</span>
+              </button>
+              <button type="button" class="page-number-btn active">1</button>
+              <button type="button" class="page-number-btn" data-action="go-attendees">2</button>
+              <button type="button" class="page-number-btn" data-action="go-attendees">3</button>
+              <button type="button" class="page-number-btn">…</button>
+              <button type="button" class="page-number-btn" data-action="go-attendees">168</button>
+              <button type="button" class="btn btn-secondary-32" data-action="go-attendees" data-node-id="2:3799">
+                <span>Next</span>
+                <img src="assets/chevron-right.svg" alt="" class="svg-icon" />
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 2: EVENTS DIRECTORY (Node 2:8029)                           -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-events" data-node-id="2:8115">
+        <div class="overview-top-block" data-node-id="2:8116">
+          <!-- Page Introduction -->
+          <div class="page-intro" data-node-id="2:8117">
+            <div class="page-intro-heading" data-node-id="2:8118">
+              <h1 class="page-title" data-node-id="2:8119">Events</h1>
+              <p class="page-subtitle" data-node-id="2:8120">
+                From the first invitation to the final connection. Keep every event in sync.
+              </p>
+            </div>
+            <button type="button" class="btn btn-primary-38 js-open-create-event" data-node-id="2:8121">
+              <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+              <span>Create event</span>
+            </button>
+          </div>
+
+          <!-- 4 Event Summary KPI Cards -->
+          <div class="metrics-grid" data-node-id="2:8124">
+            <div class="metric-card" data-node-id="2:8125">
+              <div class="metric-heading" data-node-id="2:8126">
+                <span class="metric-label-reg" data-node-id="2:8127">Total events</span>
+                <img src="assets/metric-calendar.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="events-total-kpi" data-node-id="2:8130">08</span>
+              <span class="metric-context" data-node-id="2:8131">Across your Forma studio workspace</span>
+            </div>
+
+            <div class="metric-card" data-node-id="2:8132">
+              <div class="metric-heading" data-node-id="2:8133">
+                <span class="metric-label-reg" data-node-id="2:8134">Upcoming</span>
+                <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" data-node-id="2:8136">03</span>
+              <span class="metric-context" data-node-id="2:8137">Next up · Design Leaders Dinner, Nov 19</span>
+            </div>
+
+            <div class="metric-card" data-node-id="2:8138">
+              <div class="metric-heading" data-node-id="2:8139">
+                <span class="metric-label-reg" data-node-id="2:8140">Live today</span>
+                <img src="assets/metric-radio.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" data-node-id="2:8142">01</span>
+              <span class="metric-context" data-node-id="2:8143">Form &amp; Future Summit 2026</span>
+            </div>
+
+            <div class="metric-card" data-node-id="2:8144">
+              <div class="metric-heading" data-node-id="2:8145">
+                <span class="metric-label-reg" data-node-id="2:8146">Past events</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" data-node-id="2:8148">03</span>
+              <span class="metric-context" data-node-id="2:8149">1,086 connections made this year</span>
+            </div>
+          </div>
+
+          <!-- In Focus Section (Live Event Spotlight + Next on Calendar) -->
+          <div class="split-row" data-node-id="2:8150">
+            <!-- Left: Live Event Spotlight Card -->
+            <div class="live-event-card" data-node-id="2:8151">
+              <div class="live-event-heading" data-node-id="2:8152">
+                <div class="live-event-context" data-node-id="2:8153">
+                  <div class="status-badge status-badge-green-sm" data-node-id="2:8154">
+                    <img src="assets/status-dot-green-4.svg" alt="" class="svg-icon" />
+                    <span>Live today</span>
+                  </div>
+                  <span class="live-event-schedule" data-node-id="2:8157">SAT, NOV 7 · 8:00 AM – 6:00 PM PST</span>
+                </div>
+                <button type="button" class="icon-btn" data-action="go-overview" title="Open event dashboard">
+                  <img src="assets/arrow-up-right.svg" alt="" class="svg-icon" />
+                </button>
+              </div>
+
+              <div class="live-event-identity" data-node-id="2:8159">
+                <h2 class="live-event-name" data-node-id="2:8160">Form &amp; Future Summit 2026</h2>
+                <div class="live-event-location" data-node-id="2:8161">
+                  <img src="assets/map-pin-13.svg" alt="" class="svg-icon" />
+                  <span data-node-id="2:8163">Fort Mason Center, San Francisco · Conference</span>
+                </div>
+              </div>
+
+              <div class="live-operations-row" data-node-id="2:8164">
+                <div class="live-op-stat" data-node-id="2:8165">
+                  <span class="live-op-val js-stat-registered" data-node-id="2:8166">1,284</span>
+                  <span class="live-op-label" data-node-id="2:8167">registered guests</span>
+                </div>
+                <div class="live-op-divider" data-node-id="2:8168"></div>
+                <div class="live-op-stat" data-node-id="2:8169">
+                  <span class="live-op-val js-stat-checkedin" data-node-id="2:8170">964</span>
+                  <span class="live-op-label" id="events-live-checkedin-sub" data-node-id="2:8171">checked in · 75.1%</span>
+                </div>
+                <div class="arrival-progress-col" data-node-id="2:8172">
+                  <div class="arrival-summary-labels" data-node-id="2:8173">
+                    <span style="color: var(--text-secondary);" id="events-live-remaining-label">320 yet to arrive</span>
+                    <span style="color: var(--brand-primary);" class="js-stat-rate">75.1%</span>
+                  </div>
+                  <div class="arrival-progress-track" data-node-id="2:8176">
+                    <div class="arrival-progress-fill" id="events-live-progress-bar" style="width: 75.1%;"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="live-event-footer" data-node-id="2:8178">
+                <span class="updated-text" data-node-id="2:8179">Updated just now · 4 check-in stations online</span>
+                <div class="page-actions" data-node-id="2:8180">
+                  <button type="button" class="btn btn-secondary-32-sm" data-action="go-attendees" data-node-id="2:8181">
+                    Manage attendees
+                  </button>
+                  <button type="button" class="btn btn-primary-32" data-action="go-overview" data-node-id="2:8183">
+                    Open dashboard
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Next on your calendar Card (354px) -->
+            <div class="upcoming-card" data-node-id="2:8185">
+              <div class="upcoming-heading" data-node-id="2:8186">
+                <span class="upcoming-heading-title" data-node-id="2:8187">Next on your calendar</span>
+                <button type="button" class="icon-btn" title="Event details">
+                  <img src="assets/arrow-up-right.svg" alt="" class="svg-icon" />
+                </button>
+              </div>
+              <div class="upcoming-venue-banner" data-node-id="2:8189">
+                <img src="assets/event-venue.png" alt="The Pearl, San Francisco" class="upcoming-venue-img" />
+              </div>
+              <div class="upcoming-details" data-node-id="2:8190">
+                <div class="upcoming-meta" data-node-id="2:8191">
+                  <span class="upcoming-schedule" data-node-id="2:8192">THU, NOV 19 · 6:30 PM</span>
+                  <span class="status-badge status-badge-neutral-sm" data-node-id="2:8193">In 12 days</span>
+                </div>
+                <h3 class="upcoming-name" data-node-id="2:8195">Design Leaders Dinner</h3>
+                <div class="upcoming-location" data-node-id="2:8196">
+                  <img src="assets/map-pin-12.svg" alt="" class="svg-icon" />
+                  <span data-node-id="2:8198">The Pearl, San Francisco</span>
+                </div>
+                <div class="upcoming-capacity" data-node-id="2:8199">
+                  <span class="upcoming-spots" data-node-id="2:8200">48 of 60 spots filled</span>
+                  <span class="upcoming-link" data-action="go-attendees" data-node-id="2:8201">View event →</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Event Directory Card -->
+        <section class="directory-card" data-node-id="2:8202">
+          <div class="directory-header" data-node-id="2:8203">
+            <div class="directory-heading" data-node-id="2:8204">
+              <div class="directory-title-row" data-node-id="2:8205">
+                <h2 class="directory-title-18" data-node-id="2:8206">Your events</h2>
+                <span class="status-badge status-badge-purple-sm" id="events-directory-badge" data-node-id="2:8207">08</span>
+              </div>
+              <p class="directory-desc" data-node-id="2:8209">
+                Plan what’s next, keep today running, and revisit the moments that mattered.
+              </p>
+            </div>
+            <div class="directory-actions" data-node-id="2:8210">
+              <button type="button" class="btn btn-secondary-38" id="events-export-btn" data-node-id="2:8211">
+                <img src="assets/download.svg" alt="" class="svg-icon" />
+                <span>Export</span>
+              </button>
+              <div class="view-switcher" data-node-id="2:8214">
+                <button type="button" class="view-switcher-btn active" id="view-list-btn" title="List view" data-node-id="2:8215">
+                  <img src="assets/view-list-active.svg" alt="List view" class="svg-icon" />
+                </button>
+                <button type="button" class="view-switcher-btn" id="view-cal-btn" title="Calendar view" data-node-id="2:8217">
+                  <img src="assets/view-calendar-inactive.svg" alt="Calendar view" class="svg-icon" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Status Tabs -->
+          <div class="status-tabs" id="events-status-tabs" data-node-id="2:8219">
+            <button type="button" class="status-tab active" data-event-tab="all" data-node-id="2:8220">
+              <span class="status-tab-label">All events</span>
+              <span class="status-tab-count" id="events-tab-count-all">08</span>
+            </button>
+            <button type="button" class="status-tab" data-event-tab="upcoming" data-node-id="2:8223">
+              <span class="status-tab-label">Upcoming</span>
+              <span class="status-tab-count" id="events-tab-count-upcoming">03</span>
+            </button>
+            <button type="button" class="status-tab" data-event-tab="live" data-node-id="2:8226">
+              <span class="status-tab-label">Live</span>
+              <span class="status-tab-count" id="events-tab-count-live">01</span>
+            </button>
+            <button type="button" class="status-tab" data-event-tab="past" data-node-id="2:8229">
+              <span class="status-tab-label">Past</span>
+              <span class="status-tab-count" id="events-tab-count-past">03</span>
+            </button>
+            <button type="button" class="status-tab" data-event-tab="draft" data-node-id="2:8232">
+              <span class="status-tab-label">Drafts</span>
+              <span class="status-tab-count" id="events-tab-count-draft">01</span>
+            </button>
+          </div>
+
+          <!-- Table Tools -->
+          <div class="table-tools" data-node-id="2:8235">
+            <label class="table-search-box" for="events-search-input" data-node-id="2:8236">
+              <img src="assets/search-table.svg" alt="" class="svg-icon" />
+              <input
+                type="text"
+                id="events-search-input"
+                class="table-search-input"
+                placeholder="Search events by name or location..."
+                autocomplete="off"
+              />
+            </label>
+            <div class="table-filters" data-node-id="2:8240">
+              <button type="button" class="filter-pill" id="events-type-filter" data-node-id="2:8241">
+                <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
+                <span id="events-type-filter-label">All event types</span>
+              </button>
+              <button type="button" class="filter-pill" id="events-date-filter" data-node-id="2:8244">
+                <img src="assets/calendar-range-13.svg" alt="" class="svg-icon" />
+                <span>Date range</span>
+              </button>
+              <button type="button" class="filter-pill" id="events-more-filters" data-node-id="2:8248">
+                <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
+                <span>More filters</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Events Table Header -->
+          <div class="data-table-header" data-node-id="2:8251">
+            <div class="col-checkbox-event">
+              <div class="custom-checkbox" id="events-select-all" role="checkbox" aria-checked="false" tabindex="0"></div>
+            </div>
+            <div class="col-sort-header" id="events-sort-name" data-node-id="2:8253">
+              <span class="th-label">Event name</span>
+              <img src="assets/arrow-down-12.svg" alt="" class="svg-icon" />
+            </div>
+            <div class="col-event-schedule"><span class="th-label">Date &amp; time</span></div>
+            <div class="col-event-location"><span class="th-label">Location</span></div>
+            <div class="col-event-registrations"><span class="th-label">Registrations</span></div>
+            <div class="col-event-status"><span class="th-label">Status</span></div>
+            <div class="col-event-action"><span class="th-label">&ZeroWidthSpace;</span></div>
+            <div class="col-actions"></div>
+          </div>
+
+          <!-- Events Table Rows (Rendered by JS) -->
+          <div id="events-table-rows"></div>
+
+          <!-- Events Table Footer -->
+          <div class="table-footer" data-node-id="2:8461">
+            <span class="results-count" id="events-results-count" data-node-id="2:8462">Showing all 8 events in Forma studio</span>
+            <div class="timezone-footer" data-node-id="2:8463">
+              <img src="assets/globe-12.svg" alt="" class="svg-icon" />
+              <span data-node-id="2:8465">All times shown in Pacific Time (PST)</span>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 3: ATTENDEES DIRECTORY (Node 2:8468)                        -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-attendees" data-node-id="2:8554">
+        <div class="overview-top-block" data-node-id="2:8555">
+          <!-- Page Introduction -->
+          <div class="page-intro" data-node-id="2:8556">
+            <div class="page-intro-heading" data-node-id="2:8557">
+              <h1 class="page-title" data-node-id="2:8558">Attendees</h1>
+              <p class="page-subtitle" data-node-id="2:8559">
+                The people behind your event. A smoother arrival starts here.
+              </p>
+            </div>
+            <div class="page-actions" data-node-id="2:8560">
+              <button type="button" class="btn btn-secondary-38" id="attendees-import-btn" data-node-id="2:8561">
+                <img src="assets/upload-15.svg" alt="" class="svg-icon" />
+                <span>Import attendees</span>
+              </button>
+              <button type="button" class="btn btn-primary-38 js-open-add-attendee" data-node-id="2:8564">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>Add attendee</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Event Controls -->
+          <div class="event-controls" data-node-id="2:8567">
+            <div class="event-selector" data-node-id="2:8568">
+              <div class="event-selector-trigger" data-action="go-events">
+                <div class="event-icon-box" data-node-id="2:8569">
+                  <img src="assets/aperture.svg" alt="" class="svg-icon" />
+                </div>
+                <span class="selected-event-name" data-node-id="2:8571">Form &amp; Future Summit 2026</span>
+                <img src="assets/chevron-down-14.svg" alt="" class="svg-icon" />
+              </div>
+              <div class="status-badge status-badge-green-sm" data-node-id="2:8573">
+                <img src="assets/status-dot-green-4.svg" alt="" class="svg-icon" />
+                <span>Live today</span>
+              </div>
+              <span class="event-date-meta" data-node-id="2:8576">Nov 7, 2026 · San Francisco</span>
+            </div>
+
+            <div class="controls-right-attendees" data-node-id="2:8577">
+              <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+              <span class="updated-text" data-node-id="2:8579">Updated just now</span>
+              <button type="button" class="btn btn-secondary-32-sm" id="open-checkin-scanner-btn" data-node-id="2:8580">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+                <span>Open check-in</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 4 Attendee Summary Metric Cards -->
+          <div class="metrics-grid" data-node-id="2:8583">
+            <div class="metric-card" data-node-id="2:8584">
+              <div class="metric-heading" data-node-id="2:8585">
+                <span class="metric-label-reg" data-node-id="2:8586">Total registrations</span>
+                <img src="assets/metric-users.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30 js-stat-registered" data-node-id="2:8589">1,284</span>
+              <span class="metric-context" data-node-id="2:8590">↑ 12.8% vs. previous event</span>
+            </div>
+
+            <div class="metric-card" data-node-id="2:8591">
+              <div class="metric-heading" data-node-id="2:8592">
+                <span class="metric-label-reg" data-node-id="2:8593">Checked in</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30 js-stat-checkedin" data-node-id="2:8595">964</span>
+              <span class="metric-context" id="attendees-checkedin-context" data-node-id="2:8596">75.1% of registered guests have arrived</span>
+            </div>
+
+            <div class="metric-card" data-node-id="2:8597">
+              <div class="metric-heading" data-node-id="2:8598">
+                <span class="metric-label-reg" data-node-id="2:8599">Yet to arrive</span>
+                <img src="assets/metric-clock-3.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30 js-stat-remaining" data-node-id="2:8601">320</span>
+              <span class="metric-context" data-node-id="2:8602">25 VIP guests still expected</span>
+            </div>
+
+            <div class="metric-card" data-node-id="2:8603">
+              <div class="metric-heading" data-node-id="2:8604">
+                <span class="metric-label-reg" data-node-id="2:8605">On the waitlist</span>
+                <img src="assets/metric-list-ordered.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" data-node-id="2:8607">42</span>
+              <span class="metric-context" data-node-id="2:8608">Review and approve as space opens up</span>
+            </div>
+          </div>
+
+          <!-- Check-in Summary Banner -->
+          <div class="checkin-banner" data-node-id="2:8609">
+            <img src="assets/radio-purple-16.svg" alt="" class="svg-icon" />
+            <span class="checkin-banner-status" data-node-id="2:8611">You’re ready for arrivals.</span>
+            <span class="checkin-banner-detail" id="checkin-banner-detail-text" data-node-id="2:8612">
+              4 check-in stations online · Last arrival at 10:06 AM · Badges printing normally
+            </span>
+            <span class="checkin-banner-action" id="manage-stations-btn" data-node-id="2:8613">Manage stations →</span>
+          </div>
+        </div>
+
+        <!-- Attendee Directory Card (12 rows) -->
+        <section class="directory-card" data-node-id="2:8614">
+          <div class="directory-header" data-node-id="2:8615">
+            <div class="directory-heading" data-node-id="2:8616">
+              <div class="directory-title-row" data-node-id="2:8617">
+                <h2 class="directory-title-18" data-node-id="2:8618">Attendee directory</h2>
+                <span class="status-badge status-badge-purple-sm js-stat-total-people" data-node-id="2:8619">1,338</span>
+              </div>
+              <p class="directory-desc" data-node-id="2:8621">
+                Every guest, every detail. Manage registrations, tickets, and check-ins in one place.
+              </p>
+            </div>
+            <div class="directory-actions" data-node-id="2:8622">
+              <button type="button" class="btn btn-secondary-38" id="attendees-send-msg-btn" data-node-id="2:8623">
+                <img src="assets/send-15.svg" alt="" class="svg-icon" />
+                <span>Send message</span>
+              </button>
+              <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:8627">
+                <img src="assets/download.svg" alt="" class="svg-icon" />
+                <span>Export</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Status Tabs -->
+          <div class="status-tabs" id="directory-attendee-tabs" data-node-id="2:8630">
+            <button type="button" class="status-tab active" data-tab="all" data-node-id="2:8631">
+              <span class="status-tab-label">All attendees</span>
+              <span class="status-tab-count js-stat-total-people">1,338</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="checked-in" data-node-id="2:8634">
+              <span class="status-tab-label">Checked in</span>
+              <span class="status-tab-count js-stat-checkedin">964</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="not-checked-in" data-node-id="2:8637">
+              <span class="status-tab-label">Not checked in</span>
+              <span class="status-tab-count js-stat-remaining">320</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="waitlist" data-node-id="2:8640">
+              <span class="status-tab-label">Waitlist</span>
+              <span class="status-tab-count">42</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="cancelled" data-node-id="2:8643">
+              <span class="status-tab-label">Cancelled</span>
+              <span class="status-tab-count">12</span>
+            </button>
+          </div>
+
+          <!-- Table Tools -->
+          <div class="table-tools" data-node-id="2:8646">
+            <label class="table-search-box" for="directory-attendee-search" data-node-id="2:8647">
+              <img src="assets/search-table.svg" alt="" class="svg-icon" />
+              <input
+                type="text"
+                id="directory-attendee-search"
+                class="table-search-input"
+                placeholder="Search by name, email or company..."
+                autocomplete="off"
+              />
+            </label>
+            <div class="table-filters" data-node-id="2:8650">
+              <button type="button" class="filter-pill" id="directory-ticket-filter" data-node-id="2:8651">
+                <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
+                <span id="directory-ticket-filter-label">Ticket type</span>
+              </button>
+              <button type="button" class="filter-pill" id="directory-status-filter" data-node-id="2:8654">
+                <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
+                <span id="directory-status-filter-label">Registration status</span>
+              </button>
+              <button type="button" class="filter-pill" id="directory-checkin-filter" data-node-id="2:8657">
+                <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
+                <span id="directory-checkin-filter-label">Check-in status</span>
+              </button>
+              <button type="button" class="filter-pill" id="directory-more-filters" data-node-id="2:8660">
+                <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
+                <span>More filters</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Table Header -->
+          <div class="data-table-header" data-node-id="2:8663">
+            <div class="col-checkbox">
+              <div class="custom-checkbox" id="directory-select-all" role="checkbox" aria-checked="false" tabindex="0"></div>
+            </div>
+            <div class="col-sort-header" id="directory-sort-attendee" data-node-id="2:8666">
+              <span class="th-label">Attendee</span>
+              <img src="assets/arrow-down-12.svg" alt="" class="svg-icon" />
+            </div>
+            <div class="col-company"><span class="th-label">Company</span></div>
+            <div class="col-ticket"><span class="th-label">Ticket type</span></div>
+            <div class="col-reg-date"><span class="th-label">Registered on</span></div>
+            <div class="col-reg-status"><span class="th-label">Registration</span></div>
+            <div class="col-checkin"><span class="th-label">Check-in status</span></div>
+            <div class="col-actions"></div>
+          </div>
+
+          <!-- Table Body (12 rows rendered by JS) -->
+          <div id="directory-attendee-rows"></div>
+
+          <!-- Table Footer & Pagination -->
+          <div class="table-footer" data-node-id="2:8956">
+            <span class="results-count" id="directory-results-count" data-node-id="2:8957">Showing 1–12 of 1,338 people</span>
+            <div class="page-controls" data-node-id="2:8958">
+              <button type="button" class="btn btn-secondary-32-sm" id="directory-prev-btn" data-node-id="2:8959">
+                <img src="assets/chevron-left-13.svg" alt="" class="svg-icon" />
+                <span>Previous</span>
+              </button>
+              <button type="button" class="page-number-btn active">1</button>
+              <button type="button" class="page-number-btn">2</button>
+              <button type="button" class="page-number-btn">3</button>
+              <button type="button" class="page-number-btn">…</button>
+              <button type="button" class="page-number-btn">112</button>
+              <button type="button" class="btn btn-secondary-32-sm" id="directory-next-btn" data-node-id="2:8972">
+                <span>Next</span>
+                <img src="assets/chevron-right.svg" alt="" class="svg-icon" />
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 4: ANALYTICS & LIVE TELEMETRY (PHP/MySQL Backed)            -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-analytics">
+        <div class="overview-top-block">
+          <!-- Page Introduction -->
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Analytics</h1>
+              <p class="page-subtitle">
+                Real-time arrival velocity, ticket tier conversion, and kiosk telemetry backed by MySQL.
+              </p>
+            </div>
+            <div class="page-actions">
+              <div class="db-sync-pill" id="mysql-sync-badge">
+                <img src="assets/status-dot-green-5.svg" alt="" class="svg-icon" />
+                <span id="mysql-sync-text">MySQL synced · XAMPP</span>
+              </div>
+              <button type="button" class="btn btn-secondary-38" id="reset-demo-db-btn">
+                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                <span>Reset demo data</span>
+              </button>
+              <button type="button" class="btn btn-primary-38 js-export-attendees">
+                <img src="assets/download.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+                <span>Export report</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Event Selector Bar -->
+          <div class="event-controls">
+            <div class="event-selector">
+              <div class="event-selector-trigger" data-action="go-events">
+                <div class="event-icon-box">
+                  <img src="assets/aperture.svg" alt="" class="svg-icon" />
+                </div>
+                <span class="selected-event-name">Form &amp; Future Summit 2026</span>
+                <img src="assets/chevron-down-14.svg" alt="" class="svg-icon" />
+              </div>
+              <div class="status-badge status-badge-green-md">
+                <img src="assets/status-dot-green-5.svg" alt="" class="svg-icon" />
+                <span>Live telemetry</span>
+              </div>
+              <span class="event-date-meta">Nov 7, 2026 · Fort Mason Center, San Francisco</span>
+            </div>
+
+            <div class="controls-right">
+              <span class="updated-text" id="analytics-last-updated">Last arrival at 10:06 AM</span>
+              <button type="button" class="btn btn-secondary-32" data-action="go-attendees">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+                <span>Go to check-in</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 4 Analytics KPI Cards -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-md">Check-in conversion</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30 js-stat-rate">75.1%</span>
+              <span class="metric-context" id="analytics-kpi-conversion-sub">964 of 1,284 registered guests arrived</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-md">Peak arrival window</span>
+                <img src="assets/trending-up.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="analytics-kpi-peak-val">176 / 30m</span>
+              <span class="metric-context" id="analytics-kpi-peak-sub">Recorded at 09:30 AM PST</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-md">Avg. check-in speed</span>
+                <img src="assets/metric-clock-3.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="analytics-kpi-speed-val">4.2s</span>
+              <span class="metric-context">Across 4 active badge kiosks</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-md">Gross ticket revenue</span>
+                <img src="assets/info.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30 js-stat-revenue">$128,400</span>
+              <span class="metric-context">↗ 18.2% vs. Product Futures Forum</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Split Row 1: Arrival Velocity Chart + Audience Role Distribution -->
+        <div class="split-row">
+          <!-- Left: Arrival Velocity Chart -->
+          <div class="insights-card">
+            <div class="chart-header">
+              <div class="chart-heading">
+                <h2 class="chart-title">Arrival velocity &amp; check-in flow</h2>
+                <p class="chart-subtitle">Live 30-minute check-in buckets persisted in MySQL (`checkin_intervals`).</p>
+              </div>
+              <div class="chart-legend">
+                <span class="legend-marker"></span>
+                <span class="legend-label">Arrivals per 30m</span>
+                <span class="legend-interval"> · Auto-updates on check-in</span>
+              </div>
+            </div>
+
+            <div class="attendance-summary-row">
+              <div class="summary-stat-pair">
+                <span class="summary-count-primary js-stat-checkedin">964</span>
+                <span class="summary-stat-label">checked in</span>
+              </div>
+              <div class="summary-divider"></div>
+              <div class="summary-stat-pair">
+                <span class="summary-count-muted js-stat-remaining">320</span>
+                <span class="summary-stat-label">yet to arrive</span>
+              </div>
+              <div class="peak-insight">
+                <img src="assets/trending-up.svg" alt="" class="svg-icon" />
+                <span class="peak-insight-text" id="analytics-peak-label">Peak arrival · 09:30 AM</span>
+              </div>
+            </div>
+
+            <div class="attendance-chart">
+              <div class="chart-y-axis">
+                <span>200</span>
+                <span>100</span>
+                <span>0</span>
+              </div>
+              <div class="chart-plot-wrap">
+                <div class="chart-plot">
+                  <div class="peak-tooltip" id="analytics-peak-tooltip">176 guests</div>
+                  <div class="chart-bars-container" id="analytics-chart-bars"></div>
+                  <div class="chart-grid-line" style="top: 0px;"></div>
+                  <div class="chart-grid-line" style="top: 61px;"></div>
+                  <div class="chart-grid-line" style="top: 121px;"></div>
+                </div>
+                <div class="chart-x-axis">
+                  <span>08:00</span>
+                  <span>09:00</span>
+                  <span>10:00</span>
+                  <span>11:00</span>
+                  <span>12:00</span>
+                  <span>13:00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Audience Role Breakdown (354px) -->
+          <div class="analytics-card analytics-card-354">
+            <div class="chart-heading">
+              <h2 class="chart-title">Audience by discipline</h2>
+              <p class="chart-subtitle">Breakdown of 1,284 registered attendees</p>
+            </div>
+            <div class="role-list" id="analytics-role-list"></div>
+          </div>
+        </div>
+
+        <!-- Split Row 2: Ticket Tier Conversion Table + Live Station Telemetry & Check-in Feed -->
+        <div class="split-row">
+          <!-- Left: Ticket Tier Breakdown -->
+          <section class="directory-card" style="flex: 1 0 0; min-width: 0;">
+            <div class="directory-header">
+              <div class="directory-heading">
+                <div class="directory-title-row">
+                  <h2 class="directory-title-17">Ticket tier conversion &amp; revenue</h2>
+                  <span class="status-badge status-badge-purple-sm">3 tiers</span>
+                </div>
+                <p class="directory-desc">
+                  Arrival rate and revenue contribution across General admission, VIP pass, and Speaker passes.
+                </p>
+              </div>
+            </div>
+
+            <div class="data-table-header">
+              <div class="col-tier-name"><span class="th-label th-label-med">Ticket tier</span></div>
+              <div class="col-tier-num"><span class="th-label th-label-med">Registered</span></div>
+              <div class="col-tier-num"><span class="th-label th-label-med">Checked in</span></div>
+              <div class="col-tier-rate"><span class="th-label th-label-med">Arrival rate</span></div>
+              <div class="col-tier-rev"><span class="th-label th-label-med">Revenue</span></div>
+            </div>
+
+            <div id="analytics-tier-rows"></div>
+
+            <!-- Kiosk Stations Telemetry Grid inside left card footer area -->
+            <div style="padding: 20px; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Check-in kiosk telemetry</span>
+                <span style="font-size: 11px; color: var(--status-green-text);">4 of 4 stations online</span>
+              </div>
+              <div class="stations-grid" id="analytics-stations-grid"></div>
+            </div>
+          </section>
+
+          <!-- Right: Real-Time Check-in Activity Log (MySQL `checkin_logs`) -->
+          <div class="analytics-card analytics-card-440">
+            <div class="chart-header">
+              <div class="chart-heading">
+                <h2 class="chart-title">Recent check-in log</h2>
+                <p class="chart-subtitle">Live MySQL stream (`checkin_logs`). Click Undo to revert.</p>
+              </div>
+              <span class="status-badge status-badge-green-sm">Live</span>
+            </div>
+            <div class="live-log-list" id="analytics-live-logs"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Add Attendee Modal -->
+  <div class="modal-backdrop" id="add-attendee-modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-labelledby="add-attendee-title">
+      <h3 class="modal-title" id="add-attendee-title">Add attendee</h3>
+      <form id="add-attendee-form">
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="input-attendee-name">Full name</label>
+          <input type="text" id="input-attendee-name" class="form-input" placeholder="e.g. Jordan Taylor" required />
+        </div>
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="input-attendee-email">Email address</label>
+          <input type="email" id="input-attendee-email" class="form-input" placeholder="jordan@studio.design" required />
+        </div>
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="input-attendee-company">Company</label>
+          <input type="text" id="input-attendee-company" class="form-input" placeholder="e.g. Linear" required />
+        </div>
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="input-attendee-role">Role</label>
+          <input type="text" id="input-attendee-role" class="form-input" placeholder="e.g. Staff Designer" required />
+        </div>
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label class="form-label" for="input-attendee-ticket">Ticket type</label>
+          <select id="input-attendee-ticket" class="form-select">
+            <option value="General admission">General admission</option>
+            <option value="VIP pass">VIP pass</option>
+            <option value="Speaker">Speaker</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary-38" id="cancel-add-attendee">Cancel</button>
+          <button type="submit" class="btn btn-primary-38">Add guest</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Event Modal -->
+  <div class="modal-backdrop" id="create-event-modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-labelledby="create-event-title">
+      <h3 class="modal-title" id="create-event-title">Create event</h3>
+      <form id="create-event-form">
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="input-event-name">Event title</label>
+          <input type="text" id="input-event-name" class="form-input" placeholder="e.g. Spring Design Critique" required />
+        </div>
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="input-event-type">Category</label>
+          <select id="input-event-type" class="form-select">
+            <option value="Conference">Conference</option>
+            <option value="Workshop">Workshop</option>
+            <option value="Networking dinner">Networking dinner</option>
+            <option value="Community meetup">Community meetup</option>
+          </select>
+        </div>
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="input-event-venue">Venue</label>
+          <input type="text" id="input-event-venue" class="form-input" placeholder="e.g. Fort Mason Center" required />
+        </div>
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label class="form-label" for="input-event-capacity">Capacity</label>
+          <input type="number" id="input-event-capacity" class="form-input" value="250" min="10" required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary-38" id="cancel-create-event">Cancel</button>
+          <button type="submit" class="btn btn-primary-38">Create event</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
