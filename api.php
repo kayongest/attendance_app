@@ -985,8 +985,8 @@ try {
 
         $insStmt = $pdo->prepare("
             INSERT INTO `attendance_logs`
-              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `scheduled_call_time`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW())
+              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW())
         ");
         $insStmt->execute([
             (int) $targetMember['id'],
@@ -997,7 +997,6 @@ try {
             $resolvedAction,
             $accessStatus,
             $denialReason,
-            $callTime,
             $punctuality,
             $noteText,
         ]);

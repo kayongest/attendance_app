@@ -210,15 +210,13 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `id` INT AUTO_INCREMENT PRIMARY KEY,
             `user_id` INT NOT NULL,
             `badge_code` VARCHAR(32) NOT NULL,
-            `checkpoint_type` VARCHAR(32) NOT NULL DEFAULT 'event_venue',
+            `checkpoint_type` ENUM('stock_warehouse','event_venue','main_office') NOT NULL DEFAULT 'event_venue',
             `checkpoint_id` INT NOT NULL DEFAULT 1,
-            `checkpoint_name` VARCHAR(160) NOT NULL,
-            `event_id` INT DEFAULT NULL,
-            `scan_action` VARCHAR(32) NOT NULL DEFAULT 'check_in',
-            `access_status` VARCHAR(32) NOT NULL DEFAULT 'granted',
+            `checkpoint_name` VARCHAR(150) NOT NULL,
+            `scan_action` ENUM('check_in','check_out','access_verify') NOT NULL DEFAULT 'check_in',
+            `access_status` ENUM('granted','denied') NOT NULL DEFAULT 'granted',
             `denial_reason` VARCHAR(255) DEFAULT NULL,
-            `scheduled_call_time` VARCHAR(32) DEFAULT '08:00',
-            `punctuality_status` VARCHAR(32) NOT NULL DEFAULT 'on_time',
+            `punctuality_status` ENUM('on_time','late','early','n/a') NOT NULL DEFAULT 'on_time',
             `scanned_by` INT DEFAULT 1,
             `notes` VARCHAR(255) DEFAULT NULL,
             `scanned_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -398,8 +396,8 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
 
         $logIns = $pdo->prepare("
             INSERT INTO `attendance_logs`
-              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `scheduled_call_time`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, '08:00', ?, 1, ?, ?)
+              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
         ");
 
         $seedScans = [
