@@ -3455,28 +3455,29 @@ button {
 
 .sm-grid-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
   padding: 20px;
 }
 
 .wh-card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .wh-card:hover {
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
 
 .wh-card-banner {
-  height: 140px;
+  height: 160px;
   width: 100%;
   background: linear-gradient(135deg, #0f172a, #1e3a8a);
   display: flex;
@@ -3493,7 +3494,7 @@ button {
 }
 
 .wh-card-fallback-icon {
-  font-size: 36px;
+  font-size: 40px;
   opacity: 0.8;
 }
 
@@ -3502,6 +3503,18 @@ button {
   top: 10px;
   right: 10px;
   z-index: 2;
+}
+
+.wh-card-badge-top .status-badge {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(4px);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  border-radius: 9999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .wh-card-body {
@@ -3520,10 +3533,22 @@ button {
 }
 
 .wh-card-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+}
+
+.wh-code-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 2px 7px;
 }
 
 .wh-card-meta-line {
@@ -3535,10 +3560,10 @@ button {
 }
 
 .wh-card-controller-box {
-  background-color: var(--bg-canvas);
-  border: 1px solid var(--border-color);
+  background-color: #f8fafc;
+  border: 1px solid #f1f5f9;
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 11px;
 }
 
@@ -3546,9 +3571,20 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid var(--border-color);
   margin-top: auto;
+}
+
+.wh-stored-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #15803d;
+  background-color: #dcfce7;
+  border-radius: 4px;
+  padding: 3px 8px;
 }
 
 /* Stock Item Row */

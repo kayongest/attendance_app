@@ -1359,12 +1359,24 @@
 
     // Update segmented tab buttons
     document.querySelectorAll('.js-sm-tab-btn').forEach((btn) => {
-      const tab = btn.getAttribute('data-tab');
+      const tab = btn.getAttribute('data-tab') || btn.getAttribute('data-target-tab');
       btn.classList.toggle('active', tab === state.stockManager.activeTab);
     });
 
-    const whSection = document.getElementById('sm-warehouses-section');
-    const itemsSection = document.getElementById('sm-items-section');
+    // Update active view badge & tab count numbers
+    const activeBadge = document.getElementById('sm-active-view-badge');
+    if (activeBadge) {
+      activeBadge.textContent = isWh ? 'Warehouses' : 'Stock Items';
+      activeBadge.className = `status-badge ${isWh ? 'status-badge-purple-sm' : 'status-badge-green-sm'}`;
+    }
+
+    const whTabCount = document.getElementById('sm-tab-wh-count');
+    const itemTabCount = document.getElementById('sm-tab-item-count');
+    if (whTabCount) whTabCount.textContent = String(state.stockManager.warehouses.length).padStart(2, '0');
+    if (itemTabCount) itemTabCount.textContent = String(state.stockManager.items.length).padStart(2, '0');
+
+    const whSection = document.getElementById('sm-pane-warehouses');
+    const itemsSection = document.getElementById('sm-pane-items');
 
     if (whSection && itemsSection) {
       if (isWh) {
@@ -1375,6 +1387,16 @@
         whSection.style.display = 'none';
         itemsSection.style.display = 'block';
         renderStockItemsTable();
+      }
+    }
+
+    // Update footer results count
+    const footerEl = document.getElementById('sm-results-footer');
+    if (footerEl) {
+      if (isWh) {
+        footerEl.textContent = `Showing ${state.stockManager.warehouses.length} warehouse ${state.stockManager.warehouses.length === 1 ? 'facility' : 'facilities'}`;
+      } else {
+        footerEl.textContent = `Showing ${state.stockManager.items.length} inventory equipment items`;
       }
     }
 
@@ -1460,14 +1482,13 @@
           <div class="wh-card-body">
             <div class="wh-card-title-row">
               <h3 class="wh-card-name">${escapeHtml(w.name)}</h3>
-              <span class="badge-code-primary">${escapeHtml(w.code)}</span>
+              <span class="wh-code-badge">${escapeHtml(w.code)}</span>
             </div>
             <div class="wh-card-meta-line">
               <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="opacity: 0.6;" />
               <span>${escapeHtml(w.location)}</span>
             </div>
             <div class="wh-card-meta-line">
-              <img src="assets/clock-icon.svg" alt="" class="svg-icon" style="width: 12px; height: 12px; opacity: 0.6;" />
               <span>Hours: ${escapeHtml(w.open_time)} – ${escapeHtml(w.close_time)}</span>
             </div>
             <div class="wh-card-controller-box">
@@ -1479,12 +1500,12 @@
               </div>
             </div>
             <div class="wh-card-footer">
-              <span class="ts-mini-pill in">${w.item_count} items stored</span>
+              <span class="wh-stored-pill">${w.item_count} items stored</span>
               <div style="display: flex; gap: 6px;">
                 <button type="button" class="btn btn-secondary-32-sm js-edit-wh-btn" data-wh-id="${w.id}">
                   Edit
                 </button>
-                <button type="button" class="btn btn-secondary-32-sm js-delete-record-btn" data-del-type="warehouse" data-del-id="${w.id}" data-del-name="${escapeHtml(w.name)}" style="color: #dc2626;">
+                <button type="button" class="btn btn-secondary-32-sm js-delete-record-btn" data-del-type="warehouse" data-del-id="${w.id}" data-del-name="${escapeHtml(w.name)}" style="color: #dc2626; border-color: #fecaca;">
                   Delete
                 </button>
               </div>
@@ -2588,9 +2609,11 @@
     // Segmented tabs toggle
     document.querySelectorAll('.js-sm-tab-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const tab = btn.getAttribute('data-tab');
-        state.stockManager.activeTab = tab;
-        renderStockManager();
+        const tab = btn.getAttribute('data-tab') || btn.getAttribute('data-target-tab');
+        if (tab) {
+          state.stockManager.activeTab = tab;
+          renderStockManager();
+        }
       });
     });
 
