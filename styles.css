@@ -3707,3 +3707,95 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ========================================================================== */
+/* ATTENDEES SPLIT DECK: SIDE-BY-SIDE CREW ROSTER & KIOSK VERIFICATION DECK   */
+/* ========================================================================== */
+
+.attendees-split-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 24px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  width: 100%;
+  align-items: start;
+}
+
+.attendees-split-deck .attendees-roster-column {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.attendees-split-deck .attendees-roster-column .directory-header {
+  padding: 0 0 16px 0;
+}
+
+.attendees-split-deck .attendees-roster-column .status-tabs {
+  margin-bottom: 14px;
+}
+
+.attendees-split-deck .attendees-roster-column .table-tools {
+  padding: 0 0 14px 0;
+  border-top: none;
+  background: transparent;
+}
+
+.attendees-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #ffffff;
+  scrollbar-width: thin;
+}
+
+.attendees-table-wrap .data-table-header,
+.attendees-table-wrap .data-table-row {
+  min-width: 820px;
+}
+
+.attendees-split-deck .attendees-kiosk-column {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  width: 100%;
+  position: sticky;
+  top: 84px;
+}
+
+.attendees-split-deck .attendees-kiosk-column .kiosk-scanner-bar {
+  padding-bottom: 0;
+  border-bottom: none;
+  width: 100%;
+}
+
+.attendees-split-deck .attendees-kiosk-column .kiosk-input-group {
+  width: 100%;
+}
+
+@media (max-width: 1320px) {
+  .attendees-split-deck {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .attendees-split-deck .attendees-kiosk-column {
+    position: static;
+  }
+}

@@ -769,16 +769,6 @@
                 Unified 4-Tier Access Matrix verification, paired Check-In (In) &amp; Check-Out (Out) timestamps, and Linked Equipment Batch custody.
               </p>
             </div>
-            <div class="page-actions" data-node-id="2:8560">
-              <button type="button" class="btn btn-secondary-38 js-open-rollcall-modal" data-node-id="2:8561">
-                <img src="assets/metric-users.svg" alt="" class="svg-icon" />
-                <span>Live Roll-Call (<span class="js-stat-onsite">4</span>)</span>
-              </button>
-              <button type="button" class="btn btn-primary-38" id="focus-kiosk-scanner-btn" data-node-id="2:8564">
-                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
-                <span>Focus Badge Scanner</span>
-              </button>
-            </div>
           </div>
 
           <!-- A. Checkpoint & Scan Mode Selector Bar (Node 2:8567) -->
@@ -796,10 +786,6 @@
               </div>
 
               <select class="cp-select-dropdown js-checkpoint-select" aria-label="Target Checkpoint"></select>
-
-              <button type="button" class="station-lock-pill unlocked js-station-lock-btn" data-node-id="2:8573">
-                <span class="js-station-lock-label">MULTI-CHECKPOINT MODE · Lock (PIN: 1234)</span>
-              </button>
             </div>
 
             <div class="checkpoint-right-group" data-node-id="2:8577">
@@ -812,74 +798,114 @@
               </select>
             </div>
           </div>
+        </div>
 
-          <!-- B. 4 Gate Terminal KPI Cards (Node 2:8583) -->
-          <div class="metrics-grid" data-node-id="2:8583">
-            <div class="metric-card" data-node-id="2:8584">
-              <div class="metric-heading" data-node-id="2:8585">
-                <span class="metric-label-reg" data-node-id="2:8586">Active ID Badges</span>
-                <img src="assets/metric-users.svg" alt="" class="svg-icon" />
+        <!-- Split Deck: Left Crew Roster & Right Kiosk Verification Deck -->
+        <div class="attendees-split-deck">
+          <!-- Left Column: Production Crew & Paired Check-In / Check-Out Roster Table (Node 2:8614) -->
+          <section class="directory-card attendees-roster-column" data-node-id="2:8614">
+            <div class="directory-header" data-node-id="2:8615">
+              <div class="directory-heading" data-node-id="2:8616">
+                <div class="directory-title-row" data-node-id="2:8617">
+                  <h2 class="directory-title-18" data-node-id="2:8618">Crew Roster &amp; Paired Gate Controls</h2>
+                  <span class="status-badge status-badge-purple-sm js-stat-total-people" data-node-id="2:8619">14</span>
+                </div>
+                <p class="directory-desc" data-node-id="2:8621">
+                  Click any crew row to load their ID badge in the Verification Deck above, or use the paired Checkin / Checkout buttons.
+                </p>
               </div>
-              <span class="metric-value-30 js-kpi-active-badges" data-node-id="2:8589">14</span>
-              <span class="metric-context" data-node-id="2:8590">Issued across 4 Clearance Tiers (L1–L4)</span>
+              <div class="directory-actions" data-node-id="2:8622">
+                <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:8627">
+                  <img src="assets/download.svg" alt="" class="svg-icon" />
+                  <span>Export Roster</span>
+                </button>
+              </div>
             </div>
 
-            <div class="metric-card js-open-rollcall-modal" style="cursor: pointer;" data-node-id="2:8591">
-              <div class="metric-heading" data-node-id="2:8592">
-                <span class="metric-label-reg" data-node-id="2:8593">Currently On-Site (Roll-Call)</span>
-                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
-              </div>
-              <span class="metric-value-30 js-stat-onsite" data-node-id="2:8595">4</span>
-              <span class="metric-context" data-node-id="2:8596">Click to open Live On-Site Roll-Call Modal ↗</span>
+            <!-- Status Tabs -->
+            <div class="status-tabs" id="directory-attendee-tabs" data-node-id="2:8630">
+              <button type="button" class="status-tab active" data-tab="all" data-node-id="2:8631">
+                <span class="status-tab-label">All Crew</span>
+                <span class="status-tab-count js-tab-count-all">14</span>
+              </button>
+              <button type="button" class="status-tab" data-tab="checked_in" data-node-id="2:8634">
+                <span class="status-tab-label">Checked In (On-Site)</span>
+                <span class="status-tab-count js-tab-count-in">4</span>
+              </button>
+              <button type="button" class="status-tab" data-tab="checked_out" data-node-id="2:8637">
+                <span class="status-tab-label">Checked Out</span>
+                <span class="status-tab-count js-tab-count-out">1</span>
+              </button>
+              <button type="button" class="status-tab" data-tab="stock_auth" data-node-id="2:8640">
+                <span class="status-tab-label">Stock Authorized (L2–L4)</span>
+                <span class="status-tab-count js-tab-count-stock">10</span>
+              </button>
+              <button type="button" class="status-tab" data-tab="restricted" data-node-id="2:8643">
+                <span class="status-tab-label">Denied / Restricted (L1)</span>
+                <span class="status-tab-count js-tab-count-l1">4</span>
+              </button>
             </div>
 
-            <div class="metric-card" data-node-id="2:8597">
-              <div class="metric-heading" data-node-id="2:8598">
-                <span class="metric-label-reg" data-node-id="2:8599">Venue vs. Stock Check-Ins</span>
-                <img src="assets/metric-clock-3.svg" alt="" class="svg-icon" />
+            <!-- Table Tools -->
+            <div class="table-tools" data-node-id="2:8646">
+              <label class="table-search-box" for="directory-attendee-search" data-node-id="2:8647">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input
+                  type="text"
+                  id="directory-attendee-search"
+                  class="table-search-input"
+                  placeholder="Search by name, REW-BADGE-XXXX, ABL-XXX, role or department..."
+                  autocomplete="off"
+                />
+              </label>
+              <div class="table-filters" data-node-id="2:8650">
+                <button type="button" class="filter-pill" id="directory-ticket-filter" data-node-id="2:8651">
+                  <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
+                  <span id="directory-ticket-filter-label">Clearance: All Tiers</span>
+                </button>
+                <button type="button" class="filter-pill" id="directory-checkin-filter" data-node-id="2:8657">
+                  <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
+                  <span id="directory-checkin-filter-label">Gate State: All</span>
+                </button>
               </div>
-              <span class="metric-value-30 js-kpi-total-granted" data-node-id="2:8601">5</span>
-              <span class="metric-context js-kpi-venue-vs-stock" data-node-id="2:8602">3 Venue · 2 Stock Gate today</span>
             </div>
 
-            <div class="metric-card" data-node-id="2:8603">
-              <div class="metric-heading" data-node-id="2:8604">
-                <span class="metric-label-reg" data-node-id="2:8605">Late Arrivals &amp; Denied Scans</span>
-                <img src="assets/metric-list-ordered.svg" alt="" class="svg-icon" />
+            <!-- Table Container with Horizontal Scroll Support -->
+            <div class="attendees-table-wrap">
+              <!-- Table Header -->
+              <div class="data-table-header" data-node-id="2:8663">
+                <div class="col-checkbox">
+                  <div class="custom-checkbox" id="directory-select-all" role="checkbox" aria-checked="false" tabindex="0"></div>
+                </div>
+                <div class="col-sort-header" id="directory-sort-attendee" data-node-id="2:8666">
+                  <span class="th-label">Crew Member</span>
+                  <img src="assets/arrow-down-12.svg" alt="" class="svg-icon" />
+                </div>
+                <div class="col-company"><span class="th-label">Department &amp; Role</span></div>
+                <div class="col-ticket"><span class="th-label">4-Tier Clearance</span></div>
+                <div class="col-reg-date"><span class="th-label">Staff Badge Code</span></div>
+                <div class="col-reg-status"><span class="th-label">Today’s Timestamps</span></div>
+                <div class="col-checkin"><span class="th-label">Quick Gate Actions (In / Out)</span></div>
+                <div class="col-actions"></div>
               </div>
-              <span class="metric-value-30 js-kpi-late-denied" data-node-id="2:8607">2</span>
-              <span class="metric-context js-kpi-late-denied-sub" data-node-id="2:8608">1 Late · 1 Denied (L1 at Stock)</span>
-            </div>
-          </div>
 
-          <!-- C. 4-Tier Access Matrix Quick Reference Strip (Node 2:8609) -->
-          <div class="matrix-reference-strip" data-node-id="2:8609">
-            <div class="matrix-strip-title">
-              <img src="assets/radio-purple-16.svg" alt="" class="svg-icon" />
-              <span>4-Tier Access Matrix Reference:</span>
+              <!-- Table Body -->
+              <div id="directory-attendee-rows"></div>
             </div>
-            <div class="matrix-strip-pills">
-              <div class="matrix-ref-item">
-                <span class="tier-code-badge tier-code-L1">L1</span>
-                <span>Venue Crew: Venue <strong>YES</strong> | Stock <strong style="color: #dc2626;">NO</strong></span>
-              </div>
-              <div class="matrix-ref-item">
-                <span class="tier-code-badge tier-code-L2">L2</span>
-                <span>Technical &amp; Stage: Venue <strong>YES</strong> | Stock <strong style="color: #2563eb;">YES</strong></span>
-              </div>
-              <div class="matrix-ref-item">
-                <span class="tier-code-badge tier-code-L3">L3</span>
-                <span>Stock Controller: Venue <strong>YES</strong> | Stock <strong style="color: #d97706;">FULL</strong></span>
-              </div>
-              <div class="matrix-ref-item">
-                <span class="tier-code-badge tier-code-L4">L4</span>
-                <span>Executive All-Access: <strong style="color: #dc2626;">UNRESTRICTED</strong></span>
-              </div>
-            </div>
-          </div>
 
-          <!-- D. THE GATE KIOSK VERIFICATION DECK (#pane-kiosk) -->
-          <section class="kiosk-deck-wrapper" id="pane-kiosk">
+            <!-- Table Footer -->
+            <div class="table-footer" data-node-id="2:8956">
+              <span class="results-count" id="directory-results-count" data-node-id="2:8957">Showing crew roster</span>
+              <div class="page-controls" data-node-id="2:8958">
+                <span style="font-size: 11px; color: var(--text-secondary);">
+                  Paired state machine: Ready → Checked In (In) → Checked Out (Out)
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Right Column: The Gate Kiosk Verification Deck (#pane-kiosk) -->
+          <section class="kiosk-deck-wrapper attendees-kiosk-column" id="pane-kiosk">
             <!-- Badge Code Search / Barcode Scanner Bar -->
             <div class="kiosk-scanner-bar">
               <form class="kiosk-input-group" id="kiosk-scan-form">
@@ -1009,105 +1035,6 @@
             </div>
           </section>
         </div>
-
-        <!-- E. Production Crew & Paired Check-In / Check-Out Roster Table (Node 2:8614) -->
-        <section class="directory-card" data-node-id="2:8614">
-          <div class="directory-header" data-node-id="2:8615">
-            <div class="directory-heading" data-node-id="2:8616">
-              <div class="directory-title-row" data-node-id="2:8617">
-                <h2 class="directory-title-18" data-node-id="2:8618">Crew Roster &amp; Paired Gate Controls</h2>
-                <span class="status-badge status-badge-purple-sm js-stat-total-people" data-node-id="2:8619">14</span>
-              </div>
-              <p class="directory-desc" data-node-id="2:8621">
-                Click any crew row to load their ID badge in the Verification Deck above, or use the paired Checkin / Checkout buttons.
-              </p>
-            </div>
-            <div class="directory-actions" data-node-id="2:8622">
-              <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:8627">
-                <img src="assets/download.svg" alt="" class="svg-icon" />
-                <span>Export Roster</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Status Tabs -->
-          <div class="status-tabs" id="directory-attendee-tabs" data-node-id="2:8630">
-            <button type="button" class="status-tab active" data-tab="all" data-node-id="2:8631">
-              <span class="status-tab-label">All Crew</span>
-              <span class="status-tab-count js-tab-count-all">14</span>
-            </button>
-            <button type="button" class="status-tab" data-tab="checked_in" data-node-id="2:8634">
-              <span class="status-tab-label">Checked In (On-Site)</span>
-              <span class="status-tab-count js-tab-count-in">4</span>
-            </button>
-            <button type="button" class="status-tab" data-tab="checked_out" data-node-id="2:8637">
-              <span class="status-tab-label">Checked Out</span>
-              <span class="status-tab-count js-tab-count-out">1</span>
-            </button>
-            <button type="button" class="status-tab" data-tab="stock_auth" data-node-id="2:8640">
-              <span class="status-tab-label">Stock Authorized (L2–L4)</span>
-              <span class="status-tab-count js-tab-count-stock">10</span>
-            </button>
-            <button type="button" class="status-tab" data-tab="restricted" data-node-id="2:8643">
-              <span class="status-tab-label">Denied / Restricted (L1)</span>
-              <span class="status-tab-count js-tab-count-l1">4</span>
-            </button>
-          </div>
-
-          <!-- Table Tools -->
-          <div class="table-tools" data-node-id="2:8646">
-            <label class="table-search-box" for="directory-attendee-search" data-node-id="2:8647">
-              <img src="assets/search-table.svg" alt="" class="svg-icon" />
-              <input
-                type="text"
-                id="directory-attendee-search"
-                class="table-search-input"
-                placeholder="Search by name, REW-BADGE-XXXX, ABL-XXX, role or department..."
-                autocomplete="off"
-              />
-            </label>
-            <div class="table-filters" data-node-id="2:8650">
-              <button type="button" class="filter-pill" id="directory-ticket-filter" data-node-id="2:8651">
-                <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
-                <span id="directory-ticket-filter-label">Clearance: All Tiers</span>
-              </button>
-              <button type="button" class="filter-pill" id="directory-checkin-filter" data-node-id="2:8657">
-                <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
-                <span id="directory-checkin-filter-label">Gate State: All</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Table Header -->
-          <div class="data-table-header" data-node-id="2:8663">
-            <div class="col-checkbox">
-              <div class="custom-checkbox" id="directory-select-all" role="checkbox" aria-checked="false" tabindex="0"></div>
-            </div>
-            <div class="col-sort-header" id="directory-sort-attendee" data-node-id="2:8666">
-              <span class="th-label">Crew Member</span>
-              <img src="assets/arrow-down-12.svg" alt="" class="svg-icon" />
-            </div>
-            <div class="col-company"><span class="th-label">Department &amp; Role</span></div>
-            <div class="col-ticket"><span class="th-label">4-Tier Clearance</span></div>
-            <div class="col-reg-date"><span class="th-label">Staff Badge Code</span></div>
-            <div class="col-reg-status"><span class="th-label">Today’s Timestamps</span></div>
-            <div class="col-checkin"><span class="th-label">Quick Gate Actions (In / Out)</span></div>
-            <div class="col-actions"></div>
-          </div>
-
-          <!-- Table Body -->
-          <div id="directory-attendee-rows"></div>
-
-          <!-- Table Footer -->
-          <div class="table-footer" data-node-id="2:8956">
-            <span class="results-count" id="directory-results-count" data-node-id="2:8957">Showing crew roster</span>
-            <div class="page-controls" data-node-id="2:8958">
-              <span style="font-size: 11px; color: var(--text-secondary);">
-                Paired state machine: Ready → Checked In (In) → Checked Out (Out)
-              </span>
-            </div>
-          </div>
-        </section>
       </main>
 
       <!-- ================================================================== -->
