@@ -61,6 +61,11 @@
       <!-- Workspace Navigation -->
       <nav class="nav-group-workspace" aria-label="Workspace navigation" data-node-id="2:3304">
         <span class="nav-section-label" data-node-id="2:3306">CHECKPOINT CONTROLS</span>
+        <button type="button" class="nav-item" id="sidebar-calltime-btn" title="Configure Scheduled Call Times for Venues &amp; Warehouses">
+          <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Set Call Time</span>
+          <span class="nav-item-count" id="sidebar-active-calltime-pill">08:00</span>
+        </button>
         <button type="button" class="nav-item" id="sidebar-rollcall-btn" data-node-id="2:3307">
           <img src="assets/nav-team-members.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">On-Site Roll-Call</span>
@@ -1265,6 +1270,17 @@
       <form id="call-time-form">
         <input type="hidden" id="call-time-cp-type" value="event_venue" />
         <input type="hidden" id="call-time-cp-id" value="" />
+
+        <div class="form-field" style="margin-bottom: 14px;">
+          <label class="form-label" for="call-time-cp-select">Target Venue or Stock Warehouse</label>
+          <select
+            id="call-time-cp-select"
+            class="form-input"
+            style="height: 42px; font-weight: 600; font-size: 13px; color: var(--text-primary); cursor: pointer;"
+          >
+            <!-- Populated dynamically with all venues & stock warehouses -->
+          </select>
+        </div>
 
         <div class="form-field" style="margin-bottom: 14px;">
           <label class="form-label" for="call-time-input">Scheduled Call Time (24h CAT · Kigali)</label>

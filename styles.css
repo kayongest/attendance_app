@@ -244,6 +244,16 @@ button {
   flex-shrink: 0;
 }
 
+#sidebar-active-calltime-pill {
+  font-family: 'Consolas', monospace;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--brand-primary);
+  background-color: var(--brand-soft);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 .sidebar-spacer {
   flex: 1 0 0;
   min-height: 24px;

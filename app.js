@@ -459,6 +459,11 @@
       }`;
     });
 
+    const sbCallPill = document.getElementById('sidebar-active-calltime-pill');
+    if (sbCallPill) {
+      sbCallPill.textContent = state.activeCheckpoint.call_time || '08:00';
+    }
+
     // Update Screen 2 Spotlight
     const spType = document.querySelector('.js-spotlight-cp-type');
     const spHours = document.querySelector('.js-spotlight-cp-hours');
@@ -1206,25 +1211,73 @@
     if (modal) modal.classList.add('open');
   }
 
-  function openCallTimeModal(cpType, cpId, cpName, currentTime) {
+  function openCallTimeModal(targetCpType = null, targetCpId = null, targetCpName = null, currentTime = null) {
     const modal = document.getElementById('call-time-modal');
     if (!modal) return;
 
+    const selectEl = document.getElementById('call-time-cp-select');
     const titleEl = document.getElementById('call-time-modal-target-name');
     const typeBadge = document.getElementById('call-time-modal-type');
     const typeInput = document.getElementById('call-time-cp-type');
     const idInput = document.getElementById('call-time-cp-id');
     const timeInput = document.getElementById('call-time-input');
 
-    if (titleEl) titleEl.textContent = cpName;
-    if (typeBadge) {
-      const isStock = cpType === 'stock_warehouse';
-      typeBadge.textContent = isStock ? 'Stock Warehouse' : 'Event Venue';
-      typeBadge.className = `status-badge ${isStock ? 'status-badge-green-sm' : 'status-badge-purple-sm'}`;
+    const defaultCp = state.activeCheckpoint;
+    const resolvedType = targetCpType || defaultCp.type;
+    const resolvedId = targetCpId != null ? String(targetCpId) : String(defaultCp.id);
+
+    // Populate dropdown with all Event Venues & Stock Warehouses
+    if (selectEl) {
+      const allCps = state.checkpoints.directory || [];
+      const venues = allCps.filter((c) => c.type === 'event_venue');
+      const stocks = allCps.filter((c) => c.type === 'stock_warehouse');
+
+      let html = '';
+      if (venues.length > 0) {
+        html += `<optgroup label="Event Venues">`;
+        venues.forEach((v) => {
+          const val = `event_venue:${v.id}`;
+          const isSel = resolvedType === 'event_venue' && String(v.id) === resolvedId;
+          html += `<option value="${val}" ${isSel ? 'selected' : ''}>${escapeHtml(v.name)} (Call: ${escapeHtml(v.call_time || '08:00')})</option>`;
+        });
+        html += `</optgroup>`;
+      }
+      if (stocks.length > 0) {
+        html += `<optgroup label="Stock Warehouses">`;
+        stocks.forEach((s) => {
+          const val = `stock_warehouse:${s.id}`;
+          const isSel = resolvedType === 'stock_warehouse' && String(s.id) === resolvedId;
+          html += `<option value="${val}" ${isSel ? 'selected' : ''}>${escapeHtml(s.name)} (Call: ${escapeHtml(s.call_time || '08:00')})</option>`;
+        });
+        html += `</optgroup>`;
+      }
+      selectEl.innerHTML = html;
     }
-    if (typeInput) typeInput.value = cpType;
-    if (idInput) idInput.value = cpId;
-    if (timeInput) timeInput.value = currentTime || '08:00';
+
+    // Function to synchronize inputs when selection changes
+    function syncSelectedCheckpoint(cpType, cpId) {
+      const allCps = state.checkpoints.directory || [];
+      const found = allCps.find((c) => c.type === cpType && String(c.id) === String(cpId)) || defaultCp;
+      if (titleEl) titleEl.textContent = found.name;
+      if (typeBadge) {
+        const isStock = found.type === 'stock_warehouse';
+        typeBadge.textContent = isStock ? 'Stock Warehouse' : 'Event Venue';
+        typeBadge.className = `status-badge ${isStock ? 'status-badge-green-sm' : 'status-badge-purple-sm'}`;
+      }
+      if (typeInput) typeInput.value = found.type;
+      if (idInput) idInput.value = found.id;
+      if (timeInput) timeInput.value = currentTime || found.call_time || '08:00';
+    }
+
+    syncSelectedCheckpoint(resolvedType, resolvedId);
+
+    if (selectEl) {
+      selectEl.onchange = () => {
+        const [selType, selId] = selectEl.value.split(':');
+        currentTime = null; // reset override so it loads selected checkpoint's current time
+        syncSelectedCheckpoint(selType, selId);
+      };
+    }
 
     modal.classList.add('open');
   }
@@ -1859,6 +1912,15 @@
         if (inp && t) inp.value = t;
       });
     });
+
+    // Sidebar Set Call Time Button
+    const sidebarCallTimeBtn = document.getElementById('sidebar-calltime-btn');
+    if (sidebarCallTimeBtn) {
+      sidebarCallTimeBtn.addEventListener('click', () => {
+        const cp = state.activeCheckpoint;
+        openCallTimeModal(cp ? cp.type : null, cp ? cp.id : null, cp ? cp.name : null, cp ? cp.call_time : null);
+      });
+    }
 
     // Open Call Time Modal for Active Checkpoint
     document.querySelectorAll('.js-open-active-calltime-modal').forEach((btn) => {
