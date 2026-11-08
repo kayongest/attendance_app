@@ -872,34 +872,16 @@
                     type="text"
                     id="kiosk-badge-input"
                     class="kiosk-badge-input"
-                    placeholder="Scan or type Badge Code (e.g. REW-BADGE-0006, REW-BADGE-0004, ABL-006, or crew name)..."
+                    placeholder="Scan barcode or type badge (e.g. REW-BADGE-0006, ABL-006, or name)..."
                     autocomplete="off"
                   />
+                  <span class="kiosk-search-match-tag" id="kiosk-search-match-tag" style="display: none;"></span>
+                  <button type="button" class="kiosk-input-clear-btn" id="kiosk-input-clear-btn" style="display: none;" title="Clear search">✕</button>
                 </div>
                 <button type="submit" class="btn btn-primary-38">
                   <span>Verify &amp; Record Scan</span>
                 </button>
               </form>
-
-              <div class="kiosk-preset-pills">
-                <span class="kiosk-preset-label">Quick Test Scans:</span>
-                <button type="button" class="kiosk-preset-btn js-quick-scan" data-badge="REW-BADGE-0006">
-                  <span class="tier-code-badge tier-code-L2">L2</span>
-                  <span>Eric (Tech + Batch)</span>
-                </button>
-                <button type="button" class="kiosk-preset-btn js-quick-scan" data-badge="REW-BADGE-0004">
-                  <span class="tier-code-badge tier-code-L1">L1</span>
-                  <span>Claude (Venue Crew)</span>
-                </button>
-                <button type="button" class="kiosk-preset-btn js-quick-scan" data-badge="REW-BADGE-0002">
-                  <span class="tier-code-badge tier-code-L3">L3</span>
-                  <span>Mirene (Stock Ctrl)</span>
-                </button>
-                <button type="button" class="kiosk-preset-btn js-quick-scan" data-badge="REW-BADGE-0001">
-                  <span class="tier-code-badge tier-code-L4">L4</span>
-                  <span>Didier (Exec)</span>
-                </button>
-              </div>
             </div>
 
             <!-- 12-Column Split Verification Card -->

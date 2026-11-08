@@ -175,6 +175,57 @@
     };
   }
 
+  function findCrewMember(query) {
+    if (!query) return null;
+    const q = String(query).trim().toLowerCase();
+    if (!q) return null;
+
+    // 1. Exact match on badge_code (case-insensitive)
+    let match = state.crew.find((c) => (c.badge_code || '').toLowerCase() === q);
+    if (match) return match;
+
+    // 2. Exact match on staff_code (e.g. ABL-006 or ABL-6)
+    match = state.crew.find((c) => (c.staff_code || '').toLowerCase() === q);
+    if (match) return match;
+
+    // 3. Exact match on RFID
+    match = state.crew.find((c) => (c.rfid_uid || '').toLowerCase() === q);
+    if (match) return match;
+
+    // 4. Exact match on numeric id or ABL-id
+    match = state.crew.find((c) => String(c.id) === q || `abl-${c.id}` === q);
+    if (match) return match;
+
+    // 5. Prefix/Substring match on badge_code or staff_code
+    match = state.crew.find(
+      (c) =>
+        (c.badge_code || '').toLowerCase().includes(q) ||
+        (c.staff_code || '').toLowerCase().includes(q)
+    );
+    if (match) return match;
+
+    // 6. Username match
+    match = state.crew.find(
+      (c) => (c.username || '').toLowerCase() === q || (c.username || '').toLowerCase().includes(q)
+    );
+    if (match) return match;
+
+    // 7. Full name match
+    match = state.crew.find((c) => (c.full_name || '').toLowerCase().includes(q));
+    if (match) return match;
+
+    return null;
+  }
+
+  function highlightSelectedCrewRow(crewId) {
+    document.querySelectorAll('.attendee-table-row[data-crew-id]').forEach((row) => {
+      const isSel = Number(row.getAttribute('data-crew-id')) === Number(crewId);
+      row.classList.toggle('kiosk-selected-row', isSel);
+      const cb = row.querySelector('.custom-checkbox');
+      if (cb) cb.setAttribute('aria-checked', isSel ? 'true' : 'false');
+    });
+  }
+
   async function fetchBootstrap(preserveVerification = false) {
     try {
       const url = `api.php?action=bootstrap&checkpoint_type=${encodeURIComponent(state.checkpointType)}&checkpoint_id=${encodeURIComponent(state.checkpointId)}`;
@@ -217,6 +268,23 @@
         applyBootstrapPayload(data.bootstrap, true);
       } else {
         renderAll();
+      }
+
+      // Sync kiosk input & match tag with verified badge
+      const kioskInp = document.getElementById('kiosk-badge-input');
+      const kioskTag = document.getElementById('kiosk-search-match-tag');
+      const kioskClr = document.getElementById('kiosk-input-clear-btn');
+      if (kioskInp && data.badge) {
+        kioskInp.value = data.badge.badge_code || '';
+        if (kioskClr) kioskClr.style.display = 'flex';
+        if (kioskTag) {
+          kioskTag.style.display = 'inline-flex';
+          kioskTag.innerHTML = `
+            <span class="tier-code-badge tier-code-${escapeHtml(data.badge.clearance_code)}">${escapeHtml(data.badge.clearance_code)}</span>
+            <span>${escapeHtml(data.badge.full_name)} (${escapeHtml(data.badge.badge_code)})</span>
+          `;
+        }
+        kioskInp.select();
       }
 
       const statusTxt = data.allowed
@@ -416,36 +484,6 @@
       if (bRouteEl) bRouteEl.textContent = `${fb.source_name} → ${fb.destination_name}`;
       if (bTechEl) bTechEl.textContent = `${fb.technician_name} (${fb.technician_badge} · ${fb.technician_clearance})`;
       if (bCtrlEl) bCtrlEl.textContent = `Controller: ${fb.stock_controller_name}`;
-    }
-
-    // Dynamically update Quick Test Scan Preset Buttons to match live DB crew
-    const presetContainer = document.querySelector('.kiosk-preset-pills');
-    if (presetContainer && state.crew.length > 0) {
-      const l2WithBatch = state.crew.find((c) => c.clearance_code === 'L2' && c.linked_batches && c.linked_batches.length > 0) || state.crew.find((c) => c.clearance_code === 'L2');
-      const l1Member = state.crew.find((c) => c.clearance_code === 'L1');
-      const l3Member = state.crew.find((c) => c.clearance_code === 'L3');
-      const l4Member = state.crew.find((c) => c.clearance_code === 'L4');
-      const presets = [
-        l2WithBatch ? { m: l2WithBatch, tag: 'Tech + Batch' } : null,
-        l1Member ? { m: l1Member, tag: 'Venue Crew' } : null,
-        l3Member ? { m: l3Member, tag: 'Stock Ctrl' } : null,
-        l4Member ? { m: l4Member, tag: 'Exec All-Access' } : null,
-      ].filter(Boolean);
-
-      if (presets.length > 0) {
-        presetContainer.innerHTML =
-          `<span class="kiosk-preset-label">Quick Test Scans:</span>` +
-          presets
-            .map(
-              (p) => `
-              <button type="button" class="kiosk-preset-btn js-quick-scan" data-badge="${escapeHtml(p.m.badge_code)}">
-                <span class="tier-code-badge tier-code-${escapeHtml(p.m.clearance_code)}">${escapeHtml(p.m.clearance_code)}</span>
-                <span>${escapeHtml(p.m.full_name.split(' ')[0])} (${escapeHtml(p.tag)})</span>
-              </button>
-            `
-            )
-            .join('');
-      }
     }
   }
 
@@ -747,7 +785,7 @@
         const hasBatch = Array.isArray(c.linked_batches) && c.linked_batches.length > 0;
 
         return `
-          <div class="attendee-table-row ${isSelected ? 'kiosk-selected-row' : ''}" data-crew-id="${c.id}">
+          <div class="data-table-row attendee-table-row ${isSelected ? 'kiosk-selected-row' : ''}" data-crew-id="${c.id}">
             <div class="col-checkbox">
               <div class="custom-checkbox" role="checkbox" aria-checked="${isSelected ? 'true' : 'false'}" tabindex="0"></div>
             </div>
@@ -891,7 +929,7 @@
         const isStock = cp.type === 'stock_warehouse';
         const isActive = cp.type === state.checkpointType && Number(cp.id) === Number(state.checkpointId);
         return `
-          <div class="event-table-row" style="${isActive ? 'background-color: #f5f3ff;' : ''}">
+          <div class="data-table-row data-table-row-event event-table-row" style="${isActive ? 'background-color: #f5f3ff;' : ''}">
             <div class="col-checkbox-event">
               <div class="custom-checkbox" role="checkbox" aria-checked="${isActive ? 'true' : 'false'}"></div>
             </div>
@@ -1268,18 +1306,104 @@
       });
     }
 
+    // Auto-search and instant live preview for Kiosk Badge Input
+    const kioskInput = document.getElementById('kiosk-badge-input');
+    const kioskMatchTag = document.getElementById('kiosk-search-match-tag');
+    const kioskClearBtn = document.getElementById('kiosk-input-clear-btn');
+    let autoScanTimeout = null;
+
+    if (kioskInput) {
+      kioskInput.addEventListener('input', () => {
+        const query = kioskInput.value.trim();
+        if (autoScanTimeout) {
+          clearTimeout(autoScanTimeout);
+          autoScanTimeout = null;
+        }
+
+        if (!query) {
+          if (kioskMatchTag) {
+            kioskMatchTag.style.display = 'none';
+            kioskMatchTag.textContent = '';
+          }
+          if (kioskClearBtn) kioskClearBtn.style.display = 'none';
+          return;
+        }
+
+        if (kioskClearBtn) kioskClearBtn.style.display = 'flex';
+
+        // Auto-search matching crew member
+        const matched = findCrewMember(query);
+        if (matched) {
+          if (kioskMatchTag) {
+            kioskMatchTag.style.display = 'inline-flex';
+            kioskMatchTag.innerHTML = `
+              <span class="tier-code-badge tier-code-${escapeHtml(matched.clearance_code)}">${escapeHtml(matched.clearance_code)}</span>
+              <span>${escapeHtml(matched.full_name)} (${escapeHtml(matched.badge_code)})</span>
+            `;
+          }
+
+          // Live preview in Verification Deck immediately
+          state.selectedCrewId = Number(matched.id);
+          state.currentVerification = buildClientVerificationFromMember(matched);
+          renderVerificationDeck();
+          highlightSelectedCrewRow(matched.id);
+
+          // If query matches a full barcode pattern or exact code, auto-record with brief debounce
+          const isExactBarcodePattern =
+            /^(REW-BADGE-\d{4}|ABL-BDG-\d{4}|ABL-\d{3,4})$/i.test(query) ||
+            query.toLowerCase() === (matched.badge_code || '').toLowerCase() ||
+            query.toLowerCase() === (matched.rfid_uid || '').toLowerCase();
+
+          if (isExactBarcodePattern) {
+            autoScanTimeout = setTimeout(() => {
+              triggerGateScan(matched.badge_code);
+            }, 400);
+          }
+        } else {
+          if (kioskMatchTag) {
+            kioskMatchTag.style.display = 'inline-flex';
+            kioskMatchTag.innerHTML = `<span style="color: var(--text-muted); font-size: 11px;">No matching crew</span>`;
+          }
+        }
+      });
+    }
+
+    if (kioskClearBtn) {
+      kioskClearBtn.addEventListener('click', () => {
+        if (autoScanTimeout) {
+          clearTimeout(autoScanTimeout);
+          autoScanTimeout = null;
+        }
+        if (kioskInput) {
+          kioskInput.value = '';
+          kioskInput.focus();
+        }
+        if (kioskMatchTag) {
+          kioskMatchTag.style.display = 'none';
+          kioskMatchTag.textContent = '';
+        }
+        kioskClearBtn.style.display = 'none';
+      });
+    }
+
     // Kiosk Scan Form Submit
     const scanForm = document.getElementById('kiosk-scan-form');
     if (scanForm) {
       scanForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        if (autoScanTimeout) {
+          clearTimeout(autoScanTimeout);
+          autoScanTimeout = null;
+        }
         const inp = document.getElementById('kiosk-badge-input');
         const val = inp ? inp.value.trim() : '';
         if (!val) {
           showToast('Enter or scan a Badge Code (e.g. REW-BADGE-0006)');
           return;
         }
-        triggerGateScan(val);
+        const matched = findCrewMember(val);
+        const codeToScan = matched ? matched.badge_code : val;
+        triggerGateScan(codeToScan);
       });
     }
 
@@ -1291,8 +1415,9 @@
           e.preventDefault();
           const val = topSearch.value.trim();
           if (val) {
+            const matched = findCrewMember(val);
             switchScreen('attendees', 'pane-kiosk');
-            triggerGateScan(val);
+            triggerGateScan(matched ? matched.badge_code : val);
             topSearch.value = '';
           }
         }
@@ -1318,18 +1443,8 @@
       });
     }
 
-    // Delegated clicks for Quick Scan Presets, Crew Rows, Paired Checkin/Checkout buttons, Timeline items, Checkpoint activation, and Matrix config
+    // Delegated clicks for Crew Rows, Paired Checkin/Checkout buttons, Timeline items, Checkpoint activation, and Matrix config
     document.body.addEventListener('click', async (e) => {
-      // 0. Quick Preset Scan button
-      const quickScanBtn = e.target.closest('.js-quick-scan');
-      if (quickScanBtn) {
-        const badgeCode = quickScanBtn.getAttribute('data-badge');
-        const inp = document.getElementById('kiosk-badge-input');
-        if (inp) inp.value = badgeCode;
-        if (badgeCode) triggerGateScan(badgeCode);
-        return;
-      }
-
       // 1. Paired Checkin / Checkout button in Crew Roster table
       const gateBtn = e.target.closest('.js-row-gate-action');
       if (gateBtn) {
@@ -1364,7 +1479,17 @@
           state.selectedCrewId = cid;
           state.currentVerification = buildClientVerificationFromMember(member);
           const inp = document.getElementById('kiosk-badge-input');
-          if (inp) inp.value = member.badge_code;
+          if (inp) {
+            inp.value = member.badge_code;
+            if (kioskClearBtn) kioskClearBtn.style.display = 'flex';
+            if (kioskMatchTag) {
+              kioskMatchTag.style.display = 'inline-flex';
+              kioskMatchTag.innerHTML = `
+                <span class="tier-code-badge tier-code-${escapeHtml(member.clearance_code)}">${escapeHtml(member.clearance_code)}</span>
+                <span>${escapeHtml(member.full_name)} (${escapeHtml(member.badge_code)})</span>
+              `;
+            }
+          }
           renderAll();
           showToast(`Loaded ${member.full_name} (${member.badge_code} · ${member.clearance_code}) into Kiosk Deck`);
         }

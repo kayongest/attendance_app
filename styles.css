@@ -1704,39 +1704,54 @@ button {
 }
 
 .col-company {
-  width: 153px;
+  width: 150px;
   flex-shrink: 0;
 }
 
 .col-ticket {
-  width: 130px;
+  width: 160px;
   flex-shrink: 0;
 }
 
 .col-reg-date {
-  width: 108px;
+  width: 150px;
   flex-shrink: 0;
 }
 
 .col-reg-status {
-  width: 116px;
+  width: 160px;
   flex-shrink: 0;
 }
 
 .col-checkin {
-  width: 128px;
+  width: 160px;
   flex-shrink: 0;
 }
 
 .col-actions {
-  width: 16px;
+  width: 28px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.attendee-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.company-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
 /* Events Table Columns */
+.col-event-name,
 .col-event-identity {
   flex: 1 0 0;
   min-width: 0;
@@ -2591,9 +2606,7 @@ button {
 .kiosk-scanner-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
+  width: 100%;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border-color);
 }
@@ -2601,8 +2614,8 @@ button {
 .kiosk-input-group {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1 1 420px;
+  gap: 12px;
+  width: 100%;
 }
 
 .kiosk-badge-input-wrap {
@@ -2610,12 +2623,13 @@ button {
   align-items: center;
   gap: 10px;
   flex: 1 0 0;
-  height: 40px;
+  height: 44px;
   padding: 0 14px;
   border: 1.5px solid #cbd5e1;
   border-radius: 8px;
   background-color: var(--bg-canvas);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
 }
 
 .kiosk-badge-input-wrap:focus-within {
@@ -2625,11 +2639,15 @@ button {
 }
 
 .kiosk-badge-input {
-  width: 100%;
+  flex: 1 0 0;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   font-family: 'Consolas', 'SFMono-Regular', monospace;
   color: var(--text-primary);
+  background: transparent;
+  border: none;
+  outline: none;
 }
 
 .kiosk-badge-input::placeholder {
@@ -2638,38 +2656,37 @@ button {
   color: var(--text-muted);
 }
 
-.kiosk-preset-pills {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.kiosk-preset-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.kiosk-preset-btn {
+.kiosk-search-match-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 6px;
+  padding: 3px 10px;
   border-radius: 6px;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
   font-size: 11px;
-  font-weight: 500;
-  background-color: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  transition: all 0.15s ease;
+  font-weight: 600;
+  color: #1d4ed8;
+  white-space: nowrap;
 }
 
-.kiosk-preset-btn:hover {
-  border-color: var(--brand-primary);
-  background-color: var(--brand-soft);
-  color: var(--brand-primary);
+.kiosk-input-clear-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+}
+
+.kiosk-input-clear-btn:hover {
+  color: var(--text-primary);
+  background-color: #e2e8f0;
 }
 
 /* 12-Column Split Verification Card */
@@ -3183,18 +3200,45 @@ button {
   color: #b45309;
 }
 
-.attendee-table-row.kiosk-selected-row {
-  background-color: #f5f3ff;
-  border-left: 3px solid var(--brand-primary);
-}
-
 .attendee-table-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  height: auto;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-color);
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--bg-surface);
   cursor: pointer;
   transition: background-color 0.12s ease;
 }
 
 .attendee-table-row:hover {
-  background-color: #f8fafc;
+  background-color: #fbfcfe;
+}
+
+.attendee-table-row.kiosk-selected-row {
+  background-color: #f5f3ff;
+  border-left: 3px solid var(--brand-primary);
+}
+
+.event-table-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 72px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--bg-surface);
+  transition: background-color 0.12s ease;
+}
+
+.event-table-row:hover {
+  background-color: #fbfcfe;
 }
 
 /* ========================================================================== */
