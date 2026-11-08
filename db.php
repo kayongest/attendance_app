@@ -252,6 +252,53 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
+    // 7. Ensure `items` table exists
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `items` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `item_name` VARCHAR(255) NOT NULL,
+            `serial_number` VARCHAR(100) NOT NULL UNIQUE,
+            `category` VARCHAR(100) DEFAULT 'General',
+            `brand` VARCHAR(100) DEFAULT NULL,
+            `model` VARCHAR(100) DEFAULT NULL,
+            `department` VARCHAR(50) DEFAULT 'Warehouse',
+            `description` TEXT DEFAULT NULL,
+            `specifications` TEXT DEFAULT NULL,
+            `brand_model` VARCHAR(255) DEFAULT NULL,
+            `condition` VARCHAR(20) DEFAULT 'good',
+            `stock_location` VARCHAR(255) DEFAULT 'Ndera Warehouse',
+            `storage_location` VARCHAR(255) DEFAULT NULL,
+            `notes` TEXT DEFAULT NULL,
+            `quantity` INT DEFAULT 1,
+            `status` VARCHAR(20) DEFAULT 'available',
+            `image` VARCHAR(500) DEFAULT NULL,
+            `qr_code` VARCHAR(500) DEFAULT NULL,
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `tags` VARCHAR(500) DEFAULT NULL,
+            `last_scanned` TIMESTAMP NULL DEFAULT NULL,
+            `current_location` VARCHAR(255) DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    // Ensure `image` column exists on stock_locations if missing
+    try {
+        $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `image` VARCHAR(500) DEFAULT NULL");
+    } catch (Throwable $e) {}
+
+    // Seed items if empty
+    $itemCount = (int) $pdo->query("SELECT COUNT(*) FROM `items`")->fetchColumn();
+    if ($itemCount === 0) {
+        $pdo->exec("
+            INSERT INTO `items` (`item_name`, `serial_number`, `category`, `brand`, `model`, `department`, `stock_location`, `quantity`, `status`, `condition`, `image`) VALUES
+            ('Soundcraft Vi3000 Digital Console', 'SN-AUD-VI3000-01', 'Audio', 'Soundcraft', 'Vi3000', 'Audio', 'Ndera Warehouse', 1, 'available', 'good', NULL),
+            ('L-Acoustics Kara II Line Array (Pair)', 'SN-AUD-KARA-08', 'Audio', 'L-Acoustics', 'Kara II', 'Audio', 'Ndera Warehouse', 4, 'available', 'good', NULL),
+            ('Robe Pointe 280W Beam Moving Head', 'SN-LGT-PNT-14', 'Lighting', 'Robe', 'Pointe 280W', 'Lighting', 'BK Arena Stock', 8, 'available', 'good', NULL),
+            ('Blackmagic URSA Broadcast G2 4K', 'SN-VID-URSA-02', 'Video', 'Blackmagic', 'URSA G2', 'Video', 'KCC Stock', 2, 'available', 'good', NULL),
+            ('Prolyte H40V Heavy Duty Truss 3m', 'SN-RIG-TRUSS-40', 'Rigging', 'Prolyte', 'H40V-3M', 'Rigging', 'Ndera Warehouse', 16, 'available', 'good', NULL)
+        ");
+    }
+
     // Seed stock_locations if empty
     $stockCount = (int) $pdo->query("SELECT COUNT(*) FROM `stock_locations`")->fetchColumn();
     if ($stockCount === 0) {

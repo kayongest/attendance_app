@@ -901,7 +901,7 @@ try {
     $reqCpType = (string) ($_GET['checkpoint_type'] ?? $_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse');
     $reqCpId = (int) ($_GET['checkpoint_id'] ?? $_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? 1);
 
-    if ($method === 'GET' || $action === 'bootstrap') {
+    if ($action === 'bootstrap') {
         echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
         exit;
     }
@@ -1107,6 +1107,253 @@ try {
                 'updated_cp_id' => $rawCpId,
             ]
         ));
+        exit;
+    }
+
+    if ($action === 'list_stock_manager') {
+        // 1. Fetch Warehouses
+        $whRows = $pdo->query("SELECT * FROM `stock_locations` ORDER BY `id` ASC")->fetchAll();
+        $warehouses = [];
+        foreach ($whRows as $wr) {
+            $wid = (int) $wr['id'];
+            $locName = (string) ($wr['name'] ?? 'Warehouse');
+            $itemCount = 0;
+            try {
+                $cntStmt = $pdo->prepare("SELECT COUNT(*) FROM `items` WHERE `stock_location` = ? OR `stock_location` = ?");
+                $cntStmt->execute([$locName, (string) ($wr['code'] ?? '')]);
+                $itemCount = (int) $cntStmt->fetchColumn();
+            } catch (Throwable $e) {}
+
+            $warehouses[] = [
+                'id' => $wid,
+                'name' => $locName,
+                'code' => (string) ($wr['code'] ?? $wr['location_code'] ?? 'STK-0' . $wid),
+                'location_code' => (string) ($wr['location_code'] ?? ''),
+                'location' => (string) ($wr['location'] ?? $wr['address'] ?? 'Kigali Hub'),
+                'address' => (string) ($wr['address'] ?? ''),
+                'description' => (string) ($wr['description'] ?? ''),
+                'open_time' => substr((string) ($wr['open_time'] ?? '08:00:00'), 0, 5),
+                'close_time' => substr((string) ($wr['close_time'] ?? '18:00:00'), 0, 5),
+                'controller_name' => (string) ($wr['controller_name'] ?? 'Mirene Uwase'),
+                'controller_phone' => (string) ($wr['controller_phone'] ?? '+250 788 100 002'),
+                'controller_email' => (string) ($wr['controller_email'] ?? 'mirene@ability.rw'),
+                'is_active' => (int) ($wr['is_active'] ?? 1),
+                'image' => resolveProfileImageUrl($wr['image'] ?? null),
+                'item_count' => $itemCount,
+            ];
+        }
+
+        // 2. Fetch Stock Items
+        $items = [];
+        try {
+            $itemRows = $pdo->query("SELECT * FROM `items` ORDER BY `id` DESC LIMIT 200")->fetchAll();
+            foreach ($itemRows as $ir) {
+                $items[] = [
+                    'id' => (int) $ir['id'],
+                    'item_name' => (string) ($ir['item_name'] ?? 'Equipment Item'),
+                    'serial_number' => (string) ($ir['serial_number'] ?? 'N/A'),
+                    'category' => (string) ($ir['category'] ?? 'General'),
+                    'brand' => (string) ($ir['brand'] ?? ''),
+                    'model' => (string) ($ir['model'] ?? ''),
+                    'department' => (string) ($ir['department'] ?? 'Warehouse'),
+                    'stock_location' => (string) ($ir['stock_location'] ?? 'Ndera Warehouse'),
+                    'quantity' => (int) ($ir['quantity'] ?? 1),
+                    'condition' => (string) ($ir['condition'] ?? 'good'),
+                    'status' => (string) ($ir['status'] ?? 'available'),
+                    'notes' => (string) ($ir['notes'] ?? ''),
+                    'image' => resolveProfileImageUrl($ir['image'] ?? null),
+                    'created_at' => (string) ($ir['created_at'] ?? ''),
+                ];
+            }
+        } catch (Throwable $e) {}
+
+        // 3. Categories & Stats
+        $rawCats = array_values(array_unique(array_filter(array_column($items, 'category'))));
+        $categories = !empty($rawCats) ? $rawCats : ['Audio', 'Video', 'Lighting', 'Rigging', 'Power', 'General'];
+
+        $totalAvailable = 0;
+        foreach ($items as $it) {
+            if ($it['status'] === 'available') {
+                $totalAvailable += (int) $it['quantity'];
+            }
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'warehouses' => $warehouses,
+            'stock_items' => $items,
+            'categories' => $categories,
+            'stats' => [
+                'total_warehouses' => count($warehouses),
+                'total_items' => count($items),
+                'available_count' => $totalAvailable,
+                'in_use_count' => max(0, count($items) - $totalAvailable),
+            ],
+        ]);
+        exit;
+    }
+
+    if ($action === 'save_warehouse') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $name = trim((string) ($_POST['name'] ?? $jsonBody['name'] ?? ''));
+        $code = trim((string) ($_POST['code'] ?? $jsonBody['code'] ?? ''));
+        $location = trim((string) ($_POST['location'] ?? $jsonBody['location'] ?? ''));
+        $openTime = trim((string) ($_POST['open_time'] ?? $jsonBody['open_time'] ?? '08:00'));
+        $closeTime = trim((string) ($_POST['close_time'] ?? $jsonBody['close_time'] ?? '18:00'));
+        $controllerName = trim((string) ($_POST['controller_name'] ?? $jsonBody['controller_name'] ?? 'Mirene Uwase'));
+        $controllerPhone = trim((string) ($_POST['controller_phone'] ?? $jsonBody['controller_phone'] ?? ''));
+        $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (int) ($jsonBody['is_active'] ?? 1);
+
+        if ($name === '') {
+            echo json_encode(['ok' => false, 'error' => 'Warehouse name is required']);
+            exit;
+        }
+
+        if (strlen($openTime) === 5) $openTime .= ':00';
+        if (strlen($closeTime) === 5) $closeTime .= ':00';
+
+        // Handle Image Upload
+        $uploadedImagePath = null;
+        if (!empty($_FILES['image']['tmp_name']) && is_uploaded_file($_FILES['image']['tmp_name'])) {
+            $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+                $dir = __DIR__ . '/uploads/warehouses';
+                if (!is_dir($dir)) mkdir($dir, 0777, true);
+                $fileName = 'wh_' . time() . '_' . substr(md5(uniqid()), 0, 8) . '.' . $ext;
+                $dest = $dir . '/' . $fileName;
+                if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
+                    $uploadedImagePath = 'uploads/warehouses/' . $fileName;
+                }
+            }
+        }
+
+        if ($id > 0) {
+            if ($uploadedImagePath) {
+                $stmt = $pdo->prepare("
+                    UPDATE `stock_locations`
+                    SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
+                        `controller_name` = ?, `controller_phone` = ?, `is_active` = ?, `image` = ?
+                    WHERE `id` = ?
+                ");
+                $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath, $id]);
+            } else {
+                $stmt = $pdo->prepare("
+                    UPDATE `stock_locations`
+                    SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
+                        `controller_name` = ?, `controller_phone` = ?, `is_active` = ?
+                    WHERE `id` = ?
+                ");
+                $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $id]);
+            }
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO `stock_locations`
+                (`name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `controller_name`, `controller_phone`, `is_active`, `image`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath]);
+            $id = (int) $pdo->lastInsertId();
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Warehouse saved successfully',
+            'warehouse_id' => $id,
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_warehouse') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        if ($id > 0) {
+            $del = $pdo->prepare("DELETE FROM `stock_locations` WHERE `id` = ?");
+            $del->execute([$id]);
+        }
+        echo json_encode(['ok' => true, 'message' => 'Warehouse deleted']);
+        exit;
+    }
+
+    if ($action === 'save_stock_item') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $itemName = trim((string) ($_POST['item_name'] ?? $jsonBody['item_name'] ?? ''));
+        $serialNumber = trim((string) ($_POST['serial_number'] ?? $jsonBody['serial_number'] ?? ''));
+        $category = trim((string) ($_POST['category'] ?? $jsonBody['category'] ?? 'General'));
+        $brand = trim((string) ($_POST['brand'] ?? $jsonBody['brand'] ?? ''));
+        $model = trim((string) ($_POST['model'] ?? $jsonBody['model'] ?? ''));
+        $department = trim((string) ($_POST['department'] ?? $jsonBody['department'] ?? 'Warehouse'));
+        $stockLocation = trim((string) ($_POST['stock_location'] ?? $jsonBody['stock_location'] ?? 'Ndera Warehouse'));
+        $quantity = (int) ($_POST['quantity'] ?? $jsonBody['quantity'] ?? 1);
+        $condition = trim((string) ($_POST['condition'] ?? $jsonBody['condition'] ?? 'good'));
+        $status = trim((string) ($_POST['status'] ?? $jsonBody['status'] ?? 'available'));
+        $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
+
+        if ($itemName === '') {
+            echo json_encode(['ok' => false, 'error' => 'Item name is required']);
+            exit;
+        }
+
+        if ($serialNumber === '') {
+            $serialNumber = 'SN-' . strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $category), 0, 3) ?: 'GEN') . '-' . date('ymd') . '-' . rand(100, 999);
+        }
+
+        // Handle Image Upload
+        $uploadedImagePath = null;
+        if (!empty($_FILES['image']['tmp_name']) && is_uploaded_file($_FILES['image']['tmp_name'])) {
+            $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+                $dir = __DIR__ . '/uploads/items';
+                if (!is_dir($dir)) mkdir($dir, 0777, true);
+                $fileName = 'item_' . time() . '_' . substr(md5(uniqid()), 0, 8) . '.' . $ext;
+                $dest = $dir . '/' . $fileName;
+                if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
+                    $uploadedImagePath = 'uploads/items/' . $fileName;
+                }
+            }
+        }
+
+        if ($id > 0) {
+            if ($uploadedImagePath) {
+                $stmt = $pdo->prepare("
+                    UPDATE `items`
+                    SET `item_name` = ?, `serial_number` = ?, `category` = ?, `brand` = ?, `model` = ?, `department` = ?,
+                        `stock_location` = ?, `quantity` = ?, `condition` = ?, `status` = ?, `notes` = ?, `image` = ?
+                    WHERE `id` = ?
+                ");
+                $stmt->execute([$itemName, $serialNumber, $category, $brand, $model, $department, $stockLocation, $quantity, $condition, $status, $notes, $uploadedImagePath, $id]);
+            } else {
+                $stmt = $pdo->prepare("
+                    UPDATE `items`
+                    SET `item_name` = ?, `serial_number` = ?, `category` = ?, `brand` = ?, `model` = ?, `department` = ?,
+                        `stock_location` = ?, `quantity` = ?, `condition` = ?, `status` = ?, `notes` = ?
+                    WHERE `id` = ?
+                ");
+                $stmt->execute([$itemName, $serialNumber, $category, $brand, $model, $department, $stockLocation, $quantity, $condition, $status, $notes, $id]);
+            }
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO `items`
+                (`item_name`, `serial_number`, `category`, `brand`, `model`, `department`, `stock_location`, `quantity`, `condition`, `status`, `notes`, `image`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([$itemName, $serialNumber, $category, $brand, $model, $department, $stockLocation, $quantity, $condition, $status, $notes, $uploadedImagePath]);
+            $id = (int) $pdo->lastInsertId();
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Stock item saved successfully',
+            'item_id' => $id,
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_stock_item') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        if ($id > 0) {
+            $del = $pdo->prepare("DELETE FROM `items` WHERE `id` = ?");
+            $del->execute([$id]);
+        }
+        echo json_encode(['ok' => true, 'message' => 'Stock item deleted']);
         exit;
     }
 

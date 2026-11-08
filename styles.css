@@ -3444,3 +3444,230 @@ button {
   max-height: 86vh;
   overflow-y: auto;
 }
+
+/* ========================================================================== */
+/* STOCKS & WAREHOUSES MANAGER (SCREEN 5)                                     */
+/* ========================================================================== */
+
+.sm-tab-pane {
+  display: block;
+}
+
+.sm-grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+.wh-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.wh-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.wh-card-banner {
+  height: 140px;
+  width: 100%;
+  background: linear-gradient(135deg, #0f172a, #1e3a8a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.wh-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wh-card-fallback-icon {
+  font-size: 36px;
+  opacity: 0.8;
+}
+
+.wh-card-badge-top {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+}
+
+.wh-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.wh-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wh-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.wh-card-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.wh-card-controller-box {
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.wh-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  margin-top: auto;
+}
+
+/* Stock Item Row */
+.stock-item-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  transition: background-color 0.12s ease;
+}
+
+.stock-item-row:hover {
+  background-color: #fbfcfe;
+}
+
+.stock-item-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 0 240px;
+  min-width: 0;
+}
+
+.stock-thumb-wrap {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-canvas);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stock-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.stock-thumb-placeholder {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.stock-name-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stock-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stock-item-notes {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Image Upload Dropzone & Live Preview */
+.image-upload-dropzone {
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+  background-color: var(--bg-canvas);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.image-upload-dropzone:hover,
+.image-upload-dropzone.dragover {
+  border-color: var(--brand-primary);
+  background-color: #f5f3ff;
+}
+
+.dropzone-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.dropzone-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.dropzone-thumb {
+  width: 54px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+}
+
+.dropzone-filename {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

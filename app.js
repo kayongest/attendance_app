@@ -56,6 +56,24 @@
     checkpointTab: 'all',
     checkpointSearch: '',
 
+    // Stocks & Warehouses CRUD Manager
+    stockManager: {
+      activeTab: 'warehouses',
+      warehouses: [],
+      items: [],
+      categories: [],
+      stats: {
+        total_warehouses: 0,
+        total_items: 0,
+        available_count: 0,
+        in_use_count: 0,
+      },
+      whSearch: '',
+      itemSearch: '',
+      categoryFilter: 'all',
+      locationFilter: 'all',
+    },
+
     // User Activity Timeline pagination (5 items per page)
     timelineSearch: '',
     timelineScope: 'all',
@@ -303,6 +321,7 @@
       events: document.getElementById('screen-events'),
       attendees: document.getElementById('screen-attendees'),
       analytics: document.getElementById('screen-analytics'),
+      'stock-manager': document.getElementById('screen-stock-manager'),
     };
     Object.keys(screens).forEach((k) => {
       if (screens[k]) {
@@ -329,9 +348,14 @@
       events: 'Venues & Stock Gates',
       attendees: 'Staff ID Badges & Gate Terminal (#pane-kiosk)',
       analytics: 'Stock Batch Approvals & 4-Tier Access Matrix',
+      'stock-manager': 'Stocks & Warehouses Inventory Manager',
     };
     const bc = document.getElementById('breadcrumb-page');
     if (bc) bc.textContent = pageTitles[screenKey] || 'Gate Dashboard';
+
+    if (screenKey === 'stock-manager') {
+      loadStockManagerData();
+    }
 
     if (scrollToId) {
       setTimeout(() => {
@@ -1283,6 +1307,511 @@
   }
 
   // =========================================================================
+  // STOCKS & WAREHOUSES CRUD MANAGER
+  // =========================================================================
+
+  async function loadStockManagerData() {
+    try {
+      const res = await fetch('api.php?action=list_stock_manager');
+      const data = await res.json();
+      if (!data || !data.ok) return;
+
+      state.stockManager.warehouses = Array.isArray(data.warehouses) ? data.warehouses : [];
+      state.stockManager.items = Array.isArray(data.stock_items) ? data.stock_items : [];
+      state.stockManager.categories = Array.isArray(data.categories) ? data.categories : [];
+      state.stockManager.stats = data.stats || {
+        total_warehouses: state.stockManager.warehouses.length,
+        total_items: state.stockManager.items.length,
+        available_count: 0,
+        in_use_count: 0,
+      };
+
+      // Update sidebar badge
+      const sideBadge = document.getElementById('sidebar-stock-count');
+      if (sideBadge) {
+        const whCount = String(state.stockManager.stats.total_warehouses || 0).padStart(2, '0');
+        const itCount = String(state.stockManager.stats.total_items || 0).padStart(2, '0');
+        sideBadge.textContent = `${whCount}/${itCount}`;
+      }
+
+      // Update top KPI cards
+      const elWh = document.getElementById('sm-stat-warehouses');
+      const elIt = document.getElementById('sm-stat-items');
+      const elAv = document.getElementById('sm-stat-available');
+      const elIn = document.getElementById('sm-stat-inuse');
+      if (elWh) elWh.textContent = state.stockManager.stats.total_warehouses;
+      if (elIt) elIt.textContent = state.stockManager.stats.total_items;
+      if (elAv) elAv.textContent = state.stockManager.stats.available_count;
+      if (elIn) elIn.textContent = state.stockManager.stats.in_use_count;
+
+      renderStockManager();
+    } catch (err) {
+      console.error('Failed to load stock manager data:', err);
+    }
+  }
+
+  function renderStockManager() {
+    const isWh = state.stockManager.activeTab === 'warehouses';
+
+    // Update segmented tab buttons
+    document.querySelectorAll('.js-sm-tab-btn').forEach((btn) => {
+      const tab = btn.getAttribute('data-tab');
+      btn.classList.toggle('active', tab === state.stockManager.activeTab);
+    });
+
+    const whSection = document.getElementById('sm-warehouses-section');
+    const itemsSection = document.getElementById('sm-items-section');
+
+    if (whSection && itemsSection) {
+      if (isWh) {
+        whSection.style.display = 'block';
+        itemsSection.style.display = 'none';
+        renderWarehousesGrid();
+      } else {
+        whSection.style.display = 'none';
+        itemsSection.style.display = 'block';
+        renderStockItemsTable();
+      }
+    }
+
+    // Populate category dropdown
+    const catSelect = document.getElementById('sm-category-filter');
+    if (catSelect && catSelect.children.length <= 1) {
+      const currentCat = state.stockManager.categoryFilter;
+      catSelect.innerHTML =
+        `<option value="all">All Categories</option>` +
+        state.stockManager.categories
+          .map((c) => `<option value="${escapeHtml(c)}" ${currentCat === c ? 'selected' : ''}>${escapeHtml(c)}</option>`)
+          .join('');
+    }
+
+    // Populate location dropdown in stock item filters
+    const locFilter = document.getElementById('sm-location-filter');
+    if (locFilter && locFilter.children.length <= 1) {
+      const currentLoc = state.stockManager.locationFilter;
+      locFilter.innerHTML =
+        `<option value="all">All Warehouses</option>` +
+        state.stockManager.warehouses
+          .map((w) => `<option value="${escapeHtml(w.name)}" ${currentLoc === w.name ? 'selected' : ''}>${escapeHtml(w.name)}</option>`)
+          .join('');
+    }
+
+    // Populate warehouse dropdown in stock item form
+    const formWhSelect = document.getElementById('item-modal-warehouse');
+    if (formWhSelect) {
+      formWhSelect.innerHTML = state.stockManager.warehouses
+        .map((w) => `<option value="${escapeHtml(w.name)}">${escapeHtml(w.name)} (${escapeHtml(w.code)})</option>`)
+        .join('');
+    }
+  }
+
+  function renderWarehousesGrid() {
+    const grid = document.getElementById('sm-warehouses-grid');
+    if (!grid) return;
+
+    const q = (state.stockManager.whSearch || '').toLowerCase().trim();
+    const list = state.stockManager.warehouses.filter((w) => {
+      if (!q) return true;
+      return (
+        (w.name || '').toLowerCase().includes(q) ||
+        (w.code || '').toLowerCase().includes(q) ||
+        (w.location || '').toLowerCase().includes(q) ||
+        (w.controller_name || '').toLowerCase().includes(q)
+      );
+    });
+
+    if (list.length === 0) {
+      grid.innerHTML = `
+        <div style="grid-column: 1 / -1; padding: 40px 20px; text-align: center; background: var(--bg-surface); border-radius: 8px; border: 1px dashed var(--border-color);">
+          <div style="font-size: 32px; margin-bottom: 8px;">🏬</div>
+          <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">No Warehouses Found</h4>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
+            ${q ? `No warehouses matching "${escapeHtml(q)}"` : 'Get started by creating your first warehouse facility.'}
+          </p>
+          <button type="button" class="btn btn-primary-38 js-trigger-add-wh">
+            <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+            <span>+ Add Warehouse Hub</span>
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = list
+      .map((w) => {
+        const bannerHtml = w.image
+          ? `<img src="${escapeHtml(w.image)}" alt="${escapeHtml(w.name)}" class="wh-card-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="wh-card-fallback-icon" style="display:none;">🏬</div>`
+          : `<div class="wh-card-fallback-icon">🏬</div>`;
+
+        const statusBadge = w.is_active
+          ? `<span class="status-badge status-badge-green-sm">Active Operational</span>`
+          : `<span class="status-badge status-badge-amber-sm">Inactive / Closed</span>`;
+
+        return `
+        <div class="wh-card">
+          <div class="wh-card-banner">
+            ${bannerHtml}
+            <div class="wh-card-badge-top">${statusBadge}</div>
+          </div>
+          <div class="wh-card-body">
+            <div class="wh-card-title-row">
+              <h3 class="wh-card-name">${escapeHtml(w.name)}</h3>
+              <span class="badge-code-primary">${escapeHtml(w.code)}</span>
+            </div>
+            <div class="wh-card-meta-line">
+              <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="opacity: 0.6;" />
+              <span>${escapeHtml(w.location)}</span>
+            </div>
+            <div class="wh-card-meta-line">
+              <img src="assets/clock-icon.svg" alt="" class="svg-icon" style="width: 12px; height: 12px; opacity: 0.6;" />
+              <span>Hours: ${escapeHtml(w.open_time)} – ${escapeHtml(w.close_time)}</span>
+            </div>
+            <div class="wh-card-controller-box">
+              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 2px;">
+                👤 ${escapeHtml(w.controller_name)}
+              </div>
+              <div style="color: var(--text-secondary); font-size: 11px;">
+                ${escapeHtml(w.controller_phone)} ${w.controller_email ? `· ${escapeHtml(w.controller_email)}` : ''}
+              </div>
+            </div>
+            <div class="wh-card-footer">
+              <span class="ts-mini-pill in">${w.item_count} items stored</span>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" class="btn btn-secondary-32-sm js-edit-wh-btn" data-wh-id="${w.id}">
+                  Edit
+                </button>
+                <button type="button" class="btn btn-secondary-32-sm js-delete-record-btn" data-del-type="warehouse" data-del-id="${w.id}" data-del-name="${escapeHtml(w.name)}" style="color: #dc2626;">
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+  }
+
+  function renderStockItemsTable() {
+    const rowsEl = document.getElementById('sm-items-rows');
+    const footerEl = document.getElementById('sm-results-footer');
+    if (!rowsEl) return;
+
+    const q = (state.stockManager.itemSearch || '').toLowerCase().trim();
+    const cat = state.stockManager.categoryFilter;
+    const loc = state.stockManager.locationFilter;
+
+    const list = state.stockManager.items.filter((it) => {
+      if (cat !== 'all' && it.category !== cat) return false;
+      if (loc !== 'all' && it.stock_location !== loc) return false;
+      if (!q) return true;
+      return (
+        (it.item_name || '').toLowerCase().includes(q) ||
+        (it.serial_number || '').toLowerCase().includes(q) ||
+        (it.brand || '').toLowerCase().includes(q) ||
+        (it.model || '').toLowerCase().includes(q) ||
+        (it.notes || '').toLowerCase().includes(q)
+      );
+    });
+
+    if (footerEl) {
+      footerEl.textContent = `Showing ${list.length} of ${state.stockManager.items.length} inventory equipment items`;
+    }
+
+    if (list.length === 0) {
+      rowsEl.innerHTML = `
+        <div style="padding: 40px 20px; text-align: center; background: var(--bg-surface);">
+          <div style="font-size: 32px; margin-bottom: 8px;">📦</div>
+          <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">No Equipment Items Found</h4>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
+            ${q || cat !== 'all' || loc !== 'all' ? 'Try adjusting your search terms or filters.' : 'Add your first piece of stock inventory.'}
+          </p>
+          <button type="button" class="btn btn-primary-38 js-trigger-add-item">
+            <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+            <span>+ Add Stock Item</span>
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    const condBadges = {
+      good: '<span class="status-badge status-badge-green-sm">Good</span>',
+      fair: '<span class="status-badge status-badge-blue-sm">Fair</span>',
+      maintenance: '<span class="status-badge status-badge-amber-sm">Repair</span>',
+      damaged: '<span class="status-badge status-badge-red-sm">Damaged</span>',
+    };
+
+    const statusBadges = {
+      available: '<span class="status-badge status-badge-green-sm">Available</span>',
+      in_use: '<span class="status-badge status-badge-amber-sm">In Use</span>',
+      maintenance: '<span class="status-badge status-badge-red-sm">Maintenance</span>',
+    };
+
+    rowsEl.innerHTML = list
+      .map((it) => {
+        const thumbHtml = it.image
+          ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.item_name)}" class="stock-thumb-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" /><span class="stock-thumb-placeholder" style="display:none;">📦</span>`
+          : `<span class="stock-thumb-placeholder">📦</span>`;
+
+        return `
+        <div class="stock-item-row" data-item-id="${it.id}">
+          <div class="stock-item-identity">
+            <div class="stock-thumb-wrap">
+              ${thumbHtml}
+            </div>
+            <div class="stock-name-stack">
+              <span class="stock-item-title" title="${escapeHtml(it.item_name)}">${escapeHtml(it.item_name)}</span>
+              <span class="stock-item-notes">${escapeHtml(it.notes || 'No notes specified')}</span>
+            </div>
+          </div>
+          <div style="width: 170px; display: flex; flex-direction: column; gap: 2px;">
+            <span class="badge-code-primary">${escapeHtml(it.serial_number)}</span>
+            <span style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(it.brand || '')} ${escapeHtml(it.model || '')}</span>
+          </div>
+          <div style="width: 140px; display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 12px; font-weight: 600;">${escapeHtml(it.category)}</span>
+            <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(it.department || 'Warehouse')}</span>
+          </div>
+          <div style="width: 160px; display: flex; align-items: center; gap: 6px;">
+            <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="opacity: 0.6;" />
+            <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              ${escapeHtml(it.stock_location)}
+            </span>
+          </div>
+          <div style="width: 110px; display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-size: 12px; font-weight: 700;">Qty: ${it.quantity}</span>
+            <div>${condBadges[it.condition] || condBadges.good}</div>
+          </div>
+          <div style="width: 110px;">
+            ${statusBadges[it.status] || statusBadges.available}
+          </div>
+          <div style="width: 100px; display: flex; justify-content: flex-end; gap: 6px;">
+            <button type="button" class="btn btn-secondary-32-sm js-edit-item-btn" data-item-id="${it.id}">
+              Edit
+            </button>
+            <button type="button" class="btn btn-secondary-32-sm js-delete-record-btn" data-del-type="item" data-del-id="${it.id}" data-del-name="${escapeHtml(it.item_name)}" style="color: #dc2626;">
+              Delete
+            </button>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+  }
+
+  function openWarehouseModal(warehouseId = null) {
+    const modal = document.getElementById('warehouse-crud-modal');
+    if (!modal) return;
+    const form = document.getElementById('warehouse-crud-form');
+    if (form) form.reset();
+
+    const titleEl = document.getElementById('wh-modal-title');
+    const idInput = document.getElementById('wh-modal-id');
+    const nameInput = document.getElementById('wh-modal-name');
+    const codeInput = document.getElementById('wh-modal-code');
+    const statusSelect = document.getElementById('wh-modal-status');
+    const locInput = document.getElementById('wh-modal-location');
+    const openTimeInput = document.getElementById('wh-modal-opentime');
+    const closeTimeInput = document.getElementById('wh-modal-closetime');
+    const ctrlInput = document.getElementById('wh-modal-controller');
+    const phoneInput = document.getElementById('wh-modal-phone');
+
+    // Reset dropzone
+    resetDropzone('wh');
+
+    if (warehouseId) {
+      const wh = state.stockManager.warehouses.find((w) => Number(w.id) === Number(warehouseId));
+      if (wh) {
+        if (titleEl) titleEl.textContent = 'Edit Warehouse Facility';
+        if (idInput) idInput.value = wh.id;
+        if (nameInput) nameInput.value = wh.name || '';
+        if (codeInput) codeInput.value = wh.code || '';
+        if (statusSelect) statusSelect.value = String(wh.is_active ?? 1);
+        if (locInput) locInput.value = wh.location || '';
+        if (openTimeInput) openTimeInput.value = (wh.open_time || '08:00').slice(0, 5);
+        if (closeTimeInput) closeTimeInput.value = (wh.close_time || '18:00').slice(0, 5);
+        if (ctrlInput) ctrlInput.value = wh.controller_name || '';
+        if (phoneInput) phoneInput.value = wh.controller_phone || '';
+
+        if (wh.image) {
+          setDropzonePreview('wh', wh.image, wh.image.split('/').pop());
+        }
+      }
+    } else {
+      if (titleEl) titleEl.textContent = 'Add New Warehouse';
+      if (idInput) idInput.value = '0';
+      if (openTimeInput) openTimeInput.value = '08:00';
+      if (closeTimeInput) closeTimeInput.value = '18:00';
+      if (ctrlInput) ctrlInput.value = 'Mirene Uwase';
+    }
+
+    modal.classList.add('open');
+  }
+
+  function openStockItemModal(itemId = null) {
+    const modal = document.getElementById('stock-item-crud-modal');
+    if (!modal) return;
+    const form = document.getElementById('stock-item-crud-form');
+    if (form) form.reset();
+
+    const titleEl = document.getElementById('item-modal-title');
+    const idInput = document.getElementById('item-modal-id');
+    const nameInput = document.getElementById('item-modal-name');
+    const serialInput = document.getElementById('item-modal-serial');
+    const catSelect = document.getElementById('item-modal-category');
+    const brandInput = document.getElementById('item-modal-brand');
+    const modelInput = document.getElementById('item-modal-model');
+    const whSelect = document.getElementById('item-modal-warehouse');
+    const qtyInput = document.getElementById('item-modal-qty');
+    const condSelect = document.getElementById('item-modal-condition');
+    const statusSelect = document.getElementById('item-modal-status');
+    const notesInput = document.getElementById('item-modal-notes');
+
+    // Reset dropzone
+    resetDropzone('item');
+
+    // Populate warehouses in form select if needed
+    if (whSelect && state.stockManager.warehouses.length > 0) {
+      whSelect.innerHTML = state.stockManager.warehouses
+        .map((w) => `<option value="${escapeHtml(w.name)}">${escapeHtml(w.name)} (${escapeHtml(w.code)})</option>`)
+        .join('');
+    }
+
+    if (itemId) {
+      const it = state.stockManager.items.find((i) => Number(i.id) === Number(itemId));
+      if (it) {
+        if (titleEl) titleEl.textContent = 'Edit Stock Equipment Item';
+        if (idInput) idInput.value = it.id;
+        if (nameInput) nameInput.value = it.item_name || '';
+        if (serialInput) serialInput.value = it.serial_number || '';
+        if (catSelect) catSelect.value = it.category || 'Audio';
+        if (brandInput) brandInput.value = it.brand || '';
+        if (modelInput) modelInput.value = it.model || '';
+        if (whSelect) whSelect.value = it.stock_location || (state.stockManager.warehouses[0]?.name || '');
+        if (qtyInput) qtyInput.value = it.quantity || 1;
+        if (condSelect) condSelect.value = it.condition || 'good';
+        if (statusSelect) statusSelect.value = it.status || 'available';
+        if (notesInput) notesInput.value = it.notes || '';
+
+        if (it.image) {
+          setDropzonePreview('item', it.image, it.image.split('/').pop());
+        }
+      }
+    } else {
+      if (titleEl) titleEl.textContent = 'Add New Stock Item';
+      if (idInput) idInput.value = '0';
+      if (qtyInput) qtyInput.value = 1;
+      if (condSelect) condSelect.value = 'good';
+      if (statusSelect) statusSelect.value = 'available';
+    }
+
+    modal.classList.add('open');
+  }
+
+  function openDeleteModal(type, id, name) {
+    const modal = document.getElementById('confirm-delete-modal');
+    if (!modal) return;
+    const typeInput = document.getElementById('delete-target-type');
+    const idInput = document.getElementById('delete-target-id');
+    const descEl = document.getElementById('delete-modal-desc');
+
+    if (typeInput) typeInput.value = type;
+    if (idInput) idInput.value = id;
+    if (descEl) {
+      descEl.textContent = `Are you sure you want to delete ${type === 'warehouse' ? 'warehouse facility' : 'stock item'} "${name}"? This will permanently remove it from MySQL.`;
+    }
+
+    modal.classList.add('open');
+  }
+
+  // Dropzone helper utilities
+  function resetDropzone(prefix) {
+    const fileInput = document.getElementById(`${prefix}-modal-image`);
+    const promptEl = document.getElementById(`${prefix}-dropzone-prompt`);
+    const previewEl = document.getElementById(`${prefix}-dropzone-preview`);
+    const previewImg = document.getElementById(`${prefix}-preview-img`);
+    const filenameEl = document.getElementById(`${prefix}-preview-filename`);
+
+    if (fileInput) fileInput.value = '';
+    if (promptEl) promptEl.style.display = 'flex';
+    if (previewEl) previewEl.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+    if (filenameEl) filenameEl.textContent = '';
+  }
+
+  function setDropzonePreview(prefix, imgSrc, filename) {
+    const promptEl = document.getElementById(`${prefix}-dropzone-prompt`);
+    const previewEl = document.getElementById(`${prefix}-dropzone-preview`);
+    const previewImg = document.getElementById(`${prefix}-preview-img`);
+    const filenameEl = document.getElementById(`${prefix}-preview-filename`);
+
+    if (promptEl) promptEl.style.display = 'none';
+    if (previewEl) previewEl.style.display = 'flex';
+    if (previewImg) previewImg.src = imgSrc;
+    if (filenameEl) filenameEl.textContent = filename || 'Existing image';
+  }
+
+  function setupDropzoneEvents(prefix) {
+    const dropzone = document.getElementById(`${prefix}-dropzone`);
+    const fileInput = document.getElementById(`${prefix}-modal-image`);
+    const removeBtn = document.getElementById(`${prefix}-remove-image-btn`);
+
+    if (!dropzone || !fileInput) return;
+
+    dropzone.addEventListener('click', (e) => {
+      if (e.target.closest(`#${prefix}-remove-image-btn`)) return;
+      fileInput.click();
+    });
+
+    ['dragenter', 'dragover'].forEach((evt) => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach((evt) => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        fileInput.files = e.dataTransfer.files;
+        handleFileSelect(fileInput.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files && fileInput.files[0]) {
+        handleFileSelect(fileInput.files[0]);
+      }
+    });
+
+    function handleFileSelect(file) {
+      if (!file.type.startsWith('image/')) {
+        showToast('Please select a valid image file (JPG, PNG, WEBP)');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setDropzonePreview(prefix, e.target.result, file.name);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    if (removeBtn) {
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+      });
+    }
+  }
+
+  // =========================================================================
   // EVENT LISTENERS
   // =========================================================================
 
@@ -1666,6 +2195,46 @@
           switchScreen('attendees', 'pane-kiosk');
           renderAll();
         }
+        return;
+      }
+
+      // 10. Stock Manager: Edit Warehouse
+      const editWhBtn = e.target.closest('.js-edit-wh-btn');
+      if (editWhBtn) {
+        openWarehouseModal(Number(editWhBtn.getAttribute('data-wh-id')));
+        return;
+      }
+
+      // 11. Stock Manager: Add Warehouse shortcut
+      const trigAddWh = e.target.closest('.js-trigger-add-wh');
+      if (trigAddWh) {
+        openWarehouseModal();
+        return;
+      }
+
+      // 12. Stock Manager: Edit Item
+      const editItemBtn = e.target.closest('.js-edit-item-btn');
+      if (editItemBtn) {
+        openStockItemModal(Number(editItemBtn.getAttribute('data-item-id')));
+        return;
+      }
+
+      // 13. Stock Manager: Add Item shortcut
+      const trigAddItem = e.target.closest('.js-trigger-add-item');
+      if (trigAddItem) {
+        openStockItemModal();
+        return;
+      }
+
+      // 14. Stock Manager: Delete Record
+      const delBtn = e.target.closest('.js-delete-record-btn');
+      if (delBtn) {
+        openDeleteModal(
+          delBtn.getAttribute('data-del-type'),
+          delBtn.getAttribute('data-del-id'),
+          delBtn.getAttribute('data-del-name')
+        );
+        return;
       }
     });
 
@@ -2008,6 +2577,214 @@
       });
     });
 
+    // -----------------------------------------------------------------------
+    // STOCKS & WAREHOUSES MANAGER EVENT BINDINGS
+    // -----------------------------------------------------------------------
+
+    // Segmented tabs toggle
+    document.querySelectorAll('.js-sm-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-tab');
+        state.stockManager.activeTab = tab;
+        renderStockManager();
+      });
+    });
+
+    // Search and filter listeners
+    const whSearch = document.getElementById('sm-wh-search-input');
+    if (whSearch) {
+      whSearch.addEventListener('input', (e) => {
+        state.stockManager.whSearch = e.target.value;
+        renderWarehousesGrid();
+      });
+    }
+
+    const itemSearch = document.getElementById('sm-item-search-input');
+    if (itemSearch) {
+      itemSearch.addEventListener('input', (e) => {
+        state.stockManager.itemSearch = e.target.value;
+        renderStockItemsTable();
+      });
+    }
+
+    const catFilter = document.getElementById('sm-category-filter');
+    if (catFilter) {
+      catFilter.addEventListener('change', (e) => {
+        state.stockManager.categoryFilter = e.target.value;
+        renderStockItemsTable();
+      });
+    }
+
+    const locFilter = document.getElementById('sm-location-filter');
+    if (locFilter) {
+      locFilter.addEventListener('change', (e) => {
+        state.stockManager.locationFilter = e.target.value;
+        renderStockItemsTable();
+      });
+    }
+
+    // Modal open buttons
+    const addWhBtn = document.getElementById('open-add-warehouse-btn');
+    if (addWhBtn) addWhBtn.addEventListener('click', () => openWarehouseModal());
+
+    const addItemBtn = document.getElementById('open-add-stock-btn');
+    if (addItemBtn) addItemBtn.addEventListener('click', () => openStockItemModal());
+
+    // Modal close buttons
+    const closeWhBtn = document.getElementById('close-wh-modal');
+    if (closeWhBtn) {
+      closeWhBtn.addEventListener('click', () => {
+        document.getElementById('warehouse-crud-modal')?.classList.remove('open');
+      });
+    }
+
+    const closeItemBtn = document.getElementById('close-item-modal');
+    if (closeItemBtn) {
+      closeItemBtn.addEventListener('click', () => {
+        document.getElementById('stock-item-crud-modal')?.classList.remove('open');
+      });
+    }
+
+    const cancelDelBtn = document.getElementById('cancel-delete-btn');
+    if (cancelDelBtn) {
+      cancelDelBtn.addEventListener('click', () => {
+        document.getElementById('confirm-delete-modal')?.classList.remove('open');
+      });
+    }
+
+    // Initialize dropzones
+    setupDropzoneEvents('wh');
+    setupDropzoneEvents('item');
+
+    // Warehouse CRUD Form Submit
+    const whForm = document.getElementById('warehouse-crud-form');
+    if (whForm) {
+      whForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const saveBtn = document.getElementById('save-wh-btn');
+        if (saveBtn) saveBtn.disabled = true;
+
+        const fd = new FormData();
+        fd.append('id', document.getElementById('wh-modal-id').value);
+        fd.append('name', document.getElementById('wh-modal-name').value);
+        fd.append('code', document.getElementById('wh-modal-code').value);
+        fd.append('is_active', document.getElementById('wh-modal-status').value);
+        fd.append('location', document.getElementById('wh-modal-location').value);
+        fd.append('open_time', document.getElementById('wh-modal-opentime').value);
+        fd.append('close_time', document.getElementById('wh-modal-closetime').value);
+        fd.append('controller_name', document.getElementById('wh-modal-controller').value);
+        fd.append('controller_phone', document.getElementById('wh-modal-phone').value);
+
+        const fileInput = document.getElementById('wh-modal-image');
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+          fd.append('image', fileInput.files[0]);
+        }
+
+        try {
+          const res = await fetch('api.php?action=save_warehouse', {
+            method: 'POST',
+            body: fd,
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            showToast(data.message || 'Warehouse saved successfully');
+            document.getElementById('warehouse-crud-modal')?.classList.remove('open');
+            await loadStockManagerData();
+            await fetchBootstrap(false);
+          } else {
+            showToast(data.error || 'Failed to save warehouse');
+          }
+        } catch (err) {
+          showToast('Error communicating with server');
+        } finally {
+          if (saveBtn) saveBtn.disabled = false;
+        }
+      });
+    }
+
+    // Stock Item CRUD Form Submit
+    const itemForm = document.getElementById('stock-item-crud-form');
+    if (itemForm) {
+      itemForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const saveBtn = document.getElementById('save-item-btn');
+        if (saveBtn) saveBtn.disabled = true;
+
+        const cat = document.getElementById('item-modal-category').value;
+        const fd = new FormData();
+        fd.append('id', document.getElementById('item-modal-id').value);
+        fd.append('item_name', document.getElementById('item-modal-name').value);
+        fd.append('serial_number', document.getElementById('item-modal-serial').value);
+        fd.append('category', cat);
+        fd.append('brand', document.getElementById('item-modal-brand').value);
+        fd.append('model', document.getElementById('item-modal-model').value);
+        fd.append('department', cat);
+        fd.append('stock_location', document.getElementById('item-modal-warehouse').value);
+        fd.append('quantity', document.getElementById('item-modal-qty').value);
+        fd.append('condition', document.getElementById('item-modal-condition').value);
+        fd.append('status', document.getElementById('item-modal-status').value);
+        fd.append('notes', document.getElementById('item-modal-notes').value);
+
+        const fileInput = document.getElementById('item-modal-image');
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+          fd.append('image', fileInput.files[0]);
+        }
+
+        try {
+          const res = await fetch('api.php?action=save_stock_item', {
+            method: 'POST',
+            body: fd,
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            showToast(data.message || 'Stock item saved successfully');
+            document.getElementById('stock-item-crud-modal')?.classList.remove('open');
+            await loadStockManagerData();
+          } else {
+            showToast(data.error || 'Failed to save stock item');
+          }
+        } catch (err) {
+          showToast('Error communicating with server');
+        } finally {
+          if (saveBtn) saveBtn.disabled = false;
+        }
+      });
+    }
+
+    // Delete Confirmation Button
+    const confirmDelBtn = document.getElementById('confirm-delete-btn');
+    if (confirmDelBtn) {
+      confirmDelBtn.addEventListener('click', async () => {
+        const type = document.getElementById('delete-target-type').value;
+        const id = document.getElementById('delete-target-id').value;
+        if (!id) return;
+
+        const action = type === 'warehouse' ? 'delete_warehouse' : 'delete_stock_item';
+        confirmDelBtn.disabled = true;
+
+        try {
+          const res = await fetch(`api.php?action=${action}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: Number(id) }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            showToast(data.message || 'Record deleted successfully');
+            document.getElementById('confirm-delete-modal')?.classList.remove('open');
+            await loadStockManagerData();
+            if (type === 'warehouse') await fetchBootstrap(false);
+          } else {
+            showToast(data.error || 'Failed to delete record');
+          }
+        } catch (err) {
+          showToast('Error communicating with server');
+        } finally {
+          confirmDelBtn.disabled = false;
+        }
+      });
+    }
+
     // Support Center #pane-kiosk link
     const supLink = document.getElementById('support-center-link');
     if (supLink) {
@@ -2025,5 +2802,6 @@
       switchScreen('attendees', 'pane-kiosk');
     }
     await fetchBootstrap(false);
+    loadStockManagerData();
   });
 })();
