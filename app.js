@@ -80,6 +80,10 @@
     timelinePage: 1,
     timelinePerPage: 5,
 
+    // Crew Roster pagination (5 items per page)
+    directoryPage: 1,
+    directoryPerPage: 5,
+
     // Currently inspected batch in modal
     inspectedBatchId: null,
   };
@@ -896,6 +900,46 @@
       .join('');
   }
 
+  function renderPaginationControls(currentPage, totalPages) {
+    if (totalPages <= 1) return '';
+
+    let pageBtnsHtml = '';
+    for (let p = 1; p <= totalPages; p++) {
+      pageBtnsHtml += `
+        <button
+          type="button"
+          class="page-number-btn ${p === currentPage ? 'active' : ''} js-dir-page-btn"
+          data-page="${p}"
+          aria-label="Go to page ${p}"
+        >
+          ${p}
+        </button>
+      `;
+    }
+
+    return `
+      <button
+        type="button"
+        class="btn btn-secondary-32-sm js-dir-prev-btn"
+        ${currentPage <= 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}
+        aria-label="Previous Page"
+      >
+        <span>← Prev</span>
+      </button>
+      <div class="pagination-page-numbers" style="display:flex; align-items:center; gap:4px;">
+        ${pageBtnsHtml}
+      </div>
+      <button
+        type="button"
+        class="btn btn-secondary-32-sm js-dir-next-btn"
+        ${currentPage >= totalPages ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}
+        aria-label="Next Page"
+      >
+        <span>Next →</span>
+      </button>
+    `;
+  }
+
   function renderCrewTables() {
     const overviewRowsEl = document.getElementById('overview-attendee-rows');
     const overviewCountEl = document.getElementById('overview-results-count');
@@ -909,11 +953,36 @@
 
     const dirRowsEl = document.getElementById('directory-attendee-rows');
     const dirCountEl = document.getElementById('directory-results-count');
+    const dirPaginationEl = document.getElementById('directory-page-controls');
     if (dirRowsEl) {
       const dirList = filterCrewList(state.directoryTab, state.directorySearch);
-      dirRowsEl.innerHTML = renderCrewRowsHtml(dirList);
+      const totalItems = dirList.length;
+      const perPage = state.directoryPerPage || 5;
+      const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+
+      if (state.directoryPage > totalPages) {
+        state.directoryPage = totalPages;
+      }
+      if (state.directoryPage < 1) {
+        state.directoryPage = 1;
+      }
+
+      const startIndex = (state.directoryPage - 1) * perPage;
+      const endIndex = Math.min(startIndex + perPage, totalItems);
+      const pagedList = dirList.slice(startIndex, endIndex);
+
+      dirRowsEl.innerHTML = renderCrewRowsHtml(pagedList);
+
       if (dirCountEl) {
-        dirCountEl.textContent = `Showing ${dirList.length} of ${state.crew.length} badged production crew`;
+        if (totalItems === 0) {
+          dirCountEl.textContent = 'Showing 0 crew members';
+        } else {
+          dirCountEl.textContent = `Showing ${startIndex + 1}–${endIndex} of ${totalItems} badged crew (Page ${state.directoryPage} of ${totalPages})`;
+        }
+      }
+
+      if (dirPaginationEl) {
+        dirPaginationEl.innerHTML = renderPaginationControls(state.directoryPage, totalPages);
       }
     }
   }
@@ -2222,6 +2291,35 @@
         return;
       }
 
+      // 0c. Directory Table Pagination: Prev button
+      const dirPrevBtn = e.target.closest('.js-dir-prev-btn');
+      if (dirPrevBtn && !dirPrevBtn.hasAttribute('disabled')) {
+        if (state.directoryPage > 1) {
+          state.directoryPage--;
+          renderCrewTables();
+        }
+        return;
+      }
+
+      // 0d. Directory Table Pagination: Next button
+      const dirNextBtn = e.target.closest('.js-dir-next-btn');
+      if (dirNextBtn && !dirNextBtn.hasAttribute('disabled')) {
+        state.directoryPage++;
+        renderCrewTables();
+        return;
+      }
+
+      // 0e. Directory Table Pagination: Specific Page Number button
+      const dirPageBtn = e.target.closest('.js-dir-page-btn');
+      if (dirPageBtn) {
+        const targetPage = Number(dirPageBtn.getAttribute('data-page'));
+        if (targetPage && targetPage !== state.directoryPage) {
+          state.directoryPage = targetPage;
+          renderCrewTables();
+        }
+        return;
+      }
+
       // 1. Paired Checkin / Checkout button in Crew Roster table
       const gateBtn = e.target.closest('.js-row-gate-action');
       if (gateBtn) {
@@ -2418,6 +2516,7 @@
         const tab = e.target.closest('.status-tab[data-tab]');
         if (!tab) return;
         state.directoryTab = tab.getAttribute('data-tab');
+        state.directoryPage = 1;
         dirTabs.querySelectorAll('.status-tab').forEach((t) => t.classList.toggle('active', t === tab));
         renderCrewTables();
       });
@@ -2449,6 +2548,7 @@
     if (dirSearch) {
       dirSearch.addEventListener('input', (e) => {
         state.directorySearch = e.target.value;
+        state.directoryPage = 1;
         renderCrewTables();
         renderSearchSuggestions(e.target.value);
 
@@ -2527,6 +2627,7 @@
         btn.addEventListener('click', () => {
           const idx = (TIER_CYCLE.indexOf(state.tierFilter) + 1) % TIER_CYCLE.length;
           state.tierFilter = TIER_CYCLE[idx];
+          state.directoryPage = 1;
           const lbl = state.tierFilter === 'all' ? 'Clearance: All Tiers' : `Clearance: Tier ${state.tierFilter}`;
           ['overview-ticket-filter-label', 'directory-ticket-filter-label'].forEach((lid) => {
             const el = document.getElementById(lid);
@@ -2543,6 +2644,7 @@
         btn.addEventListener('click', () => {
           const idx = (GATE_STATE_CYCLE.indexOf(state.gateStateFilter) + 1) % GATE_STATE_CYCLE.length;
           state.gateStateFilter = GATE_STATE_CYCLE[idx];
+          state.directoryPage = 1;
           const lbl =
             state.gateStateFilter === 'all'
               ? 'Gate State: All'
