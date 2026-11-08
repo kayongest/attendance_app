@@ -636,6 +636,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'punctuality' => $uDaily['punctuality_label'] ?? 'READY',
             'last_checkpoint_type' => $uDaily['last_checkpoint_type'] ?? null,
             'last_checkpoint_name' => $uDaily['last_checkpoint_name'] ?? null,
+            'is_active' => (int) ($ur['is_active'] ?? 1),
             'linked_batches' => $linkedBatches,
         ];
 
@@ -1354,6 +1355,139 @@ try {
             $del->execute([$id]);
         }
         echo json_encode(['ok' => true, 'message' => 'Stock item deleted']);
+        exit;
+    }
+
+    if ($action === 'save_user') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $fullName = trim((string) ($_POST['full_name'] ?? $jsonBody['full_name'] ?? ''));
+        $username = trim((string) ($_POST['username'] ?? $jsonBody['username'] ?? ''));
+        $email = trim((string) ($_POST['email'] ?? $jsonBody['email'] ?? ''));
+        $phone = trim((string) ($_POST['phone'] ?? $jsonBody['phone'] ?? ''));
+        $role = trim((string) ($_POST['role'] ?? $jsonBody['role'] ?? 'technician'));
+        $department = trim((string) ($_POST['department'] ?? $jsonBody['department'] ?? 'Audio'));
+        $clearanceLevel = trim((string) ($_POST['clearance_level'] ?? $jsonBody['clearance_level'] ?? 'L2_TECH_STAGE'));
+        $stockAccessMode = trim((string) ($_POST['stock_access_mode'] ?? $jsonBody['stock_access_mode'] ?? 'assigned_only'));
+        $venueAccessMode = trim((string) ($_POST['venue_access_mode'] ?? $jsonBody['venue_access_mode'] ?? 'all'));
+        $badgeCode = trim((string) ($_POST['badge_code'] ?? $jsonBody['badge_code'] ?? ''));
+        $rfidUid = trim((string) ($_POST['rfid_uid'] ?? $jsonBody['rfid_uid'] ?? ''));
+        $badgeStatus = trim((string) ($_POST['badge_status'] ?? $jsonBody['badge_status'] ?? 'active'));
+        $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (int) ($jsonBody['is_active'] ?? 1);
+
+        if ($fullName === '') {
+            echo json_encode(['ok' => false, 'error' => 'Full name is required']);
+            exit;
+        }
+
+        if ($username === '') {
+            $username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $fullName));
+            if ($username === '') $username = 'user' . time();
+        }
+
+        // Check for duplicate username
+        $checkUser = $pdo->prepare("SELECT `id` FROM `users` WHERE `username` = ? AND `id` != ?");
+        $checkUser->execute([$username, $id]);
+        if ($checkUser->fetch()) {
+            $username .= '_' . rand(10, 99);
+        }
+
+        // Handle profile photo upload
+        $uploadedImagePath = null;
+        if (!empty($_FILES['profile_image']['tmp_name']) && is_uploaded_file($_FILES['profile_image']['tmp_name'])) {
+            $ext = strtolower(pathinfo($_FILES['profile_image']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+                $dir = __DIR__ . '/uploads/profiles';
+                if (!is_dir($dir)) mkdir($dir, 0777, true);
+                $fileName = 'profile_' . time() . '_' . substr(md5(uniqid()), 0, 8) . '.' . $ext;
+                $dest = $dir . '/' . $fileName;
+                if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $dest)) {
+                    $uploadedImagePath = 'uploads/profiles/' . $fileName;
+                }
+            }
+        }
+
+        if ($id > 0) {
+            if ($uploadedImagePath) {
+                $stmt = $pdo->prepare("
+                    UPDATE `users`
+                    SET `username` = ?, `full_name` = ?, `email` = ?, `phone` = ?, `role` = ?, `department` = ?, `profile_image` = ?, `is_active` = ?
+                    WHERE `id` = ?
+                ");
+                $stmt->execute([$username, $fullName, $email, $phone, $role, $department, $uploadedImagePath, $isActive, $id]);
+            } else {
+                $stmt = $pdo->prepare("
+                    UPDATE `users`
+                    SET `username` = ?, `full_name` = ?, `email` = ?, `phone` = ?, `role` = ?, `department` = ?, `is_active` = ?
+                    WHERE `id` = ?
+                ");
+                $stmt->execute([$username, $fullName, $email, $phone, $role, $department, $isActive, $id]);
+            }
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO `users`
+                (`username`, `full_name`, `email`, `phone`, `role`, `department`, `profile_image`, `is_active`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([$username, $fullName, $email, $phone, $role, $department, $uploadedImagePath, $isActive]);
+            $id = (int) $pdo->lastInsertId();
+        }
+
+        // Ensure badge values
+        if ($badgeCode === '') {
+            $badgeCode = 'REW-BADGE-' . str_pad((string) $id, 4, '0', STR_PAD_LEFT);
+        }
+        if ($rfidUid === '') {
+            $rfidUid = 'RFID-88' . str_pad((string) $id, 2, '0', STR_PAD_LEFT);
+        }
+
+        // Prevent duplicate badge_code
+        $checkBadge = $pdo->prepare("SELECT `id` FROM `user_badges` WHERE `badge_code` = ? AND `user_id` != ?");
+        $checkBadge->execute([$badgeCode, $id]);
+        if ($checkBadge->fetch()) {
+            $badgeCode .= '-' . rand(10, 99);
+        }
+
+        // Normalize clearance level
+        $tier = normalizeClearanceTier($clearanceLevel, $role);
+        $normClearance = $tier['key'];
+
+        // Save or update user_badges
+        $badgeCheck = $pdo->prepare("SELECT `id` FROM `user_badges` WHERE `user_id` = ?");
+        $badgeCheck->execute([$id]);
+        $existingBadge = $badgeCheck->fetch();
+
+        if ($existingBadge) {
+            $stmtB = $pdo->prepare("
+                UPDATE `user_badges`
+                SET `badge_code` = ?, `rfid_uid` = ?, `clearance_level` = ?, `stock_access_mode` = ?, `venue_access_mode` = ?, `badge_status` = ?
+                WHERE `user_id` = ?
+            ");
+            $stmtB->execute([$badgeCode, $rfidUid, $normClearance, $stockAccessMode, $venueAccessMode, $badgeStatus, $id]);
+        } else {
+            $stmtB = $pdo->prepare("
+                INSERT INTO `user_badges`
+                (`user_id`, `badge_code`, `rfid_uid`, `clearance_level`, `stock_access_mode`, `venue_access_mode`, `badge_status`, `issued_at`, `expires_at`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR))
+            ");
+            $stmtB->execute([$id, $badgeCode, $rfidUid, $normClearance, $stockAccessMode, $venueAccessMode, $badgeStatus]);
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Personnel profile & permissions saved successfully',
+            'user_id' => $id,
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_user') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        if ($id > 0) {
+            $pdo->prepare("DELETE FROM `attendance_logs` WHERE `user_id` = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM `user_badges` WHERE `user_id` = ?")->execute([$id]);
+            $pdo->prepare("DELETE FROM `users` WHERE `id` = ?")->execute([$id]);
+        }
+        echo json_encode(['ok' => true, 'message' => 'User deleted successfully']);
         exit;
     }
 

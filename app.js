@@ -56,6 +56,14 @@
     checkpointTab: 'all',
     checkpointSearch: '',
 
+    // Users & Roles CRUD Manager
+    usersTab: 'all',
+    usersSearch: '',
+    usersFilterDept: 'all',
+    usersFilterTier: 'all',
+    usersPage: 1,
+    usersPerPage: 5,
+
     // Stocks & Warehouses CRUD Manager
     stockManager: {
       activeTab: 'warehouses',
@@ -323,6 +331,7 @@
     const screens = {
       overview: document.getElementById('screen-overview'),
       events: document.getElementById('screen-events'),
+      users: document.getElementById('screen-users'),
       attendees: document.getElementById('screen-attendees'),
       analytics: document.getElementById('screen-analytics'),
       'stock-manager': document.getElementById('screen-stock-manager'),
@@ -350,6 +359,7 @@
     const pageTitles = {
       overview: 'Gate Operations Dashboard',
       events: 'Venues & Stock Gates',
+      users: 'Staff, Technicians & Role Management',
       attendees: 'Staff ID Badges & Gate Terminal (#pane-kiosk)',
       analytics: 'Stock Batch Approvals & 4-Tier Access Matrix',
       'stock-manager': 'Stocks & Warehouses Inventory Manager',
@@ -359,6 +369,9 @@
 
     if (screenKey === 'stock-manager') {
       loadStockManagerData();
+    }
+    if (screenKey === 'users') {
+      renderUsersScreen();
     }
 
     if (scrollToId === 'pane-kiosk') {
@@ -389,6 +402,7 @@
     renderCheckpointsDirectory();
     renderBatchesAndMatrixScreen();
     renderRollCallModalList();
+    renderUsersScreen();
   }
 
   function renderTopbarAndKpis() {
@@ -400,6 +414,10 @@
     }
 
     const k = state.kpis;
+    const sideUserCount = document.getElementById('sidebar-users-count');
+    if (sideUserCount) {
+      sideUserCount.textContent = String(state.crew.length).padStart(2, '0');
+    }
     document.querySelectorAll('.js-kpi-active-badges').forEach((el) => {
       el.textContent = String(k.activeBadges ?? 14);
     });
@@ -1918,6 +1936,316 @@
     modal.classList.add('open');
   }
 
+  function openUserModal(userId = null) {
+    const modal = document.getElementById('user-crud-modal');
+    if (!modal) return;
+    const form = document.getElementById('user-crud-form');
+    if (form) form.reset();
+
+    const titleEl = document.getElementById('user-modal-title');
+    const idInput = document.getElementById('user-modal-id');
+    const nameInput = document.getElementById('user-modal-fullname');
+    const userInput = document.getElementById('user-modal-username');
+    const roleSelect = document.getElementById('user-modal-role');
+    const deptSelect = document.getElementById('user-modal-dept');
+    const phoneInput = document.getElementById('user-modal-phone');
+    const emailInput = document.getElementById('user-modal-email');
+    const clearanceSelect = document.getElementById('user-modal-clearance');
+    const stockAccessSelect = document.getElementById('user-modal-stock-access');
+    const venueAccessSelect = document.getElementById('user-modal-venue-access');
+    const badgeCodeInput = document.getElementById('user-modal-badge-code');
+    const rfidInput = document.getElementById('user-modal-rfid-uid');
+    const badgeStatusSelect = document.getElementById('user-modal-badge-status');
+    const activeCheck = document.getElementById('user-modal-active');
+
+    resetDropzone('user');
+
+    if (userId) {
+      const u = state.crew.find((c) => Number(c.id) === Number(userId));
+      if (u) {
+        if (titleEl) titleEl.textContent = 'Edit Personnel & Roles';
+        if (idInput) idInput.value = u.id;
+        if (nameInput) nameInput.value = u.full_name || '';
+        if (userInput) userInput.value = u.username || '';
+        if (roleSelect) roleSelect.value = u.role || 'technician';
+        if (deptSelect) deptSelect.value = u.department || 'Audio';
+        if (phoneInput) phoneInput.value = u.phone || '';
+        if (emailInput) emailInput.value = u.email || '';
+        if (clearanceSelect) clearanceSelect.value = u.clearance_level || 'L2_TECH_STAGE';
+        if (stockAccessSelect) stockAccessSelect.value = u.stock_access_mode || 'assigned_only';
+        if (venueAccessSelect) venueAccessSelect.value = u.venue_access_mode || 'all';
+        if (badgeCodeInput) badgeCodeInput.value = u.badge_code || '';
+        if (rfidInput) rfidInput.value = u.rfid_uid || '';
+        if (badgeStatusSelect) badgeStatusSelect.value = u.badge_status || 'active';
+        if (activeCheck) activeCheck.checked = Number(u.is_active ?? 1) === 1;
+
+        if (u.profile_image_url) {
+          setDropzonePreview('user', u.profile_image_url, u.profile_image_url.split('/').pop());
+        }
+      }
+    } else {
+      if (titleEl) titleEl.textContent = 'Add New Team Member';
+      if (idInput) idInput.value = '0';
+      if (roleSelect) roleSelect.value = 'technician';
+      if (deptSelect) deptSelect.value = 'Audio';
+      if (clearanceSelect) clearanceSelect.value = 'L2_TECH_STAGE';
+      if (stockAccessSelect) stockAccessSelect.value = 'assigned_only';
+      if (venueAccessSelect) venueAccessSelect.value = 'all';
+      if (badgeStatusSelect) badgeStatusSelect.value = 'active';
+      if (activeCheck) activeCheck.checked = true;
+
+      // Suggest next badge code
+      const nextId = state.crew.length > 0 ? Math.max(...state.crew.map((c) => Number(c.id))) + 1 : 1;
+      if (badgeCodeInput) badgeCodeInput.value = `REW-BADGE-${String(nextId).padStart(4, '0')}`;
+      if (rfidInput) rfidInput.value = `RFID-88${String(nextId).padStart(2, '0')}`;
+    }
+
+    modal.classList.add('open');
+  }
+
+  function exportUsersCsv() {
+    const list = state.crew || [];
+    if (list.length === 0) {
+      showToast('No users available to export');
+      return;
+    }
+    const headers = ['ID', 'Full Name', 'Username', 'Role', 'Department', 'Clearance Code', 'Clearance Title', 'Badge Code', 'RFID UID', 'Phone', 'Email', 'Status'];
+    const rows = list.map((u) => [
+      u.id,
+      `"${(u.full_name || '').replace(/"/g, '""')}"`,
+      `"${(u.username || '').replace(/"/g, '""')}"`,
+      `"${(u.role_display || u.role || '').replace(/"/g, '""')}"`,
+      `"${(u.department || '').replace(/"/g, '""')}"`,
+      `"${u.clearance_code || ''}"`,
+      `"${(u.clearance_short || '').replace(/"/g, '""')}"`,
+      `"${u.badge_code || ''}"`,
+      `"${u.rfid_uid || ''}"`,
+      `"${u.phone || ''}"`,
+      `"${u.email || ''}"`,
+      u.badge_status || 'active',
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Ability_Crew_Roster_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exported Crew Roster to CSV');
+  }
+
+  function renderUsersScreen() {
+    const tableBody = document.getElementById('users-table-body');
+    if (!tableBody) return;
+
+    const crew = Array.isArray(state.crew) ? state.crew : [];
+
+    // Update sidebar count
+    const sideUserCount = document.getElementById('sidebar-users-count');
+    if (sideUserCount) {
+      sideUserCount.textContent = String(crew.length).padStart(2, '0');
+    }
+
+    // Calculate metrics
+    const totalCount = crew.length;
+    const activeBadges = crew.filter((c) => c.badge_status === 'active').length;
+    const stockAuth = crew.filter((c) => c.clearance_code !== 'L1' && c.badge_status === 'active').length;
+    const uniqueDepts = Array.from(new Set(crew.map((c) => c.department).filter(Boolean)));
+    const deptCount = uniqueDepts.length;
+
+    const elTotal = document.getElementById('users-kpi-total');
+    const elActive = document.getElementById('users-kpi-active');
+    const elStock = document.getElementById('users-kpi-stock');
+    const elDepts = document.getElementById('users-kpi-depts');
+    const elBadge = document.getElementById('users-badge-count');
+
+    if (elTotal) elTotal.textContent = String(totalCount).padStart(2, '0');
+    if (elActive) elActive.textContent = String(activeBadges).padStart(2, '0');
+    if (elStock) elStock.textContent = String(stockAuth).padStart(2, '0');
+    if (elDepts) elDepts.textContent = String(deptCount).padStart(2, '0');
+    if (elBadge) elBadge.textContent = `${totalCount} Staff`;
+
+    // Tab counts
+    const techRoles = ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'stage_manager', 'rigging_lead'];
+    const stockRoles = ['stock_controller', 'stock_manager'];
+    const mgmtRoles = ['admin', 'project_manager', 'tech_lead', 'manager'];
+
+    const techCount = crew.filter((c) => techRoles.includes(c.role)).length;
+    const stockCtrlCount = crew.filter((c) => stockRoles.includes(c.role)).length;
+    const mgmtCount = crew.filter((c) => mgmtRoles.includes(c.role)).length;
+    const suspendedCount = crew.filter((c) => c.badge_status !== 'active' || Number(c.is_active) === 0).length;
+
+    const tabAll = document.getElementById('users-tab-count-all');
+    const tabTech = document.getElementById('users-tab-count-tech');
+    const tabStock = document.getElementById('users-tab-count-stock');
+    const tabMgmt = document.getElementById('users-tab-count-mgmt');
+    const tabSusp = document.getElementById('users-tab-count-suspended');
+
+    if (tabAll) tabAll.textContent = String(totalCount);
+    if (tabTech) tabTech.textContent = String(techCount);
+    if (tabStock) tabStock.textContent = String(stockCtrlCount);
+    if (tabMgmt) tabMgmt.textContent = String(mgmtCount);
+    if (tabSusp) tabSusp.textContent = String(suspendedCount);
+
+    // Populate Department dropdown filter if not already populated or changed
+    const deptFilterEl = document.getElementById('users-filter-dept');
+    if (deptFilterEl && deptFilterEl.options.length <= 1) {
+      uniqueDepts.sort().forEach((d) => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        deptFilterEl.appendChild(opt);
+      });
+    }
+
+    // Filtering
+    let filtered = crew.filter((c) => {
+      // Tab filter
+      if (state.usersTab === 'technicians' && !techRoles.includes(c.role)) return false;
+      if (state.usersTab === 'stock_controllers' && !stockRoles.includes(c.role)) return false;
+      if (state.usersTab === 'managers' && !mgmtRoles.includes(c.role)) return false;
+      if (state.usersTab === 'suspended' && c.badge_status === 'active' && Number(c.is_active) === 1) return false;
+
+      // Department filter
+      if (state.usersFilterDept !== 'all' && c.department !== state.usersFilterDept) return false;
+
+      // Clearance filter
+      if (state.usersFilterTier !== 'all' && c.clearance_code !== state.usersFilterTier) return false;
+
+      // Search query filter
+      if (state.usersSearch) {
+        const q = state.usersSearch.toLowerCase().trim();
+        const str = `${c.full_name} ${c.username} ${c.badge_code} ${c.rfid_uid} ${c.phone} ${c.email} ${c.role_display} ${c.department}`.toLowerCase();
+        if (!str.includes(q)) return false;
+      }
+
+      return true;
+    });
+
+    // Pagination
+    const totalItems = filtered.length;
+    const perPage = state.usersPerPage || 5;
+    const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+
+    if (state.usersPage > totalPages) state.usersPage = totalPages;
+    if (state.usersPage < 1) state.usersPage = 1;
+
+    const startIndex = (state.usersPage - 1) * perPage;
+    const endIndex = Math.min(startIndex + perPage, totalItems);
+    const pagedUsers = filtered.slice(startIndex, endIndex);
+
+    // Render Table Rows
+    if (pagedUsers.length === 0) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 36px 16px; color: var(--text-secondary); font-size: 13px;">
+            No personnel found matching the selected filter criteria.
+          </td>
+        </tr>
+      `;
+    } else {
+      tableBody.innerHTML = pagedUsers.map((c) => {
+        const isSusp = c.badge_status !== 'active' || Number(c.is_active) === 0;
+        const statusBadge = isSusp
+          ? `<span class="status-badge status-badge-red-sm">Suspended</span>`
+          : `<span class="status-badge status-badge-green-sm">Active</span>`;
+
+        const avatarHtml = c.profile_image_url
+          ? `<img src="${escapeHtml(c.profile_image_url)}" alt="${escapeHtml(c.full_name)}" class="user-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+             <div class="user-avatar-wrap" style="display:none;">${escapeHtml(c.initials)}</div>`
+          : `<div class="user-avatar-wrap">${escapeHtml(c.initials)}</div>`;
+
+        return `
+          <tr data-user-id="${c.id}">
+            <td>
+              <div class="user-identity-cell">
+                <div class="user-avatar-wrap" style="${c.profile_image_url ? 'padding: 0;' : ''}">
+                  ${avatarHtml}
+                </div>
+                <div class="user-name-stack">
+                  <span class="user-full-name">${escapeHtml(c.full_name)}</span>
+                  <span class="user-username">@${escapeHtml(c.username)}</span>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span style="font-weight: 600; font-size: 12px; color: var(--text-primary);">${escapeHtml(c.role_display)}</span>
+                <span class="dept-pill">${escapeHtml(c.department)}</span>
+              </div>
+            </td>
+            <td>
+              <span class="tier-pill-soft ${escapeHtml(c.clearance_code)}">
+                <span class="tier-code-badge tier-code-${escapeHtml(c.clearance_code)}">${escapeHtml(c.clearance_code)}</span>
+                <span>${escapeHtml(c.clearance_short)}</span>
+              </span>
+            </td>
+            <td>
+              <div class="user-badge-cell">
+                <span class="user-badge-code">${escapeHtml(c.badge_code)}</span>
+                <span class="user-rfid-uid">${escapeHtml(c.rfid_uid)}</span>
+              </div>
+            </td>
+            <td>
+              <div class="user-contact-cell">
+                <span class="user-phone">${escapeHtml(c.phone)}</span>
+                <span class="user-email">${escapeHtml(c.email)}</span>
+              </div>
+            </td>
+            <td>
+              ${statusBadge}
+            </td>
+            <td style="text-align: right;">
+              <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary-32-sm js-edit-user-btn" data-user-id="${c.id}" title="Edit User & Permissions">
+                  Edit
+                </button>
+                <button type="button" class="btn btn-secondary-32-sm js-delete-user-btn" data-user-id="${c.id}" data-user-name="${escapeHtml(c.full_name)}" style="color: #dc2626;" title="Delete User">
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Pagination Footer
+    const footerCount = document.getElementById('users-results-footer');
+    if (footerCount) {
+      if (totalItems === 0) {
+        footerCount.textContent = 'Showing 0 personnel';
+      } else {
+        footerCount.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalItems} personnel (Page ${state.usersPage} of ${totalPages})`;
+      }
+    }
+
+    const pageControls = document.getElementById('users-page-controls');
+    if (pageControls) {
+      let pageHtml = '';
+      pageHtml += `
+        <button type="button" class="btn btn-secondary-32-sm js-users-page-prev" ${state.usersPage <= 1 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+          Prev
+        </button>
+      `;
+      for (let p = 1; p <= totalPages; p++) {
+        const isActive = p === state.usersPage;
+        pageHtml += `
+          <button type="button" class="btn ${isActive ? 'btn-primary-38' : 'btn-secondary-32-sm'} js-users-page-num" data-page="${p}" style="min-width: 32px; height: 32px; padding: 0 8px; font-size: 12px; font-weight: ${isActive ? '700' : '500'};">
+            ${p}
+          </button>
+        `;
+      }
+      pageHtml += `
+        <button type="button" class="btn btn-secondary-32-sm js-users-page-next" ${state.usersPage >= totalPages ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+          Next
+        </button>
+      `;
+      pageControls.innerHTML = pageHtml;
+    }
+  }
+
   function openDeleteModal(type, id, name) {
     const modal = document.getElementById('confirm-delete-modal');
     if (!modal) return;
@@ -1928,7 +2256,8 @@
     if (typeInput) typeInput.value = type;
     if (idInput) idInput.value = id;
     if (descEl) {
-      descEl.textContent = `Are you sure you want to delete ${type === 'warehouse' ? 'warehouse facility' : 'stock item'} "${name}"? This will permanently remove it from MySQL.`;
+      const typeLabel = type === 'warehouse' ? 'warehouse facility' : (type === 'user' ? 'personnel record & badge credentials for' : 'stock item');
+      descEl.textContent = `Are you sure you want to delete ${typeLabel} "${name}"? This action will permanently remove it from MySQL.`;
     }
 
     modal.classList.add('open');
@@ -2472,6 +2801,46 @@
         );
         return;
       }
+
+      // 15. User Management: Edit User
+      const editUserBtn = e.target.closest('.js-edit-user-btn');
+      if (editUserBtn) {
+        openUserModal(Number(editUserBtn.getAttribute('data-user-id')));
+        return;
+      }
+
+      // 16. User Management: Delete User
+      const delUserBtn = e.target.closest('.js-delete-user-btn');
+      if (delUserBtn) {
+        openDeleteModal('user', Number(delUserBtn.getAttribute('data-user-id')), delUserBtn.getAttribute('data-user-name') || 'this user');
+        return;
+      }
+
+      // 17. User Management: Pagination Prev
+      const userPrevBtn = e.target.closest('.js-users-page-prev');
+      if (userPrevBtn) {
+        if (state.usersPage > 1) {
+          state.usersPage--;
+          renderUsersScreen();
+        }
+        return;
+      }
+
+      // 18. User Management: Pagination Next
+      const userNextBtn = e.target.closest('.js-users-page-next');
+      if (userNextBtn) {
+        state.usersPage++;
+        renderUsersScreen();
+        return;
+      }
+
+      // 19. User Management: Pagination Page Num
+      const userNumBtn = e.target.closest('.js-users-page-num');
+      if (userNumBtn) {
+        state.usersPage = Number(userNumBtn.getAttribute('data-page'));
+        renderUsersScreen();
+        return;
+      }
     });
 
     // Clearance Tier Change in Matrix Config Table
@@ -2957,6 +3326,113 @@
     // Initialize dropzones
     setupDropzoneEvents('wh');
     setupDropzoneEvents('item');
+    setupDropzoneEvents('user');
+
+    // User Management Modal Triggers & Controls
+    const openAddUserBtn = document.getElementById('open-add-user-btn');
+    if (openAddUserBtn) {
+      openAddUserBtn.addEventListener('click', () => openUserModal());
+    }
+
+    const closeUserModalBtn = document.getElementById('close-user-modal');
+    if (closeUserModalBtn) {
+      closeUserModalBtn.addEventListener('click', () => {
+        document.getElementById('user-crud-modal')?.classList.remove('open');
+      });
+    }
+
+    const userSearchInput = document.getElementById('users-search-input');
+    if (userSearchInput) {
+      userSearchInput.addEventListener('input', (e) => {
+        state.usersSearch = e.target.value;
+        state.usersPage = 1;
+        renderUsersScreen();
+      });
+    }
+
+    const userDeptFilter = document.getElementById('users-filter-dept');
+    if (userDeptFilter) {
+      userDeptFilter.addEventListener('change', (e) => {
+        state.usersFilterDept = e.target.value;
+        state.usersPage = 1;
+        renderUsersScreen();
+      });
+    }
+
+    const userTierFilter = document.getElementById('users-filter-tier');
+    if (userTierFilter) {
+      userTierFilter.addEventListener('change', (e) => {
+        state.usersFilterTier = e.target.value;
+        state.usersPage = 1;
+        renderUsersScreen();
+      });
+    }
+
+    document.querySelectorAll('#users-status-tabs .status-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('#users-status-tabs .status-tab').forEach((t) => t.classList.remove('active'));
+        tab.classList.add('active');
+        state.usersTab = tab.getAttribute('data-tab') || 'all';
+        state.usersPage = 1;
+        renderUsersScreen();
+      });
+    });
+
+    const userExportBtn = document.getElementById('users-export-btn');
+    if (userExportBtn) {
+      userExportBtn.addEventListener('click', () => exportUsersCsv());
+    }
+
+    // User CRUD Form Submit
+    const userForm = document.getElementById('user-crud-form');
+    if (userForm) {
+      userForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const saveBtn = document.getElementById('save-user-btn');
+        if (saveBtn) saveBtn.disabled = true;
+
+        const fd = new FormData();
+        fd.append('id', document.getElementById('user-modal-id').value);
+        fd.append('full_name', document.getElementById('user-modal-fullname').value);
+        fd.append('username', document.getElementById('user-modal-username').value);
+        fd.append('role', document.getElementById('user-modal-role').value);
+        fd.append('department', document.getElementById('user-modal-dept').value);
+        fd.append('phone', document.getElementById('user-modal-phone').value);
+        fd.append('email', document.getElementById('user-modal-email').value);
+        fd.append('clearance_level', document.getElementById('user-modal-clearance').value);
+        fd.append('stock_access_mode', document.getElementById('user-modal-stock-access').value);
+        fd.append('venue_access_mode', document.getElementById('user-modal-venue-access').value);
+        fd.append('badge_code', document.getElementById('user-modal-badge-code').value);
+        fd.append('rfid_uid', document.getElementById('user-modal-rfid-uid').value);
+        fd.append('badge_status', document.getElementById('user-modal-badge-status').value);
+        fd.append('is_active', document.getElementById('user-modal-active').checked ? 1 : 0);
+
+        const fileInput = document.getElementById('user-modal-image');
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+          fd.append('profile_image', fileInput.files[0]);
+        }
+
+        try {
+          const res = await fetch('api.php?action=save_user', {
+            method: 'POST',
+            body: fd,
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            showToast(data.message || 'Personnel profile & permissions saved');
+            document.getElementById('user-crud-modal')?.classList.remove('open');
+            await fetchBootstrap(false);
+            renderUsersScreen();
+          } else {
+            showToast(data.error || 'Failed to save personnel record');
+          }
+        } catch (err) {
+          showToast('Error communicating with server');
+        } finally {
+          if (saveBtn) saveBtn.disabled = false;
+        }
+      });
+    }
 
     // Warehouse CRUD Form Submit
     const whForm = document.getElementById('warehouse-crud-form');
@@ -3061,7 +3537,9 @@
         const id = document.getElementById('delete-target-id').value;
         if (!id) return;
 
-        const action = type === 'warehouse' ? 'delete_warehouse' : 'delete_stock_item';
+        let action = 'delete_stock_item';
+        if (type === 'warehouse') action = 'delete_warehouse';
+        else if (type === 'user') action = 'delete_user';
         confirmDelBtn.disabled = true;
 
         try {
@@ -3074,8 +3552,13 @@
           if (data && data.ok) {
             showToast(data.message || 'Record deleted successfully');
             document.getElementById('confirm-delete-modal')?.classList.remove('open');
-            await loadStockManagerData();
-            if (type === 'warehouse') await fetchBootstrap(false);
+            if (type === 'user') {
+              await fetchBootstrap(false);
+              renderUsersScreen();
+            } else {
+              await loadStockManagerData();
+              if (type === 'warehouse') await fetchBootstrap(false);
+            }
           } else {
             showToast(data.error || 'Failed to delete record');
           }

@@ -40,6 +40,11 @@
           <span class="nav-item-label">Venues &amp; Stock Gates</span>
           <span class="nav-item-count" id="sidebar-events-count">07</span>
         </button>
+        <button type="button" class="nav-item" data-nav-target="users" id="nav-users-btn">
+          <img src="assets/nav-team-members.svg" alt="" class="svg-icon" id="nav-icon-users" />
+          <span class="nav-item-label">Users &amp; Roles</span>
+          <span class="nav-item-count" id="sidebar-users-count">21</span>
+        </button>
         <button type="button" class="nav-item" data-nav-target="attendees" data-node-id="2:3292">
           <img src="assets/nav-attendees-inactive.svg" alt="" class="svg-icon" id="nav-icon-attendees" />
           <span class="nav-item-label">ID Badges &amp; Kiosk</span>
@@ -1285,6 +1290,160 @@
           </div>
         </section>
       </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 6: USER & ROLE MANAGEMENT (CRUD)                            -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-users">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Staff, Technicians &amp; Role Management</h1>
+              <p class="page-subtitle">
+                Unified personnel directory and access controls. Manage technicians, engineers, controllers, 4-tier security clearance levels, and RFID badge credentials.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" id="users-export-btn">
+                <img src="assets/download.svg" alt="" class="svg-icon" />
+                <span>Export Roster</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" id="open-add-user-btn">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add New User</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Top Metrics Cards -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Total Personnel</span>
+                <img src="assets/metric-users.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="users-kpi-total">21</span>
+              <span class="metric-context">Registered Staff &amp; Crew</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Active Badges</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="users-kpi-active">21</span>
+              <span class="metric-context">Operational RFID Badges</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Stock Authorized (L2–L4)</span>
+                <img src="assets/metric-radio.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="users-kpi-stock">18</span>
+              <span class="metric-context">Warehouse &amp; Dispatch Access</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Active Departments</span>
+                <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="users-kpi-depts">08</span>
+              <span class="metric-context">Audio, Video, Rigging, Stage &amp; More</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Personnel Directory Card -->
+        <section class="directory-card">
+          <div class="directory-header">
+            <div class="directory-heading">
+              <div class="directory-title-row">
+                <h2 class="directory-title-18">Personnel &amp; Access Directory</h2>
+                <span class="status-badge status-badge-purple-sm" id="users-badge-count">21 Staff</span>
+              </div>
+              <p class="directory-desc">
+                Review and manage user profiles, technical roles, clearance tier privileges (L1–L4), and assigned badge hardware credentials.
+              </p>
+            </div>
+          </div>
+
+          <!-- Status Tabs -->
+          <div class="status-tabs" id="users-status-tabs">
+            <button type="button" class="status-tab active" data-tab="all">
+              <span class="status-tab-label">All Personnel</span>
+              <span class="status-tab-count" id="users-tab-count-all">21</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="technicians">
+              <span class="status-tab-label">Technicians &amp; Crew</span>
+              <span class="status-tab-count" id="users-tab-count-tech">16</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="stock_controllers">
+              <span class="status-tab-label">Stock Controllers</span>
+              <span class="status-tab-count" id="users-tab-count-stock">2</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="managers">
+              <span class="status-tab-label">Managers &amp; Admins</span>
+              <span class="status-tab-count" id="users-tab-count-mgmt">3</span>
+            </button>
+            <button type="button" class="status-tab" data-tab="suspended">
+              <span class="status-tab-label">Suspended / Inactive</span>
+              <span class="status-tab-count" id="users-tab-count-suspended">0</span>
+            </button>
+          </div>
+
+          <!-- Filter & Search Bar -->
+          <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <label class="table-search-box" for="users-search-input" style="flex: 1 1 260px; min-width: 240px;">
+              <img src="assets/search-table.svg" alt="" class="svg-icon" />
+              <input type="text" id="users-search-input" class="table-search-input" placeholder="Search by name, username, badge, phone, role, department..." />
+            </label>
+
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <select id="users-filter-dept" class="scan-mode-select" style="min-width: 150px;" aria-label="Filter Department">
+                <option value="all">All Departments</option>
+              </select>
+
+              <select id="users-filter-tier" class="scan-mode-select" style="min-width: 150px;" aria-label="Filter Clearance">
+                <option value="all">All Clearances</option>
+                <option value="L1">L1 - Event Venue Basic</option>
+                <option value="L2">L2 - Technical &amp; Stage</option>
+                <option value="L3">L3 - Stock Controller</option>
+                <option value="L4">L4 - Executive All-Access</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="table-responsive" style="overflow-x: auto; margin-top: 14px;">
+            <table class="data-table" id="users-data-table" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th style="min-width: 220px;">Personnel</th>
+                  <th style="min-width: 160px;">Role &amp; Department</th>
+                  <th style="min-width: 180px;">Clearance Tier</th>
+                  <th style="min-width: 180px;">Badge &amp; RFID Code</th>
+                  <th style="min-width: 170px;">Contact Details</th>
+                  <th style="min-width: 110px;">Status</th>
+                  <th style="min-width: 120px; text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="users-table-body">
+                <!-- Dynamically populated rows -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Table Pagination Footer -->
+          <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 4px 6px; border-top: 1px solid var(--border-color); margin-top: 10px;">
+            <span class="results-count" id="users-results-footer">Showing 1-5 of 21 personnel</span>
+            <div class="page-controls" id="users-page-controls" style="display: flex; gap: 4px; align-items: center;">
+              <!-- Prev / Page numbers / Next -->
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   </div>
 
@@ -1619,6 +1778,168 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary-38" id="close-item-modal">Cancel</button>
           <button type="submit" class="btn btn-primary-38" id="save-item-btn">Save Stock Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL 8: USER & ROLE MANAGEMENT MODAL (WITH PROFILE PHOTO UPLOAD)      -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="user-crud-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 580px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-labelledby="user-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h3 class="modal-title" id="user-modal-title">Add New Team Member</h3>
+        <span class="status-badge status-badge-purple-sm">Staff &amp; Permissions</span>
+      </div>
+
+      <form id="user-crud-form">
+        <input type="hidden" id="user-modal-id" value="0" />
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="user-modal-fullname">Full Name *</label>
+            <input type="text" id="user-modal-fullname" class="form-input" placeholder="e.g. Eric Havugimana" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="user-modal-username">Username *</label>
+            <input type="text" id="user-modal-username" class="form-input" placeholder="e.g. erich" required />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="user-modal-role">Role / Designation *</label>
+            <select id="user-modal-role" class="form-input" required>
+              <option value="technician">Technician</option>
+              <option value="sound_engineer">Sound Engineer</option>
+              <option value="lighting_tech">Lighting Technician</option>
+              <option value="video_director">Video Director</option>
+              <option value="stage_manager">Stage Manager</option>
+              <option value="rigging_lead">Rigging Specialist</option>
+              <option value="stock_controller">Stock Controller</option>
+              <option value="project_manager">Project Manager</option>
+              <option value="security">Venue Security Guard</option>
+              <option value="tech_lead">Technical Lead</option>
+              <option value="admin">System Administrator</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="user-modal-dept">Department *</label>
+            <select id="user-modal-dept" class="form-input" required>
+              <option value="Audio">Audio</option>
+              <option value="Lighting">Lighting</option>
+              <option value="Video">Video</option>
+              <option value="Stage">Stage</option>
+              <option value="Rigging">Rigging</option>
+              <option value="Production">Production</option>
+              <option value="Warehouse">Warehouse / Logistics</option>
+              <option value="Venue Security">Venue Security</option>
+              <option value="Operations">Operations</option>
+              <option value="Executive">Executive</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="user-modal-phone">Phone Number</label>
+            <input type="text" id="user-modal-phone" class="form-input" placeholder="e.g. +250 788 123 456" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="user-modal-email">Email Address</label>
+            <input type="email" id="user-modal-email" class="form-input" placeholder="e.g. eric@ability.rw" />
+          </div>
+        </div>
+
+        <!-- Clearance & Security Permissions Section -->
+        <div style="background-color: var(--bg-canvas); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+          <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); display: block; margin-bottom: 8px;">
+            Security Matrix &amp; Gate Credentials
+          </span>
+
+          <div class="form-field" style="margin-bottom: 10px;">
+            <label class="form-label" for="user-modal-clearance">4-Tier Security Clearance Level *</label>
+            <select id="user-modal-clearance" class="form-input" required>
+              <option value="L1_VENUE_BASIC">Level 1 - Event Venue Basic (No Stock Access)</option>
+              <option value="L2_TECH_STAGE">Level 2 - Technical &amp; Stage (Assigned Stock Access)</option>
+              <option value="L3_STOCK_WAREHOUSE">Level 3 - Stock Controller (Full Warehouse Access)</option>
+              <option value="L4_ALL_ACCESS">Level 4 - Executive &amp; All-Access (Unrestricted)</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+            <div class="form-field">
+              <label class="form-label" for="user-modal-stock-access">Stock Warehouse Access</label>
+              <select id="user-modal-stock-access" class="form-input">
+                <option value="assigned_only">Assigned Equipment Batches Only</option>
+                <option value="all">Full Warehouse Access</option>
+                <option value="none">Restricted / No Access (L1 default)</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="user-modal-venue-access">Event Venue Gates</label>
+              <select id="user-modal-venue-access" class="form-input">
+                <option value="all">All Event Venues Authorized</option>
+                <option value="assigned_only">Assigned Event Checkpoints Only</option>
+                <option value="none">Restricted</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-field">
+              <label class="form-label" for="user-modal-badge-code">Badge Barcode (REW-BADGE-XXXX)</label>
+              <input type="text" id="user-modal-badge-code" class="form-input" placeholder="Auto-generated if empty" />
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="user-modal-rfid-uid">RFID UID</label>
+              <input type="text" id="user-modal-rfid-uid" class="form-input" placeholder="e.g. RFID-8822" />
+            </div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; align-items: center;">
+          <div class="form-field">
+            <label class="form-label" for="user-modal-badge-status">Badge Status</label>
+            <select id="user-modal-badge-status" class="form-input">
+              <option value="active">Active (Gate Granted)</option>
+              <option value="suspended">Suspended (Access Denied)</option>
+              <option value="revoked">Revoked</option>
+            </select>
+          </div>
+          <div class="form-field" style="padding-top: 16px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 500;">
+              <input type="checkbox" id="user-modal-active" checked style="width: 16px; height: 16px; accent-color: var(--brand-primary);" />
+              <span>Operational Active Account</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Profile Photo Upload Dropzone -->
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label class="form-label">Profile Portrait Photo</label>
+          <div class="image-upload-dropzone" id="user-dropzone">
+            <input type="file" id="user-modal-image" accept="image/*" style="display: none;" />
+            <div class="dropzone-prompt" id="user-dropzone-prompt">
+              <img src="assets/upload-15.svg" alt="" class="svg-icon" style="width: 20px; height: 20px; opacity: 0.6; margin-bottom: 4px;" />
+              <span style="font-size: 12px; font-weight: 500; color: var(--text-primary); display: block;">Click or drag to upload portrait photo</span>
+              <span style="font-size: 10px; color: var(--text-muted);">JPG, PNG, WEBP supported</span>
+            </div>
+            <div class="dropzone-preview" id="user-dropzone-preview" style="display: none;">
+              <img src="" alt="Preview" id="user-preview-img" class="dropzone-thumb" style="border-radius: 50%;" />
+              <div style="flex: 1; min-width: 0;">
+                <span id="user-preview-filename" class="dropzone-filename">portrait.jpg</span>
+                <span style="font-size: 10px; color: #16a34a; font-weight: 600;">Photo Selected</span>
+              </div>
+              <button type="button" class="btn btn-secondary-32-sm" id="user-remove-image-btn">Change</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary-38" id="close-user-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="save-user-btn">Save Personnel Record</button>
         </div>
       </form>
     </div>
