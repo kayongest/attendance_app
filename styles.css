@@ -3709,93 +3709,210 @@ button {
 }
 
 /* ========================================================================== */
-/* ATTENDEES SPLIT DECK: SIDE-BY-SIDE CREW ROSTER & KIOSK VERIFICATION DECK   */
+/* CREW ROSTER AUTO-SUGGEST DROPDOWN & TABLE WRAP                             */
 /* ========================================================================== */
 
-.attendees-split-deck {
-  display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
-  gap: 24px;
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 24px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
-  width: 100%;
-  align-items: start;
+.table-search-box-wrap {
+  position: relative;
+  flex: 1 0 0;
+  min-width: 260px;
+  max-width: 520px;
 }
 
-.attendees-split-deck .attendees-roster-column {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
+.table-search-box-wrap .table-search-box {
+  width: 100%;
+}
+
+.search-suggest-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14);
+  z-index: 80;
+  overflow: hidden;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.search-suggest-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.12s ease;
+  gap: 12px;
+}
+
+.search-suggest-item:last-child {
+  border-bottom: none;
+}
+
+.search-suggest-item:hover {
+  background-color: #f5f3ff;
+}
+
+.suggest-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.suggest-identity {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  width: 100%;
 }
 
-.attendees-split-deck .attendees-roster-column .directory-header {
-  padding: 0 0 16px 0;
+.suggest-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.attendees-split-deck .attendees-roster-column .status-tabs {
-  margin-bottom: 14px;
+.suggest-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.attendees-split-deck .attendees-roster-column .table-tools {
-  padding: 0 0 14px 0;
-  border-top: none;
-  background: transparent;
+.suggest-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.suggest-open-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--brand-primary);
+  padding: 3px 9px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.15s ease;
+}
+
+.search-suggest-item:hover .suggest-open-pill {
+  opacity: 0.9;
+}
+
+.search-suggest-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .attendees-table-wrap {
   width: 100%;
   overflow-x: auto;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-top: 1px solid var(--border-color);
   background: #ffffff;
   scrollbar-width: thin;
 }
 
 .attendees-table-wrap .data-table-header,
 .attendees-table-wrap .data-table-row {
-  min-width: 820px;
+  min-width: 900px;
 }
 
-.attendees-split-deck .attendees-kiosk-column {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
+/* ========================================================================== */
+/* CENTERED LIGHTBOX MODAL FOR GATE KIOSK VERIFICATION DECK (#pane-kiosk)     */
+/* ========================================================================== */
+
+.kiosk-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 2000;
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-  width: 100%;
-  position: sticky;
-  top: 84px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: kioskModalFadeIn 0.18s ease-out;
 }
 
-.attendees-split-deck .attendees-kiosk-column .kiosk-scanner-bar {
-  padding-bottom: 0;
-  border-bottom: none;
-  width: 100%;
+@keyframes kioskModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.attendees-split-deck .attendees-kiosk-column .kiosk-input-group {
+.kiosk-modal-dialog {
+  position: relative;
+  max-width: 980px;
   width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.45);
+  animation: kioskModalScaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  background: #ffffff;
 }
 
-@media (max-width: 1320px) {
-  .attendees-split-deck {
-    grid-template-columns: 1fr;
-    gap: 28px;
+@keyframes kioskModalScaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(12px);
   }
-  .attendees-split-deck .attendees-kiosk-column {
-    position: static;
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
   }
+}
+
+.kiosk-modal-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  font-size: 16px;
+  font-weight: 700;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 40;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease;
+}
+
+.kiosk-modal-close-btn:hover {
+  background-color: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+  transform: scale(1.08);
+}
+
+.kiosk-modal-dialog .kiosk-deck-wrapper {
+  border: none;
+  border-radius: 16px;
+  box-shadow: none;
+  background: #ffffff;
+  padding: 24px;
 }

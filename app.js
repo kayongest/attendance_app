@@ -357,7 +357,11 @@
       loadStockManagerData();
     }
 
-    if (scrollToId) {
+    if (scrollToId === 'pane-kiosk') {
+      setTimeout(() => {
+        openKioskModal();
+      }, 70);
+    } else if (scrollToId) {
       setTimeout(() => {
         const el = document.getElementById(scrollToId);
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1187,6 +1191,117 @@
       `
       )
       .join('');
+  }
+
+  function openKioskModal(memberOrId = null) {
+    let member = null;
+    if (typeof memberOrId === 'object' && memberOrId !== null) {
+      member = memberOrId;
+    } else if (memberOrId != null) {
+      member = (state.crew || []).find((c) => Number(c.id) === Number(memberOrId));
+    } else if (state.selectedCrewId) {
+      member = (state.crew || []).find((c) => Number(c.id) === Number(state.selectedCrewId));
+    }
+    if (!member && state.crew && state.crew.length > 0) {
+      member = state.crew[0];
+    }
+
+    if (member) {
+      state.selectedCrewId = Number(member.id);
+      state.currentVerification = buildClientVerificationFromMember(member);
+      const inp = document.getElementById('kiosk-badge-input');
+      const matchTag = document.getElementById('kiosk-search-match-tag');
+      const clearBtn = document.getElementById('kiosk-input-clear-btn');
+      if (inp) {
+        inp.value = member.badge_code || member.staff_code || '';
+        if (clearBtn) clearBtn.style.display = 'flex';
+        if (matchTag) {
+          matchTag.style.display = 'inline-flex';
+          matchTag.innerHTML = `
+            <span class="tier-code-badge tier-code-${escapeHtml(member.clearance_code)}">${escapeHtml(member.clearance_code)}</span>
+            <span>${escapeHtml(member.full_name)} (${escapeHtml(member.badge_code)})</span>
+          `;
+        }
+      }
+    }
+
+    renderVerificationDeck();
+    highlightSelectedCrewRow(state.selectedCrewId);
+
+    const backdrop = document.getElementById('kiosk-modal-backdrop');
+    if (backdrop) {
+      backdrop.style.display = 'flex';
+      backdrop.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      const inp = document.getElementById('kiosk-badge-input');
+      if (inp) {
+        setTimeout(() => {
+          inp.focus();
+          inp.select();
+        }, 90);
+      }
+    }
+  }
+
+  function closeKioskModal() {
+    const backdrop = document.getElementById('kiosk-modal-backdrop');
+    if (backdrop) {
+      backdrop.style.display = 'none';
+      backdrop.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+  }
+
+  function renderSearchSuggestions(query) {
+    const suggestEl = document.getElementById('directory-search-suggest');
+    if (!suggestEl) return;
+
+    const q = (query || '').trim().toLowerCase();
+    if (!q) {
+      suggestEl.style.display = 'none';
+      suggestEl.innerHTML = '';
+      return;
+    }
+
+    const matches = (state.crew || []).filter((c) => {
+      const name = (c.full_name || '').toLowerCase();
+      const badge = (c.badge_code || '').toLowerCase();
+      const staffCode = (c.staff_code || '').toLowerCase();
+      const username = (c.username || '').toLowerCase();
+      const dept = (c.department || '').toLowerCase();
+      const role = (c.role_display || '').toLowerCase();
+      return name.includes(q) || badge.includes(q) || staffCode.includes(q) || username.includes(q) || dept.includes(q) || role.includes(q);
+    }).slice(0, 5);
+
+    if (matches.length === 0) {
+      suggestEl.style.display = 'block';
+      suggestEl.innerHTML = `
+        <div class="search-suggest-empty">
+          No matching crew members for "<strong>${escapeHtml(query)}</strong>"
+        </div>
+      `;
+      return;
+    }
+
+    suggestEl.style.display = 'block';
+    suggestEl.innerHTML = matches.map((m) => `
+      <div class="search-suggest-item js-suggest-kiosk-item" data-crew-id="${m.id}">
+        <div class="suggest-left">
+          <div class="avatar-circle avatar-jl" style="width: 28px; height: 28px; font-size: 11px;">${escapeHtml(m.initials || 'CR')}</div>
+          <div class="suggest-identity">
+            <span class="suggest-name">${escapeHtml(m.full_name)}</span>
+            <span class="suggest-sub">@${escapeHtml(m.username)} · ${escapeHtml(m.badge_code)}</span>
+          </div>
+        </div>
+        <div class="suggest-right">
+          <span class="tier-pill-soft ${escapeHtml(m.clearance_code)}" style="font-size: 10px; padding: 2px 7px;">
+            <span class="tier-code-badge tier-code-${escapeHtml(m.clearance_code)}">${escapeHtml(m.clearance_code)}</span>
+            <span>${escapeHtml(m.clearance_short)}</span>
+          </span>
+          <span class="suggest-open-pill">Open Kiosk ↗</span>
+        </div>
+      </div>
+    `).join('');
   }
 
   function openBatchModal(batchId) {
@@ -2088,6 +2203,25 @@
 
     // Delegated clicks for Crew Rows, Paired Checkin/Checkout buttons, Timeline items, Checkpoint activation, and Matrix config
     document.body.addEventListener('click', async (e) => {
+      // 0. Close Kiosk Modal if close button or backdrop clicked
+      if (e.target.closest('#kiosk-modal-close-btn') || e.target.id === 'kiosk-modal-backdrop') {
+        closeKioskModal();
+        return;
+      }
+
+      // 0b. Open Kiosk from search suggestion click
+      const suggestItem = e.target.closest('.js-suggest-kiosk-item');
+      if (suggestItem) {
+        const cid = Number(suggestItem.getAttribute('data-crew-id'));
+        const member = state.crew.find((m) => Number(m.id) === cid);
+        if (member) {
+          const sEl = document.getElementById('directory-search-suggest');
+          if (sEl) sEl.style.display = 'none';
+          openKioskModal(member);
+        }
+        return;
+      }
+
       // 1. Paired Checkin / Checkout button in Crew Roster table
       const gateBtn = e.target.closest('.js-row-gate-action');
       if (gateBtn) {
@@ -2105,36 +2239,18 @@
         const cid = Number(inspectCrewBtn.getAttribute('data-crew-id'));
         const member = state.crew.find((m) => Number(m.id) === cid);
         if (member) {
-          state.selectedCrewId = cid;
-          state.currentVerification = buildClientVerificationFromMember(member);
-          switchScreen('attendees', 'pane-kiosk');
-          renderAll();
+          openKioskModal(member);
         }
         return;
       }
 
-      // 3. Crew Roster Row Click -> Load member in `#pane-kiosk`
+      // 3. Crew Roster Row Click -> Load member in Centered Kiosk Modal
       const crewRow = e.target.closest('.attendee-table-row[data-crew-id]');
       if (crewRow) {
         const cid = Number(crewRow.getAttribute('data-crew-id'));
         const member = state.crew.find((m) => Number(m.id) === cid);
         if (member) {
-          state.selectedCrewId = cid;
-          state.currentVerification = buildClientVerificationFromMember(member);
-          const inp = document.getElementById('kiosk-badge-input');
-          if (inp) {
-            inp.value = member.badge_code;
-            if (kioskClearBtn) kioskClearBtn.style.display = 'flex';
-            if (kioskMatchTag) {
-              kioskMatchTag.style.display = 'inline-flex';
-              kioskMatchTag.innerHTML = `
-                <span class="tier-code-badge tier-code-${escapeHtml(member.clearance_code)}">${escapeHtml(member.clearance_code)}</span>
-                <span>${escapeHtml(member.full_name)} (${escapeHtml(member.badge_code)})</span>
-              `;
-            }
-          }
-          renderAll();
-          showToast(`Loaded ${member.full_name} (${member.badge_code} · ${member.clearance_code}) into Kiosk Deck`);
+          openKioskModal(member);
         }
         return;
       }
@@ -2145,10 +2261,7 @@
         const uid = Number(tlCard.getAttribute('data-timeline-uid'));
         const member = state.crew.find((m) => Number(m.id) === uid);
         if (member) {
-          state.selectedCrewId = uid;
-          state.currentVerification = buildClientVerificationFromMember(member);
-          switchScreen('attendees', 'pane-kiosk');
-          renderAll();
+          openKioskModal(member);
         }
         return;
       }
@@ -2332,12 +2445,72 @@
     }
 
     const dirSearch = document.getElementById('directory-attendee-search');
+    const suggestEl = document.getElementById('directory-search-suggest');
     if (dirSearch) {
       dirSearch.addEventListener('input', (e) => {
         state.directorySearch = e.target.value;
         renderCrewTables();
+        renderSearchSuggestions(e.target.value);
+
+        // Auto-open modal on exact badge code match (e.g. barcode scanner)
+        const q = e.target.value.trim().toLowerCase();
+        if (q.length >= 4) {
+          const exactMatch = (state.crew || []).find((c) =>
+            (c.badge_code && c.badge_code.toLowerCase() === q) ||
+            (c.staff_code && c.staff_code.toLowerCase() === q) ||
+            (c.rfid_uid && c.rfid_uid.toLowerCase() === q)
+          );
+          if (exactMatch) {
+            if (suggestEl) suggestEl.style.display = 'none';
+            openKioskModal(exactMatch);
+          }
+        }
+      });
+
+      dirSearch.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const q = dirSearch.value.trim().toLowerCase();
+          if (!q) return;
+          const matched = (state.crew || []).find((c) =>
+            (c.full_name && c.full_name.toLowerCase().includes(q)) ||
+            (c.badge_code && c.badge_code.toLowerCase().includes(q)) ||
+            (c.staff_code && c.staff_code.toLowerCase().includes(q)) ||
+            (c.username && c.username.toLowerCase().includes(q)) ||
+            (c.department && c.department.toLowerCase().includes(q))
+          );
+          if (matched) {
+            if (suggestEl) suggestEl.style.display = 'none';
+            openKioskModal(matched);
+          }
+        } else if (e.key === 'Escape') {
+          if (suggestEl) suggestEl.style.display = 'none';
+        }
+      });
+
+      dirSearch.addEventListener('focus', () => {
+        if (dirSearch.value.trim()) {
+          renderSearchSuggestions(dirSearch.value);
+        }
       });
     }
+
+    // Dismiss search suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.table-search-box-wrap')) {
+        const sEl = document.getElementById('directory-search-suggest');
+        if (sEl) sEl.style.display = 'none';
+      }
+    });
+
+    // Global Escape key to dismiss Kiosk modal or search suggestions
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeKioskModal();
+        const sEl = document.getElementById('directory-search-suggest');
+        if (sEl) sEl.style.display = 'none';
+      }
+    });
 
     const evSearch = document.getElementById('events-search-input');
     if (evSearch) {
