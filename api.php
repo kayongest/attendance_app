@@ -1064,6 +1064,52 @@ try {
         exit;
     }
 
+    if ($action === 'update_call_time') {
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? ''));
+        $rawCpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? ''));
+        $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
+
+        // Normalize time to HH:MM format
+        $timeParts = explode(':', $rawCallTime);
+        $hRaw = preg_replace('/\D/', '', $timeParts[0] ?? '08');
+        $mRaw = preg_replace('/\D/', '', $timeParts[1] ?? '00');
+        $hour = str_pad($hRaw !== '' ? $hRaw : '08', 2, '0', STR_PAD_LEFT);
+        $min = str_pad(substr($mRaw !== '' ? $mRaw : '00', 0, 2), 2, '0', STR_PAD_LEFT);
+        $formattedTime = "{$hour}:{$min}";
+        $formattedTimeFull = "{$hour}:{$min}:00";
+
+        if ($cpType === 'stock_warehouse') {
+            $numId = (int) $rawCpId;
+            if ($numId > 0) {
+                try {
+                    $upd = $pdo->prepare("UPDATE `stock_locations` SET `open_time` = ? WHERE `id` = ?");
+                    $upd->execute([$formattedTimeFull, $numId]);
+                } catch (Throwable $e) {
+                    // Ignore column error if schema differs
+                }
+            }
+        } elseif ($cpType === 'event_venue') {
+            try {
+                $upd = $pdo->prepare("UPDATE `events` SET `call_time` = ? WHERE `id` = ?");
+                $upd->execute([$formattedTime, $rawCpId]);
+            } catch (Throwable $e) {
+                // Ignore error if schema differs
+            }
+        }
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'call_time_updated' => true,
+                'updated_call_time' => $formattedTime,
+                'updated_cp_type' => $cpType,
+                'updated_cp_id' => $rawCpId,
+            ]
+        ));
+        exit;
+    }
+
     if ($action === 'reset_demo') {
         ensureAbilitySchemaAndSeed($pdo, true);
         echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));

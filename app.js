@@ -945,7 +945,20 @@
             </div>
             <div class="col-event-schedule">
               <div class="company-stack">
-                <span class="company-name">Call Time: ${escapeHtml(cp.call_time || '08:00')}</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span class="company-name">Call: <strong>${escapeHtml(cp.call_time || '08:00')}</strong></span>
+                  <button
+                    type="button"
+                    class="calltime-edit-trigger js-open-row-calltime"
+                    data-cp-type="${cp.type}"
+                    data-cp-id="${cp.id}"
+                    data-cp-name="${escapeHtml(cp.name)}"
+                    data-call-time="${escapeHtml(cp.call_time || '08:00')}"
+                    title="Change Call Time"
+                  >
+                    ✎ Set
+                  </button>
+                </div>
                 <span class="company-role">${escapeHtml(cp.lead_label || '')}</span>
               </div>
             </div>
@@ -1191,6 +1204,29 @@
     }
 
     if (modal) modal.classList.add('open');
+  }
+
+  function openCallTimeModal(cpType, cpId, cpName, currentTime) {
+    const modal = document.getElementById('call-time-modal');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('call-time-modal-target-name');
+    const typeBadge = document.getElementById('call-time-modal-type');
+    const typeInput = document.getElementById('call-time-cp-type');
+    const idInput = document.getElementById('call-time-cp-id');
+    const timeInput = document.getElementById('call-time-input');
+
+    if (titleEl) titleEl.textContent = cpName;
+    if (typeBadge) {
+      const isStock = cpType === 'stock_warehouse';
+      typeBadge.textContent = isStock ? 'Stock Warehouse' : 'Event Venue';
+      typeBadge.className = `status-badge ${isStock ? 'status-badge-green-sm' : 'status-badge-purple-sm'}`;
+    }
+    if (typeInput) typeInput.value = cpType;
+    if (idInput) idInput.value = cpId;
+    if (timeInput) timeInput.value = currentTime || '08:00';
+
+    modal.classList.add('open');
   }
 
   // =========================================================================
@@ -1540,6 +1576,18 @@
         return;
       }
 
+      // 8. Open Call Time modal from table row
+      const callTimeRowBtn = e.target.closest('.js-open-row-calltime');
+      if (callTimeRowBtn) {
+        e.stopPropagation();
+        const cpType = callTimeRowBtn.getAttribute('data-cp-type');
+        const cpId = callTimeRowBtn.getAttribute('data-cp-id');
+        const cpName = callTimeRowBtn.getAttribute('data-cp-name');
+        const currentTime = callTimeRowBtn.getAttribute('data-call-time');
+        openCallTimeModal(cpType, cpId, cpName, currentTime);
+        return;
+      }
+
       // 8. Approve Batch button
       const approveBatchBtn = e.target.closest('.js-approve-batch-btn');
       if (approveBatchBtn) {
@@ -1793,6 +1841,66 @@
         batchModal.classList.remove('open');
         await fetchBootstrap(true);
         showToast(`Batch #${state.inspectedBatchId} approved`);
+      });
+    }
+
+    // Call Time Modal Handlers
+    const callTimeModal = document.getElementById('call-time-modal');
+    const closeCallTimeBtn = document.getElementById('close-call-time-modal');
+    if (closeCallTimeBtn && callTimeModal) {
+      closeCallTimeBtn.addEventListener('click', () => callTimeModal.classList.remove('open'));
+    }
+
+    // Quick Presets in Call Time Modal
+    document.querySelectorAll('.js-calltime-preset').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-time');
+        const inp = document.getElementById('call-time-input');
+        if (inp && t) inp.value = t;
+      });
+    });
+
+    // Open Call Time Modal for Active Checkpoint
+    document.querySelectorAll('.js-open-active-calltime-modal').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cp = state.activeCheckpoint;
+        if (cp) {
+          openCallTimeModal(cp.type, cp.id, cp.name, cp.call_time);
+        }
+      });
+    });
+
+    // Submit Call Time Form
+    const callTimeForm = document.getElementById('call-time-form');
+    if (callTimeForm) {
+      callTimeForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const cpType = document.getElementById('call-time-cp-type').value;
+        const cpId = document.getElementById('call-time-cp-id').value;
+        const callTime = document.getElementById('call-time-input').value;
+
+        try {
+          const res = await fetch('api.php?action=update_call_time', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update_call_time',
+              checkpoint_type: cpType,
+              checkpoint_id: cpId,
+              call_time: callTime,
+            }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            applyBootstrapPayload(data, true);
+            if (callTimeModal) callTimeModal.classList.remove('open');
+            showToast(`Scheduled Call Time set to ${callTime} (${cpType === 'stock_warehouse' ? 'Stock Warehouse' : 'Event Venue'})`);
+          } else {
+            showToast('Failed to update call time');
+          }
+        } catch (err) {
+          showToast('Error communicating with server');
+        }
       });
     }
 

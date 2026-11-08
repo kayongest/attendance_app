@@ -628,6 +628,9 @@
                   <button type="button" class="btn btn-secondary-32-sm js-open-rollcall-modal" data-node-id="2:8181">
                     Open Roll-Call
                   </button>
+                  <button type="button" class="btn btn-secondary-32-sm js-open-active-calltime-modal" title="Change Call Time">
+                    Set Call Time
+                  </button>
                   <button type="button" class="btn btn-primary-32" data-action="go-kiosk" data-node-id="2:8183">
                     Open Gate Kiosk (#pane-kiosk)
                   </button>
@@ -1243,6 +1246,58 @@
         <button type="button" class="btn btn-secondary-38" id="close-batch-modal">Close</button>
         <button type="button" class="btn btn-primary-38" id="approve-batch-modal-btn">Verify &amp; Approve Dispatch</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL 4: SET CALL TIME MODAL (VENUES, STOCKS & WAREHOUSES)             -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="call-time-modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-labelledby="call-time-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+        <h3 class="modal-title" id="call-time-modal-title">Set Checkpoint Call Time</h3>
+        <span class="status-badge status-badge-purple-sm" id="call-time-modal-type">Event Venue</span>
+      </div>
+      <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px;" id="call-time-modal-desc">
+        Configure scheduled call time for <strong id="call-time-modal-target-name">Checkpoint</strong>. Check-ins are evaluated for punctuality (Early, On Time, or Late) against this schedule.
+      </p>
+
+      <form id="call-time-form">
+        <input type="hidden" id="call-time-cp-type" value="event_venue" />
+        <input type="hidden" id="call-time-cp-id" value="" />
+
+        <div class="form-field" style="margin-bottom: 14px;">
+          <label class="form-label" for="call-time-input">Scheduled Call Time (24h CAT · Kigali)</label>
+          <input
+            type="time"
+            id="call-time-input"
+            class="form-input"
+            style="font-size: 16px; font-weight: 700; font-family: monospace; height: 42px; padding: 0 12px;"
+            required
+            value="08:00"
+          />
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px;">
+            Quick Presets:
+          </span>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;" id="call-time-presets">
+            <button type="button" class="btn btn-secondary-32-sm js-calltime-preset" data-time="06:30">06:30 AM</button>
+            <button type="button" class="btn btn-secondary-32-sm js-calltime-preset" data-time="07:00">07:00 AM</button>
+            <button type="button" class="btn btn-secondary-32-sm js-calltime-preset" data-time="07:30">07:30 AM</button>
+            <button type="button" class="btn btn-secondary-32-sm js-calltime-preset" data-time="08:00">08:00 AM</button>
+            <button type="button" class="btn btn-secondary-32-sm js-calltime-preset" data-time="08:30">08:30 AM</button>
+            <button type="button" class="btn btn-secondary-32-sm js-calltime-preset" data-time="09:00">09:00 AM</button>
+            <button type="button" class="btn btn-secondary-32-sm js-calltime-preset" data-time="14:00">02:00 PM</button>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary-38" id="close-call-time-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="save-call-time-btn">Save Call Time</button>
+        </div>
+      </form>
     </div>
   </div>
 
