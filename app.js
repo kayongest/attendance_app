@@ -922,17 +922,21 @@
     const stocksCount = (state.checkpoints.stock_warehouses || []).length;
     const venuesCount = (state.checkpoints.event_venues || []).length;
 
-    const totalKpi = document.getElementById('events-total-kpi');
-    const stockKpi = document.getElementById('events-stock-kpi');
-    const venueKpi = document.getElementById('events-venue-kpi');
-    const batchKpi = document.getElementById('events-batches-kpi');
+    document.querySelectorAll('#events-total-kpi').forEach((el) => {
+      el.textContent = String(allCps.length).padStart(2, '0');
+    });
+    document.querySelectorAll('#events-stock-kpi').forEach((el) => {
+      el.textContent = String(stocksCount).padStart(2, '0');
+    });
+    document.querySelectorAll('#events-venue-kpi').forEach((el) => {
+      el.textContent = String(venuesCount).padStart(2, '0');
+    });
+    document.querySelectorAll('#events-batches-kpi').forEach((el) => {
+      el.textContent = String(state.batches.length).padStart(2, '0');
+    });
+
     const sidebarCount = document.getElementById('sidebar-events-count');
     const dirBadge = document.getElementById('events-directory-badge');
-
-    if (totalKpi) totalKpi.textContent = String(allCps.length).padStart(2, '0');
-    if (stockKpi) stockKpi.textContent = String(stocksCount).padStart(2, '0');
-    if (venueKpi) venueKpi.textContent = String(venuesCount).padStart(2, '0');
-    if (batchKpi) batchKpi.textContent = String(state.batches.length).padStart(2, '0');
     if (sidebarCount) sidebarCount.textContent = String(allCps.length).padStart(2, '0');
     if (dirBadge) dirBadge.textContent = String(allCps.length).padStart(2, '0');
 
