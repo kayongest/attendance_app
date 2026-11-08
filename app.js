@@ -2036,8 +2036,8 @@
   }
 
   function renderUsersScreen() {
-    const tableBody = document.getElementById('users-table-body');
-    if (!tableBody) return;
+    const rowsEl = document.getElementById('users-table-rows') || document.getElementById('users-table-body');
+    if (!rowsEl) return;
 
     const crew = Array.isArray(state.crew) ? state.crew : [];
 
@@ -2137,15 +2137,13 @@
 
     // Render Table Rows
     if (pagedUsers.length === 0) {
-      tableBody.innerHTML = `
-        <tr>
-          <td colspan="7" style="text-align: center; padding: 36px 16px; color: var(--text-secondary); font-size: 13px;">
-            No personnel found matching the selected filter criteria.
-          </td>
-        </tr>
+      rowsEl.innerHTML = `
+        <div style="padding: 36px 20px; text-align: center; color: var(--text-secondary); font-size: 13px; border-bottom: 1px solid var(--border-color);">
+          No personnel found matching the selected filter criteria.
+        </div>
       `;
     } else {
-      tableBody.innerHTML = pagedUsers.map((c) => {
+      rowsEl.innerHTML = pagedUsers.map((c) => {
         const isSusp = c.badge_status !== 'active' || Number(c.is_active) === 0;
         const statusBadge = isSusp
           ? `<span class="status-badge status-badge-red-sm">Suspended</span>`
@@ -2157,56 +2155,46 @@
           : `<div class="user-avatar-wrap">${escapeHtml(c.initials)}</div>`;
 
         return `
-          <tr data-user-id="${c.id}">
-            <td>
-              <div class="user-identity-cell">
-                <div class="user-avatar-wrap" style="${c.profile_image_url ? 'padding: 0;' : ''}">
-                  ${avatarHtml}
-                </div>
-                <div class="user-name-stack">
-                  <span class="user-full-name">${escapeHtml(c.full_name)}</span>
-                  <span class="user-username">@${escapeHtml(c.username)}</span>
-                </div>
+          <div class="data-table-row" data-user-id="${c.id}" style="height: 64px;">
+            <div class="col-user-personnel" style="flex: 1 0 240px; min-width: 0; display: flex; align-items: center; gap: 12px;">
+              <div class="user-avatar-wrap" style="${c.profile_image_url ? 'padding: 0;' : ''}">
+                ${avatarHtml}
               </div>
-            </td>
-            <td>
-              <div style="display: flex; flex-direction: column; gap: 4px;">
-                <span style="font-weight: 600; font-size: 12px; color: var(--text-primary);">${escapeHtml(c.role_display)}</span>
-                <span class="dept-pill">${escapeHtml(c.department)}</span>
+              <div class="user-name-stack" style="min-width: 0; overflow: hidden;">
+                <span class="user-full-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(c.full_name)}</span>
+                <span class="user-username">@${escapeHtml(c.username)}</span>
               </div>
-            </td>
-            <td>
+            </div>
+            <div class="col-user-role" style="width: 170px; display: flex; flex-direction: column; gap: 3px;">
+              <span style="font-weight: 600; font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(c.role_display)}</span>
+              <span class="dept-pill">${escapeHtml(c.department)}</span>
+            </div>
+            <div class="col-user-tier" style="width: 180px;">
               <span class="tier-pill-soft ${escapeHtml(c.clearance_code)}">
                 <span class="tier-code-badge tier-code-${escapeHtml(c.clearance_code)}">${escapeHtml(c.clearance_code)}</span>
                 <span>${escapeHtml(c.clearance_short)}</span>
               </span>
-            </td>
-            <td>
-              <div class="user-badge-cell">
-                <span class="user-badge-code">${escapeHtml(c.badge_code)}</span>
-                <span class="user-rfid-uid">${escapeHtml(c.rfid_uid)}</span>
-              </div>
-            </td>
-            <td>
-              <div class="user-contact-cell">
-                <span class="user-phone">${escapeHtml(c.phone)}</span>
-                <span class="user-email">${escapeHtml(c.email)}</span>
-              </div>
-            </td>
-            <td>
+            </div>
+            <div class="col-user-badge" style="width: 170px; display: flex; flex-direction: column; gap: 2px;">
+              <span class="user-badge-code">${escapeHtml(c.badge_code)}</span>
+              <span class="user-rfid-uid">${escapeHtml(c.rfid_uid)}</span>
+            </div>
+            <div class="col-user-contact" style="width: 180px; display: flex; flex-direction: column; gap: 2px;">
+              <span class="user-phone">${escapeHtml(c.phone)}</span>
+              <span class="user-email" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(c.email)}</span>
+            </div>
+            <div class="col-user-status" style="width: 90px;">
               ${statusBadge}
-            </td>
-            <td style="text-align: right;">
-              <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end;">
-                <button type="button" class="btn btn-secondary-32-sm js-edit-user-btn" data-user-id="${c.id}" title="Edit User & Permissions">
-                  Edit
-                </button>
-                <button type="button" class="btn btn-secondary-32-sm js-delete-user-btn" data-user-id="${c.id}" data-user-name="${escapeHtml(c.full_name)}" style="color: #dc2626;" title="Delete User">
-                  Delete
-                </button>
-              </div>
-            </td>
-          </tr>
+            </div>
+            <div class="col-user-actions" style="width: 130px; display: flex; justify-content: flex-end; align-items: center; gap: 6px;">
+              <button type="button" class="btn btn-secondary-32-sm js-edit-user-btn" data-user-id="${c.id}" title="Edit User & Permissions">
+                Edit
+              </button>
+              <button type="button" class="btn btn-secondary-32-sm js-delete-user-btn" data-user-id="${c.id}" data-user-name="${escapeHtml(c.full_name)}" style="color: #dc2626; border-color: #fecaca;" title="Delete User">
+                Delete
+              </button>
+            </div>
+          </div>
         `;
       }).join('');
     }

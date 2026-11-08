@@ -3933,33 +3933,50 @@ button {
   filter: invert(41%) sepia(85%) saturate(1478%) hue-rotate(227deg) brightness(96%) contrast(97%);
 }
 
-.users-table {
+.users-table-wrap {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  white-space: nowrap;
+  overflow-x: auto;
 }
 
-.users-table th {
-  background-color: var(--bg-canvas);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-color);
-  text-align: left;
+.users-table-wrap .data-table-header,
+.users-table-wrap .data-table-row {
+  min-width: 1080px;
 }
 
-.users-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  vertical-align: middle;
+.col-user-personnel {
+  flex: 1 0 240px;
+  min-width: 0;
 }
 
-.users-table tbody tr:hover td {
-  background-color: #fbfcfe;
+.col-user-role {
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.col-user-tier {
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.col-user-badge {
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.col-user-contact {
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.col-user-status {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.col-user-actions {
+  width: 130px;
+  flex-shrink: 0;
+  text-align: right;
 }
 
 .user-identity-cell {

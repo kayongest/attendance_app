@@ -1415,24 +1415,23 @@
             </div>
           </div>
 
-          <!-- Table Container -->
-          <div class="table-responsive" style="overflow-x: auto; margin-top: 14px;">
-            <table class="data-table" id="users-data-table" style="width: 100%;">
-              <thead>
-                <tr>
-                  <th style="min-width: 220px;">Personnel</th>
-                  <th style="min-width: 160px;">Role &amp; Department</th>
-                  <th style="min-width: 180px;">Clearance Tier</th>
-                  <th style="min-width: 180px;">Badge &amp; RFID Code</th>
-                  <th style="min-width: 170px;">Contact Details</th>
-                  <th style="min-width: 110px;">Status</th>
-                  <th style="min-width: 120px; text-align: right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="users-table-body">
-                <!-- Dynamically populated rows -->
-              </tbody>
-            </table>
+          <!-- Table Container with Horizontal Scroll Support -->
+          <div class="users-table-wrap" style="overflow-x: auto; width: 100%; margin-top: 14px;">
+            <div style="min-width: 1080px;">
+              <!-- Users Table Header -->
+              <div class="data-table-header">
+                <div class="col-user-personnel" style="flex: 1 0 240px; min-width: 0;"><span class="th-label">Personnel</span></div>
+                <div class="col-user-role" style="width: 170px;"><span class="th-label">Role &amp; Department</span></div>
+                <div class="col-user-tier" style="width: 180px;"><span class="th-label">Clearance Tier</span></div>
+                <div class="col-user-badge" style="width: 170px;"><span class="th-label">Badge &amp; RFID Code</span></div>
+                <div class="col-user-contact" style="width: 180px;"><span class="th-label">Contact Details</span></div>
+                <div class="col-user-status" style="width: 90px;"><span class="th-label">Status</span></div>
+                <div class="col-user-actions" style="width: 130px; text-align: right;"><span class="th-label">Actions</span></div>
+              </div>
+
+              <!-- Users Table Rows Container -->
+              <div id="users-table-rows"></div>
+            </div>
           </div>
 
           <!-- Table Pagination Footer -->
