@@ -310,6 +310,116 @@ function buildVerificationCardPayload(
     ];
 }
 
+
+function ensureRolesTable(PDO $pdo): void
+{
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `roles` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `role_key` VARCHAR(64) NOT NULL UNIQUE,
+                `title` VARCHAR(120) NOT NULL,
+                `clearance_level` VARCHAR(50) NOT NULL DEFAULT 'L2_TECH_STAGE',
+                `department` VARCHAR(80) DEFAULT 'Audio',
+                `description` TEXT DEFAULT NULL,
+                `is_system` TINYINT(1) NOT NULL DEFAULT 0,
+                `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+        $cnt = (int) $pdo->query("SELECT COUNT(*) FROM `roles`")->fetchColumn();
+        if ($cnt === 0) {
+            $seedRoles = [
+                ['admin', 'Administrator', 'L4_ALL_ACCESS', 'Executive', 'Full operational control, security matrix management, user provision and badge issuance.', 1],
+                ['stock_controller', 'Stock Controller', 'L3_STOCK_WAREHOUSE', 'Warehouse', 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', 1],
+                ['tech_lead', 'Technical Lead', 'L4_ALL_ACCESS', 'Production', 'Supervises audio, video, lighting and rigging operations across all checkpoints.', 1],
+                ['technician', 'Stage & Audio Technician', 'L2_TECH_STAGE', 'Audio', 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 1],
+                ['sound_engineer', 'Lead Sound Engineer', 'L2_TECH_STAGE', 'Audio', 'Lead acoustic calibration and sound engineering for live events and concert tours.', 0],
+                ['lighting_tech', 'Lighting Technician', 'L2_TECH_STAGE', 'Lighting', 'DMX universes routing, moving-head fixtures, dimmer racks and stage wash fixtures.', 0],
+                ['video_director', 'Video Director', 'L2_TECH_STAGE', 'Video', 'Controls LED video walls, SDI fiber transmission, switchers, and live camera chains.', 0],
+                ['stage_manager', 'Stage Manager', 'L2_TECH_STAGE', 'Production', 'Directs stage crew, backstage call-time coordination, and cueing.', 0],
+                ['rigging_lead', 'Rigging Lead', 'L2_TECH_STAGE', 'Rigging', 'Motors, truss rigging, load calculations and safety cable inspections overhead.', 0],
+                ['user', 'Venue Crew', 'L1_VENUE_BASIC', 'Production', 'General event venue operations and support staff. Stock warehouse access restricted.', 0],
+                ['security', 'Security Officer', 'L1_VENUE_BASIC', 'Security', 'Front of house and gate security perimeter verification.', 0],
+                ['driver', 'Logistics Driver', 'L1_VENUE_BASIC', 'Logistics', 'Equipment transport, loading bay check-in, and transit logistics.', 0],
+            ];
+            $ins = $pdo->prepare("INSERT INTO `roles` (`role_key`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, 1)");
+            foreach ($seedRoles as $sr) {
+                $ins->execute($sr);
+            }
+        }
+    } catch (Throwable $e) {}
+}
+
+function getRolesList(PDO $pdo, array $crew = []): array
+{
+    ensureRolesTable($pdo);
+    $roles = [];
+    try {
+        $rows = $pdo->query("SELECT * FROM `roles` ORDER BY `id` ASC")->fetchAll();
+        foreach ($rows as $r) {
+            $rKey = strtolower((string)$r['role_key']);
+            $tier = normalizeClearanceTier((string)$r['clearance_level'], $rKey);
+            $staffCount = 0;
+            foreach ($crew as $c) {
+                if (strtolower((string)($c['role'] ?? '')) === $rKey) {
+                    $staffCount++;
+                }
+            }
+            $roles[] = [
+                'id' => (int) $r['id'],
+                'role_key' => $rKey,
+                'title' => (string) $r['title'],
+                'clearance_level' => $tier['key'],
+                'clearance_code' => $tier['code'],
+                'clearance_title' => $tier['title'],
+                'clearance_short' => $tier['short'],
+                'clearance_color' => $tier['color'],
+                'department' => (string) ($r['department'] ?? 'Production'),
+                'description' => (string) ($r['description'] ?? ''),
+                'is_system' => (int) ($r['is_system'] ?? 0),
+                'is_active' => (int) ($r['is_active'] ?? 1),
+                'staff_count' => $staffCount,
+            ];
+        }
+    } catch (Throwable $e) {}
+
+    if (empty($roles)) {
+        $defaultKeys = [
+            ['id' => 1, 'role_key' => 'admin', 'title' => 'Administrator', 'clearance_level' => 'L4_ALL_ACCESS', 'department' => 'Executive', 'description' => 'Full operational control, security matrix management, user provision and badge issuance.', 'is_system' => 1, 'is_active' => 1],
+            ['id' => 2, 'role_key' => 'stock_controller', 'title' => 'Stock Controller', 'clearance_level' => 'L3_STOCK_WAREHOUSE', 'department' => 'Warehouse', 'description' => 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', 'is_system' => 1, 'is_active' => 1],
+            ['id' => 3, 'role_key' => 'tech_lead', 'title' => 'Technical Lead', 'clearance_level' => 'L4_ALL_ACCESS', 'department' => 'Production', 'description' => 'Supervises audio, video, lighting and rigging operations across all checkpoints.', 'is_system' => 1, 'is_active' => 1],
+            ['id' => 4, 'role_key' => 'technician', 'title' => 'Stage & Audio Technician', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Audio', 'description' => 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 'is_system' => 1, 'is_active' => 1],
+            ['id' => 5, 'role_key' => 'sound_engineer', 'title' => 'Lead Sound Engineer', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Audio', 'description' => 'Lead acoustic calibration and sound engineering for live events and concert tours.', 'is_system' => 0, 'is_active' => 1],
+            ['id' => 6, 'role_key' => 'lighting_tech', 'title' => 'Lighting Technician', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Lighting', 'description' => 'DMX universes routing, moving-head fixtures, dimmer racks and stage wash fixtures.', 'is_system' => 0, 'is_active' => 1],
+            ['id' => 7, 'role_key' => 'video_director', 'title' => 'Video Director', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Video', 'description' => 'Controls LED video walls, SDI fiber transmission, switchers, and live camera chains.', 'is_system' => 0, 'is_active' => 1],
+            ['id' => 8, 'role_key' => 'stage_manager', 'title' => 'Stage Manager', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Production', 'description' => 'Directs stage crew, backstage call-time coordination, and cueing.', 'is_system' => 0, 'is_active' => 1],
+            ['id' => 9, 'role_key' => 'rigging_lead', 'title' => 'Rigging Lead', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Rigging', 'description' => 'Motors, truss rigging, load calculations and safety cable inspections overhead.', 'is_system' => 0, 'is_active' => 1],
+            ['id' => 10, 'role_key' => 'user', 'title' => 'Venue Crew', 'clearance_level' => 'L1_VENUE_BASIC', 'department' => 'Production', 'description' => 'General event venue operations and support staff. Stock warehouse access restricted.', 'is_system' => 0, 'is_active' => 1],
+            ['id' => 11, 'role_key' => 'security', 'title' => 'Security Officer', 'clearance_level' => 'L1_VENUE_BASIC', 'department' => 'Security', 'description' => 'Front of house and gate security perimeter verification.', 'is_system' => 0, 'is_active' => 1],
+            ['id' => 12, 'role_key' => 'driver', 'title' => 'Logistics Driver', 'clearance_level' => 'L1_VENUE_BASIC', 'department' => 'Logistics', 'description' => 'Equipment transport, loading bay check-in, and transit logistics.', 'is_system' => 0, 'is_active' => 1],
+        ];
+        foreach ($defaultKeys as $dk) {
+            $tier = normalizeClearanceTier($dk['clearance_level'], $dk['role_key']);
+            $staffCount = 0;
+            foreach ($crew as $c) {
+                if (strtolower((string)($c['role'] ?? '')) === $dk['role_key']) {
+                    $staffCount++;
+                }
+            }
+            $roles[] = array_merge($dk, [
+                'clearance_code' => $tier['code'],
+                'clearance_title' => $tier['title'],
+                'clearance_short' => $tier['short'],
+                'clearance_color' => $tier['color'],
+                'staff_count' => $staffCount,
+            ]);
+        }
+    }
+    return $roles;
+}
+
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
 {
     $todayStr = date('Y-m-d');
@@ -841,6 +951,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'activityTimeline' => $activityTimeline,
         'batches' => $allBatches,
         'defaultVerification' => $defaultVerification,
+        'roles' => getRolesList($pdo, $crew),
     ];
 }
 
@@ -1762,6 +1873,116 @@ try {
             'ok' => true,
             'message' => 'Personnel profile & permissions saved successfully',
             'user_id' => $id,
+        ]);
+        exit;
+    }
+
+    
+    if ($action === 'get_roles') {
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode(['ok' => true, 'roles' => $full['roles']]);
+        exit;
+    }
+
+    if ($action === 'save_role') {
+        ensureRolesTable($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $title = trim((string) ($_POST['title'] ?? $jsonBody['title'] ?? ''));
+        $roleKey = strtolower(trim((string) ($_POST['role_key'] ?? $jsonBody['role_key'] ?? '')));
+        $clearanceLevel = trim((string) ($_POST['clearance_level'] ?? $jsonBody['clearance_level'] ?? 'L2_TECH_STAGE'));
+        $department = trim((string) ($_POST['department'] ?? $jsonBody['department'] ?? 'Audio'));
+        $description = trim((string) ($_POST['description'] ?? $jsonBody['description'] ?? ''));
+        $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (int) ($jsonBody['is_active'] ?? 1);
+
+        if ($title === '') {
+            echo json_encode(['ok' => false, 'error' => 'Role title is required.']);
+            exit;
+        }
+        if ($roleKey === '') {
+            $roleKey = strtolower(preg_replace('/[^a-zA-Z0-9_]/', '_', $title));
+        }
+
+        $tier = normalizeClearanceTier($clearanceLevel, $roleKey);
+        $normClearance = $tier['key'];
+
+        if ($id > 0) {
+            $upd = $pdo->prepare("
+                UPDATE `roles`
+                SET `title` = ?, `role_key` = ?, `clearance_level` = ?, `department` = ?, `description` = ?, `is_active` = ?
+                WHERE `id` = ?
+            ");
+            $upd->execute([$title, $roleKey, $normClearance, $department, $description, $isActive, $id]);
+        } else {
+            $dup = $pdo->prepare("SELECT `id` FROM `roles` WHERE `role_key` = ?");
+            $dup->execute([$roleKey]);
+            if ($dup->fetch()) {
+                $roleKey .= '_' . rand(10, 99);
+            }
+            $ins = $pdo->prepare("
+                INSERT INTO `roles` (`role_key`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`)
+                VALUES (?, ?, ?, ?, ?, 0, ?)
+            ");
+            $ins->execute([$roleKey, $title, $normClearance, $department, $description, $isActive]);
+            $id = (int) $pdo->lastInsertId();
+        }
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Role definition saved successfully.',
+            'role_id' => $id,
+            'roles' => $full['roles'],
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_role') {
+        ensureRolesTable($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $roleKey = strtolower(trim((string) ($_POST['role_key'] ?? $jsonBody['role_key'] ?? '')));
+
+        if ($id > 0) {
+            $stmt = $pdo->prepare("SELECT * FROM `roles` WHERE `id` = ?");
+            $stmt->execute([$id]);
+            $r = $stmt->fetch();
+        } elseif ($roleKey !== '') {
+            $stmt = $pdo->prepare("SELECT * FROM `roles` WHERE `role_key` = ?");
+            $stmt->execute([$roleKey]);
+            $r = $stmt->fetch();
+        } else {
+            $r = null;
+        }
+
+        if (!$r) {
+            echo json_encode(['ok' => false, 'error' => 'Role not found.']);
+            exit;
+        }
+
+        $rKey = strtolower((string)$r['role_key']);
+        if ((int)$r['is_system'] === 1 || in_array($rKey, ['admin', 'stock_controller'], true)) {
+            echo json_encode(['ok' => false, 'error' => "System core role '{$r['title']}' is protected and cannot be deleted."]);
+            exit;
+        }
+
+        $checkUsers = $pdo->prepare("SELECT COUNT(*) FROM `users` WHERE `role` = ?");
+        $checkUsers->execute([$rKey]);
+        $assignedCount = (int) $checkUsers->fetchColumn();
+        if ($assignedCount > 0) {
+            echo json_encode([
+                'ok' => false,
+                'error' => "Cannot delete '{$r['title']}': {$assignedCount} personnel members are currently assigned to this role. Please reassign them first.",
+            ]);
+            exit;
+        }
+
+        $del = $pdo->prepare("DELETE FROM `roles` WHERE `id` = ?");
+        $del->execute([(int)$r['id']]);
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode([
+            'ok' => true,
+            'message' => "Role '{$r['title']}' deleted successfully.",
+            'roles' => $full['roles'],
         ]);
         exit;
     }

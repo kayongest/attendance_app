@@ -41,6 +41,11 @@
     hourlyTraffic: [],
     activityTimeline: [],
     batches: [],
+    roles: [],
+    usersViewMode: 'personnel',
+    rolesSearch: '',
+    rolesFilterTier: 'all',
+    rolesFilterDept: 'all',
     currentVerification: null,
     selectedCrewId: 6,
 
@@ -148,6 +153,25 @@
     state.hourlyTraffic = Array.isArray(data.hourlyTraffic) ? data.hourlyTraffic : [];
     state.activityTimeline = Array.isArray(data.activityTimeline) ? data.activityTimeline : [];
     state.batches = Array.isArray(data.batches) ? data.batches : [];
+    if (Array.isArray(data.roles) && data.roles.length > 0) {
+      state.roles = data.roles;
+    } else if (state.roles.length === 0) {
+      // Default fallback roles
+      state.roles = [
+        { id: 1, role_key: 'admin', title: 'Administrator', clearance_level: 'L4_ALL_ACCESS', clearance_code: 'L4', clearance_title: 'Level 4 - All Access', clearance_color: '#10b981', department: 'Executive', description: 'Full operational control, security matrix management, user provision and badge issuance.', is_system: 1, is_active: 1, staff_count: 1 },
+        { id: 2, role_key: 'stock_controller', title: 'Stock Controller', clearance_level: 'L3_STOCK_WAREHOUSE', clearance_code: 'L3', clearance_title: 'Level 3 - Stock Warehouse', clearance_color: '#8b5cf6', department: 'Warehouse', description: 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', is_system: 1, is_active: 1, staff_count: 2 },
+        { id: 3, role_key: 'tech_lead', title: 'Technical Lead', clearance_level: 'L4_ALL_ACCESS', clearance_code: 'L4', clearance_title: 'Level 4 - All Access', clearance_color: '#10b981', department: 'Production', description: 'Supervises audio, video, lighting and rigging operations across all checkpoints.', is_system: 1, is_active: 1, staff_count: 1 },
+        { id: 4, role_key: 'technician', title: 'Stage & Audio Technician', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Audio', description: 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', is_system: 1, is_active: 1, staff_count: 8 },
+        { id: 5, role_key: 'sound_engineer', title: 'Lead Sound Engineer', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Audio', description: 'Lead acoustic calibration and sound engineering for live events and concert tours.', is_system: 0, is_active: 1, staff_count: 2 },
+        { id: 6, role_key: 'lighting_tech', title: 'Lighting Technician', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Lighting', description: 'DMX universes routing, moving-head fixtures, dimmer racks and stage wash fixtures.', is_system: 0, is_active: 1, staff_count: 2 },
+        { id: 7, role_key: 'video_director', title: 'Video Director', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Video', description: 'Controls LED video walls, SDI fiber transmission, switchers, and live camera chains.', is_system: 0, is_active: 1, staff_count: 1 },
+        { id: 8, role_key: 'stage_manager', title: 'Stage Manager', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Production', description: 'Directs stage crew, backstage call-time coordination, and cueing.', is_system: 0, is_active: 1, staff_count: 1 },
+        { id: 9, role_key: 'rigging_lead', title: 'Rigging Lead', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Rigging', description: 'Motors, truss rigging, load calculations and safety cable inspections overhead.', is_system: 0, is_active: 1, staff_count: 1 },
+        { id: 10, role_key: 'user', title: 'Venue Crew', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Production', description: 'General event venue operations and support staff. Stock warehouse access restricted.', is_system: 0, is_active: 1, staff_count: 1 },
+        { id: 11, role_key: 'security', title: 'Security Officer', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Security', description: 'Front of house and gate security perimeter verification.', is_system: 0, is_active: 1, staff_count: 1 },
+        { id: 12, role_key: 'driver', title: 'Logistics Driver', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Logistics', description: 'Equipment transport, loading bay check-in, and transit logistics.', is_system: 0, is_active: 1, staff_count: 1 },
+      ];
+    }
 
     if (data.currentUser) {
       state.currentUser = data.currentUser;
@@ -721,6 +745,11 @@
       if (menuBadge) menuBadge.textContent = u.badge_code || 'REW-BADGE-0002';
 
       const isAdmin = isCurrentUserAdmin();
+      const userDropdown = document.getElementById('topbar-user-dropdown');
+      if (userDropdown && !isAdmin) {
+        userDropdown.style.display = 'none';
+      }
+
       const authTitle = document.getElementById('topbar-menu-auth-title');
       const authSub = document.getElementById('topbar-menu-auth-sub');
       if (authTitle) {
@@ -2366,9 +2395,217 @@
     showToast('Exported Crew Roster to CSV');
   }
 
+  
+  // =========================================================================
+  // ROLES MANAGEMENT CRUD LOGIC
+  // =========================================================================
+
+  function renderRolesScreen() {
+    const rowsEl = document.getElementById('roles-table-rows');
+    if (!rowsEl) return;
+
+    const roles = Array.isArray(state.roles) ? state.roles : [];
+    const crew = Array.isArray(state.crew) ? state.crew : [];
+
+    // Recalculate staff counts dynamically from current crew list
+    roles.forEach((r) => {
+      const rKey = (r.role_key || '').toLowerCase();
+      r.staff_count = crew.filter((c) => (c.role || '').toLowerCase() === rKey).length;
+    });
+
+    // Update KPI counters
+    const l1Roles = roles.filter((r) => (r.clearance_code || '').startsWith('L1')).length;
+    const l2Roles = roles.filter((r) => (r.clearance_code || '').startsWith('L2')).length;
+    const l3Roles = roles.filter((r) => (r.clearance_code || '').startsWith('L3')).length;
+    const l4Roles = roles.filter((r) => (r.clearance_code || '').startsWith('L4')).length;
+
+    const elL1 = document.getElementById('roles-kpi-l1');
+    const elL2 = document.getElementById('roles-kpi-l2');
+    const elL3 = document.getElementById('roles-kpi-l3');
+    const elL4 = document.getElementById('roles-kpi-l4');
+    const elBadge = document.getElementById('roles-badge-count');
+    const elPillRoles = document.getElementById('pill-roles-count');
+    const elPillCrew = document.getElementById('pill-personnel-count');
+
+    if (elL1) elL1.textContent = String(l1Roles).padStart(2, '0') + ' Roles';
+    if (elL2) elL2.textContent = String(l2Roles).padStart(2, '0') + ' Roles';
+    if (elL3) elL3.textContent = String(l3Roles).padStart(2, '0') + ' Role' + (l3Roles === 1 ? '' : 's');
+    if (elL4) elL4.textContent = String(l4Roles).padStart(2, '0') + ' Roles';
+    if (elBadge) elBadge.textContent = `${roles.length} Roles`;
+    if (elPillRoles) elPillRoles.textContent = String(roles.length);
+    if (elPillCrew) elPillCrew.textContent = String(crew.length);
+
+    // Populate roles department filter dropdown
+    const deptSelect = document.getElementById('roles-filter-dept');
+    if (deptSelect && deptSelect.options.length <= 1) {
+      const depts = Array.from(new Set(roles.map((r) => r.department).filter(Boolean))).sort();
+      depts.forEach((d) => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        deptSelect.appendChild(opt);
+      });
+    }
+
+    // Filter roles
+    const q = (state.rolesSearch || '').trim().toLowerCase();
+    const filterTier = state.rolesFilterTier || 'all';
+    const filterDept = state.rolesFilterDept || 'all';
+
+    const filtered = roles.filter((r) => {
+      if (q) {
+        const matchTitle = (r.title || '').toLowerCase().includes(q);
+        const matchKey = (r.role_key || '').toLowerCase().includes(q);
+        const matchDept = (r.department || '').toLowerCase().includes(q);
+        const matchDesc = (r.description || '').toLowerCase().includes(q);
+        if (!matchTitle && !matchKey && !matchDept && !matchDesc) return false;
+      }
+      if (filterTier !== 'all' && !(r.clearance_code || '').startsWith(filterTier)) {
+        return false;
+      }
+      if (filterDept !== 'all' && (r.department || '').toLowerCase() !== filterDept.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      rowsEl.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No technical roles match the selected filter.</div>`;
+      return;
+    }
+
+    rowsEl.innerHTML = filtered.map((r) => {
+      const tierBadgeClass =
+        r.clearance_code === 'L4' ? 'status-badge-green-sm' :
+        r.clearance_code === 'L3' ? 'status-badge-purple-sm' :
+        r.clearance_code === 'L2' ? 'status-badge-blue-sm' : 'status-badge-gray-sm';
+
+      const isSys = Number(r.is_system) === 1;
+      const typeTag = isSys
+        ? `<span class="status-badge" style="background: #e0e7ff; color: #3730a3; font-size: 10px; font-weight: 700;">SYSTEM</span>`
+        : `<span class="status-badge" style="background: #f1f5f9; color: #475569; font-size: 10px; font-weight: 600;">CUSTOM</span>`;
+
+      return `
+        <div class="data-table-row" style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border-color); font-size: 12px; gap: 8px;">
+          <div style="width: 230px;">
+            <div style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(r.title)}</div>
+            <div style="font-family: monospace; font-size: 11px; color: var(--text-muted);">code: ${escapeHtml(r.role_key)}</div>
+          </div>
+
+          <div style="width: 170px;">
+            <span class="status-badge ${tierBadgeClass}" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px;">
+              <span class="status-dot"></span>
+              ${escapeHtml(r.clearance_code)} · ${escapeHtml(r.clearance_short || r.clearance_title || 'Access')}
+            </span>
+          </div>
+
+          <div style="width: 140px;">
+            <span style="font-weight: 600; color: #4a5568;">${escapeHtml(r.department || 'Production')}</span>
+          </div>
+
+          <div style="flex: 1 0 260px; min-width: 0; color: var(--text-secondary); line-height: 1.4; padding-right: 10px;">
+            ${escapeHtml(r.description || 'Standard venue operations and gate verification scope.')}
+          </div>
+
+          <div style="width: 110px; text-align: center;">
+            <button type="button" class="btn-ghost-sm js-filter-crew-by-role" data-role-key="${escapeHtml(r.role_key)}" title="Click to view assigned personnel in directory" style="background: #edf2f7; border-radius: 12px; padding: 3px 10px; font-size: 11px; font-weight: 600; cursor: pointer; border: none;">
+              👥 ${r.staff_count} Staff
+            </button>
+          </div>
+
+          <div style="width: 85px;">
+            ${typeTag}
+          </div>
+
+          <div style="width: 130px; display: flex; justify-content: flex-end; gap: 6px;">
+            <button type="button" class="btn btn-secondary-32 js-edit-role" data-role-id="${r.id}" title="Edit Role & Clearance" style="padding: 0 10px; font-size: 11px;">
+              ✏️ Edit
+            </button>
+            ${isSys
+              ? `<button type="button" class="btn btn-secondary-32" disabled title="Protected Core System Role" style="opacity: 0.35; cursor: not-allowed; padding: 0 8px; font-size: 11px;">🔒</button>`
+              : `<button type="button" class="btn btn-secondary-32 js-delete-role" data-role-id="${r.id}" data-role-title="${escapeHtml(r.title)}" data-assigned="${r.staff_count}" title="Delete Custom Role" style="color: #dc2626; padding: 0 8px; font-size: 11px;">🗑️</button>`
+            }
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function openRoleModal(role = null) {
+    const modal = document.getElementById('role-crud-modal');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('role-modal-title');
+    const tagEl = document.getElementById('role-modal-tag');
+    const idInput = document.getElementById('role-modal-id');
+    const titleInput = document.getElementById('role-modal-title-input');
+    const keyInput = document.getElementById('role-modal-key-input');
+    const tierSelect = document.getElementById('role-modal-tier-select');
+    const deptSelect = document.getElementById('role-modal-dept-select');
+    const descInput = document.getElementById('role-modal-desc-input');
+    const activeCb = document.getElementById('role-modal-active-checkbox');
+
+    if (role) {
+      if (titleEl) titleEl.textContent = `Edit Role: ${role.title}`;
+      if (tagEl) tagEl.textContent = `Tier ${role.clearance_code || 'L2'}`;
+      if (idInput) idInput.value = String(role.id);
+      if (titleInput) titleInput.value = role.title || '';
+      if (keyInput) {
+        keyInput.value = role.role_key || '';
+        keyInput.readOnly = Number(role.is_system) === 1;
+      }
+      if (tierSelect) tierSelect.value = role.clearance_level || 'L2_TECH_STAGE';
+      if (deptSelect) deptSelect.value = role.department || 'Audio';
+      if (descInput) descInput.value = role.description || '';
+      if (activeCb) activeCb.checked = Number(role.is_active) !== 0;
+    } else {
+      if (titleEl) titleEl.textContent = 'Add Technical Role';
+      if (tagEl) tagEl.textContent = 'New Clearance Definition';
+      if (idInput) idInput.value = '0';
+      if (titleInput) titleInput.value = '';
+      if (keyInput) {
+        keyInput.value = '';
+        keyInput.readOnly = false;
+      }
+      if (tierSelect) tierSelect.value = 'L2_TECH_STAGE';
+      if (deptSelect) deptSelect.value = 'Audio';
+      if (descInput) descInput.value = '';
+      if (activeCb) activeCb.checked = true;
+    }
+
+    modal.classList.add('open');
+  }
+
+  function closeRoleModal() {
+    const modal = document.getElementById('role-crud-modal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  function populateRoleDropdowns() {
+    const roleSelects = [
+      document.getElementById('user-modal-role'),
+      document.getElementById('reg-role'),
+    ];
+
+    if (!Array.isArray(state.roles) || state.roles.length === 0) return;
+
+    roleSelects.forEach((sel) => {
+      if (!sel) return;
+      const currentVal = sel.value;
+      sel.innerHTML = state.roles.map((r) => `
+        <option value="${escapeHtml(r.role_key)}">${escapeHtml(r.title)} (${escapeHtml(r.clearance_code || 'L2')})</option>
+      `).join('');
+      if (currentVal && Array.from(sel.options).some((o) => o.value === currentVal)) {
+        sel.value = currentVal;
+      }
+    });
+  }
+
   function renderUsersScreen() {
     const rowsEl = document.getElementById('users-table-rows') || document.getElementById('users-table-body');
     if (!rowsEl) return;
+    populateRoleDropdowns();
+    renderRolesScreen();
 
     const crew = Array.isArray(state.crew) ? state.crew : [];
 
@@ -3061,12 +3298,24 @@
       });
     }
 
-    // User Avatar & Account Menu Dropdown
+    // User Avatar & Account Menu Dropdown (ONLY FOR ADMIN)
     const topAvatar = document.getElementById('topbar-avatar');
     const userDropdown = document.getElementById('topbar-user-dropdown');
     if (topAvatar && userDropdown) {
       topAvatar.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (!isCurrentUserAdmin()) {
+          closeAllTopbarDropdowns();
+          const u = state.currentUser || {};
+          const name = u.full_name || 'Staff Member';
+          const role = u.role_display || u.role || 'Operator';
+          const tier = u.clearance_code || 'L2';
+          const doSignOut = confirm(`Active Operator: ${name}\nRole: ${role} · ${tier}\n\nNotice: Account settings, operator switching, and registration are reserved for System Administrators.\n\nDo you want to Sign Out of this station?`);
+          if (doSignOut) {
+            window.location.href = 'login.php?logout=1';
+          }
+          return;
+        }
         const isOpen = userDropdown.style.display === 'block';
         closeAllTopbarDropdowns();
         if (!isOpen) userDropdown.style.display = 'block';
@@ -3989,6 +4238,234 @@
           openCallTimeModal(cp.type, cp.id, cp.name, cp.call_time);
         }
       });
+    });
+
+    
+    // View Switcher between Personnel Directory and Roles CRUD
+    const tabPersonnel = document.getElementById('view-tab-personnel');
+    const tabRoles = document.getElementById('view-tab-roles');
+    const personnelView = document.getElementById('personnel-view-container');
+    const rolesView = document.getElementById('roles-view-container');
+    const addStaffBtn = document.getElementById('open-add-user-btn');
+    const addRoleBtn = document.getElementById('open-add-role-btn');
+
+    function switchUsersView(mode) {
+      state.usersViewMode = mode;
+      if (mode === 'roles') {
+        if (tabPersonnel) {
+          tabPersonnel.className = 'btn btn-secondary-32 js-users-view-tab';
+          const icon = tabPersonnel.querySelector('img');
+          if (icon) icon.style.filter = 'none';
+        }
+        if (tabRoles) {
+          tabRoles.className = 'btn btn-primary-32 js-users-view-tab active-subtab';
+          const icon = tabRoles.querySelector('img');
+          if (icon) icon.style.filter = 'brightness(0) invert(1)';
+        }
+        if (personnelView) personnelView.style.display = 'none';
+        if (rolesView) rolesView.style.display = 'block';
+        if (addStaffBtn) addStaffBtn.style.display = 'none';
+        if (addRoleBtn) addRoleBtn.style.display = 'inline-flex';
+        renderRolesScreen();
+      } else {
+        if (tabPersonnel) {
+          tabPersonnel.className = 'btn btn-primary-32 js-users-view-tab active-subtab';
+          const icon = tabPersonnel.querySelector('img');
+          if (icon) icon.style.filter = 'brightness(0) invert(1)';
+        }
+        if (tabRoles) {
+          tabRoles.className = 'btn btn-secondary-32 js-users-view-tab';
+          const icon = tabRoles.querySelector('img');
+          if (icon) icon.style.filter = 'none';
+        }
+        if (personnelView) personnelView.style.display = 'block';
+        if (rolesView) rolesView.style.display = 'none';
+        if (addStaffBtn) addStaffBtn.style.display = 'inline-flex';
+        if (addRoleBtn) addRoleBtn.style.display = 'none';
+        renderUsersScreen();
+      }
+    }
+
+    if (tabPersonnel) tabPersonnel.addEventListener('click', () => switchUsersView('personnel'));
+    if (tabRoles) tabRoles.addEventListener('click', () => switchUsersView('roles'));
+
+    // Open Add Role Modal
+    if (addRoleBtn) {
+      addRoleBtn.addEventListener('click', () => openRoleModal(null));
+    }
+
+    // Close Role Modal
+    document.querySelectorAll('.js-close-role-modal').forEach((btn) => {
+      btn.addEventListener('click', () => closeRoleModal());
+    });
+
+    // Auto slugify role key input from title input
+    const roleTitleInput = document.getElementById('role-modal-title-input');
+    const roleKeyInput = document.getElementById('role-modal-key-input');
+    if (roleTitleInput && roleKeyInput) {
+      roleTitleInput.addEventListener('input', () => {
+        const idVal = Number(document.getElementById('role-modal-id').value);
+        if (idVal === 0) {
+          roleKeyInput.value = roleTitleInput.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
+        }
+      });
+    }
+
+    // Role CRUD Form Submit
+    const roleForm = document.getElementById('role-crud-form');
+    if (roleForm) {
+      roleForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = Number(document.getElementById('role-modal-id').value);
+        const title = document.getElementById('role-modal-title-input').value.trim();
+        const role_key = document.getElementById('role-modal-key-input').value.trim().toLowerCase();
+        const clearance_level = document.getElementById('role-modal-tier-select').value;
+        const department = document.getElementById('role-modal-dept-select').value;
+        const description = document.getElementById('role-modal-desc-input').value.trim();
+        const is_active = document.getElementById('role-modal-active-checkbox').checked ? 1 : 0;
+        const submitBtn = document.getElementById('role-modal-submit-btn');
+
+        if (!title || !role_key) {
+          showToast('Please provide both role title and code key.');
+          return;
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving Role...';
+        }
+
+        try {
+          const res = await fetch('api.php?action=save_role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, title, role_key, clearance_level, department, description, is_active }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            if (Array.isArray(data.roles)) state.roles = data.roles;
+            closeRoleModal();
+            renderRolesScreen();
+            populateRoleDropdowns();
+            showToast(data.message || 'Role definition saved successfully!');
+          } else {
+            showToast(data.error || 'Failed to save role definition.');
+          }
+        } catch (err) {
+          // Offline fallback
+          const tier = clearance_level === 'L4_ALL_ACCESS' ? { code: 'L4', title: 'Level 4 - All Access', color: '#10b981' } :
+                       clearance_level === 'L3_STOCK_WAREHOUSE' ? { code: 'L3', title: 'Level 3 - Stock Warehouse', color: '#8b5cf6' } :
+                       clearance_level === 'L2_TECH_STAGE' ? { code: 'L2', title: 'Level 2 - Technical & Stage', color: '#3b82f6' } :
+                       { code: 'L1', title: 'Level 1 - Venue Basic', color: '#64748b' };
+          if (id > 0) {
+            const existing = state.roles.find((r) => Number(r.id) === id);
+            if (existing) {
+              Object.assign(existing, { title, role_key, clearance_level, department, description, is_active, clearance_code: tier.code, clearance_title: tier.title, clearance_color: tier.color });
+            }
+          } else {
+            const newId = (state.roles.length ? Math.max(...state.roles.map((r) => Number(r.id))) : 0) + 1;
+            state.roles.push({ id: newId, title, role_key, clearance_level, department, description, is_active, is_system: 0, staff_count: 0, clearance_code: tier.code, clearance_title: tier.title, clearance_color: tier.color });
+          }
+          closeRoleModal();
+          renderRolesScreen();
+          populateRoleDropdowns();
+          showToast(`Role "${title}" saved successfully (Offline mode)!`);
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save Role Definition';
+          }
+        }
+      });
+    }
+
+    // Role search & filters
+    const rolesSearchInp = document.getElementById('roles-search-input');
+    if (rolesSearchInp) {
+      rolesSearchInp.addEventListener('input', (e) => {
+        state.rolesSearch = e.target.value;
+        renderRolesScreen();
+      });
+    }
+    const rolesTierSel = document.getElementById('roles-filter-tier');
+    if (rolesTierSel) {
+      rolesTierSel.addEventListener('change', (e) => {
+        state.rolesFilterTier = e.target.value;
+        renderRolesScreen();
+      });
+    }
+    const rolesDeptSel = document.getElementById('roles-filter-dept');
+    if (rolesDeptSel) {
+      rolesDeptSel.addEventListener('change', (e) => {
+        state.rolesFilterDept = e.target.value;
+        renderRolesScreen();
+      });
+    }
+
+    // Global click listener for Edit Role, Delete Role, and Filter Crew by Role
+    document.addEventListener('click', async (e) => {
+      // 1. Edit Role
+      const editRoleBtn = e.target.closest('.js-edit-role');
+      if (editRoleBtn) {
+        const rid = Number(editRoleBtn.getAttribute('data-role-id'));
+        const r = (state.roles || []).find((x) => Number(x.id) === rid);
+        if (r) openRoleModal(r);
+        return;
+      }
+
+      // 2. Delete Role
+      const delRoleBtn = e.target.closest('.js-delete-role');
+      if (delRoleBtn) {
+        const rid = Number(delRoleBtn.getAttribute('data-role-id'));
+        const title = delRoleBtn.getAttribute('data-role-title') || 'this role';
+        const assigned = Number(delRoleBtn.getAttribute('data-assigned') || 0);
+
+        if (assigned > 0) {
+          showToast(`Cannot delete "${title}": ${assigned} staff members are assigned to this role. Please reassign them first.`);
+          return;
+        }
+
+        const confirmDelete = confirm(`Are you sure you want to permanently delete technical role "${title}"?`);
+        if (!confirmDelete) return;
+
+        try {
+          const res = await fetch('api.php?action=delete_role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: rid }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            if (Array.isArray(data.roles)) state.roles = data.roles;
+            else state.roles = state.roles.filter((x) => Number(x.id) !== rid);
+            renderRolesScreen();
+            populateRoleDropdowns();
+            showToast(data.message || `Role "${title}" deleted successfully.`);
+          } else {
+            showToast(data.error || 'Failed to delete role.');
+          }
+        } catch (err) {
+          state.roles = state.roles.filter((x) => Number(x.id) !== rid);
+          renderRolesScreen();
+          populateRoleDropdowns();
+          showToast(`Role "${title}" deleted (Offline mode).`);
+        }
+        return;
+      }
+
+      // 3. Filter Crew by Role pill
+      const filterPill = e.target.closest('.js-filter-crew-by-role');
+      if (filterPill) {
+        const rKey = filterPill.getAttribute('data-role-key');
+        switchUsersView('personnel');
+        const searchInput = document.getElementById('users-search-input');
+        if (searchInput) {
+          searchInput.value = rKey;
+          state.usersSearch = rKey;
+          renderUsersScreen();
+        }
+        return;
+      }
     });
 
     // Submit Call Time Form

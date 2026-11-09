@@ -1429,9 +1429,29 @@
                 <img src="assets/plus-white.svg" alt="" class="svg-icon" />
                 <span>+ Add New User</span>
               </button>
+              <button type="button" class="btn btn-primary-38" id="open-add-role-btn" style="display: none; background: #5c3dbb;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>+ Add New Role</span>
+              </button>
             </div>
           </div>
 
+          <!-- View Mode Toggle: Personnel Directory vs Roles Management -->
+          <div class="user-subnav-pills" style="display: flex; gap: 10px; margin-top: 14px; margin-bottom: 8px;">
+            <button type="button" class="btn btn-primary-32 js-users-view-tab" id="view-tab-personnel" data-view="personnel">
+              <img src="assets/metric-users.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+              <span>Personnel Directory (<span id="pill-personnel-count">21</span>)</span>
+            </button>
+            <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-roles" data-view="roles">
+              <img src="assets/nav-payments.svg" alt="" class="svg-icon" />
+              <span>Roles &amp; Clearance Matrix CRUD (<span id="pill-roles-count">12</span>)</span>
+            </button>
+          </div>
+
+          <div id="personnel-view-container">
           <!-- Top Metrics Cards -->
           <div class="metrics-grid">
             <div class="metric-card">
@@ -1559,6 +1579,103 @@
             </div>
           </div>
         </section>
+        </div><!-- End #personnel-view-container -->
+
+        <!-- Roles & Clearance Management View Container (CRUD for Roles) -->
+        <div id="roles-view-container" style="display: none; margin-top: 10px;">
+          <!-- 4-Tier Roles Distribution Grid -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Tier L1 — Venue Basic</span>
+                <span class="status-badge" style="background:#e2e8f0; color:#334155; font-size:10px;">L1 Matrix</span>
+              </div>
+              <span class="metric-value-30" id="roles-kpi-l1">03 Roles</span>
+              <span class="metric-context">Venue Crew, Security &amp; Logistics (Stock Blocked)</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Tier L2 — Technical &amp; Stage</span>
+                <span class="status-badge status-badge-blue-sm" style="font-size:10px;">L2 Matrix</span>
+              </div>
+              <span class="metric-value-30" id="roles-kpi-l2">05 Roles</span>
+              <span class="metric-context">Audio, Video, Lighting &amp; Rigging Specialists</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Tier L3 — Stock Warehouse</span>
+                <span class="status-badge status-badge-purple-sm" style="font-size:10px;">L3 Matrix</span>
+              </div>
+              <span class="metric-value-30" id="roles-kpi-l3">01 Role</span>
+              <span class="metric-context">Stock Controllers (#pane-kiosk &amp; Batch Custody)</span>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Tier L4 — Executive All-Access</span>
+                <span class="status-badge status-badge-green-sm" style="font-size:10px;">L4 Matrix</span>
+              </div>
+              <span class="metric-value-30" id="roles-kpi-l4">03 Roles</span>
+              <span class="metric-context">System Administrators &amp; Production Tech Leads</span>
+            </div>
+          </div>
+
+          <!-- Roles Table Directory Card -->
+          <section class="directory-card" style="margin-top: 20px;">
+            <div class="directory-header">
+              <div class="directory-heading">
+                <div class="directory-title-row">
+                  <h2 class="directory-title-18">Defined Technical Roles &amp; Matrix Permissions</h2>
+                  <span class="status-badge status-badge-purple-sm" id="roles-badge-count">12 Roles</span>
+                </div>
+                <p class="directory-desc">
+                  Create, configure, update, or remove technical role designations. Each role links to a 4-Tier clearance level determining gate authorization and warehouse custody permissions.
+                </p>
+              </div>
+            </div>
+
+            <!-- Roles Tools -->
+            <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <label class="table-search-box" for="roles-search-input" style="flex: 1 1 260px; min-width: 240px;">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input type="text" id="roles-search-input" class="table-search-input" placeholder="Search roles by title, code, department, or tier..." />
+              </label>
+
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <select id="roles-filter-tier" class="scan-mode-select" style="min-width: 170px;" aria-label="Filter Roles Tier">
+                  <option value="all">All Clearance Tiers</option>
+                  <option value="L1">Level 1 (Venue Basic)</option>
+                  <option value="L2">Level 2 (Technical &amp; Stage)</option>
+                  <option value="L3">Level 3 (Stock Warehouse)</option>
+                  <option value="L4">Level 4 (All Access)</option>
+                </select>
+
+                <select id="roles-filter-dept" class="scan-mode-select" style="min-width: 160px;" aria-label="Filter Roles Department">
+                  <option value="all">All Departments</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Roles Table Container -->
+            <div class="users-table-wrap" style="overflow-x: auto; width: 100%; margin-top: 14px;">
+              <div style="min-width: 1040px;">
+                <div class="data-table-header">
+                  <div style="width: 230px;"><span class="th-label">Role Title &amp; Code</span></div>
+                  <div style="width: 170px;"><span class="th-label">Clearance Tier</span></div>
+                  <div style="width: 140px;"><span class="th-label">Department</span></div>
+                  <div style="flex: 1 0 260px; min-width: 0;"><span class="th-label">Gate Access Scope &amp; Responsibilities</span></div>
+                  <div style="width: 110px; text-align: center;"><span class="th-label">Assigned Staff</span></div>
+                  <div style="width: 85px;"><span class="th-label">Type</span></div>
+                  <div style="width: 130px; text-align: right;"><span class="th-label">Actions</span></div>
+                </div>
+
+                <div id="roles-table-rows"></div>
+              </div>
+            </div>
+          </section>
+        </div><!-- End #roles-view-container -->
       </main>
     </div>
   </div>
@@ -2062,6 +2179,78 @@
   </div>
 
   <!-- ====================================================================== -->
+
+  <!-- ====================================================================== -->
+  <!-- MODAL: ROLE & CLEARANCE MATRIX CRUD (ADD / EDIT ROLE)                  -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="role-crud-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-labelledby="role-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h3 class="modal-title" id="role-modal-title">Add Technical Role</h3>
+        <span class="status-badge status-badge-purple-sm" id="role-modal-tag">Clearance Definition</span>
+      </div>
+
+      <form id="role-crud-form">
+        <input type="hidden" id="role-modal-id" value="0" />
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="role-modal-title-input">Role Title *</label>
+            <input type="text" id="role-modal-title-input" class="form-input" placeholder="e.g. Wireless Frequency Specialist" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="role-modal-key-input">Role Code / Key *</label>
+            <input type="text" id="role-modal-key-input" class="form-input" placeholder="e.g. wireless_specialist" required />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="role-modal-tier-select">Clearance Tier *</label>
+            <select id="role-modal-tier-select" class="form-input" required>
+              <option value="L1_VENUE_BASIC">Level 1 — Venue Crew &amp; Security</option>
+              <option value="L2_TECH_STAGE" selected>Level 2 — Technical &amp; Stage Crew</option>
+              <option value="L3_STOCK_WAREHOUSE">Level 3 — Stock Warehouse &amp; Dispatch</option>
+              <option value="L4_ALL_ACCESS">Level 4 — Management &amp; All Access</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="role-modal-dept-select">Default Department *</label>
+            <select id="role-modal-dept-select" class="form-input" required>
+              <option value="Audio">Audio</option>
+              <option value="Lighting">Lighting</option>
+              <option value="Video">Video</option>
+              <option value="Stage">Stage</option>
+              <option value="Rigging">Rigging</option>
+              <option value="Warehouse">Warehouse / Stock</option>
+              <option value="Security">Security</option>
+              <option value="Production">Production</option>
+              <option value="Logistics">Logistics</option>
+              <option value="Executive">Executive</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="role-modal-desc-input">Gate Access Scope &amp; Responsibilities</label>
+          <textarea id="role-modal-desc-input" class="form-input" rows="3" placeholder="Describe operational privileges, equipment authorization, and gate checkpoints..." style="resize: vertical;"></textarea>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text-primary);">
+            <input type="checkbox" id="role-modal-active-checkbox" checked />
+            <span>Active Role (Available in Staff Creation &amp; Registration)</span>
+          </label>
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary-38 js-close-role-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="role-modal-submit-btn" style="background: #5c3dbb;">Save Role Definition</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL 7: CONFIRM DELETE MODAL                                          -->
   <!-- ====================================================================== -->
   <div class="modal-backdrop" id="confirm-delete-modal" aria-hidden="true">
