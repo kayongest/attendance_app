@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS `users` (
     `username` VARCHAR(64) NOT NULL UNIQUE,
     `full_name` VARCHAR(120) NOT NULL,
     `email` VARCHAR(150) DEFAULT NULL,
+    `password_hash` VARCHAR(255) DEFAULT NULL,
     `phone` VARCHAR(50) DEFAULT '+250 788 100 200',
     `role` VARCHAR(50) NOT NULL DEFAULT 'technician',
     `department` VARCHAR(80) DEFAULT 'Audio',

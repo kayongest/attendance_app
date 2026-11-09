@@ -1,0 +1,5 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="2.5" y="6.5" width="11" height="8" rx="1.5" stroke="#777985" stroke-width="1.6"/>
+<path d="M5 6.5V4.5C5 2.84315 6.34315 1.5 8 1.5C9.65685 1.5 11 2.84315 11 4.5V6.5" stroke="#777985" stroke-width="1.6" stroke-linecap="round"/>
+<circle cx="8" cy="10" r="1" fill="#777985"/>
+</svg>

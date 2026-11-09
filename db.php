@@ -146,6 +146,7 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `username` VARCHAR(64) NOT NULL UNIQUE,
             `full_name` VARCHAR(120) NOT NULL,
             `email` VARCHAR(150) DEFAULT NULL,
+            `password_hash` VARCHAR(255) DEFAULT NULL,
             `phone` VARCHAR(50) DEFAULT '+250 788 100 200',
             `role` VARCHAR(50) NOT NULL DEFAULT 'technician',
             `department` VARCHAR(80) DEFAULT 'Audio',
@@ -154,6 +155,28 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
+
+    // Ensure `password_hash` column exists if table already existed without it
+    try {
+        $hasPasswordCol = false;
+        $colStmt = $pdo->query("SHOW COLUMNS FROM `users` LIKE 'password_hash'");
+        if ($colStmt && $colStmt->fetch()) {
+            $hasPasswordCol = true;
+        }
+        if (!$hasPasswordCol) {
+            $pdo->exec("ALTER TABLE `users` ADD COLUMN `password_hash` VARCHAR(255) DEFAULT NULL AFTER `email`");
+        }
+    } catch (Throwable $e) {
+    }
+
+    // Set default password hashes for users if null (admin: admin123, others: password123)
+    try {
+        $defaultHash = password_hash('password123', PASSWORD_BCRYPT);
+        $adminHash = password_hash('admin123', PASSWORD_BCRYPT);
+        $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `username` = 'admin' AND (`password_hash` IS NULL OR `password_hash` = '')")->execute([$adminHash]);
+        $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `username` != 'admin' AND (`password_hash` IS NULL OR `password_hash` = '')")->execute([$defaultHash]);
+    } catch (Throwable $e) {
+    }
 
     // 2. Ensure `user_badges` table exists
     $pdo->exec("
