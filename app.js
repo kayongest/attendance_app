@@ -73,9 +73,11 @@
     tierFilter: 'all',
     gateStateFilter: 'all',
 
-    // Checkpoints directory filters
+    // Checkpoints directory filters & pagination (5 items per page)
     checkpointTab: 'all',
     checkpointSearch: '',
+    checkpointPage: 1,
+    checkpointPerPage: 5,
 
     // Users & Roles CRUD Manager
     usersTab: 'all',
@@ -1447,7 +1449,82 @@
       return true;
     });
 
-    rowsEl.innerHTML = filtered
+    // 5 items per page pagination
+    state.checkpointPage = state.checkpointPage || 1;
+    state.checkpointPerPage = 5;
+    const totalPages = Math.ceil(filtered.length / state.checkpointPerPage) || 1;
+    if (state.checkpointPage > totalPages) state.checkpointPage = totalPages;
+    if (state.checkpointPage < 1) state.checkpointPage = 1;
+
+    const startIdx = (state.checkpointPage - 1) * state.checkpointPerPage;
+    const paged = filtered.slice(startIdx, startIdx + state.checkpointPerPage);
+
+    // Update Footer Count
+    const footerCountEl = document.getElementById('events-results-count');
+    if (footerCountEl) {
+      if (filtered.length === 0) {
+        footerCountEl.textContent = 'Showing 0 of 0 checkpoints';
+      } else {
+        const endIdx = Math.min(startIdx + state.checkpointPerPage, filtered.length);
+        footerCountEl.textContent = `Showing ${startIdx + 1}–${endIdx} of ${filtered.length} checkpoints`;
+      }
+    }
+
+    // Update Page Controls
+    const pageControlsEl = document.getElementById('events-page-controls');
+    if (pageControlsEl) {
+      if (totalPages <= 1) {
+        pageControlsEl.innerHTML = '';
+      } else {
+        let controlsHtml = `
+          <button type="button" class="btn btn-secondary-32 js-events-prev-page" ${state.checkpointPage <= 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            &larr; Prev
+          </button>
+        `;
+        for (let p = 1; p <= totalPages; p++) {
+          const isActive = p === state.checkpointPage;
+          controlsHtml += `
+            <button type="button" class="btn ${isActive ? 'btn-primary-32' : 'btn-secondary-32'} js-events-page-num" data-page="${p}" style="min-width: 32px; padding: 0 8px; font-weight: 600;">
+              ${p}
+            </button>
+          `;
+        }
+        controlsHtml += `
+          <button type="button" class="btn btn-secondary-32 js-events-next-page" ${state.checkpointPage >= totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            Next &rarr;
+          </button>
+        `;
+        pageControlsEl.innerHTML = controlsHtml;
+
+        pageControlsEl.querySelectorAll('.js-events-page-num').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.checkpointPage = Number(btn.getAttribute('data-page'));
+            renderCheckpointsDirectory();
+          });
+        });
+        const prevBtn = pageControlsEl.querySelector('.js-events-prev-page');
+        if (prevBtn && state.checkpointPage > 1) {
+          prevBtn.addEventListener('click', () => {
+            state.checkpointPage--;
+            renderCheckpointsDirectory();
+          });
+        }
+        const nextBtn = pageControlsEl.querySelector('.js-events-next-page');
+        if (nextBtn && state.checkpointPage < totalPages) {
+          nextBtn.addEventListener('click', () => {
+            state.checkpointPage++;
+            renderCheckpointsDirectory();
+          });
+        }
+      }
+    }
+
+    if (filtered.length === 0) {
+      rowsEl.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No checkpoints match the search criteria.</div>';
+      return;
+    }
+
+    rowsEl.innerHTML = paged
       .map((cp) => {
         const isStock = cp.type === 'stock_warehouse';
         const isActive = cp.type === state.checkpointType && Number(cp.id) === Number(state.checkpointId);
@@ -1478,8 +1555,10 @@
                     data-cp-name="${escapeHtml(cp.name)}"
                     data-call-time="${escapeHtml(cp.call_time || '08:00')}"
                     title="Change Call Time"
+                    style="display: inline-flex; align-items: center; gap: 3px;"
                   >
-                    ✎ Set
+                    <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 10px; height: 10px;" />
+                    <span>Set</span>
                   </button>
                 </div>
                 <span class="company-role">${escapeHtml(cp.lead_label || '')}</span>
@@ -4832,6 +4911,7 @@
         const tab = e.target.closest('.status-tab[data-event-tab]');
         if (!tab) return;
         state.checkpointTab = tab.getAttribute('data-event-tab');
+        state.checkpointPage = 1;
         evTabs.querySelectorAll('.status-tab').forEach((t) => t.classList.toggle('active', t === tab));
         renderCheckpointsDirectory();
       });
@@ -4919,6 +4999,7 @@
     if (evSearch) {
       evSearch.addEventListener('input', (e) => {
         state.checkpointSearch = e.target.value;
+        state.checkpointPage = 1;
         renderCheckpointsDirectory();
       });
     }
