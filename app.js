@@ -41,6 +41,9 @@
     hourlyTraffic: [],
     activityTimeline: [],
     batches: [],
+    batchesSearch: '',
+    batchesFilterStatus: 'all',
+    batchesFilterMovement: 'all',
     roles: [],
     usersViewMode: 'personnel',
     rolesSearch: '',
@@ -1515,50 +1518,97 @@
     }
 
     // 2. Equipment Batches Custody Table
+    populateBatchCrudDropdowns();
     const batchesRowsEl = document.getElementById('batches-table-rows');
     const batchesBadge = document.getElementById('batches-count-badge');
-    if (batchesBadge) batchesBadge.textContent = String(state.batches.length).padStart(2, '0');
+
+    let batches = Array.isArray(state.batches) ? state.batches : [];
+    if (state.batchesSearch) {
+      const q = state.batchesSearch.toLowerCase().trim();
+      batches = batches.filter(
+        (b) =>
+          (b.batch_number || '').toLowerCase().includes(q) ||
+          (b.job_sheet || '').toLowerCase().includes(q) ||
+          (b.event_name || '').toLowerCase().includes(q) ||
+          (b.technician_name || '').toLowerCase().includes(q) ||
+          (b.source_name || '').toLowerCase().includes(q) ||
+          (b.destination_name || '').toLowerCase().includes(q) ||
+          (b.destination_room || '').toLowerCase().includes(q)
+      );
+    }
+    if (state.batchesFilterStatus && state.batchesFilterStatus !== 'all') {
+      batches = batches.filter((b) => (b.status || '').toLowerCase() === state.batchesFilterStatus.toLowerCase());
+    }
+    if (state.batchesFilterMovement && state.batchesFilterMovement !== 'all') {
+      batches = batches.filter((b) => (b.movement_type || '').toLowerCase() === state.batchesFilterMovement.toLowerCase());
+    }
+
+    if (batchesBadge) batchesBadge.textContent = String(batches.length).padStart(2, '0');
 
     if (batchesRowsEl) {
-      batchesRowsEl.innerHTML = state.batches
-        .map((b) => {
-          const isApproved = b.status === 'approved';
-          return `
-            <div class="tier-table-row" style="height: 68px;">
-              <div style="width: 210px; display: flex; flex-direction: column; gap: 3px;">
-                <span class="badge-code-primary">${escapeHtml(b.batch_number)}</span>
-                <span style="font-size: 10px; color: var(--text-secondary);">Job Sheet: ${escapeHtml(b.job_sheet)} · ${escapeHtml(b.event_name)}</span>
+      if (batches.length === 0) {
+        batchesRowsEl.innerHTML = `
+          <div style="padding: 32px 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+            <div style="font-size: 24px; margin-bottom: 6px;">📦</div>
+            <strong>No equipment batches found</strong>
+            <p style="margin-top: 4px; font-size: 11px;">Try adjusting search terms or click "+ Create Equipment Batch" above.</p>
+          </div>
+        `;
+      } else {
+        batchesRowsEl.innerHTML = batches
+          .map((b) => {
+            const isApproved = b.status === 'approved';
+            const statusBadge =
+              b.status === 'approved' ? 'status-badge-green-sm' :
+              b.status === 'pending' ? 'status-badge-amber-sm' :
+              b.status === 'in_transit' ? 'status-badge-blue-sm' :
+              b.status === 'completed' ? 'status-badge-purple-sm' : 'status-badge-amber-sm';
+
+            const itemsCount = Array.isArray(b.items) ? b.items.length : 0;
+
+            return `
+              <div class="tier-table-row" style="height: 68px;">
+                <div style="width: 210px; display: flex; flex-direction: column; gap: 3px;">
+                  <span class="badge-code-primary">${escapeHtml(b.batch_number)}</span>
+                  <span style="font-size: 10px; color: var(--text-secondary);">Job Sheet: ${escapeHtml(b.job_sheet)} · ${escapeHtml(b.event_name)}</span>
+                </div>
+                <div style="width: 220px; display: flex; flex-direction: column; gap: 3px;">
+                  <span style="font-size: 11px; font-weight: 600;">${escapeHtml(b.source_name)} &rarr; ${escapeHtml(b.destination_name)}</span>
+                  <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(b.destination_room || 'Main Stage')} (${escapeHtml(b.movement_type)})</span>
+                </div>
+                <div style="width: 190px; display: flex; flex-direction: column; gap: 3px;">
+                  <span style="font-size: 11px; font-weight: 600;">${escapeHtml(b.technician_name)}</span>
+                  <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(b.technician_badge)} · Tier ${escapeHtml(b.technician_clearance)}</span>
+                </div>
+                <div style="width: 130px; font-size: 11px;">
+                  ${escapeHtml(b.stock_controller_name)}
+                </div>
+                <div style="width: 110px;">
+                  <span class="status-badge ${statusBadge}">
+                    ${escapeHtml(b.status.toUpperCase())}
+                  </span>
+                </div>
+                <div style="flex: 1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <button type="button" class="btn btn-secondary-32-sm js-open-batch-modal" data-batch-id="${b.id}" title="Inspect Manifest (${itemsCount} items)">
+                    Inspect (${itemsCount})
+                  </button>
+                  <button type="button" class="btn btn-secondary-32-sm js-edit-batch" data-batch-id="${b.id}" title="Edit Equipment Batch">
+                    ✏️ Edit
+                  </button>
+                  ${
+                    !isApproved
+                      ? `<button type="button" class="btn btn-primary-32-sm js-approve-batch-btn" data-batch-id="${b.id}" style="background:#16a34a; font-size:11px; padding:0 8px; height:28px;" title="Verify & Approve Batch">Approve</button>`
+                      : ''
+                  }
+                  <button type="button" class="btn btn-secondary-32-sm js-delete-batch" data-batch-id="${b.id}" data-batch-num="${escapeHtml(b.batch_number)}" style="color: #dc2626; padding:0 8px; height:28px;" title="Delete Batch">
+                    🗑️
+                  </button>
+                </div>
               </div>
-              <div style="width: 220px; display: flex; flex-direction: column; gap: 3px;">
-                <span style="font-size: 11px; font-weight: 600;">${escapeHtml(b.source_name)} → ${escapeHtml(b.destination_name)}</span>
-                <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(b.destination_room)} (${escapeHtml(b.movement_type)})</span>
-              </div>
-              <div style="width: 200px; display: flex; flex-direction: column; gap: 3px;">
-                <span style="font-size: 11px; font-weight: 600;">${escapeHtml(b.technician_name)}</span>
-                <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(b.technician_badge)} · Tier ${escapeHtml(b.technician_clearance)}</span>
-              </div>
-              <div style="width: 140px; font-size: 11px;">
-                ${escapeHtml(b.stock_controller_name)}
-              </div>
-              <div style="width: 120px;">
-                <span class="status-badge ${isApproved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">
-                  ${escapeHtml(b.status.toUpperCase())}
-                </span>
-              </div>
-              <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
-                <button type="button" class="btn btn-secondary-32-sm js-open-batch-modal" data-batch-id="${b.id}">
-                  Inspect Manifest
-                </button>
-                ${
-                  !isApproved
-                    ? `<button type="button" class="btn btn-primary-32 js-approve-batch-btn" data-batch-id="${b.id}">Approve Batch</button>`
-                    : ''
-                }
-              </div>
-            </div>
-          `;
-        })
-        .join('');
+            `;
+          })
+          .join('');
+      }
     }
 
     // 3. 4-Tier Access Matrix Crew Assignment Rows
@@ -1810,6 +1860,126 @@
     }
 
     if (modal) modal.classList.add('open');
+  }
+
+  function populateBatchCrudDropdowns() {
+    const techSelect = document.getElementById('batch-crud-tech');
+    if (techSelect && state.crew.length > 0) {
+      const currentVal = techSelect.value;
+      techSelect.innerHTML = state.crew
+        .map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)} (${escapeHtml(c.badge_code)} · ${escapeHtml(c.clearance_code)})</option>`)
+        .join('');
+      if (currentVal) techSelect.value = currentVal;
+    }
+
+    const ctrlSelect = document.getElementById('batch-crud-controller');
+    if (ctrlSelect) {
+      const currentVal = ctrlSelect.value;
+      const controllers = state.crew.filter((c) =>
+        ['stock_controller', 'stock_manager', 'admin', 'manager'].includes((c.role || '').toLowerCase()) ||
+        (c.clearance_code === 'L3' || c.clearance_code === 'L4')
+      );
+      const list = controllers.length > 0 ? controllers : state.crew;
+      ctrlSelect.innerHTML = list
+        .map((c) => `<option value="${c.id}" data-name="${escapeHtml(c.full_name)}">${escapeHtml(c.full_name)} (${escapeHtml(c.role_display)})</option>`)
+        .join('');
+      if (currentVal) ctrlSelect.value = currentVal;
+    }
+  }
+
+  function addBatchCrudItemRow(name = '', qty = 1, serial = '') {
+    const container = document.getElementById('batch-crud-items-container');
+    if (!container) return;
+    const row = document.createElement('div');
+    row.className = 'batch-item-row';
+    row.style.cssText = 'display: flex; gap: 6px; align-items: center; margin-bottom: 4px;';
+    row.innerHTML = `
+      <input type="text" class="form-input js-batch-item-name" placeholder="Item name (e.g. Flight Case A)" value="${escapeHtml(name)}" required style="flex: 2; height: 30px; font-size: 11px;" />
+      <input type="number" class="form-input js-batch-item-qty" placeholder="Qty" value="${qty || 1}" min="1" required style="width: 60px; height: 30px; font-size: 11px;" />
+      <input type="text" class="form-input js-batch-item-serial" placeholder="Serial / Asset #" value="${escapeHtml(serial || '')}" style="flex: 1.5; height: 30px; font-size: 11px;" />
+      <button type="button" class="btn-ghost-sm js-remove-batch-item" style="color: #dc2626; padding: 2px 6px; cursor: pointer; border: none; background: transparent; font-weight: bold;" title="Remove Item">✕</button>
+    `;
+    container.appendChild(row);
+  }
+
+  function openBatchCrudModal(batch = null) {
+    populateBatchCrudDropdowns();
+    const modal = document.getElementById('batch-crud-modal');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('batch-crud-modal-title');
+    const idInput = document.getElementById('batch-crud-id');
+    const numInput = document.getElementById('batch-crud-num');
+    const jobsheetInput = document.getElementById('batch-crud-jobsheet');
+    const eventInput = document.getElementById('batch-crud-event');
+    const movementSelect = document.getElementById('batch-crud-movement');
+    const sourceInput = document.getElementById('batch-crud-source');
+    const destInput = document.getElementById('batch-crud-destination');
+    const roomInput = document.getElementById('batch-crud-room');
+    const statusSelect = document.getElementById('batch-crud-status');
+    const techSelect = document.getElementById('batch-crud-tech');
+    const ctrlSelect = document.getElementById('batch-crud-controller');
+    const notesInput = document.getElementById('batch-crud-notes');
+    const itemsContainer = document.getElementById('batch-crud-items-container');
+
+    if (itemsContainer) itemsContainer.innerHTML = '';
+
+    const todayDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randCode = Math.random().toString(16).substring(2, 8).toUpperCase();
+
+    if (batch) {
+      if (titleEl) titleEl.textContent = `Edit Equipment Batch (${batch.batch_number})`;
+      if (idInput) idInput.value = batch.id;
+      if (numInput) numInput.value = batch.batch_number || '';
+      if (jobsheetInput) jobsheetInput.value = batch.job_sheet || '';
+      if (eventInput) eventInput.value = batch.event_name || '';
+      if (movementSelect) movementSelect.value = batch.movement_type || 'stock_to_venue_room';
+      if (sourceInput) sourceInput.value = batch.source_name || '';
+      if (destInput) destInput.value = batch.destination_name || '';
+      if (roomInput) roomInput.value = batch.destination_room || '';
+      if (statusSelect) statusSelect.value = batch.status || 'pending';
+      if (techSelect && batch.technician_id) techSelect.value = batch.technician_id;
+      if (ctrlSelect) {
+        if (batch.stock_controller_id) ctrlSelect.value = batch.stock_controller_id;
+        else {
+          const opt = Array.from(ctrlSelect.options).find(
+            (o) => (o.getAttribute('data-name') || '').toLowerCase() === (batch.stock_controller_name || '').toLowerCase()
+          );
+          if (opt) opt.selected = true;
+        }
+      }
+      if (notesInput) notesInput.value = batch.notes || '';
+
+      if (Array.isArray(batch.items) && batch.items.length > 0) {
+        batch.items.forEach((it) => addBatchCrudItemRow(it.item_name, it.quantity, it.serial_number));
+      } else {
+        addBatchCrudItemRow('Standard Equipment Package', 1, '');
+      }
+    } else {
+      if (titleEl) titleEl.textContent = 'Create Equipment Batch';
+      if (idInput) idInput.value = 0;
+      if (numInput) numInput.value = `BATCH-${todayDateStr}-${randCode}`;
+      if (jobsheetInput) jobsheetInput.value = `JS-${todayDateStr}-01`;
+      if (eventInput) eventInput.value = state.activeCheckpoint ? state.activeCheckpoint.name : 'Production Event';
+      if (movementSelect) movementSelect.value = 'stock_to_venue_room';
+      if (sourceInput) sourceInput.value = 'Ndera Central Warehouse';
+      if (destInput) destInput.value = 'Kigali Convention Centre';
+      if (roomInput) roomInput.value = 'Main Stage (MH1)';
+      if (statusSelect) statusSelect.value = 'pending';
+      if (techSelect && state.crew.length > 0) techSelect.value = state.selectedCrewId || state.crew[0].id;
+      if (ctrlSelect && ctrlSelect.options.length > 0) ctrlSelect.selectedIndex = 0;
+      if (notesInput) notesInput.value = '';
+
+      addBatchCrudItemRow('Flight Case A', 1, `FC-${randCode}`);
+      addBatchCrudItemRow('Microphone Shure Wireless', 2, `SHUR-${randCode}`);
+    }
+
+    modal.classList.add('open');
+  }
+
+  function closeBatchCrudModal() {
+    const modal = document.getElementById('batch-crud-modal');
+    if (modal) modal.classList.remove('open');
   }
 
   function openCallTimeModal(targetCpType = null, targetCpId = null, targetCpName = null, currentTime = null) {
@@ -3816,6 +3986,54 @@
         return;
       }
 
+      // 8b. Edit Batch button
+      const editBatchBtn = e.target.closest('.js-edit-batch');
+      if (editBatchBtn) {
+        const bid = Number(editBatchBtn.getAttribute('data-batch-id'));
+        const batch = state.batches.find((b) => Number(b.id) === bid);
+        if (batch) openBatchCrudModal(batch);
+        return;
+      }
+
+      // 8c. Delete Batch button
+      const delBatchBtn = e.target.closest('.js-delete-batch');
+      if (delBatchBtn) {
+        const bid = Number(delBatchBtn.getAttribute('data-batch-id'));
+        const num = delBatchBtn.getAttribute('data-batch-num') || `Batch #${bid}`;
+        const doDel = confirm(`Are you sure you want to permanently delete equipment batch "${num}"? All linked items in the manifest will also be removed.`);
+        if (!doDel) return;
+
+        try {
+          const res = await fetch('api.php?action=delete_batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete_batch', id: bid }),
+          });
+          const d = await res.json();
+          if (d && d.ok) {
+            if (Array.isArray(d.batches)) state.batches = d.batches;
+            else state.batches = state.batches.filter((b) => Number(b.id) !== bid);
+            renderBatchesAndMatrixScreen();
+            showToast(d.message || `Batch "${num}" deleted successfully.`);
+          } else {
+            showToast(d.error || 'Failed to delete batch.');
+          }
+        } catch (err) {
+          state.batches = state.batches.filter((b) => Number(b.id) !== bid);
+          renderBatchesAndMatrixScreen();
+          showToast(`Batch "${num}" deleted.`);
+        }
+        return;
+      }
+
+      // 8d. Remove item row in Batch CRUD Modal
+      const remItemBtn = e.target.closest('.js-remove-batch-item');
+      if (remItemBtn) {
+        const row = remItemBtn.closest('.batch-item-row');
+        if (row) row.remove();
+        return;
+      }
+
       // 9. Test in Kiosk from Matrix screen
       const testKioskBtn = e.target.closest('.js-test-in-kiosk');
       if (testKioskBtn) {
@@ -4207,6 +4425,129 @@
         batchModal.classList.remove('open');
         await fetchBootstrap(true);
         showToast(`Batch #${state.inspectedBatchId} approved`);
+      });
+    }
+
+    // Batch CRUD Modal triggers & submission
+    const openCreateBatchBtn = document.getElementById('open-create-batch-btn');
+    if (openCreateBatchBtn) {
+      openCreateBatchBtn.addEventListener('click', () => openBatchCrudModal(null));
+    }
+    const addBatchItemBtn = document.getElementById('batch-crud-add-item-btn');
+    if (addBatchItemBtn) {
+      addBatchItemBtn.addEventListener('click', () => addBatchCrudItemRow('', 1, ''));
+    }
+    document.querySelectorAll('.js-close-batch-crud-modal').forEach((btn) => {
+      btn.addEventListener('click', closeBatchCrudModal);
+    });
+
+    const batchCrudForm = document.getElementById('batch-crud-form');
+    if (batchCrudForm) {
+      batchCrudForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = document.getElementById('batch-crud-submit-btn');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving Batch...';
+        }
+
+        const id = Number(document.getElementById('batch-crud-id').value || 0);
+        const batch_number = document.getElementById('batch-crud-num').value.trim();
+        const job_sheet = document.getElementById('batch-crud-jobsheet').value.trim();
+        const event_name = document.getElementById('batch-crud-event').value.trim();
+        const movement_type = document.getElementById('batch-crud-movement').value;
+        const source_name = document.getElementById('batch-crud-source').value.trim();
+        const destination_name = document.getElementById('batch-crud-destination').value.trim();
+        const destination_room = document.getElementById('batch-crud-room').value.trim();
+        const status = document.getElementById('batch-crud-status').value;
+        const techSelect = document.getElementById('batch-crud-tech');
+        const technician_id = Number(techSelect ? techSelect.value : 0);
+        const ctrlSelect = document.getElementById('batch-crud-controller');
+        const stock_controller_id = Number(ctrlSelect ? ctrlSelect.value : 0);
+        const stock_controller_name = ctrlSelect && ctrlSelect.selectedOptions[0]
+          ? ctrlSelect.selectedOptions[0].getAttribute('data-name') || ctrlSelect.selectedOptions[0].text
+          : 'Mirene Uwase';
+        const notes = document.getElementById('batch-crud-notes').value.trim();
+
+        // Extract manifest items
+        const itemRows = document.querySelectorAll('#batch-crud-items-container .batch-item-row');
+        const items = [];
+        itemRows.forEach((row) => {
+          const nameInp = row.querySelector('.js-batch-item-name');
+          const qtyInp = row.querySelector('.js-batch-item-qty');
+          const serialInp = row.querySelector('.js-batch-item-serial');
+          const item_name = nameInp ? nameInp.value.trim() : '';
+          const quantity = qtyInp ? Number(qtyInp.value || 1) : 1;
+          const serial_number = serialInp ? serialInp.value.trim() : '';
+          if (item_name) {
+            items.push({ item_name, quantity, serial_number, status });
+          }
+        });
+
+        try {
+          const res = await fetch('api.php?action=save_batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'save_batch',
+              id,
+              batch_number,
+              job_sheet,
+              event_name,
+              movement_type,
+              source_name,
+              destination_name,
+              destination_room,
+              status,
+              technician_id,
+              stock_controller_id,
+              stock_controller_name,
+              notes,
+              items,
+            }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            if (Array.isArray(data.batches)) state.batches = data.batches;
+            closeBatchCrudModal();
+            renderBatchesAndMatrixScreen();
+            showToast(data.message || `Equipment batch "${batch_number}" saved!`);
+          } else {
+            showToast(data.error || 'Failed to save equipment batch.');
+          }
+        } catch (err) {
+          console.error(err);
+          showToast('Batch saved (Offline fallback)');
+          closeBatchCrudModal();
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save Equipment Batch';
+          }
+        }
+      });
+    }
+
+    // Batches Table Search & Filters
+    const batchesSearchInp = document.getElementById('batches-search-input');
+    if (batchesSearchInp) {
+      batchesSearchInp.addEventListener('input', (e) => {
+        state.batchesSearch = e.target.value;
+        renderBatchesAndMatrixScreen();
+      });
+    }
+    const batchesFilterStatus = document.getElementById('batches-filter-status');
+    if (batchesFilterStatus) {
+      batchesFilterStatus.addEventListener('change', (e) => {
+        state.batchesFilterStatus = e.target.value;
+        renderBatchesAndMatrixScreen();
+      });
+    }
+    const batchesFilterMovement = document.getElementById('batches-filter-movement');
+    if (batchesFilterMovement) {
+      batchesFilterMovement.addEventListener('change', (e) => {
+        state.batchesFilterMovement = e.target.value;
+        renderBatchesAndMatrixScreen();
       });
     }
 

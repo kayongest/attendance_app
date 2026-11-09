@@ -832,8 +832,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     // 6. Load All Equipment Batches (`stock_movements`)
     $allBatches = [];
     try {
-        $bRows = $pdo->query("SELECT * FROM `stock_movements` ORDER BY `id` DESC LIMIT 25")->fetchAll();
-        $itemStmt = $pdo->prepare("SELECT `item_name`, `quantity` FROM `batch_items` WHERE `batch_id` = ? LIMIT 10");
+        $bRows = $pdo->query("SELECT * FROM `stock_movements` ORDER BY `id` DESC LIMIT 50")->fetchAll();
+        $itemStmt = $pdo->prepare("SELECT `id`, `item_name`, `quantity`, `serial_number`, `status` FROM `batch_items` WHERE `batch_id` = ? ORDER BY `id` ASC LIMIT 50");
         foreach ($bRows as $br) {
             $bid = (int) $br['id'];
             $techId = (int) ($br['technician_id'] ?? 0);
@@ -848,7 +848,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             $allBatches[] = [
                 'id' => $bid,
                 'batch_number' => (string) ($br['batch_number'] ?? ('BATCH-' . $bid)),
-                'movement_type' => (string) ($br['movement_type'] ?? 'dispatch'),
+                'movement_type' => (string) ($br['movement_type'] ?? 'stock_to_venue_room'),
                 'source_name' => (string) ($br['source_name'] ?? 'Ndera Warehouse'),
                 'destination_name' => (string) ($br['destination_name'] ?? 'Kigali Convention Centre'),
                 'destination_room' => (string) ($br['destination_room'] ?? 'Main Auditorium'),
@@ -856,7 +856,10 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
                 'technician_name' => $techMember ? $techMember['full_name'] : (string) ($br['submitted_by'] ?: 'Eric Havugimana'),
                 'technician_badge' => $techMember ? $techMember['badge_code'] : 'REW-BADGE-0006',
                 'technician_clearance' => $techMember ? $techMember['clearance_code'] : 'L2',
+                'stock_controller_id' => (int) ($br['stock_controller_id'] ?? 0),
                 'stock_controller_name' => (string) ($br['stock_controller_name'] ?: 'Mirene Uwase'),
+                'submitted_by' => (string) ($br['submitted_by'] ?? ''),
+                'notes' => (string) ($br['notes'] ?? ''),
                 'status' => strtolower((string) ($br['status'] ?? $br['approval_status'] ?? 'approved')),
                 'event_name' => (string) ($br['event_name'] ?: 'World Bank Summit'),
                 'job_sheet' => (string) ($br['job_sheet'] ?: 'JS-2026-104'),
@@ -1477,6 +1480,153 @@ try {
             }
         }
         echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
+        exit;
+    }
+
+    if ($action === 'save_batch') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $batchNumber = trim((string) ($_POST['batch_number'] ?? $jsonBody['batch_number'] ?? ''));
+        if ($batchNumber === '') {
+            $batchNumber = 'BATCH-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
+        }
+        $techId = (int) ($_POST['technician_id'] ?? $jsonBody['technician_id'] ?? 0);
+        $submittedBy = trim((string) ($_POST['submitted_by'] ?? $jsonBody['submitted_by'] ?? ''));
+        $controllerId = (int) ($_POST['stock_controller_id'] ?? $jsonBody['stock_controller_id'] ?? 0);
+        $controllerName = trim((string) ($_POST['stock_controller_name'] ?? $jsonBody['stock_controller_name'] ?? 'Mirene Uwase'));
+        $movementType = trim((string) ($_POST['movement_type'] ?? $jsonBody['movement_type'] ?? 'stock_to_venue_room'));
+        $sourceName = trim((string) ($_POST['source_name'] ?? $jsonBody['source_name'] ?? 'Ndera Warehouse'));
+        $destinationName = trim((string) ($_POST['destination_name'] ?? $jsonBody['destination_name'] ?? 'Kigali Convention Centre'));
+        $destinationRoom = trim((string) ($_POST['destination_room'] ?? $jsonBody['destination_room'] ?? 'Main Stage'));
+        $eventName = trim((string) ($_POST['event_name'] ?? $jsonBody['event_name'] ?? 'Production Event'));
+        $jobSheet = trim((string) ($_POST['job_sheet'] ?? $jsonBody['job_sheet'] ?? 'JS-' . date('Ymd')));
+        $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
+        $status = strtolower(trim((string) ($_POST['status'] ?? $jsonBody['status'] ?? 'pending')));
+        if (!in_array($status, ['pending', 'approved', 'in_transit', 'completed', 'rejected'], true)) {
+            $status = 'pending';
+        }
+
+        if ($techId > 0 && $submittedBy === '') {
+            $uStmt = $pdo->prepare("SELECT `username`, `full_name` FROM `users` WHERE `id` = ?");
+            $uStmt->execute([$techId]);
+            $uRow = $uStmt->fetch();
+            if ($uRow) {
+                $submittedBy = (string) ($uRow['full_name'] ?: $uRow['username']);
+            }
+        }
+
+        if ($id > 0) {
+            $upd = $pdo->prepare("
+                UPDATE `stock_movements`
+                SET `batch_number` = ?,
+                    `technician_id` = ?,
+                    `submitted_by` = ?,
+                    `stock_controller_id` = ?,
+                    `stock_controller_name` = ?,
+                    `movement_type` = ?,
+                    `source_name` = ?,
+                    `destination_name` = ?,
+                    `destination_room` = ?,
+                    `event_name` = ?,
+                    `job_sheet` = ?,
+                    `notes` = ?,
+                    `status` = ?,
+                    `approval_status` = ?,
+                    `updated_at` = NOW()
+                WHERE `id` = ?
+            ");
+            $upd->execute([
+                $batchNumber, $techId, $submittedBy, $controllerId, $controllerName,
+                $movementType, $sourceName, $destinationName, $destinationRoom,
+                $eventName, $jobSheet, $notes, $status, $status, $id
+            ]);
+            $batchId = $id;
+        } else {
+            $ins = $pdo->prepare("
+                INSERT INTO `stock_movements` (
+                    `batch_number`, `technician_id`, `submitted_by`, `stock_controller_id`,
+                    `stock_controller_name`, `movement_type`, `source_name`, `destination_name`,
+                    `destination_room`, `event_name`, `job_sheet`, `notes`, `status`,
+                    `approval_status`, `created_at`
+                ) VALUES (
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, NOW()
+                )
+            ");
+            $ins->execute([
+                $batchNumber, $techId, $submittedBy, $controllerId,
+                $controllerName, $movementType, $sourceName, $destinationName,
+                $destinationRoom, $eventName, $jobSheet, $notes, $status,
+                $status
+            ]);
+            $batchId = (int) $pdo->lastInsertId();
+        }
+
+        $rawItems = $_POST['items'] ?? $jsonBody['items'] ?? null;
+        if (is_string($rawItems)) {
+            $decoded = json_decode($rawItems, true);
+            if (is_array($decoded)) $rawItems = $decoded;
+        }
+        if (is_array($rawItems)) {
+            $delItems = $pdo->prepare("DELETE FROM `batch_items` WHERE `batch_id` = ?");
+            $delItems->execute([$batchId]);
+
+            $insItem = $pdo->prepare("
+                INSERT INTO `batch_items` (`batch_id`, `item_name`, `quantity`, `serial_number`, `status`, `item_status`, `created_at`)
+                VALUES (?, ?, ?, ?, ?, ?, NOW())
+            ");
+            foreach ($rawItems as $item) {
+                $iName = trim((string) ($item['item_name'] ?? ''));
+                if ($iName === '') continue;
+                $iQty = max(1, (int) ($item['quantity'] ?? 1));
+                $iSerial = trim((string) ($item['serial_number'] ?? ''));
+                $iStatus = trim((string) ($item['status'] ?? $status));
+                $insItem->execute([$batchId, $iName, $iQty, $iSerial, $iStatus, $iStatus]);
+            }
+        }
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Equipment batch ' . ($id > 0 ? 'updated' : 'created') . ' successfully.',
+            'batch_id' => $batchId,
+            'batches' => $full['batches'],
+            'full' => $full,
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_batch') {
+        $batchId = (int) ($_POST['batch_id'] ?? $jsonBody['batch_id'] ?? $_POST['id'] ?? $jsonBody['id'] ?? 0);
+        if ($batchId > 0) {
+            $pdo->prepare("DELETE FROM `batch_items` WHERE `batch_id` = ?")->execute([$batchId]);
+            $pdo->prepare("DELETE FROM `stock_movements` WHERE `id` = ?")->execute([$batchId]);
+        }
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Equipment batch deleted successfully.',
+            'batches' => $full['batches'],
+            'full' => $full,
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_batch') {
+        $batchId = (int) ($_GET['id'] ?? $_POST['batch_id'] ?? $jsonBody['batch_id'] ?? 0);
+        $stmt = $pdo->prepare("SELECT * FROM `stock_movements` WHERE `id` = ?");
+        $stmt->execute([$batchId]);
+        $batch = $stmt->fetch();
+        if (!$batch) {
+            echo json_encode(['ok' => false, 'error' => 'Batch not found.']);
+            exit;
+        }
+        $itemStmt = $pdo->prepare("SELECT `id`, `item_name`, `quantity`, `serial_number`, `status` FROM `batch_items` WHERE `batch_id` = ? ORDER BY `id` ASC");
+        $itemStmt->execute([$batchId]);
+        $items = $itemStmt->fetchAll();
+        $batch['items'] = $items;
+        echo json_encode(['ok' => true, 'batch' => $batch]);
         exit;
     }
 
