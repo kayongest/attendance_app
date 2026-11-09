@@ -6248,8 +6248,135 @@
     }
   }
 
+  // ==========================================================================
+  // THEME MANAGEMENT (LIGHT & DARK MODE)
+  // ==========================================================================
+
+  function getSystemTheme() {
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function getSavedTheme() {
+    try {
+      const saved = localStorage.getItem('ability_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch (e) {}
+    return getSystemTheme();
+  }
+
+  function applyTheme(theme, animate = false, showFeedback = false) {
+    const root = document.documentElement;
+    const currentTheme = root.getAttribute('data-theme') || 'light';
+
+    if (animate) {
+      root.classList.add('theme-transitioning');
+      setTimeout(() => {
+        root.classList.remove('theme-transitioning');
+      }, 350);
+    }
+
+    root.setAttribute('data-theme', theme);
+
+    try {
+      localStorage.setItem('ability_theme', theme);
+      document.cookie = `ability_theme=${theme};path=/;max-age=31536000;SameSite=Lax`;
+    } catch (e) {}
+
+    updateThemeUI(theme);
+
+    if (showFeedback && currentTheme !== theme) {
+      const isDark = theme === 'dark';
+      showToast(isDark ? '🌙 Dark Mode activated' : '☀️ Light Mode activated');
+    }
+  }
+
+  function toggleTheme(showFeedback = true) {
+    const current = document.documentElement.getAttribute('data-theme') || getSavedTheme();
+    const next = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next, true, showFeedback);
+  }
+
+  function updateThemeUI(theme) {
+    const isDark = theme === 'dark';
+
+    // Topbar Toggle Button tooltip & aria
+    const topBtn = document.getElementById('topbar-theme-toggle-btn');
+    if (topBtn) {
+      topBtn.setAttribute('title', isDark ? 'Switch to Light Mode (Alt+T or Ctrl+Shift+D)' : 'Switch to Dark Mode (Alt+T or Ctrl+Shift+D)');
+      topBtn.setAttribute('aria-label', isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode');
+    }
+
+    // User Dropdown Theme item
+    const userMenuTitle = document.getElementById('user-menu-theme-title');
+    const userMenuSub = document.getElementById('user-menu-theme-sub');
+    const userMenuIcon = document.getElementById('user-menu-theme-icon');
+    if (userMenuTitle) {
+      userMenuTitle.textContent = isDark ? 'Theme: Light Mode' : 'Theme: Dark Mode';
+    }
+    if (userMenuSub) {
+      userMenuSub.textContent = isDark ? 'Switch to light interface' : 'Switch to dark interface';
+    }
+    if (userMenuIcon) {
+      userMenuIcon.innerHTML = isDark
+        ? '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>'
+        : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+    }
+  }
+
+  function initTheme() {
+    const initialTheme = getSavedTheme();
+    applyTheme(initialTheme, false, false);
+
+    // Topbar Button Click
+    const topBtn = document.getElementById('topbar-theme-toggle-btn');
+    if (topBtn) {
+      topBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleTheme(true);
+      });
+    }
+
+    // User Dropdown Menu Item Click
+    const menuBtn = document.getElementById('topbar-menu-theme-btn');
+    if (menuBtn) {
+      menuBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        toggleTheme(true);
+        closeAllTopbarDropdowns();
+      });
+    }
+
+    // Keyboard Shortcuts: Alt+T or Ctrl+Shift+D / Cmd+Shift+D
+    window.addEventListener('keydown', (e) => {
+      const isAltT = e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 't' || e.key === 'T');
+      const isCtrlShiftD = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'D' || e.key === 'd');
+      if (isAltT || isCtrlShiftD) {
+        e.preventDefault();
+        toggleTheme(true);
+      }
+    });
+
+    // Cross-tab synchronization
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'ability_theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+        applyTheme(e.newValue, true, false);
+      }
+    });
+
+    // OS preference change listener (if user has not set explicit preference)
+    if (window.matchMedia) {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      mediaQuery.addEventListener('change', (e) => {
+        if (!localStorage.getItem('ability_theme')) {
+          applyTheme(e.matches ? 'dark' : 'light', true, false);
+        }
+      });
+    }
+  }
+
   // Initialize
   document.addEventListener('DOMContentLoaded', async () => {
+    initTheme();
     bindEvents();
     if (window.location.hash === '#pane-kiosk') {
       switchScreen('attendees', 'pane-kiosk');

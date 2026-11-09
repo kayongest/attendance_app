@@ -44,13 +44,27 @@ if (isset($_GET['logout'])) {
         session_destroy();
     }
 }
+
+$initialTheme = 'light';
+if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
+    $initialTheme = $_COOKIE['ability_theme'];
+}
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<?php echo htmlspecialchars($initialTheme, ENT_QUOTES, 'UTF-8'); ?>">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sign In &amp; Sign Up — aBility Manager</title>
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('ability_theme');
+        var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {}
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -63,8 +77,70 @@ if (isset($_GET['logout'])) {
       padding: 0;
     }
 
+    :root {
+      --bg-page: #f4f5f8;
+      --bg-card: #ffffff;
+      --bg-input: #edf2f7;
+      --bg-input-focus: #e2e8f0;
+      --border-color: #e2e8f0;
+      --border-color-focus: #cbd5e0;
+      --text-main: #20212a;
+      --text-sub: #718096;
+      --text-muted: #a0aec0;
+      --brand-purple: #5c3dbb;
+      --brand-purple-hover: #4f2cb8;
+      --brand-purple-soft: #ede9fe;
+      --card-shadow: 0 14px 28px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
+      --overlay-gradient: linear-gradient(135deg, #6c42e2 0%, #4f2cb8 100%);
+      --modal-card-bg: #ffffff;
+      --modal-backdrop-bg: rgba(15, 17, 23, 0.65);
+      --social-border: #e2e8f0;
+      --social-color: #4a5568;
+      --social-hover-bg: #f7fafc;
+      --cancel-btn-bg: #edf2f7;
+      --cancel-btn-color: #4a5568;
+    }
+
+    [data-theme="dark"] {
+      --bg-page: #090d16;
+      --bg-card: #121826;
+      --bg-input: #1a2234;
+      --bg-input-focus: #242e45;
+      --border-color: #263147;
+      --border-color-focus: #3b4861;
+      --text-main: #f1f5f9;
+      --text-sub: #94a3b8;
+      --text-muted: #64748b;
+      --brand-purple: #7c3aed;
+      --brand-purple-hover: #6d28d9;
+      --brand-purple-soft: rgba(124, 58, 237, 0.2);
+      --card-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 10px 15px rgba(0, 0, 0, 0.4);
+      --overlay-gradient: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+      --modal-card-bg: #121826;
+      --modal-backdrop-bg: rgba(0, 0, 0, 0.78);
+      --social-border: #263147;
+      --social-color: #94a3b8;
+      --social-hover-bg: #1a2234;
+      --cancel-btn-bg: #1a2234;
+      --cancel-btn-color: #94a3b8;
+    }
+
+    /* Smooth theme transition */
+    html.theme-transitioning,
+    html.theme-transitioning *,
+    html.theme-transitioning *::before,
+    html.theme-transitioning *::after {
+      transition: background-color 0.25s ease, border-color 0.25s ease, color 0.15s ease, box-shadow 0.2s ease !important;
+      transition-delay: 0s !important;
+    }
+
+    [data-theme="dark"] input,
+    [data-theme="dark"] select {
+      color-scheme: dark;
+    }
+
     body {
-      background: #f4f5f8;
+      background: var(--bg-page);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -73,7 +149,7 @@ if (isset($_GET['logout'])) {
       min-height: 100vh;
       margin: 0;
       padding: 20px;
-      color: #20212a;
+      color: var(--text-main);
     }
 
     /* Top-Right Toast Notification (Matches Screenshot) */
@@ -113,11 +189,19 @@ if (isset($_GET['logout'])) {
       background-color: #3182ce;
     }
 
-    /* Header Bar Link */
-    .top-back-link {
+    /* Top Header Bar & Theme Switcher */
+    .login-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 780px;
+      max-width: 100%;
       margin-bottom: 18px;
+    }
+
+    .top-back-link {
       font-size: 12px;
-      color: #718096;
+      color: var(--text-sub);
       text-decoration: none;
       display: inline-flex;
       align-items: center;
@@ -126,14 +210,67 @@ if (isset($_GET['logout'])) {
     }
 
     .top-back-link:hover {
-      color: #5c3dbb;
+      color: var(--brand-purple);
+    }
+
+    .theme-toggle-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-card);
+      color: var(--text-sub);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    }
+
+    .theme-toggle-pill:hover {
+      color: var(--text-main);
+      border-color: var(--brand-purple);
+      transform: translateY(-1px);
+    }
+
+    .theme-toggle-pill .theme-sun-icon {
+      color: #fbbf24;
+      transition: transform 0.25s ease;
+    }
+
+    .theme-toggle-pill .theme-moon-icon {
+      color: var(--text-sub);
+      transition: transform 0.25s ease;
+    }
+
+    .theme-toggle-pill:hover svg {
+      transform: rotate(18deg);
+    }
+
+    [data-theme="dark"] .theme-toggle-pill .theme-sun-icon {
+      display: block !important;
+    }
+    [data-theme="dark"] .theme-toggle-pill .theme-moon-icon {
+      display: none !important;
+    }
+    :root:not([data-theme="dark"]) .theme-toggle-pill .theme-sun-icon,
+    [data-theme="light"] .theme-toggle-pill .theme-sun-icon {
+      display: none !important;
+    }
+    :root:not([data-theme="dark"]) .theme-toggle-pill .theme-moon-icon,
+    [data-theme="light"] .theme-toggle-pill .theme-moon-icon {
+      display: block !important;
     }
 
     /* Outer Dual-Panel Container */
     .container {
-      background-color: #ffffff;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
       border-radius: 14px;
-      box-shadow: 0 14px 28px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
+      box-shadow: var(--card-shadow);
       position: relative;
       overflow: hidden;
       width: 780px;
@@ -184,7 +321,7 @@ if (isset($_GET['logout'])) {
     }
 
     form {
-      background-color: #ffffff;
+      background-color: var(--bg-card);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -197,7 +334,7 @@ if (isset($_GET['logout'])) {
     h1 {
       font-weight: 700;
       font-size: 30px;
-      color: #20212a;
+      color: var(--text-main);
       margin-bottom: 8px;
     }
 
@@ -210,14 +347,14 @@ if (isset($_GET['logout'])) {
     }
 
     .social-container a {
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--social-border);
       border-radius: 50%;
       display: inline-flex;
       justify-content: center;
       align-items: center;
       height: 38px;
       width: 38px;
-      color: #4a5568;
+      color: var(--social-color);
       text-decoration: none;
       font-size: 13px;
       font-weight: 700;
@@ -226,15 +363,15 @@ if (isset($_GET['logout'])) {
     }
 
     .social-container a:hover {
-      background-color: #f7fafc;
-      border-color: #cbd5e0;
-      color: #5c3dbb;
+      background-color: var(--social-hover-bg);
+      border-color: var(--border-color-focus);
+      color: var(--brand-purple);
       transform: translateY(-1px);
     }
 
     span.form-subtitle {
       font-size: 12px;
-      color: #a0aec0;
+      color: var(--text-muted);
       margin-bottom: 16px;
     }
 
@@ -246,25 +383,26 @@ if (isset($_GET['logout'])) {
     }
 
     .input-field {
-      background-color: #edf2f7;
-      border: none;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-color);
       padding: 12px 15px;
       border-radius: 6px;
       width: 100%;
       font-size: 13px;
       font-family: inherit;
-      color: #2d3748;
+      color: var(--text-main);
       outline: none;
-      transition: background-color 0.15s, box-shadow 0.15s;
+      transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
     }
 
     .input-field:focus {
-      background-color: #e2e8f0;
-      box-shadow: 0 0 0 2px rgba(92, 61, 187, 0.2);
+      background-color: var(--bg-input-focus);
+      border-color: var(--brand-purple);
+      box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
     }
 
     .input-field::placeholder {
-      color: #a0aec0;
+      color: var(--text-muted);
     }
 
     .input-field.has-eye {
@@ -279,7 +417,7 @@ if (isset($_GET['logout'])) {
       background: none;
       border: none;
       cursor: pointer;
-      color: #718096;
+      color: var(--text-sub);
       padding: 4px;
       display: flex;
       align-items: center;
@@ -288,7 +426,7 @@ if (isset($_GET['logout'])) {
     }
 
     .password-eye-btn:hover {
-      color: #5c3dbb;
+      color: var(--brand-purple);
     }
 
     /* Forgot Password Link */
@@ -313,7 +451,7 @@ if (isset($_GET['logout'])) {
       align-items: center;
       gap: 8px;
       font-size: 12px;
-      color: #4a5568;
+      color: var(--text-sub);
       margin-bottom: 16px;
       cursor: pointer;
       user-select: none;
@@ -321,7 +459,7 @@ if (isset($_GET['logout'])) {
 
     .remember-wrap input[type="checkbox"] {
       cursor: pointer;
-      accent-color: #5c3dbb;
+      accent-color: var(--brand-purple);
       width: 14px;
       height: 14px;
     }
@@ -330,7 +468,7 @@ if (isset($_GET['logout'])) {
     .btn-submit-pill {
       border-radius: 24px;
       border: none;
-      background-color: #5c3dbb;
+      background-color: var(--brand-purple);
       color: #ffffff;
       font-size: 12px;
       font-weight: 700;
@@ -344,7 +482,7 @@ if (isset($_GET['logout'])) {
     }
 
     .btn-submit-pill:hover {
-      background-color: #4f2cb8;
+      background-color: var(--brand-purple-hover);
       transform: translateY(-1px);
       box-shadow: 0 6px 18px rgba(92, 61, 187, 0.45);
     }
@@ -375,8 +513,7 @@ if (isset($_GET['logout'])) {
     }
 
     .overlay {
-      background: #5c3dbb;
-      background: linear-gradient(135deg, #6c42e2 0%, #4f2cb8 100%);
+      background: var(--overlay-gradient);
       background-repeat: no-repeat;
       background-size: cover;
       background-position: 0 0;
@@ -465,7 +602,7 @@ if (isset($_GET['logout'])) {
 
     .btn-ghost-pill:hover {
       background-color: #ffffff;
-      color: #5c3dbb;
+      color: var(--brand-purple);
       transform: translateY(-1px);
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
     }
@@ -511,7 +648,7 @@ if (isset($_GET['logout'])) {
     .admin-pin-modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(15, 17, 23, 0.65);
+      background: var(--modal-backdrop-bg);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -525,28 +662,34 @@ if (isset($_GET['logout'])) {
     }
 
     .admin-pin-modal-card {
-      background: #ffffff;
+      background: var(--modal-card-bg);
+      border: 1px solid var(--border-color);
       border-radius: 12px;
       width: 360px;
       max-width: 90vw;
       padding: 22px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.35);
     }
 
     .btn-cancel-sm {
-      background: #edf2f7;
-      border: none;
-      color: #4a5568;
+      background: var(--cancel-btn-bg);
+      border: 1px solid var(--border-color);
+      color: var(--cancel-btn-color);
       padding: 8px 16px;
       border-radius: 6px;
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
       font-family: inherit;
+      transition: all 0.12s;
+    }
+
+    .btn-cancel-sm:hover {
+      color: var(--text-main);
     }
 
     .btn-submit-sm {
-      background: #5c3dbb;
+      background: var(--brand-purple);
       border: none;
       color: #ffffff;
       padding: 8px 18px;
@@ -555,9 +698,13 @@ if (isset($_GET['logout'])) {
       font-weight: 600;
       cursor: pointer;
       font-family: inherit;
+      transition: all 0.12s;
     }
 
-   
+    .btn-submit-sm:hover {
+      background: var(--brand-purple-hover);
+    }
+
     .demo-pills {
       display: flex;
       flex-wrap: wrap;
@@ -566,12 +713,12 @@ if (isset($_GET['logout'])) {
     }
 
     .demo-pill-btn {
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
       padding: 6px 14px;
       border-radius: 16px;
       font-size: 11px;
-      color: #4a5568;
+      color: var(--text-sub);
       cursor: pointer;
       transition: all 0.12s;
       display: flex;
@@ -581,14 +728,14 @@ if (isset($_GET['logout'])) {
     }
 
     .demo-pill-btn:hover {
-      background-color: #ede9fe;
-      border-color: #c4b5fd;
-      color: #5c3dbb;
+      background-color: var(--brand-purple-soft);
+      border-color: var(--brand-purple);
+      color: var(--text-main);
       transform: translateY(-1px);
     }
 
     .demo-pill-btn strong {
-      color: #20212a;
+      color: var(--text-main);
     }
 
     /* Form Fields Grid for Register */
@@ -601,15 +748,21 @@ if (isset($_GET['logout'])) {
     }
 
     .input-select {
-      background-color: #edf2f7;
-      border: none;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-color);
       padding: 10px 12px;
       border-radius: 6px;
       width: 100%;
       font-size: 12px;
       font-family: inherit;
-      color: #2d3748;
+      color: var(--text-main);
       outline: none;
+      transition: background-color 0.15s, border-color 0.15s;
+    }
+
+    .input-select:focus {
+      background-color: var(--bg-input-focus);
+      border-color: var(--brand-purple);
     }
 
     /* Responsive */
@@ -635,10 +788,29 @@ if (isset($_GET['logout'])) {
     <span id="toast-text">Welcome back, Lorem Ipsum!</span>
   </div>
 
-  <!-- Top Navigation Link -->
-  <a href="index.php" class="top-back-link">
-    &larr; Return to Gate Operations Dashboard
-  </a>
+  <!-- Top Header Bar with Navigation & Theme Toggle -->
+  <div class="login-header-bar">
+    <a href="index.php" class="top-back-link">
+      &larr; Return to Gate Operations Dashboard
+    </a>
+    <button type="button" class="theme-toggle-pill" id="login-theme-toggle-btn" title="Toggle Light / Dark Mode">
+      <svg class="theme-sun-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+        <line x1="1" y1="12" x2="3" y2="12"></line>
+        <line x1="21" y1="12" x2="23" y2="12"></line>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+      </svg>
+      <svg class="theme-moon-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+      <span id="login-theme-text">Dark Mode</span>
+    </button>
+  </div>
 
   <!-- Main Sliding Container -->
   <div class="container" id="auth-container">
@@ -1140,6 +1312,75 @@ if (isset($_GET['logout'])) {
           }
         });
       }
+
+      // Theme Toggle Logic
+      function updateLoginThemeUI(theme) {
+        const isDark = theme === 'dark';
+        const label = document.getElementById('login-theme-text');
+        if (label) {
+          label.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+        }
+      }
+
+      function applyLoginTheme(theme, animate = false, showFeedback = false) {
+        const root = document.documentElement;
+        const currentTheme = root.getAttribute('data-theme') || 'light';
+
+        if (animate) {
+          root.classList.add('theme-transitioning');
+          setTimeout(() => {
+            root.classList.remove('theme-transitioning');
+          }, 350);
+        }
+
+        root.setAttribute('data-theme', theme);
+
+        try {
+          localStorage.setItem('ability_theme', theme);
+          document.cookie = `ability_theme=${theme};path=/;max-age=31536000;SameSite=Lax`;
+        } catch (e) {}
+
+        updateLoginThemeUI(theme);
+
+        if (showFeedback && currentTheme !== theme) {
+          showToast(theme === 'dark' ? '🌙 Dark Mode activated' : '☀️ Light Mode activated', 'info', 2000);
+        }
+      }
+
+      function toggleLoginTheme() {
+        const current = document.documentElement.getAttribute('data-theme') || 'light';
+        const next = current === 'dark' ? 'light' : 'dark';
+        applyLoginTheme(next, true, true);
+      }
+
+      const loginThemeBtn = document.getElementById('login-theme-toggle-btn');
+      if (loginThemeBtn) {
+        loginThemeBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          toggleLoginTheme();
+        });
+      }
+
+      // Keyboard shortcut: Alt+T or Ctrl+Shift+D / Cmd+Shift+D
+      window.addEventListener('keydown', (e) => {
+        const isAltT = e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 't' || e.key === 'T');
+        const isCtrlShiftD = (e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'D' || e.key === 'd');
+        if (isAltT || isCtrlShiftD) {
+          e.preventDefault();
+          toggleLoginTheme();
+        }
+      });
+
+      // Synchronize with stored or initial theme
+      const currentInitialTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      updateLoginThemeUI(currentInitialTheme);
+
+      // Cross-tab sync
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'ability_theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+          applyLoginTheme(e.newValue, true, false);
+        }
+      });
 
     })();
   </script>

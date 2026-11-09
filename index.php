@@ -20,5 +20,10 @@ header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 header("Expires: 0");
 
-// Serve main app view
-readfile(__DIR__ . '/index.html');
+// Serve main app view with server-side theme preset if cookie exists
+$html = file_get_contents(__DIR__ . '/index.html');
+if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
+    $theme = htmlspecialchars($_COOKIE['ability_theme'], ENT_QUOTES, 'UTF-8');
+    $html = str_replace('<html lang="en">', '<html lang="en" data-theme="' . $theme . '">', $html);
+}
+echo $html;
