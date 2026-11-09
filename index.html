@@ -1472,10 +1472,14 @@
                 </svg>
                 <span>+ Add New Role</span>
               </button>
+              <button type="button" class="btn btn-primary-38 js-open-create-tier-btn" id="open-add-tier-top-btn" style="display: none; background: #10b981; border-color: #059669;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add Clearance Tier</span>
+              </button>
             </div>
           </div>
 
-          <!-- View Mode Toggle: Personnel Directory vs Roles Management -->
+          <!-- View Mode Toggle: Personnel Directory vs Roles Management vs 4-Tier Access Matrix -->
           <div class="user-subnav-pills" style="display: flex; gap: 10px; margin-top: 14px; margin-bottom: 8px;">
             <button type="button" class="btn btn-primary-32 js-users-view-tab" id="view-tab-personnel" data-view="personnel">
               <img src="assets/metric-users.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
@@ -1484,6 +1488,10 @@
             <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-roles" data-view="roles">
               <img src="assets/nav-payments.svg" alt="" class="svg-icon" />
               <span>Roles &amp; Clearance Matrix CRUD (<span id="pill-roles-count">12</span>)</span>
+            </button>
+            <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-matrix" data-view="matrix">
+              <img src="assets/lock.svg" alt="" class="svg-icon" />
+              <span>4-Tier Access Matrix (<span id="pill-matrix-count">5</span>)</span>
             </button>
           </div>
 
@@ -1712,6 +1720,33 @@
             </div>
           </section>
         </div><!-- End #roles-view-container -->
+
+        <!-- 4-Tier Access Matrix View Container (3rd Tab) -->
+        <div id="matrix-view-container" style="display: none; margin-top: 14px;">
+          <div class="overview-top-block" style="margin-bottom: 16px;">
+            <div class="page-intro" style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px;">
+              <div class="page-intro-heading">
+                <h2 class="page-title" style="font-family: 'Share Tech', sans-serif; font-size: 26px; margin: 0 0 4px; font-weight: 700; letter-spacing: -0.01em;">4-Tier Access Matrix</h2>
+                <p class="page-subtitle" style="margin: 0; font-size: 12px; color: var(--text-secondary);">
+                  Inspect linked equipment batches (<code style="background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; font-size: 11px;">BATCH-YYYYMMDD-XXXXXX</code>) and configure L1–L4 clearance permissions.
+                </p>
+              </div>
+              <div class="page-actions" style="display: flex; align-items: center; gap: 10px;">
+                <button type="button" class="btn btn-secondary-38" id="users-matrix-reset-logs-btn">
+                  <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                  <span>Reset Today’s Gate Logs</span>
+                </button>
+                <button type="button" class="btn btn-primary-38 js-open-create-tier-btn" id="users-matrix-add-tier-btn" style="background: #10b981; border-color: #059669; color: #fff;">
+                  <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                  <span>+ Add Clearance Tier</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Clearance Tier Cards Grid in Users Tab -->
+            <div class="metrics-grid" id="users-matrix-tier-cards-grid"></div>
+          </div>
+        </div><!-- End #matrix-view-container -->
       </main>
     </div>
   </div>

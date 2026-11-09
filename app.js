@@ -1495,44 +1495,64 @@
       .join('');
   }
 
+  function renderClearanceMatrixCardsHtml() {
+    if (!state.clearanceMatrix || state.clearanceMatrix.length === 0) {
+      return '<div style="padding: 24px; text-align: center; color: var(--text-secondary); width: 100%;">No clearance tiers configured.</div>';
+    }
+    return state.clearanceMatrix
+      .map(
+        (m) => `
+        <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color)}; position: relative;">
+          <div class="metric-heading" style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="tier-code-badge tier-code-${escapeHtml(m.code)}" style="background: ${escapeHtml(m.color)}; color: #fff;">${escapeHtml(m.code)}</span>
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">${m.member_count || 0} Staff</span>
+            </div>
+            <div class="tier-card-actions" style="display: flex; align-items: center; gap: 4px;">
+              <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 4px;">
+                <span>✏️ Edit</span>
+              </button>
+              ${
+                !m.is_system
+                  ? `
+              <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 4px;">
+                <span>🗑️ Del</span>
+              </button>`
+                  : `
+              <span style="font-size: 10px; font-weight: 600; color: var(--text-secondary); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">Core Tier</span>`
+              }
+            </div>
+          </div>
+          <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: block;">${escapeHtml(m.title)}</span>
+          <span class="metric-context">
+            Venue Access: <strong>${escapeHtml(m.venue_Rule || m.venue_rule || 'YES')}</strong> · Stock Access: <strong>${escapeHtml(m.stock_rule || 'NO')}</strong>
+          </span>
+          ${m.description ? `<p style="margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); line-height: 1.35;">${escapeHtml(m.description)}</p>` : ''}
+        </div>
+      `
+      )
+      .join('');
+  }
+
+  function renderClearanceMatrixCards() {
+    const html = renderClearanceMatrixCardsHtml();
+    const matrixGrid = document.getElementById('matrix-tier-cards-grid');
+    if (matrixGrid) matrixGrid.innerHTML = html;
+
+    const usersMatrixGrid = document.getElementById('users-matrix-tier-cards-grid');
+    if (usersMatrixGrid) usersMatrixGrid.innerHTML = html;
+
+    const pillMatrix = document.getElementById('pill-matrix-count');
+    if (pillMatrix) pillMatrix.textContent = String(state.clearanceMatrix ? state.clearanceMatrix.length : 0);
+  }
+
+  function renderUsersMatrixScreen() {
+    renderClearanceMatrixCards();
+  }
+
   function renderBatchesAndMatrixScreen() {
     // 1. 4-Tier Matrix Overview Cards
-    const matrixGrid = document.getElementById('matrix-tier-cards-grid');
-    if (matrixGrid && state.clearanceMatrix.length > 0) {
-      matrixGrid.innerHTML = state.clearanceMatrix
-        .map(
-          (m) => `
-          <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color)}; position: relative;">
-            <div class="metric-heading" style="display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span class="tier-code-badge tier-code-${escapeHtml(m.code)}" style="background: ${escapeHtml(m.color)}; color: #fff;">${escapeHtml(m.code)}</span>
-                <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">${m.member_count || 0} Staff</span>
-              </div>
-              <div class="tier-card-actions" style="display: flex; align-items: center; gap: 4px;">
-                <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 4px;">
-                  <span>✏️ Edit</span>
-                </button>
-                ${
-                  !m.is_system
-                    ? `
-                <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 4px;">
-                  <span>🗑️ Del</span>
-                </button>`
-                    : `
-                <span style="font-size: 10px; font-weight: 600; color: var(--text-secondary); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">Core Tier</span>`
-                }
-              </div>
-            </div>
-            <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: block;">${escapeHtml(m.title)}</span>
-            <span class="metric-context">
-              Venue Access: <strong>${escapeHtml(m.venue_Rule || m.venue_rule || 'YES')}</strong> · Stock Access: <strong>${escapeHtml(m.stock_rule || 'NO')}</strong>
-            </span>
-            ${m.description ? `<p style="margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); line-height: 1.35;">${escapeHtml(m.description)}</p>` : ''}
-          </div>
-        `
-        )
-        .join('');
-    }
+    renderClearanceMatrixCards();
 
     // 2. Equipment Batches Custody Table
     populateBatchCrudDropdowns();
@@ -2743,6 +2763,8 @@
     if (elBadge) elBadge.textContent = `${roles.length} Roles`;
     if (elPillRoles) elPillRoles.textContent = String(roles.length);
     if (elPillCrew) elPillCrew.textContent = String(crew.length);
+    const elPillMatrix = document.getElementById('pill-matrix-count');
+    if (elPillMatrix) elPillMatrix.textContent = String(state.clearanceMatrix ? state.clearanceMatrix.length : 0);
 
     // Populate roles department filter dropdown
     const deptSelect = document.getElementById('roles-filter-dept');
@@ -2943,6 +2965,10 @@
     if (elStock) elStock.textContent = String(stockAuth).padStart(2, '0');
     if (elDepts) elDepts.textContent = String(deptCount).padStart(2, '0');
     if (elBadge) elBadge.textContent = `${totalCount} Staff`;
+    const elPillCrew = document.getElementById('pill-personnel-count');
+    if (elPillCrew) elPillCrew.textContent = String(totalCount);
+    const elPillMatrix = document.getElementById('pill-matrix-count');
+    if (elPillMatrix) elPillMatrix.textContent = String(state.clearanceMatrix ? state.clearanceMatrix.length : 0);
 
     // Tab counts
     const techRoles = ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'stage_manager', 'rigging_lead'];
@@ -4688,10 +4714,9 @@
     }
 
     // Clearance Tier CRUD Triggers & Submission
-    const openCreateTierBtn = document.getElementById('open-create-tier-btn');
-    if (openCreateTierBtn) {
-      openCreateTierBtn.addEventListener('click', () => openTierCrudModal(null));
-    }
+    document.querySelectorAll('#open-create-tier-btn, .js-open-create-tier-btn').forEach((btn) => {
+      btn.addEventListener('click', () => openTierCrudModal(null));
+    });
     document.querySelectorAll('.js-close-tier-crud-modal').forEach((btn) => {
       btn.addEventListener('click', closeTierCrudModal);
     });
@@ -4782,7 +4807,7 @@
               state.clearanceMatrix = data.clearanceMatrix;
             }
             closeTierCrudModal();
-            renderBatchesAndMatrixScreen();
+            renderClearanceMatrixCards();
             showToast(data.message || `Clearance Tier ${code} saved successfully.`);
             await fetchBootstrap(false);
           } else {
@@ -4800,37 +4825,39 @@
       });
     }
 
-    // Delegated click on Matrix Tier Cards (Edit & Delete)
-    const matrixTierCardsGrid = document.getElementById('matrix-tier-cards-grid');
-    if (matrixTierCardsGrid) {
-      matrixTierCardsGrid.addEventListener('click', (e) => {
-        const editBtn = e.target.closest('.js-edit-tier');
-        if (editBtn) {
-          const tierCode = editBtn.getAttribute('data-tier-code');
-          const tierId = Number(editBtn.getAttribute('data-tier-id') || 0);
-          const tier = (state.clearanceMatrix || []).find(
-            (m) => (tierId > 0 && Number(m.id) === tierId) || m.code === tierCode
-          );
-          if (tier) openTierCrudModal(tier);
-          return;
-        }
-
-        const delBtn = e.target.closest('.js-delete-tier');
-        if (delBtn) {
-          const tierId = Number(delBtn.getAttribute('data-tier-id') || 0);
-          const tierCode = delBtn.getAttribute('data-tier-code') || '';
-          const tierTitle = delBtn.getAttribute('data-tier-title') || '';
-          const memberCount = Number(delBtn.getAttribute('data-member-count') || 0);
-
-          if (memberCount > 0) {
-            showToast(`Cannot delete ${tierCode}: ${memberCount} staff member(s) are assigned to this tier.`);
+    // Delegated click on Matrix Tier Cards (Edit & Delete) across Screen 4 & Screen Users (Tab 3)
+    ['matrix-tier-cards-grid', 'users-matrix-tier-cards-grid'].forEach((gridId) => {
+      const grid = document.getElementById(gridId);
+      if (grid) {
+        grid.addEventListener('click', (e) => {
+          const editBtn = e.target.closest('.js-edit-tier');
+          if (editBtn) {
+            const tierCode = editBtn.getAttribute('data-tier-code');
+            const tierId = Number(editBtn.getAttribute('data-tier-id') || 0);
+            const tier = (state.clearanceMatrix || []).find(
+              (m) => (tierId > 0 && Number(m.id) === tierId) || m.code === tierCode
+            );
+            if (tier) openTierCrudModal(tier);
             return;
           }
 
-          openDeleteModal('clearance_tier', tierId, `${tierCode} — ${tierTitle}`);
-        }
-      });
-    }
+          const delBtn = e.target.closest('.js-delete-tier');
+          if (delBtn) {
+            const tierId = Number(delBtn.getAttribute('data-tier-id') || 0);
+            const tierCode = delBtn.getAttribute('data-tier-code') || '';
+            const tierTitle = delBtn.getAttribute('data-tier-title') || '';
+            const memberCount = Number(delBtn.getAttribute('data-member-count') || 0);
+
+            if (memberCount > 0) {
+              showToast(`Cannot delete ${tierCode}: ${memberCount} staff member(s) are assigned to this tier.`);
+              return;
+            }
+
+            openDeleteModal('clearance_tier', tierId, `${tierCode} — ${tierTitle}`);
+          }
+        });
+      }
+    });
 
     // Call Time Modal Handlers
     const callTimeModal = document.getElementById('call-time-modal');
@@ -4872,53 +4899,61 @@
     });
 
     
-    // View Switcher between Personnel Directory and Roles CRUD
+    // View Switcher between Personnel Directory, Roles Management, and 4-Tier Access Matrix
     const tabPersonnel = document.getElementById('view-tab-personnel');
     const tabRoles = document.getElementById('view-tab-roles');
+    const tabMatrix = document.getElementById('view-tab-matrix');
     const personnelView = document.getElementById('personnel-view-container');
     const rolesView = document.getElementById('roles-view-container');
+    const matrixView = document.getElementById('matrix-view-container');
     const addStaffBtn = document.getElementById('open-add-user-btn');
     const addRoleBtn = document.getElementById('open-add-role-btn');
+    const addTierTopBtn = document.getElementById('open-add-tier-top-btn');
+    const exportBtn = document.getElementById('users-export-btn');
 
     function switchUsersView(mode) {
       state.usersViewMode = mode;
-      if (mode === 'roles') {
-        if (tabPersonnel) {
-          tabPersonnel.className = 'btn btn-secondary-32 js-users-view-tab';
-          const icon = tabPersonnel.querySelector('img');
+
+      const tabs = [
+        { el: tabPersonnel, active: mode === 'personnel' },
+        { el: tabRoles, active: mode === 'roles' },
+        { el: tabMatrix, active: mode === 'matrix' },
+      ];
+
+      tabs.forEach(({ el, active }) => {
+        if (!el) return;
+        if (active) {
+          el.className = 'btn btn-primary-32 js-users-view-tab active-subtab';
+          const icon = el.querySelector('img');
+          if (icon) icon.style.filter = 'brightness(0) invert(1)';
+        } else {
+          el.className = 'btn btn-secondary-32 js-users-view-tab';
+          const icon = el.querySelector('img');
           if (icon) icon.style.filter = 'none';
         }
-        if (tabRoles) {
-          tabRoles.className = 'btn btn-primary-32 js-users-view-tab active-subtab';
-          const icon = tabRoles.querySelector('img');
-          if (icon) icon.style.filter = 'brightness(0) invert(1)';
-        }
-        if (personnelView) personnelView.style.display = 'none';
-        if (rolesView) rolesView.style.display = 'block';
-        if (addStaffBtn) addStaffBtn.style.display = 'none';
-        if (addRoleBtn) addRoleBtn.style.display = 'inline-flex';
+      });
+
+      if (personnelView) personnelView.style.display = mode === 'personnel' ? 'block' : 'none';
+      if (rolesView) rolesView.style.display = mode === 'roles' ? 'block' : 'none';
+      if (matrixView) matrixView.style.display = mode === 'matrix' ? 'block' : 'none';
+
+      if (addStaffBtn) addStaffBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
+      if (addRoleBtn) addRoleBtn.style.display = mode === 'roles' ? 'inline-flex' : 'none';
+      if (addTierTopBtn) addTierTopBtn.style.display = mode === 'matrix' ? 'inline-flex' : 'none';
+      if (exportBtn) exportBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
+
+      if (mode === 'matrix') {
+        renderUsersMatrixScreen();
+      } else if (mode === 'roles') {
         renderRolesScreen();
       } else {
-        if (tabPersonnel) {
-          tabPersonnel.className = 'btn btn-primary-32 js-users-view-tab active-subtab';
-          const icon = tabPersonnel.querySelector('img');
-          if (icon) icon.style.filter = 'brightness(0) invert(1)';
-        }
-        if (tabRoles) {
-          tabRoles.className = 'btn btn-secondary-32 js-users-view-tab';
-          const icon = tabRoles.querySelector('img');
-          if (icon) icon.style.filter = 'none';
-        }
-        if (personnelView) personnelView.style.display = 'block';
-        if (rolesView) rolesView.style.display = 'none';
-        if (addStaffBtn) addStaffBtn.style.display = 'inline-flex';
-        if (addRoleBtn) addRoleBtn.style.display = 'none';
         renderUsersScreen();
       }
     }
 
     if (tabPersonnel) tabPersonnel.addEventListener('click', () => switchUsersView('personnel'));
     if (tabRoles) tabRoles.addEventListener('click', () => switchUsersView('roles'));
+    if (tabMatrix) tabMatrix.addEventListener('click', () => switchUsersView('matrix'));
 
     // Open Add Role Modal
     if (addRoleBtn) {
@@ -5134,7 +5169,7 @@
     }
 
     // Reset Today's Scans
-    ['reset-demo-db-btn', 'sidebar-reset-demo-btn'].forEach((id) => {
+    ['reset-demo-db-btn', 'sidebar-reset-demo-btn', 'users-matrix-reset-logs-btn'].forEach((id) => {
       const btn = document.getElementById(id);
       if (btn) {
         btn.addEventListener('click', async () => {
@@ -5488,8 +5523,8 @@
             document.getElementById('confirm-delete-modal')?.classList.remove('open');
             if (type === 'clearance_tier') {
               if (Array.isArray(data.clearanceMatrix)) state.clearanceMatrix = data.clearanceMatrix;
+              renderClearanceMatrixCards();
               await fetchBootstrap(false);
-              renderBatchesAndMatrixScreen();
             } else if (type === 'user') {
               await fetchBootstrap(false);
               renderUsersScreen();
