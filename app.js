@@ -448,11 +448,33 @@
     `).join('');
   }
 
+  function isCurrentUserAdmin() {
+    if (!state.currentUser) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    const clearance = (state.currentUser.clearance_code || '').toUpperCase();
+    return (
+      role === 'admin' ||
+      role === 'manager' ||
+      role === 'tech_lead' ||
+      clearance.includes('L4') ||
+      clearance === 'L4_ALL_ACCESS'
+    );
+  }
+
   function openAuthModal(defaultTab = 'login') {
     const modal = document.getElementById('auth-modal');
     if (!modal) return;
     modal.classList.add('open');
-    switchAuthTab(defaultTab);
+    const isAdmin = isCurrentUserAdmin();
+    const tabReg = document.getElementById('auth-tab-register');
+    const restrictedBadge = document.getElementById('auth-tab-restricted-badge');
+    if (tabReg) {
+      tabReg.style.display = isAdmin ? 'inline-block' : 'none';
+    }
+    if (restrictedBadge) {
+      restrictedBadge.style.display = isAdmin ? 'none' : 'inline-flex';
+    }
+    switchAuthTab(isAdmin ? defaultTab : 'login');
   }
 
   function closeAuthModal() {
@@ -466,6 +488,13 @@
     const formLogin = document.getElementById('login-form');
     const formReg = document.getElementById('register-form');
     const title = document.getElementById('auth-modal-title');
+    const isAdmin = isCurrentUserAdmin();
+
+    if (tab === 'register' && !isAdmin) {
+      showToast('Staff registration is restricted to system administrators.');
+      tab = 'login';
+    }
+
     if (tab === 'login') {
       if (tabLogin) tabLogin.classList.add('active');
       if (tabReg) tabReg.classList.remove('active');
@@ -477,7 +506,7 @@
       if (tabReg) tabReg.classList.add('active');
       if (formLogin) formLogin.style.display = 'none';
       if (formReg) formReg.style.display = 'block';
-      if (title) title.textContent = 'Register New Staff & Issue Badge';
+      if (title) title.textContent = 'Register New Staff & Issue Badge (Admin)';
     }
   }
 
@@ -574,6 +603,16 @@
 
       const menuBadge = document.getElementById('user-menu-badge');
       if (menuBadge) menuBadge.textContent = u.badge_code || 'REW-BADGE-0002';
+
+      const isAdmin = isCurrentUserAdmin();
+      const authTitle = document.getElementById('topbar-menu-auth-title');
+      const authSub = document.getElementById('topbar-menu-auth-sub');
+      if (authTitle) {
+        authTitle.textContent = isAdmin ? 'Register Staff & Badge' : 'Sign In / Switch Operator';
+      }
+      if (authSub) {
+        authSub.textContent = isAdmin ? 'Admin toggle: Sign In & Register' : 'Login with personal credentials';
+      }
     }
 
     // Render Notifications Bubble
@@ -2922,7 +2961,8 @@
     if (menuAuth) {
       menuAuth.addEventListener('click', () => {
         closeAllTopbarDropdowns();
-        window.location.href = 'login.php';
+        const isAdmin = isCurrentUserAdmin();
+        window.location.href = isAdmin ? 'login.php?admin=1' : 'login.php';
       });
     }
 

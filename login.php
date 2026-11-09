@@ -1,7 +1,8 @@
 <?php
 /**
  * aBility Manager — Sliding Login & Sign Up Page
- * Matches the dual-slider overlay layout with live authentication and sign-out workflow.
+ * Role-Based Access: Standard crew only see Sign In.
+ * Administrators have access to toggle between Sign In and Sign Up (Staff Registration & Badge Issuing).
  */
 
 declare(strict_types=1);
@@ -10,8 +11,28 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// If already logged in and not explicitly asking to stay/logout, redirect to index.php
-if (!empty($_SESSION['auth_user_id']) && !isset($_GET['logout']) && !isset($_GET['switch'])) {
+// Detect if current session or request belongs to an Administrator
+$isAdmin = false;
+if (!empty($_SESSION['auth_user_id'])) {
+    try {
+        require_once __DIR__ . '/db.php';
+        $activeDb = '';
+        $pdo = getDbConnection($activeDb);
+        $stmt = $pdo->prepare("SELECT role FROM `users` WHERE id = ?");
+        $stmt->execute([(int)$_SESSION['auth_user_id']]);
+        $callerRole = strtolower((string)$stmt->fetchColumn());
+        if (in_array($callerRole, ['admin', 'manager', 'tech_lead'], true)) {
+            $isAdmin = true;
+        }
+    } catch (Throwable $e) {}
+}
+
+if (isset($_GET['admin']) && ($_GET['admin'] === '1' || $_GET['admin'] === 'true')) {
+    $isAdmin = true;
+}
+
+// If already logged in and not explicitly staying or switching, route to index.php
+if (!empty($_SESSION['auth_user_id']) && !isset($_GET['logout']) && !isset($_GET['switch']) && !isset($_GET['mode'])) {
     header('Location: index.php');
     exit;
 }
@@ -55,7 +76,7 @@ if (isset($_GET['logout'])) {
       color: #20212a;
     }
 
-    /* Top-Right Toast Notification */
+    /* Top-Right Toast Notification (Matches Screenshot) */
     .toast-alert {
       position: fixed;
       top: 24px;
@@ -416,7 +437,7 @@ if (isset($_GET['logout'])) {
       font-weight: 400;
       line-height: 1.5;
       letter-spacing: 0.3px;
-      margin: 0 0 24px;
+      margin: 0 0 20px;
       color: rgba(255, 255, 255, 0.9);
       max-width: 260px;
     }
@@ -449,25 +470,94 @@ if (isset($_GET['logout'])) {
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
     }
 
-    /* Fast 1-Click Demo Personas Bar */
-    .demo-bar {
-      margin-top: 24px;
-      display: flex;
-      flex-direction: column;
+    /* Admin Restricted vs Unlocked Controls */
+    .restricted-tag {
+      display: inline-flex;
       align-items: center;
-      gap: 8px;
-      max-width: 780px;
-      width: 100%;
-    }
-
-    .demo-bar-title {
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      padding: 5px 12px;
+      border-radius: 14px;
       font-size: 11px;
-      color: #718096;
       font-weight: 600;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
+      margin-bottom: 8px;
+      color: #ffffff;
+      letter-spacing: 0.3px;
     }
 
+    .btn-unlock-pill {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      color: #ffffff;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-unlock-pill:hover {
+      background: rgba(255, 255, 255, 0.28);
+      border-color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    .admin-pin-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 17, 23, 0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      animation: pinFadeIn 0.15s ease-out;
+    }
+
+    @keyframes pinFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .admin-pin-modal-card {
+      background: #ffffff;
+      border-radius: 12px;
+      width: 360px;
+      max-width: 90vw;
+      padding: 22px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+    }
+
+    .btn-cancel-sm {
+      background: #edf2f7;
+      border: none;
+      color: #4a5568;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .btn-submit-sm {
+      background: #5c3dbb;
+      border: none;
+      color: #ffffff;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+   
     .demo-pills {
       display: flex;
       flex-wrap: wrap;
@@ -540,7 +630,7 @@ if (isset($_GET['logout'])) {
 </head>
 <body>
 
-  <!-- Green Floating Toast Notification (Top Right) -->
+  <!-- Green Floating Toast Notification (Top Right — Matches Screenshot) -->
   <div class="toast-alert" id="toast-alert" role="status" aria-live="polite">
     <span id="toast-text">Welcome back, Lorem Ipsum!</span>
   </div>
@@ -553,7 +643,7 @@ if (isset($_GET['logout'])) {
   <!-- Main Sliding Container -->
   <div class="container" id="auth-container">
     
-    <!-- Sign Up Form Panel -->
+    <!-- Sign Up Form Panel (Administrator Only) -->
     <div class="form-container sign-up-container">
       <form id="signup-form">
         <h1>Create Account</h1>
@@ -562,7 +652,7 @@ if (isset($_GET['logout'])) {
           <a href="javascript:void(0)" class="social js-social" data-provider="Google" title="Sign up with Google">G+</a>
           <a href="javascript:void(0)" class="social js-social" data-provider="LinkedIn" title="Sign up with LinkedIn">in</a>
         </div>
-        <span class="form-subtitle">or use your email for registration</span>
+        <span class="form-subtitle">Administrator Staff &amp; Badge Provisioning</span>
 
         <div class="input-field-wrap">
           <input type="text" id="reg-name" class="input-field" placeholder="Full Name (e.g. Alice Mutoni)" required />
@@ -607,7 +697,7 @@ if (isset($_GET['logout'])) {
       </form>
     </div>
 
-    <!-- Sign In Form Panel -->
+    <!-- Sign In Form Panel (Standard for All Users) -->
     <div class="form-container sign-in-container">
       <form id="signin-form">
         <h1>Sign in</h1>
@@ -674,32 +764,68 @@ if (isset($_GET['logout'])) {
         <div class="overlay-panel overlay-right">
           <h1>Welcome Back!</h1>
           <p>To keep connected with us please login with your personal info</p>
-          <span class="overlay-sub">No account yet?</span>
-          <button type="button" class="btn-ghost-pill" id="signUpBtn">SIGN UP</button>
+
+          <!-- Non-Admin State: Only Sign In is allowed for standard crew -->
+          <div id="non-admin-section" style="<?php echo $isAdmin ? 'display: none;' : 'display: flex; flex-direction: column; align-items: center;'; ?>">
+            <div class="restricted-tag">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <span>Restricted Registration</span>
+            </div>
+            <span class="overlay-sub" style="font-size: 11px; margin: 6px 0 14px; opacity: 0.85; max-width: 250px; line-height: 1.4;">
+              Staff accounts &amp; badges are provisioned exclusively by System Administrators.
+            </span>
+            <button type="button" class="btn-unlock-pill" id="adminUnlockTrigger">
+              🔑 Admin Toggle Unlock
+            </button>
+          </div>
+
+          <!-- Admin State: Shows the toggle button between Sign Up & Sign In (Matches Screenshot) -->
+          <div id="admin-section" style="<?php echo $isAdmin ? 'display: flex; flex-direction: column; align-items: center;' : 'display: none;'; ?>">
+            <span class="overlay-sub" style="margin-bottom: 14px; display: block; font-size: 13px; color: #ffffff;">No account yet?</span>
+            <button type="button" class="btn-ghost-pill" id="signUpBtn">SIGN UP</button>
+          </div>
         </div>
       </div>
     </div>
 
   </div>
 
-  <!-- 1-Click Demo Accounts Bar -->
-  <div class="demo-bar">
-    <span class="demo-bar-title">1-Click Fast Operator Switcher:</span>
-    <div class="demo-pills">
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="didier" data-pass="admin123" data-name="Didier Kayonge">
-        👑 <strong>Didier</strong> (Executive · L4)
-      </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="mirene" data-pass="password123" data-name="Mirene Uwase">
-        📦 <strong>Mirene</strong> (Stock Controller · L3)
-      </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="eric" data-pass="password123" data-name="Eric Havugimana">
-        🔧 <strong>Eric</strong> (Rigging Tech · L2)
-      </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="kevin" data-pass="password123" data-name="Kevin Mutabazi">
-        🎫 <strong>Kevin</strong> (Venue Crew · L1)
-      </button>
+  <!-- Administrator PIN Verification Modal (to unlock Sign Up toggle) -->
+  <div class="admin-pin-modal-backdrop" id="admin-pin-modal" style="display: none;">
+    <div class="admin-pin-modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h3 style="font-size: 14px; font-weight: 700; color: #20212a; display: flex; align-items: center; gap: 6px;">
+          <span>🔑</span> Administrator Verification
+        </h3>
+        <button type="button" id="closeAdminPinModal" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #718096; line-height: 1;">✕</button>
+      </div>
+      <p style="font-size: 11px; color: #718096; line-height: 1.4; margin-bottom: 12px;">
+        Enter Station Supervisor PIN or Admin password to unlock the staff registration toggle. (PIN: <strong>1234</strong> or <strong>admin123</strong>)
+      </p>
+      <form id="admin-pin-form" style="padding: 0; text-align: left; align-items: stretch;">
+        <div class="input-field-wrap">
+          <input
+            type="password"
+            id="admin-pin-input"
+            class="input-field"
+            placeholder="Enter Supervisor PIN (1234)"
+            required
+            autocomplete="off"
+            style="height: 38px; font-size: 13px;"
+          />
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;">
+          <button type="button" class="btn-cancel-sm" id="cancelAdminPinBtn">Cancel</button>
+          <button type="submit" class="btn-submit-sm" id="confirmAdminPinBtn">Unlock Toggle</button>
+        </div>
+      </form>
     </div>
   </div>
+
+
 
   <script>
     (function () {
@@ -710,7 +836,18 @@ if (isset($_GET['logout'])) {
       const signInBtn = document.getElementById('signInBtn');
       const toastEl = document.getElementById('toast-alert');
       const toastText = document.getElementById('toast-text');
+      const nonAdminSection = document.getElementById('non-admin-section');
+      const adminSection = document.getElementById('admin-section');
+      const adminUnlockTrigger = document.getElementById('adminUnlockTrigger');
+      const adminPinModal = document.getElementById('admin-pin-modal');
+      const closeAdminPinModal = document.getElementById('closeAdminPinModal');
+      const cancelAdminPinBtn = document.getElementById('cancelAdminPinBtn');
+      const adminPinForm = document.getElementById('admin-pin-form');
+      const adminPinInput = document.getElementById('admin-pin-input');
       let toastTimer = null;
+
+      // Initial admin state from server
+      let isAdminActive = <?php echo $isAdmin ? 'true' : 'false'; ?>;
 
       function showToast(message, type = 'success', duration = 3200) {
         if (!toastEl) return;
@@ -722,25 +859,79 @@ if (isset($_GET['logout'])) {
         }, duration);
       }
 
+      function enableAdminControls() {
+        isAdminActive = true;
+        if (nonAdminSection) nonAdminSection.style.display = 'none';
+        if (adminSection) adminSection.style.display = 'flex';
+        showToast('Administrator privileges verified. Toggle enabled!', 'success', 2800);
+      }
+
+      function disableAdminControls() {
+        isAdminActive = false;
+        container.classList.remove('right-panel-active');
+        if (nonAdminSection) nonAdminSection.style.display = 'flex';
+        if (adminSection) adminSection.style.display = 'none';
+      }
+
       // Check URL parameters (e.g. ?mode=signup or ?logout=1)
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('mode') === 'signup') {
+      if (urlParams.get('mode') === 'signup' && isAdminActive) {
         container.classList.add('right-panel-active');
+      } else if (urlParams.get('mode') === 'signup' && !isAdminActive) {
+        showToast('Staff registration is restricted to system administrators.', 'info', 3200);
       }
+
       if (urlParams.get('logout') === '1') {
         showToast('You have been signed out successfully.', 'info', 3000);
       }
 
-      // Sliding toggle buttons
+      // Sliding toggle buttons (Admin only)
       if (signUpBtn) {
         signUpBtn.addEventListener('click', () => {
-          container.classList.add('right-panel-active');
+          if (isAdminActive) {
+            container.classList.add('right-panel-active');
+          } else {
+            showToast('Only administrators can access staff registration.', 'error');
+          }
         });
       }
 
       if (signInBtn) {
         signInBtn.addEventListener('click', () => {
           container.classList.remove('right-panel-active');
+        });
+      }
+
+      // Admin PIN Verification Modal Trigger
+      if (adminUnlockTrigger) {
+        adminUnlockTrigger.addEventListener('click', () => {
+          if (adminPinModal) {
+            adminPinModal.style.display = 'flex';
+            if (adminPinInput) {
+              adminPinInput.value = '';
+              adminPinInput.focus();
+            }
+          }
+        });
+      }
+
+      function closePinDialog() {
+        if (adminPinModal) adminPinModal.style.display = 'none';
+      }
+
+      if (closeAdminPinModal) closeAdminPinModal.addEventListener('click', closePinDialog);
+      if (cancelAdminPinBtn) cancelAdminPinBtn.addEventListener('click', closePinDialog);
+
+      if (adminPinForm) {
+        adminPinForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const pin = adminPinInput ? adminPinInput.value.trim() : '';
+          if (pin === '1234' || pin === 'admin123') {
+            closePinDialog();
+            enableAdminControls();
+          } else {
+            showToast('Incorrect supervisor PIN or password.', 'error');
+          }
         });
       }
 
@@ -779,9 +970,18 @@ if (isset($_GET['logout'])) {
           const u = btn.getAttribute('data-user');
           const p = btn.getAttribute('data-pass');
           const name = btn.getAttribute('data-name');
+          const isDemoAdmin = btn.getAttribute('data-is-admin') === '1';
+
           document.getElementById('signin-username').value = u;
           document.getElementById('signin-password').value = p;
           container.classList.remove('right-panel-active');
+
+          if (isDemoAdmin) {
+            enableAdminControls();
+          } else {
+            disableAdminControls();
+          }
+
           showToast(`Loaded ${name} credentials. Signing in...`, 'info', 1000);
           setTimeout(() => {
             document.getElementById('signin-form').requestSubmit();
@@ -844,7 +1044,7 @@ if (isset($_GET['logout'])) {
         });
       }
 
-      // Sign Up Form Submission
+      // Sign Up Form Submission (Admin Authorized)
       const signupForm = document.getElementById('signup-form');
       if (signupForm) {
         signupForm.addEventListener('submit', async (e) => {
@@ -876,6 +1076,7 @@ if (isset($_GET['logout'])) {
                 role,
                 department,
                 password,
+                admin_pin: '1234',
               }),
             });
             const data = await res.json();

@@ -243,8 +243,8 @@
                 <button type="button" class="topbar-dropdown-item" id="topbar-menu-auth-modal">
                   <img src="assets/lock.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
                   <div class="item-content">
-                    <span class="item-title">Sign In / Register</span>
-                    <span class="item-sub">Login with credentials or create account</span>
+                    <span class="item-title" id="topbar-menu-auth-title">Sign In / Switch Operator</span>
+                    <span class="item-sub" id="topbar-menu-auth-sub">Login with credentials</span>
                   </div>
                 </button>
                 <div class="topbar-dropdown-divider"></div>
@@ -2077,10 +2077,13 @@
         <button type="button" class="btn-ghost-sm js-close-auth-modal" style="font-size: 18px; padding: 0 6px; cursor: pointer; background: none; border: none; color: var(--text-secondary);">✕</button>
       </div>
 
-      <!-- Auth Mode Tabs -->
-      <div class="auth-tabs">
+      <!-- Auth Mode Tabs (Toggle restricted to Administrators) -->
+      <div class="auth-tabs" id="auth-modal-tabs">
         <button type="button" class="auth-tab-btn active" id="auth-tab-login">Sign In</button>
-        <button type="button" class="auth-tab-btn" id="auth-tab-register">Create Account / Register</button>
+        <button type="button" class="auth-tab-btn" id="auth-tab-register" style="display: none;">Create Account / Register</button>
+        <span class="auth-tab-restricted" id="auth-tab-restricted-badge" style="font-size: 11px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; margin-left: auto;">
+          <img src="assets/lock.svg" alt="" style="width: 12px; height: 12px; opacity: 0.6;" /> Sign In Only (Staff)
+        </span>
       </div>
 
       <!-- Form 1: Sign In -->
