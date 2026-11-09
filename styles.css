@@ -777,6 +777,32 @@ button {
   width: 100%;
 }
 
+/* 4-Tier Access Matrix Cards: 4 items per row, 2 rows */
+#matrix-tier-cards-grid,
+#users-matrix-tier-cards-grid,
+.matrix-cards-grid-4col {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  #matrix-tier-cards-grid,
+  #users-matrix-tier-cards-grid,
+  .matrix-cards-grid-4col {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  #matrix-tier-cards-grid,
+  #users-matrix-tier-cards-grid,
+  .matrix-cards-grid-4col {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 .metric-card {
   flex: 1 0 0;
   min-width: 0;
