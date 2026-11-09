@@ -511,6 +511,26 @@
       bcRoot.textContent = isStock ? 'aBility Gate Station (Stock Controller)' : 'aBility Manager';
     }
 
+    // Disable CHECKPOINT CONTROLS navigation group for Stock Controllers
+    const cpNav = document.getElementById('sidebar-checkpoint-controls') || document.querySelector('.nav-group-workspace');
+    if (cpNav) {
+      if (isStock) {
+        cpNav.classList.add('nav-group-disabled');
+        cpNav.querySelectorAll('button').forEach((b) => {
+          b.disabled = true;
+          b.setAttribute('tabindex', '-1');
+          b.title = 'Access Restricted: Checkpoint controls require Supervisor or Administrator privileges';
+        });
+      } else {
+        cpNav.classList.remove('nav-group-disabled');
+        cpNav.querySelectorAll('button').forEach((b) => {
+          b.disabled = false;
+          b.removeAttribute('tabindex');
+          b.removeAttribute('title');
+        });
+      }
+    }
+
     const kioskBanner = document.getElementById('kiosk-stock-role-banner');
     if (kioskBanner) {
       kioskBanner.style.display = isStock ? 'flex' : 'none';
@@ -3809,6 +3829,10 @@
     const rollcallModal = document.getElementById('rollcall-modal');
     document.querySelectorAll('.js-open-rollcall-modal, #sidebar-rollcall-btn, #topbar-help-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
+        if (btn.id === 'sidebar-rollcall-btn' && isCurrentUserStockController()) {
+          showToast('Access Restricted: Roll-Call inspection requires Supervisor or Administrator privileges.');
+          return;
+        }
         renderRollCallModalList();
         if (rollcallModal) rollcallModal.classList.add('open');
       });
@@ -3822,6 +3846,10 @@
     const lockModal = document.getElementById('station-lock-modal');
     document.querySelectorAll('.js-station-lock-btn, #sidebar-station-lock-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
+        if (btn.id === 'sidebar-station-lock-btn' && isCurrentUserStockController()) {
+          showToast('Access Restricted: Station PIN Locking requires Supervisor or Administrator privileges.');
+          return;
+        }
         if (lockModal) lockModal.classList.add('open');
       });
     });
@@ -3896,6 +3924,10 @@
     const sidebarCallTimeBtn = document.getElementById('sidebar-calltime-btn');
     if (sidebarCallTimeBtn) {
       sidebarCallTimeBtn.addEventListener('click', () => {
+        if (isCurrentUserStockController()) {
+          showToast('Access Restricted: Setting Call Times requires Supervisor or Administrator privileges.');
+          return;
+        }
         const cp = state.activeCheckpoint;
         openCallTimeModal(cp ? cp.type : null, cp ? cp.id : null, cp ? cp.name : null, cp ? cp.call_time : null);
       });
@@ -3950,6 +3982,10 @@
       const btn = document.getElementById(id);
       if (btn) {
         btn.addEventListener('click', async () => {
+          if (isCurrentUserStockController()) {
+            showToast('Access Restricted: Resetting scans requires Administrator privileges.');
+            return;
+          }
           const res = await fetch('api.php?action=reset_demo', { method: 'POST' });
           const data = await res.json();
           if (data && data.ok) {

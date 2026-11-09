@@ -194,6 +194,26 @@ button {
   flex-direction: column;
   gap: 6px;
   width: 100%;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+.nav-group-workspace.nav-group-disabled {
+  opacity: 0.38;
+  filter: grayscale(1);
+}
+
+.nav-group-workspace.nav-group-disabled button {
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
+.nav-group-workspace.nav-group-disabled .nav-section-label::after {
+  content: ' (RESTRICTED)';
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  margin-left: 5px;
 }
 
 .nav-section-label {
