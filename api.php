@@ -1793,6 +1793,7 @@ try {
         $description = trim((string) ($_POST['description'] ?? $jsonBody['description'] ?? ''));
         $sortOrder = (int) ($_POST['sort_order'] ?? $jsonBody['sort_order'] ?? 0);
         $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (isset($jsonBody['is_active']) ? (int) $jsonBody['is_active'] : 1);
+        $isSystem = isset($_POST['is_system']) ? (int) $_POST['is_system'] : (isset($jsonBody['is_system']) ? (int) $jsonBody['is_system'] : 0);
 
         if ($code === '' || $title === '') {
             http_response_code(400);
@@ -1822,10 +1823,11 @@ try {
                 exit;
             }
 
-            // Protect code and level_key for system tiers (L1..L4)
-            if ((int)($existing['is_system'] ?? 0) === 1) {
+            // Protect code and level_key for foundational core system tiers (L1..L4)
+            if (in_array($existing['code'], ['L1', 'L2', 'L3', 'L4'], true)) {
                 $code = $existing['code'];
                 $levelKey = $existing['level_key'];
+                $isSystem = 1;
             }
 
             $upd = $pdo->prepare("
@@ -1840,13 +1842,14 @@ try {
                     `stock_rule` = ?,
                     `description` = ?,
                     `sort_order` = ?,
+                    `is_system` = ?,
                     `is_active` = ?,
                     `updated_at` = NOW()
                 WHERE `id` = ?
             ");
             $upd->execute([
                 $code, $levelKey, $title, $shortName, $color, $badgeBg,
-                $venueRule, $stockRule, $description, $sortOrder, $isActive, $id
+                $venueRule, $stockRule, $description, $sortOrder, $isSystem, $isActive, $id
             ]);
             $tierId = $id;
         } else {
@@ -1862,11 +1865,11 @@ try {
             $ins = $pdo->prepare("
                 INSERT INTO `access_clearance_levels`
                 (`level_key`, `code`, `title`, `short_name`, `color`, `bg`, `border`, `badge_bg`, `icon`, `description`, `default_stock_access`, `default_venue_access`, `venue_rule`, `stock_rule`, `sort_order`, `is_system`, `is_active`, `created_at`, `updated_at`)
-                VALUES (?, ?, ?, ?, ?, '#f8fafc', '#e2e8f0', ?, 'fa-shield-halved', ?, 'all', 'all', ?, ?, ?, 0, ?, NOW(), NOW())
+                VALUES (?, ?, ?, ?, ?, '#f8fafc', '#e2e8f0', ?, 'fa-shield-halved', ?, 'all', 'all', ?, ?, ?, ?, ?, NOW(), NOW())
             ");
             $ins->execute([
                 $levelKey, $code, $title, $shortName, $color, $badgeBg,
-                $description, $venueRule, $stockRule, $sortOrder, $isActive
+                $description, $venueRule, $stockRule, $sortOrder, $isSystem, $isActive
             ]);
             $tierId = (int) $pdo->lastInsertId();
         }

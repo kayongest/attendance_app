@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261109_v7" />
+  <link rel="stylesheet" href="styles.css?v=20261109_v8" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -2526,6 +2526,14 @@
         <input type="hidden" id="tier-crud-id" value="0" />
         <input type="hidden" id="tier-crud-is-system" value="0" />
 
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="tier-crud-tier-type">Tier Management Option *</label>
+          <select id="tier-crud-tier-type" class="form-input" style="font-weight: 600;">
+            <option value="1">1. Core Tier — Protected &amp; System-Critical (Locked credentials, protected from deletion)</option>
+            <option value="0">2. Standard Tier — Custom &amp; Flexible (Configurable scope, removable when unassigned)</option>
+          </select>
+        </div>
+
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-field">
             <label class="form-label" for="tier-crud-code">Tier Code * (e.g. L5)</label>
@@ -2840,6 +2848,6 @@
   <!-- Toast Notification -->
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=20261109_v7"></script>
+  <script src="app.js?v=20261109_v8"></script>
 </body>
 </html>

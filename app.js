@@ -1605,60 +1605,40 @@
     }
     return state.clearanceMatrix
       .map((m) => {
-        const titleClean = (m.title || '').replace(/^Level\s*\d+\s*[—–-]\s*/i, '').trim() || m.short || m.code;
         const venueRule = m.venue_Rule || m.venue_rule || 'YES';
         const stockRule = m.stock_rule || 'NO';
-
-        let badgeClass = 'status-badge';
-        let badgeStyle = 'font-size: 10px; font-weight: 600;';
-        if (m.code === 'L1') {
-          badgeStyle += ' background: #e2e8f0; color: #334155;';
-        } else if (m.code === 'L2') {
-          badgeClass += ' status-badge-blue-sm';
-        } else if (m.code === 'L3') {
-          badgeClass += ' status-badge-purple-sm';
-        } else if (m.code === 'L4') {
-          badgeClass += ' status-badge-green-sm';
-        } else {
-          const hex = (m.color || '#7c3aed').replace('#', '');
-          const r = parseInt(hex.substring(0, 2), 16) || 124;
-          const g = parseInt(hex.substring(2, 4), 16) || 58;
-          const b = parseInt(hex.substring(4, 6), 16) || 237;
-          badgeStyle += ` background: rgba(${r}, ${g}, ${b}, 0.12); color: ${m.color || '#7c3aed'};`;
-        }
+        const isCore = Number(m.is_system) === 1;
 
         return `
         <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color || '#2563eb')}; position: relative;">
-          <div class="metric-heading" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 6px;">
-            <span class="metric-label-reg" style="font-weight: 600; color: var(--text-primary); font-size: 11px; white-space: normal; line-height: 1.3;">
-              Tier ${escapeHtml(m.code)} — ${escapeHtml(titleClean)}
-            </span>
-            <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
-              <span class="${badgeClass}" style="${badgeStyle}">${escapeHtml(m.code)} Matrix</span>
-              <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 3px;">
+          <div class="metric-heading" style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="tier-code-badge" style="background: ${escapeHtml(m.color || '#2563eb')}; color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; display: inline-block;">${escapeHtml(m.code)}</span>
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">${m.member_count || 0} Staff</span>
+            </div>
+            <div class="tier-card-actions" style="display: flex; align-items: center; gap: 4px;">
+              <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 4px;">
                 <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" />
                 <span>Edit</span>
               </button>
               ${
-                !m.is_system
-                  ? `
-              <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 3px;">
+                isCore
+                  ? `<span style="font-size: 10px; font-weight: 600; color: #1e40af; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><img src="assets/lock.svg" alt="" class="svg-icon" style="width: 10px; height: 10px; opacity: 0.7;" /> Core Tier</span>`
+                  : `<span style="font-size: 10px; font-weight: 600; color: #475569; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;">Standard</span>
+              <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 3px;">
                 <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" />
                 <span>Del</span>
               </button>`
-                  : `<span style="font-size: 10px; font-weight: 600; color: var(--text-secondary); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><img src="assets/lock.svg" alt="" class="svg-icon" style="width: 10px; height: 10px; opacity: 0.6;" /> Core</span>`
               }
             </div>
           </div>
-          <span class="metric-value-30" style="margin-top: 8px; font-size: 26px; font-weight: 700; color: var(--text-primary); line-height: 1.1;">
-            ${String(m.member_count || 0).padStart(2, '0')} Staff
-          </span>
-          <span class="metric-context" style="margin-top: 6px; display: block; font-size: 11px; color: var(--text-secondary); line-height: 1.35; white-space: normal;">
+          <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: block; line-height: 1.25;">${escapeHtml(m.title)}</span>
+          <span class="metric-context" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; display: block;">
             Venue Access: <strong>${escapeHtml(venueRule)}</strong> · Stock Access: <strong>${escapeHtml(stockRule)}</strong>
           </span>
           ${
             m.description
-              ? `<p style="margin: 4px 0 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(m.description)}">${escapeHtml(m.description)}</p>`
+              ? `<p style="margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(m.description)}">${escapeHtml(m.description)}</p>`
               : ''
           }
         </div>
@@ -2250,6 +2230,7 @@
     const titleEl = document.getElementById('tier-crud-modal-title');
     const idInput = document.getElementById('tier-crud-id');
     const isSystemInput = document.getElementById('tier-crud-is-system');
+    const typeSelect = document.getElementById('tier-crud-tier-type');
     const codeInput = document.getElementById('tier-crud-code');
     const keyInput = document.getElementById('tier-crud-key');
     const titleInput = document.getElementById('tier-crud-title');
@@ -2266,7 +2247,13 @@
     if (tier) {
       if (titleEl) titleEl.textContent = `Edit Clearance Tier (${tier.code})`;
       if (idInput) idInput.value = tier.id || 0;
-      const isSys = Boolean(tier.is_system);
+      const isSys = Number(tier.is_system) === 1;
+      const isBaseCore = ['L1', 'L2', 'L3', 'L4'].includes(tier.code);
+
+      if (typeSelect) {
+        typeSelect.value = isSys ? '1' : '0';
+        typeSelect.disabled = isBaseCore; // Foundational L1-L4 must stay Core
+      }
       if (isSystemInput) isSystemInput.value = isSys ? '1' : '0';
       if (codeInput) {
         codeInput.value = tier.code || '';
@@ -2286,10 +2273,19 @@
       if (sortInput) sortInput.value = tier.sort_order || (tier.id || 5);
       if (activeCheck) activeCheck.checked = tier.is_active !== 0;
       if (descInput) descInput.value = tier.description || '';
-      if (systemNotice) systemNotice.style.display = isSys ? 'block' : 'none';
+      if (systemNotice) {
+        systemNotice.style.display = isSys ? 'block' : 'none';
+        systemNotice.innerHTML = isBaseCore
+          ? '🔒 <strong>Foundational Core Tier (L1–L4):</strong> Code and unique key are locked to preserve gate checkpoint rules. You can safely configure Title, Rules, Description, and Theme Color.'
+          : '🔒 <strong>Core Tier:</strong> Designated as system-critical and protected from deletion.';
+      }
     } else {
       if (titleEl) titleEl.textContent = 'Add New Clearance Tier';
       if (idInput) idInput.value = 0;
+      if (typeSelect) {
+        typeSelect.value = '0'; // Defaults to 2. Standard Tier
+        typeSelect.disabled = false;
+      }
       if (isSystemInput) isSystemInput.value = '0';
       const nextIdx = (state.clearanceMatrix ? state.clearanceMatrix.length : 4) + 1;
       const nextCode = `L${nextIdx}`;
@@ -5327,6 +5323,19 @@
       });
     }
 
+    // Tier Type (1. Core vs 2. Standard) dynamic toggle
+    const tierTypeSelect = document.getElementById('tier-crud-tier-type');
+    if (tierTypeSelect) {
+      tierTypeSelect.addEventListener('change', (e) => {
+        const isSys = e.target.value === '1';
+        const systemNotice = document.getElementById('tier-crud-system-notice');
+        if (systemNotice) {
+          systemNotice.style.display = isSys ? 'block' : 'none';
+          systemNotice.innerHTML = '🔒 <strong>Core Tier:</strong> Designated as system-protected and safe from accidental deletion.';
+        }
+      });
+    }
+
     // Tier CRUD Form Submit
     const tierCrudForm = document.getElementById('tier-crud-form');
     if (tierCrudForm) {
@@ -5348,6 +5357,7 @@
         const color = document.getElementById('tier-crud-color-text').value.trim() || document.getElementById('tier-crud-color').value;
         const sort_order = Number(document.getElementById('tier-crud-sort').value || 0);
         const is_active = document.getElementById('tier-crud-active').checked ? 1 : 0;
+        const is_system = Number(document.getElementById('tier-crud-tier-type')?.value ?? document.getElementById('tier-crud-is-system')?.value ?? 0);
         const description = document.getElementById('tier-crud-desc').value.trim();
 
         try {
@@ -5366,6 +5376,7 @@
               color,
               sort_order,
               is_active,
+              is_system,
               description,
             }),
           });
