@@ -531,6 +531,46 @@
       }
     }
 
+    // Disable Venue Security Portal and 4-Tier Access Matrix shortcuts for Stock Controllers
+    const venueSecBtn = document.getElementById('nav-venue-security-btn');
+    const matrixNavBtn = document.getElementById('nav-access-matrix-btn');
+
+    if (venueSecBtn) {
+      if (isStock) {
+        venueSecBtn.disabled = true;
+        venueSecBtn.style.opacity = '0.35';
+        venueSecBtn.style.filter = 'grayscale(1)';
+        venueSecBtn.style.cursor = 'not-allowed';
+        venueSecBtn.setAttribute('tabindex', '-1');
+        venueSecBtn.title = 'Access Restricted: Venue Security Portal is restricted for Stock Controllers (Stock Warehouse Terminal Only)';
+      } else {
+        venueSecBtn.disabled = false;
+        venueSecBtn.style.opacity = '1';
+        venueSecBtn.style.filter = 'none';
+        venueSecBtn.style.cursor = 'pointer';
+        venueSecBtn.removeAttribute('tabindex');
+        venueSecBtn.removeAttribute('title');
+      }
+    }
+
+    if (matrixNavBtn) {
+      if (isStock) {
+        matrixNavBtn.disabled = true;
+        matrixNavBtn.style.opacity = '0.35';
+        matrixNavBtn.style.filter = 'grayscale(1)';
+        matrixNavBtn.style.cursor = 'not-allowed';
+        matrixNavBtn.setAttribute('tabindex', '-1');
+        matrixNavBtn.title = 'Access Restricted: 4-Tier Access Matrix configuration requires Supervisor or Administrator privileges';
+      } else {
+        matrixNavBtn.disabled = false;
+        matrixNavBtn.style.opacity = '1';
+        matrixNavBtn.style.filter = 'none';
+        matrixNavBtn.style.cursor = 'pointer';
+        matrixNavBtn.removeAttribute('tabindex');
+        matrixNavBtn.removeAttribute('title');
+      }
+    }
+
     const kioskBanner = document.getElementById('kiosk-stock-role-banner');
     if (kioskBanner) {
       kioskBanner.style.display = isStock ? 'flex' : 'none';
@@ -2660,6 +2700,10 @@
     const venueSecBtn = document.getElementById('nav-venue-security-btn');
     if (venueSecBtn) {
       venueSecBtn.addEventListener('click', () => {
+        if (isCurrentUserStockController()) {
+          showToast('Access Restricted: Stock Controllers are assigned exclusively to Stock Warehouse Gate Terminal (#pane-kiosk).');
+          return;
+        }
         if (state.stationLocked && state.checkpointType !== 'event_venue') {
           showToast('Station is locked. Unlock with PIN 1234 first.');
           return;
@@ -2677,6 +2721,10 @@
     const matrixNavBtn = document.getElementById('nav-access-matrix-btn');
     if (matrixNavBtn) {
       matrixNavBtn.addEventListener('click', () => {
+        if (isCurrentUserStockController()) {
+          showToast('Access Restricted: 4-Tier Access Matrix configuration requires Supervisor or Administrator privileges.');
+          return;
+        }
         switchScreen('analytics', 'matrix-config-section');
       });
     }
