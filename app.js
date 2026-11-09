@@ -300,7 +300,14 @@
     try {
       const url = `api.php?action=bootstrap&checkpoint_type=${encodeURIComponent(state.checkpointType)}&checkpoint_id=${encodeURIComponent(state.checkpointId)}`;
       const res = await fetch(url, { cache: 'no-store' });
-      const data = await res.json();
+      const text = await res.text();
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        console.error('Failed to parse API response as JSON:', parseErr, text.slice(0, 300));
+        return;
+      }
       if (data && data.ok) {
         applyBootstrapPayload(data, preserveVerification);
       }
@@ -746,8 +753,12 @@
 
       const isAdmin = isCurrentUserAdmin();
       const userDropdown = document.getElementById('topbar-user-dropdown');
+      const quickLogout = document.getElementById('topbar-logout-quick-btn');
       if (userDropdown && !isAdmin) {
         userDropdown.style.display = 'none';
+      }
+      if (quickLogout) {
+        quickLogout.style.display = isAdmin ? 'none' : 'inline-flex';
       }
 
       const authTitle = document.getElementById('topbar-menu-auth-title');
@@ -3301,19 +3312,17 @@
     // User Avatar & Account Menu Dropdown (ONLY FOR ADMIN)
     const topAvatar = document.getElementById('topbar-avatar');
     const userDropdown = document.getElementById('topbar-user-dropdown');
+    const quickLogout = document.getElementById('topbar-logout-quick-btn');
+    if (quickLogout) {
+      quickLogout.addEventListener('click', () => {
+        window.location.href = 'login.php?logout=1';
+      });
+    }
     if (topAvatar && userDropdown) {
       topAvatar.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!isCurrentUserAdmin()) {
           closeAllTopbarDropdowns();
-          const u = state.currentUser || {};
-          const name = u.full_name || 'Staff Member';
-          const role = u.role_display || u.role || 'Operator';
-          const tier = u.clearance_code || 'L2';
-          const doSignOut = confirm(`Active Operator: ${name}\nRole: ${role} · ${tier}\n\nNotice: Account settings, operator switching, and registration are reserved for System Administrators.\n\nDo you want to Sign Out of this station?`);
-          if (doSignOut) {
-            window.location.href = 'login.php?logout=1';
-          }
           return;
         }
         const isOpen = userDropdown.style.display === 'block';

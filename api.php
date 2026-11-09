@@ -7,6 +7,9 @@
 
 declare(strict_types=1);
 
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING & ~E_DEPRECATED);
+ini_set('display_errors', '0');
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -318,9 +321,10 @@ function ensureRolesTable(PDO $pdo): void
             CREATE TABLE IF NOT EXISTS `roles` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
                 `role_key` VARCHAR(64) NOT NULL UNIQUE,
-                `title` VARCHAR(120) NOT NULL,
-                `clearance_level` VARCHAR(50) NOT NULL DEFAULT 'L2_TECH_STAGE',
-                `department` VARCHAR(80) DEFAULT 'Audio',
+                `role_name` VARCHAR(120) DEFAULT NULL,
+                `title` VARCHAR(120) DEFAULT NULL,
+                `clearance_level` VARCHAR(50) DEFAULT NULL,
+                `department` VARCHAR(80) DEFAULT 'Production',
                 `description` TEXT DEFAULT NULL,
                 `is_system` TINYINT(1) NOT NULL DEFAULT 0,
                 `is_active` TINYINT(1) NOT NULL DEFAULT 1,
@@ -328,23 +332,41 @@ function ensureRolesTable(PDO $pdo): void
                 `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         ");
+        $cols = $pdo->query("SHOW COLUMNS FROM `roles`")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('title', $cols, true)) {
+            $pdo->exec("ALTER TABLE `roles` ADD `title` VARCHAR(120) NULL");
+            $pdo->exec("UPDATE `roles` SET `title` = `role_name` WHERE `title` IS NULL OR `title` = ''");
+        }
+        if (!in_array('role_name', $cols, true)) {
+            $pdo->exec("ALTER TABLE `roles` ADD `role_name` VARCHAR(120) NULL");
+            $pdo->exec("UPDATE `roles` SET `role_name` = `title` WHERE `role_name` IS NULL OR `role_name` = ''");
+        }
+        if (!in_array('clearance_level', $cols, true)) {
+            $pdo->exec("ALTER TABLE `roles` ADD `clearance_level` VARCHAR(50) NULL");
+        }
+        if (!in_array('department', $cols, true)) {
+            $pdo->exec("ALTER TABLE `roles` ADD `department` VARCHAR(80) DEFAULT 'Production'");
+        }
+        if (!in_array('is_system', $cols, true)) {
+            $pdo->exec("ALTER TABLE `roles` ADD `is_system` TINYINT(1) DEFAULT 0");
+        }
         $cnt = (int) $pdo->query("SELECT COUNT(*) FROM `roles`")->fetchColumn();
         if ($cnt === 0) {
             $seedRoles = [
-                ['admin', 'Administrator', 'L4_ALL_ACCESS', 'Executive', 'Full operational control, security matrix management, user provision and badge issuance.', 1],
-                ['stock_controller', 'Stock Controller', 'L3_STOCK_WAREHOUSE', 'Warehouse', 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', 1],
-                ['tech_lead', 'Technical Lead', 'L4_ALL_ACCESS', 'Production', 'Supervises audio, video, lighting and rigging operations across all checkpoints.', 1],
-                ['technician', 'Stage & Audio Technician', 'L2_TECH_STAGE', 'Audio', 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 1],
-                ['sound_engineer', 'Lead Sound Engineer', 'L2_TECH_STAGE', 'Audio', 'Lead acoustic calibration and sound engineering for live events and concert tours.', 0],
-                ['lighting_tech', 'Lighting Technician', 'L2_TECH_STAGE', 'Lighting', 'DMX universes routing, moving-head fixtures, dimmer racks and stage wash fixtures.', 0],
-                ['video_director', 'Video Director', 'L2_TECH_STAGE', 'Video', 'Controls LED video walls, SDI fiber transmission, switchers, and live camera chains.', 0],
-                ['stage_manager', 'Stage Manager', 'L2_TECH_STAGE', 'Production', 'Directs stage crew, backstage call-time coordination, and cueing.', 0],
-                ['rigging_lead', 'Rigging Lead', 'L2_TECH_STAGE', 'Rigging', 'Motors, truss rigging, load calculations and safety cable inspections overhead.', 0],
-                ['user', 'Venue Crew', 'L1_VENUE_BASIC', 'Production', 'General event venue operations and support staff. Stock warehouse access restricted.', 0],
-                ['security', 'Security Officer', 'L1_VENUE_BASIC', 'Security', 'Front of house and gate security perimeter verification.', 0],
-                ['driver', 'Logistics Driver', 'L1_VENUE_BASIC', 'Logistics', 'Equipment transport, loading bay check-in, and transit logistics.', 0],
+                ['admin', 'Administrator', 'Administrator', 'L4_ALL_ACCESS', 'Executive', 'Full operational control, security matrix management, user provision and badge issuance.', 1],
+                ['stock_controller', 'Stock Controller', 'Stock Controller', 'L3_STOCK_WAREHOUSE', 'Warehouse', 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', 1],
+                ['tech_lead', 'Technical Lead', 'Technical Lead', 'L4_ALL_ACCESS', 'Production', 'Supervises audio, video, lighting and rigging operations across all checkpoints.', 1],
+                ['technician', 'Stage & Audio Technician', 'Stage & Audio Technician', 'L2_TECH_STAGE', 'Audio', 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 1],
+                ['sound_engineer', 'Lead Sound Engineer', 'Lead Sound Engineer', 'L2_TECH_STAGE', 'Audio', 'Lead acoustic calibration and sound engineering for live events and concert tours.', 0],
+                ['lighting_tech', 'Lighting Technician', 'Lighting Technician', 'L2_TECH_STAGE', 'Lighting', 'DMX universes routing, moving-head fixtures, dimmer racks and stage wash fixtures.', 0],
+                ['video_director', 'Video Director', 'Video Director', 'L2_TECH_STAGE', 'Video', 'Controls LED video walls, SDI fiber transmission, switchers, and live camera chains.', 0],
+                ['stage_manager', 'Stage Manager', 'Stage Manager', 'L2_TECH_STAGE', 'Production', 'Directs stage crew, backstage call-time coordination, and cueing.', 0],
+                ['rigging_lead', 'Rigging Lead', 'Rigging Lead', 'L2_TECH_STAGE', 'Rigging', 'Motors, truss rigging, load calculations and safety cable inspections overhead.', 0],
+                ['user', 'Venue Crew', 'Venue Crew', 'L1_VENUE_BASIC', 'Production', 'General event venue operations and support staff. Stock warehouse access restricted.', 0],
+                ['security', 'Security Officer', 'Security Officer', 'L1_VENUE_BASIC', 'Security', 'Front of house and gate security perimeter verification.', 0],
+                ['driver', 'Logistics Driver', 'Logistics Driver', 'L1_VENUE_BASIC', 'Logistics', 'Equipment transport, loading bay check-in, and transit logistics.', 0],
             ];
-            $ins = $pdo->prepare("INSERT INTO `roles` (`role_key`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, 1)");
+            $ins = $pdo->prepare("INSERT INTO `roles` (`role_key`, `role_name`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
             foreach ($seedRoles as $sr) {
                 $ins->execute($sr);
             }
@@ -359,8 +381,14 @@ function getRolesList(PDO $pdo, array $crew = []): array
     try {
         $rows = $pdo->query("SELECT * FROM `roles` ORDER BY `id` ASC")->fetchAll();
         foreach ($rows as $r) {
-            $rKey = strtolower((string)$r['role_key']);
-            $tier = normalizeClearanceTier((string)$r['clearance_level'], $rKey);
+            $rKey = strtolower(trim((string)($r['role_key'] ?? '')));
+            if ($rKey === '') continue;
+            $rawTitle = trim((string)($r['title'] ?? $r['role_name'] ?? ''));
+            if ($rawTitle === '') {
+                $rawTitle = ucwords(str_replace('_', ' ', $rKey));
+            }
+            $rawClearance = trim((string)($r['clearance_level'] ?? ''));
+            $tier = normalizeClearanceTier($rawClearance, $rKey);
             $staffCount = 0;
             foreach ($crew as $c) {
                 if (strtolower((string)($c['role'] ?? '')) === $rKey) {
@@ -368,9 +396,9 @@ function getRolesList(PDO $pdo, array $crew = []): array
                 }
             }
             $roles[] = [
-                'id' => (int) $r['id'],
+                'id' => (int) ($r['id'] ?? 0),
                 'role_key' => $rKey,
-                'title' => (string) $r['title'],
+                'title' => $rawTitle,
                 'clearance_level' => $tier['key'],
                 'clearance_code' => $tier['code'],
                 'clearance_title' => $tier['title'],
@@ -378,7 +406,7 @@ function getRolesList(PDO $pdo, array $crew = []): array
                 'clearance_color' => $tier['color'],
                 'department' => (string) ($r['department'] ?? 'Production'),
                 'description' => (string) ($r['description'] ?? ''),
-                'is_system' => (int) ($r['is_system'] ?? 0),
+                'is_system' => (int) ($r['is_system'] ?? (in_array($rKey, ['admin', 'manager', 'stock_controller', 'user'], true) ? 1 : 0)),
                 'is_active' => (int) ($r['is_active'] ?? 1),
                 'staff_count' => $staffCount,
             ];
@@ -1908,10 +1936,10 @@ try {
         if ($id > 0) {
             $upd = $pdo->prepare("
                 UPDATE `roles`
-                SET `title` = ?, `role_key` = ?, `clearance_level` = ?, `department` = ?, `description` = ?, `is_active` = ?
+                SET `title` = ?, `role_name` = ?, `role_key` = ?, `clearance_level` = ?, `department` = ?, `description` = ?, `is_active` = ?
                 WHERE `id` = ?
             ");
-            $upd->execute([$title, $roleKey, $normClearance, $department, $description, $isActive, $id]);
+            $upd->execute([$title, $title, $roleKey, $normClearance, $department, $description, $isActive, $id]);
         } else {
             $dup = $pdo->prepare("SELECT `id` FROM `roles` WHERE `role_key` = ?");
             $dup->execute([$roleKey]);
@@ -1919,10 +1947,10 @@ try {
                 $roleKey .= '_' . rand(10, 99);
             }
             $ins = $pdo->prepare("
-                INSERT INTO `roles` (`role_key`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`)
-                VALUES (?, ?, ?, ?, ?, 0, ?)
+                INSERT INTO `roles` (`role_key`, `role_name`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`)
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?)
             ");
-            $ins->execute([$roleKey, $title, $normClearance, $department, $description, $isActive]);
+            $ins->execute([$roleKey, $title, $title, $normClearance, $department, $description, $isActive]);
             $id = (int) $pdo->lastInsertId();
         }
 
