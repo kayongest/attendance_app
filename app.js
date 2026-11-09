@@ -11,7 +11,13 @@
     stationLocked: localStorage.getItem('ability_station_locked') === '1',
     scanMode: 'auto',
     dbSource: 'ability_db',
-    clearanceMatrix: [],
+    clearanceMatrix: [
+      { id: 1, key: 'L1_VENUE_BASIC', level_key: 'L1_VENUE_BASIC', code: 'L1', title: 'Level 1 — Venue Crew', short: 'Assigned Venues Only', short_name: 'Assigned Venues Only', color: '#16a34a', description: 'Standard crew access restricted strictly to assigned Event Venues during scheduled calltimes.', venue_rule: 'YES', venue_Rule: 'YES', stock_rule: 'ALL', is_system: 1, is_active: 1, sort_order: 1, member_count: 0 },
+      { id: 2, key: 'L2_TECH_STAGE', level_key: 'L2_TECH_STAGE', code: 'L2', title: 'Level 2 — Technical & Stage', short: 'Technical', short_name: 'Technical', color: '#2563eb', description: 'Access to Technical Stage areas, FOH/Backstage at assigned Event Venues, and designated Dispatch Stock Locations.', venue_rule: 'YES', venue_Rule: 'YES', stock_rule: 'YES', is_system: 1, is_active: 1, sort_order: 2, member_count: 16 },
+      { id: 3, key: 'L3_STOCK_WAREHOUSE', level_key: 'L3_STOCK_WAREHOUSE', code: 'L3', title: 'Level 3 — Stock & Warehouse', short: 'Stock', short_name: 'Stock', color: '#d97706', description: 'Full access to authorized Stock Warehouses, Loading Bays, and Assigned Event Venues.', venue_rule: 'YES', venue_Rule: 'YES', stock_rule: 'FULL', is_system: 1, is_active: 1, sort_order: 3, member_count: 4 },
+      { id: 4, key: 'L4_ALL_ACCESS', level_key: 'L4_ALL_ACCESS', code: 'L4', title: 'Level 4 — Full All-Access', short: 'ALL ACCESS', short_name: 'ALL ACCESS', color: '#dc2626', description: 'Unrestricted 24/7 entry to all Stock Warehouses, Production Vaults, Backstage Technical Zones, and Event Venues.', venue_rule: 'ALL', venue_Rule: 'ALL', stock_rule: 'ALL', is_system: 1, is_active: 1, sort_order: 4, member_count: 2 },
+      { id: 8, key: 'L6_SPECIALIZED_OPS', level_key: 'L6_SPECIALIZED_OPS', code: 'L6', title: 'Level 6 — Management', short: 'Management', short_name: 'Management', color: '#7c3aed', description: 'Full executive access to all production facilities, sound stages and warehouse logistics.', venue_rule: 'YES', venue_Rule: 'YES', stock_rule: 'FULL', is_system: 0, is_active: 1, sort_order: 6, member_count: 0 },
+    ],
     checkpoints: {
       stock_warehouses: [],
       event_venues: [],
@@ -141,7 +147,9 @@
   function applyBootstrapPayload(data, preserveCurrentVerification = false) {
     if (!data || !data.ok) return;
     state.dbSource = data.dbSource || 'ability_db';
-    state.clearanceMatrix = Array.isArray(data.clearanceMatrix) ? data.clearanceMatrix : [];
+    if (Array.isArray(data.clearanceMatrix) && data.clearanceMatrix.length > 0) {
+      state.clearanceMatrix = data.clearanceMatrix;
+    }
     state.checkpoints = data.checkpoints || { stock_warehouses: [], event_venues: [], directory: [] };
     if (data.activeCheckpoint) {
       state.activeCheckpoint = data.activeCheckpoint;
@@ -427,6 +435,7 @@
     }
     if (screenKey === 'users') {
       renderUsersScreen();
+      switchUsersView(state.usersViewMode || 'personnel');
     }
 
     if (scrollToId === 'pane-kiosk') {
@@ -458,6 +467,9 @@
     renderBatchesAndMatrixScreen();
     renderRollCallModalList();
     renderUsersScreen();
+    if (state.activeScreen === 'users') {
+      switchUsersView(state.usersViewMode || 'personnel');
+    }
   }
 
   function closeAllTopbarDropdowns() {
@@ -1523,7 +1535,7 @@
               }
             </div>
           </div>
-          <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: block;">${escapeHtml(m.title)}</span>
+          <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: block; font-family: 'Share Tech', sans-serif;">${escapeHtml(m.title)}</span>
           <span class="metric-context">
             Venue Access: <strong>${escapeHtml(m.venue_Rule || m.venue_rule || 'YES')}</strong> · Stock Access: <strong>${escapeHtml(m.stock_rule || 'NO')}</strong>
           </span>
@@ -1548,6 +1560,57 @@
 
   function renderUsersMatrixScreen() {
     renderClearanceMatrixCards();
+  }
+
+  function switchUsersView(mode) {
+    state.usersViewMode = mode;
+
+    const tabPersonnel = document.getElementById('view-tab-personnel');
+    const tabRoles = document.getElementById('view-tab-roles');
+    const tabMatrix = document.getElementById('view-tab-matrix');
+    const personnelView = document.getElementById('personnel-view-container');
+    const rolesView = document.getElementById('roles-view-container');
+    const matrixView = document.getElementById('matrix-view-container');
+    const addStaffBtn = document.getElementById('open-add-user-btn');
+    const addRoleBtn = document.getElementById('open-add-role-btn');
+    const addTierTopBtn = document.getElementById('open-add-tier-top-btn');
+    const exportBtn = document.getElementById('users-export-btn');
+
+    const tabs = [
+      { el: tabPersonnel, active: mode === 'personnel' },
+      { el: tabRoles, active: mode === 'roles' },
+      { el: tabMatrix, active: mode === 'matrix' },
+    ];
+
+    tabs.forEach(({ el, active }) => {
+      if (!el) return;
+      if (active) {
+        el.className = 'btn btn-primary-32 js-users-view-tab active-subtab';
+        const icon = el.querySelector('img');
+        if (icon) icon.style.filter = 'brightness(0) invert(1)';
+      } else {
+        el.className = 'btn btn-secondary-32 js-users-view-tab';
+        const icon = el.querySelector('img');
+        if (icon) icon.style.filter = 'none';
+      }
+    });
+
+    if (personnelView) personnelView.style.display = mode === 'personnel' ? 'block' : 'none';
+    if (rolesView) rolesView.style.display = mode === 'roles' ? 'block' : 'none';
+    if (matrixView) matrixView.style.display = mode === 'matrix' ? 'block' : 'none';
+
+    if (addStaffBtn) addStaffBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
+    if (addRoleBtn) addRoleBtn.style.display = mode === 'roles' ? 'inline-flex' : 'none';
+    if (addTierTopBtn) addTierTopBtn.style.display = 'none';
+    if (exportBtn) exportBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
+
+    if (mode === 'matrix') {
+      renderUsersMatrixScreen();
+    } else if (mode === 'roles') {
+      renderRolesScreen();
+    } else {
+      renderUsersScreen();
+    }
   }
 
   function renderBatchesAndMatrixScreen() {
@@ -4903,53 +4966,7 @@
     const tabPersonnel = document.getElementById('view-tab-personnel');
     const tabRoles = document.getElementById('view-tab-roles');
     const tabMatrix = document.getElementById('view-tab-matrix');
-    const personnelView = document.getElementById('personnel-view-container');
-    const rolesView = document.getElementById('roles-view-container');
-    const matrixView = document.getElementById('matrix-view-container');
-    const addStaffBtn = document.getElementById('open-add-user-btn');
     const addRoleBtn = document.getElementById('open-add-role-btn');
-    const addTierTopBtn = document.getElementById('open-add-tier-top-btn');
-    const exportBtn = document.getElementById('users-export-btn');
-
-    function switchUsersView(mode) {
-      state.usersViewMode = mode;
-
-      const tabs = [
-        { el: tabPersonnel, active: mode === 'personnel' },
-        { el: tabRoles, active: mode === 'roles' },
-        { el: tabMatrix, active: mode === 'matrix' },
-      ];
-
-      tabs.forEach(({ el, active }) => {
-        if (!el) return;
-        if (active) {
-          el.className = 'btn btn-primary-32 js-users-view-tab active-subtab';
-          const icon = el.querySelector('img');
-          if (icon) icon.style.filter = 'brightness(0) invert(1)';
-        } else {
-          el.className = 'btn btn-secondary-32 js-users-view-tab';
-          const icon = el.querySelector('img');
-          if (icon) icon.style.filter = 'none';
-        }
-      });
-
-      if (personnelView) personnelView.style.display = mode === 'personnel' ? 'block' : 'none';
-      if (rolesView) rolesView.style.display = mode === 'roles' ? 'block' : 'none';
-      if (matrixView) matrixView.style.display = mode === 'matrix' ? 'block' : 'none';
-
-      if (addStaffBtn) addStaffBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
-      if (addRoleBtn) addRoleBtn.style.display = mode === 'roles' ? 'inline-flex' : 'none';
-      if (addTierTopBtn) addTierTopBtn.style.display = mode === 'matrix' ? 'inline-flex' : 'none';
-      if (exportBtn) exportBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
-
-      if (mode === 'matrix') {
-        renderUsersMatrixScreen();
-      } else if (mode === 'roles') {
-        renderRolesScreen();
-      } else {
-        renderUsersScreen();
-      }
-    }
 
     if (tabPersonnel) tabPersonnel.addEventListener('click', () => switchUsersView('personnel'));
     if (tabRoles) tabRoles.addEventListener('click', () => switchUsersView('roles'));
