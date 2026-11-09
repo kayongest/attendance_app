@@ -1512,37 +1512,64 @@
       return '<div style="padding: 24px; text-align: center; color: var(--text-secondary); width: 100%;">No clearance tiers configured.</div>';
     }
     return state.clearanceMatrix
-      .map(
-        (m) => `
-        <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color)}; position: relative;">
-          <div class="metric-heading" style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="tier-code-badge tier-code-${escapeHtml(m.code)}" style="background: ${escapeHtml(m.color)}; color: #fff;">${escapeHtml(m.code)}</span>
-              <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">${m.member_count || 0} Staff</span>
-            </div>
-            <div class="tier-card-actions" style="display: flex; align-items: center; gap: 4px;">
-              <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 4px;">
+      .map((m) => {
+        const titleClean = (m.title || '').replace(/^Level\s*\d+\s*[—–-]\s*/i, '').trim() || m.short || m.code;
+        const venueRule = m.venue_Rule || m.venue_rule || 'YES';
+        const stockRule = m.stock_rule || 'NO';
+
+        let badgeClass = 'status-badge';
+        let badgeStyle = 'font-size: 10px; font-weight: 600;';
+        if (m.code === 'L1') {
+          badgeStyle += ' background: #e2e8f0; color: #334155;';
+        } else if (m.code === 'L2') {
+          badgeClass += ' status-badge-blue-sm';
+        } else if (m.code === 'L3') {
+          badgeClass += ' status-badge-purple-sm';
+        } else if (m.code === 'L4') {
+          badgeClass += ' status-badge-green-sm';
+        } else {
+          const hex = (m.color || '#7c3aed').replace('#', '');
+          const r = parseInt(hex.substring(0, 2), 16) || 124;
+          const g = parseInt(hex.substring(2, 4), 16) || 58;
+          const b = parseInt(hex.substring(4, 6), 16) || 237;
+          badgeStyle += ` background: rgba(${r}, ${g}, ${b}, 0.12); color: ${m.color || '#7c3aed'};`;
+        }
+
+        return `
+        <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color || '#2563eb')}; position: relative;">
+          <div class="metric-heading" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 6px;">
+            <span class="metric-label-reg" style="font-weight: 600; color: var(--text-primary); font-size: 11px; white-space: normal; line-height: 1.3;">
+              Tier ${escapeHtml(m.code)} — ${escapeHtml(titleClean)}
+            </span>
+            <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+              <span class="${badgeClass}" style="${badgeStyle}">${escapeHtml(m.code)} Matrix</span>
+              <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 2px;">
                 <span>✏️ Edit</span>
               </button>
               ${
                 !m.is_system
                   ? `
-              <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 4px;">
+              <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 2px;">
                 <span>🗑️ Del</span>
               </button>`
-                  : `
-              <span style="font-size: 10px; font-weight: 600; color: var(--text-secondary); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">Core Tier</span>`
+                  : ''
               }
             </div>
           </div>
-          <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: block; font-family: 'Share Tech', sans-serif;">${escapeHtml(m.title)}</span>
-          <span class="metric-context">
-            Venue Access: <strong>${escapeHtml(m.venue_Rule || m.venue_rule || 'YES')}</strong> · Stock Access: <strong>${escapeHtml(m.stock_rule || 'NO')}</strong>
+          <span class="metric-value-30" style="margin-top: 8px; font-size: 26px; font-weight: 700; color: var(--text-primary); line-height: 1.1;">
+            ${String(m.member_count || 0).padStart(2, '0')} Staff
           </span>
-          ${m.description ? `<p style="margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); line-height: 1.35;">${escapeHtml(m.description)}</p>` : ''}
+          <span class="metric-context" style="margin-top: 6px; display: block; font-size: 11px; color: var(--text-secondary); line-height: 1.35; white-space: normal;">
+            Venue Access: <strong>${escapeHtml(venueRule)}</strong> · Stock Access: <strong>${escapeHtml(stockRule)}</strong>
+          </span>
+          ${
+            m.description
+              ? `<p style="margin: 4px 0 0; font-size: 10.5px; color: var(--text-secondary); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(m.description)}">${escapeHtml(m.description)}</p>`
+              : ''
+          }
         </div>
-      `
-      )
+      `;
+      })
       .join('');
   }
 
