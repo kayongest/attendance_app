@@ -1183,6 +1183,10 @@
                 <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
                 <span>Reset Today’s Gate Logs</span>
               </button>
+              <button type="button" class="btn btn-primary-38" id="open-create-tier-btn" style="background: #10b981;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add Clearance Tier</span>
+              </button>
               <button type="button" class="btn btn-primary-38" id="open-create-batch-btn" style="background: #7c3aed;">
                 <img src="assets/plus-white.svg" alt="" class="svg-icon" />
                 <span>+ Create Equipment Batch</span>
@@ -2387,6 +2391,107 @@
         <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
           <button type="button" class="btn btn-secondary-38 js-close-batch-crud-modal">Cancel</button>
           <button type="submit" class="btn btn-primary-38" id="batch-crud-submit-btn" style="background: #7c3aed;">Save Equipment Batch</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL: CREATE / EDIT CLEARANCE TIER (4-TIER ACCESS MATRIX CRUD)        -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="tier-crud-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 580px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-labelledby="tier-crud-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h3 class="modal-title" id="tier-crud-modal-title">Configure Clearance Tier</h3>
+        <span class="status-badge status-badge-purple-sm" id="tier-crud-modal-tag">Access Matrix</span>
+      </div>
+
+      <div id="tier-crud-system-notice" style="display: none; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; font-size: 11px; color: #1e40af; line-height: 1.4;">
+        🔒 <strong>Core System Tier:</strong> Code and unique key are locked to preserve gate checkpoint rules. You can safely configure Title, Rules, Description, and Theme Color.
+      </div>
+
+      <form id="tier-crud-form">
+        <input type="hidden" id="tier-crud-id" value="0" />
+        <input type="hidden" id="tier-crud-is-system" value="0" />
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="tier-crud-code">Tier Code * (e.g. L5)</label>
+            <input type="text" id="tier-crud-code" class="form-input" placeholder="e.g. L5" maxlength="8" required style="font-weight: 700; text-transform: uppercase;" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="tier-crud-key">Unique Key * (e.g. L5_HQ_MANAGEMENT)</label>
+            <input type="text" id="tier-crud-key" class="form-input" placeholder="e.g. L5_HQ_OFFICE" maxlength="64" required style="text-transform: uppercase; font-family: monospace;" />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="tier-crud-title">Tier Display Title *</label>
+            <input type="text" id="tier-crud-title" class="form-input" placeholder="e.g. Level 5 — HQ & Executive Management" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="tier-crud-short">Short Name / Badge Subtitle *</label>
+            <input type="text" id="tier-crud-short" class="form-input" placeholder="e.g. HQ Management" required />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="tier-crud-venue-rule">Venue Access Rule *</label>
+            <select id="tier-crud-venue-rule" class="form-input" required>
+              <option value="YES">YES — Assigned / Scheduled Event Venues</option>
+              <option value="ALL">ALL — Unrestricted 24/7 All Venues</option>
+              <option value="NO">NO — Venue Check-in Denied</option>
+              <option value="ASSIGNED_ONLY">ASSIGNED ONLY — Strictly Whitelisted Venues</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="tier-crud-stock-rule">Stock Warehouse Access Rule *</label>
+            <select id="tier-crud-stock-rule" class="form-input" required>
+              <option value="NO">NO — Warehouse Check-in Denied</option>
+              <option value="YES">YES — Technical & Assigned Stock Bays</option>
+              <option value="FULL">FULL — Full Warehouse Controller & Dispatch</option>
+              <option value="ALL">ALL — Unrestricted 24/7 All Warehouses & Vaults</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="tier-crud-color">Theme Color *</label>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="color" id="tier-crud-color" value="#2563eb" style="width: 38px; height: 38px; padding: 2px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; background: #fff;" />
+              <input type="text" id="tier-crud-color-text" class="form-input" value="#2563eb" placeholder="#2563eb" maxlength="9" style="flex: 1;" />
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 6px;">
+              <button type="button" class="tier-color-swatch" data-color="#16a34a" style="width: 20px; height: 20px; border-radius: 50%; background: #16a34a; border: 1px solid rgba(0,0,0,0.15); cursor: pointer;" title="Green (L1)"></button>
+              <button type="button" class="tier-color-swatch" data-color="#2563eb" style="width: 20px; height: 20px; border-radius: 50%; background: #2563eb; border: 1px solid rgba(0,0,0,0.15); cursor: pointer;" title="Blue (L2)"></button>
+              <button type="button" class="tier-color-swatch" data-color="#d97706" style="width: 20px; height: 20px; border-radius: 50%; background: #d97706; border: 1px solid rgba(0,0,0,0.15); cursor: pointer;" title="Amber (L3)"></button>
+              <button type="button" class="tier-color-swatch" data-color="#dc2626" style="width: 20px; height: 20px; border-radius: 50%; background: #dc2626; border: 1px solid rgba(0,0,0,0.15); cursor: pointer;" title="Red (L4)"></button>
+              <button type="button" class="tier-color-swatch" data-color="#c502a1" style="width: 20px; height: 20px; border-radius: 50%; background: #c502a1; border: 1px solid rgba(0,0,0,0.15); cursor: pointer;" title="Magenta (L5)"></button>
+              <button type="button" class="tier-color-swatch" data-color="#0284c7" style="width: 20px; height: 20px; border-radius: 50%; background: #0284c7; border: 1px solid rgba(0,0,0,0.15); cursor: pointer;" title="Sky Blue"></button>
+              <button type="button" class="tier-color-swatch" data-color="#7c3aed" style="width: 20px; height: 20px; border-radius: 50%; background: #7c3aed; border: 1px solid rgba(0,0,0,0.15); cursor: pointer;" title="Purple"></button>
+            </div>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="tier-crud-sort">Display Sort Order</label>
+            <input type="number" id="tier-crud-sort" class="form-input" value="5" min="1" max="99" />
+            <label style="display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; cursor: pointer;">
+              <input type="checkbox" id="tier-crud-active" checked />
+              <span>Active in Checkpoint Verification</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label class="form-label" for="tier-crud-desc">Access Scope Description &amp; Verification Rules</label>
+          <textarea id="tier-crud-desc" class="form-input" rows="2" placeholder="e.g. Full executive access to all production facilities, sound stages, and warehouse logistics." style="resize: vertical;"></textarea>
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary-38 js-close-tier-crud-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="tier-crud-submit-btn" style="background: #10b981;">Save Clearance Tier</button>
         </div>
       </form>
     </div>

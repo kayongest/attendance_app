@@ -1502,15 +1502,32 @@
       matrixGrid.innerHTML = state.clearanceMatrix
         .map(
           (m) => `
-          <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color)};">
-            <div class="metric-heading">
-              <span class="tier-code-badge tier-code-${escapeHtml(m.code)}">${escapeHtml(m.code)}</span>
-              <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">${m.member_count || 0} Staff</span>
+          <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color)}; position: relative;">
+            <div class="metric-heading" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="tier-code-badge tier-code-${escapeHtml(m.code)}" style="background: ${escapeHtml(m.color)}; color: #fff;">${escapeHtml(m.code)}</span>
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">${m.member_count || 0} Staff</span>
+              </div>
+              <div class="tier-card-actions" style="display: flex; align-items: center; gap: 4px;">
+                <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 4px;">
+                  <span>✏️ Edit</span>
+                </button>
+                ${
+                  !m.is_system
+                    ? `
+                <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 4px;">
+                  <span>🗑️ Del</span>
+                </button>`
+                    : `
+                <span style="font-size: 10px; font-weight: 600; color: var(--text-secondary); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">Core Tier</span>`
+                }
+              </div>
             </div>
-            <span style="font-size: 15px; font-weight: 700; color: var(--text-primary);">${escapeHtml(m.title)}</span>
+            <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: block;">${escapeHtml(m.title)}</span>
             <span class="metric-context">
-              Venue Access: <strong>${escapeHtml(m.venue_Rule)}</strong> · Stock Access: <strong>${escapeHtml(m.stock_rule)}</strong>
+              Venue Access: <strong>${escapeHtml(m.venue_Rule || m.venue_rule || 'YES')}</strong> · Stock Access: <strong>${escapeHtml(m.stock_rule || 'NO')}</strong>
             </span>
+            ${m.description ? `<p style="margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); line-height: 1.35;">${escapeHtml(m.description)}</p>` : ''}
           </div>
         `
         )
@@ -1979,6 +1996,116 @@
 
   function closeBatchCrudModal() {
     const modal = document.getElementById('batch-crud-modal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  function populateClearanceDropdowns() {
+    const userClrSelect = document.getElementById('user-modal-clearance');
+    const roleClrSelect = document.getElementById('role-modal-tier-select');
+    if (!state.clearanceMatrix || state.clearanceMatrix.length === 0) return;
+
+    if (userClrSelect) {
+      const currentVal = userClrSelect.value;
+      userClrSelect.innerHTML = state.clearanceMatrix
+        .map(
+          (m) =>
+            `<option value="${escapeHtml(m.key || m.level_key)}">${escapeHtml(m.code)} — ${escapeHtml(m.title)} (${escapeHtml(m.short || m.short_name || '')})</option>`
+        )
+        .join('');
+      if (currentVal && Array.from(userClrSelect.options).some((o) => o.value === currentVal)) {
+        userClrSelect.value = currentVal;
+      }
+    }
+
+    if (roleClrSelect) {
+      const currentVal = roleClrSelect.value;
+      roleClrSelect.innerHTML = state.clearanceMatrix
+        .map(
+          (m) =>
+            `<option value="${escapeHtml(m.key || m.level_key)}">${escapeHtml(m.code)} — ${escapeHtml(m.title)}</option>`
+        )
+        .join('');
+      if (currentVal && Array.from(roleClrSelect.options).some((o) => o.value === currentVal)) {
+        roleClrSelect.value = currentVal;
+      }
+    }
+  }
+
+  function openTierCrudModal(tier = null) {
+    const modal = document.getElementById('tier-crud-modal');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('tier-crud-modal-title');
+    const idInput = document.getElementById('tier-crud-id');
+    const isSystemInput = document.getElementById('tier-crud-is-system');
+    const codeInput = document.getElementById('tier-crud-code');
+    const keyInput = document.getElementById('tier-crud-key');
+    const titleInput = document.getElementById('tier-crud-title');
+    const shortInput = document.getElementById('tier-crud-short');
+    const venueSelect = document.getElementById('tier-crud-venue-rule');
+    const stockSelect = document.getElementById('tier-crud-stock-rule');
+    const colorInput = document.getElementById('tier-crud-color');
+    const colorTextInput = document.getElementById('tier-crud-color-text');
+    const sortInput = document.getElementById('tier-crud-sort');
+    const activeCheck = document.getElementById('tier-crud-active');
+    const descInput = document.getElementById('tier-crud-desc');
+    const systemNotice = document.getElementById('tier-crud-system-notice');
+
+    if (tier) {
+      if (titleEl) titleEl.textContent = `Edit Clearance Tier (${tier.code})`;
+      if (idInput) idInput.value = tier.id || 0;
+      const isSys = Boolean(tier.is_system);
+      if (isSystemInput) isSystemInput.value = isSys ? '1' : '0';
+      if (codeInput) {
+        codeInput.value = tier.code || '';
+        codeInput.readOnly = isSys;
+      }
+      if (keyInput) {
+        keyInput.value = tier.key || tier.level_key || '';
+        keyInput.readOnly = isSys;
+      }
+      if (titleInput) titleInput.value = tier.title || '';
+      if (shortInput) shortInput.value = tier.short_name || tier.short || tier.title || '';
+      if (venueSelect) venueSelect.value = (tier.venue_rule || tier.venue_Rule || 'YES').toUpperCase();
+      if (stockSelect) stockSelect.value = (tier.stock_rule || 'NO').toUpperCase();
+      const col = tier.color || '#2563eb';
+      if (colorInput) colorInput.value = col;
+      if (colorTextInput) colorTextInput.value = col;
+      if (sortInput) sortInput.value = tier.sort_order || (tier.id || 5);
+      if (activeCheck) activeCheck.checked = tier.is_active !== 0;
+      if (descInput) descInput.value = tier.description || '';
+      if (systemNotice) systemNotice.style.display = isSys ? 'block' : 'none';
+    } else {
+      if (titleEl) titleEl.textContent = 'Add New Clearance Tier';
+      if (idInput) idInput.value = 0;
+      if (isSystemInput) isSystemInput.value = '0';
+      const nextIdx = (state.clearanceMatrix ? state.clearanceMatrix.length : 4) + 1;
+      const nextCode = `L${nextIdx}`;
+      if (codeInput) {
+        codeInput.value = nextCode;
+        codeInput.readOnly = false;
+      }
+      if (keyInput) {
+        keyInput.value = `${nextCode}_SPECIALIZED_OPS`;
+        keyInput.readOnly = false;
+      }
+      if (titleInput) titleInput.value = `Level ${nextIdx} — Specialized Operations`;
+      if (shortInput) shortInput.value = 'Specialized Operations';
+      if (venueSelect) venueSelect.value = 'YES';
+      if (stockSelect) stockSelect.value = 'YES';
+      if (colorInput) colorInput.value = '#8b5cf6';
+      if (colorTextInput) colorTextInput.value = '#8b5cf6';
+      if (sortInput) sortInput.value = nextIdx;
+      if (activeCheck) activeCheck.checked = true;
+      if (descInput) descInput.value = '';
+      if (systemNotice) systemNotice.style.display = 'none';
+    }
+
+    modal.classList.add('open');
+  }
+
+  function closeTierCrudModal() {
+    const modal = document.getElementById('tier-crud-modal');
     if (modal) modal.classList.remove('open');
   }
 
@@ -2478,6 +2605,7 @@
   }
 
   function openUserModal(userId = null) {
+    populateClearanceDropdowns();
     const modal = document.getElementById('user-crud-modal');
     if (!modal) return;
     const form = document.getElementById('user-crud-form');
@@ -2713,6 +2841,7 @@
   }
 
   function openRoleModal(role = null) {
+    populateClearanceDropdowns();
     const modal = document.getElementById('role-crud-modal');
     if (!modal) return;
 
@@ -2993,7 +3122,14 @@
     if (typeInput) typeInput.value = type;
     if (idInput) idInput.value = id;
     if (descEl) {
-      const typeLabel = type === 'warehouse' ? 'warehouse facility' : (type === 'user' ? 'personnel record & badge credentials for' : 'stock item');
+      const typeLabel =
+        type === 'warehouse'
+          ? 'warehouse facility'
+          : type === 'user'
+          ? 'personnel record & badge credentials for'
+          : type === 'clearance_tier'
+          ? 'security clearance level'
+          : 'stock item';
       descEl.textContent = `Are you sure you want to delete ${typeLabel} "${name}"? This action will permanently remove it from MySQL.`;
     }
 
@@ -4551,6 +4687,151 @@
       });
     }
 
+    // Clearance Tier CRUD Triggers & Submission
+    const openCreateTierBtn = document.getElementById('open-create-tier-btn');
+    if (openCreateTierBtn) {
+      openCreateTierBtn.addEventListener('click', () => openTierCrudModal(null));
+    }
+    document.querySelectorAll('.js-close-tier-crud-modal').forEach((btn) => {
+      btn.addEventListener('click', closeTierCrudModal);
+    });
+
+    // Swatches & Color Picker Sync
+    document.querySelectorAll('.tier-color-swatch').forEach((swatch) => {
+      swatch.addEventListener('click', () => {
+        const c = swatch.getAttribute('data-color');
+        const picker = document.getElementById('tier-crud-color');
+        const txt = document.getElementById('tier-crud-color-text');
+        if (picker && c) picker.value = c;
+        if (txt && c) txt.value = c;
+      });
+    });
+    const tierColorPicker = document.getElementById('tier-crud-color');
+    const tierColorTxt = document.getElementById('tier-crud-color-text');
+    if (tierColorPicker && tierColorTxt) {
+      tierColorPicker.addEventListener('input', (e) => {
+        tierColorTxt.value = e.target.value;
+      });
+      tierColorTxt.addEventListener('input', (e) => {
+        if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value.trim())) {
+          tierColorPicker.value = e.target.value.trim();
+        }
+      });
+    }
+
+    // Auto-derive key from title on creation
+    const tierCodeInp = document.getElementById('tier-crud-code');
+    const tierTitleInp = document.getElementById('tier-crud-title');
+    const tierKeyInp = document.getElementById('tier-crud-key');
+    if (tierTitleInp && tierKeyInp) {
+      tierTitleInp.addEventListener('input', () => {
+        const idVal = Number(document.getElementById('tier-crud-id')?.value || 0);
+        if (idVal === 0 && tierCodeInp && !tierCodeInp.readOnly) {
+          const code = (tierCodeInp.value || 'L').toUpperCase().trim();
+          const clean = tierTitleInp.value.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+          if (clean) tierKeyInp.value = `${code}_${clean}`.slice(0, 60);
+        }
+      });
+    }
+
+    // Tier CRUD Form Submit
+    const tierCrudForm = document.getElementById('tier-crud-form');
+    if (tierCrudForm) {
+      tierCrudForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = document.getElementById('tier-crud-submit-btn');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving Tier...';
+        }
+
+        const id = Number(document.getElementById('tier-crud-id').value || 0);
+        const code = document.getElementById('tier-crud-code').value.trim().toUpperCase();
+        const level_key = document.getElementById('tier-crud-key').value.trim().toUpperCase();
+        const title = document.getElementById('tier-crud-title').value.trim();
+        const short_name = document.getElementById('tier-crud-short').value.trim();
+        const venue_rule = document.getElementById('tier-crud-venue-rule').value;
+        const stock_rule = document.getElementById('tier-crud-stock-rule').value;
+        const color = document.getElementById('tier-crud-color-text').value.trim() || document.getElementById('tier-crud-color').value;
+        const sort_order = Number(document.getElementById('tier-crud-sort').value || 0);
+        const is_active = document.getElementById('tier-crud-active').checked ? 1 : 0;
+        const description = document.getElementById('tier-crud-desc').value.trim();
+
+        try {
+          const res = await fetch('api.php?action=save_clearance_tier', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'save_clearance_tier',
+              id,
+              code,
+              level_key,
+              title,
+              short_name,
+              venue_rule,
+              stock_rule,
+              color,
+              sort_order,
+              is_active,
+              description,
+            }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            if (Array.isArray(data.clearanceMatrix)) {
+              state.clearanceMatrix = data.clearanceMatrix;
+            }
+            closeTierCrudModal();
+            renderBatchesAndMatrixScreen();
+            showToast(data.message || `Clearance Tier ${code} saved successfully.`);
+            await fetchBootstrap(false);
+          } else {
+            showToast(data.error || 'Failed to save clearance tier.');
+          }
+        } catch (err) {
+          console.error(err);
+          showToast('Error communicating with server.');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save Clearance Tier';
+          }
+        }
+      });
+    }
+
+    // Delegated click on Matrix Tier Cards (Edit & Delete)
+    const matrixTierCardsGrid = document.getElementById('matrix-tier-cards-grid');
+    if (matrixTierCardsGrid) {
+      matrixTierCardsGrid.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.js-edit-tier');
+        if (editBtn) {
+          const tierCode = editBtn.getAttribute('data-tier-code');
+          const tierId = Number(editBtn.getAttribute('data-tier-id') || 0);
+          const tier = (state.clearanceMatrix || []).find(
+            (m) => (tierId > 0 && Number(m.id) === tierId) || m.code === tierCode
+          );
+          if (tier) openTierCrudModal(tier);
+          return;
+        }
+
+        const delBtn = e.target.closest('.js-delete-tier');
+        if (delBtn) {
+          const tierId = Number(delBtn.getAttribute('data-tier-id') || 0);
+          const tierCode = delBtn.getAttribute('data-tier-code') || '';
+          const tierTitle = delBtn.getAttribute('data-tier-title') || '';
+          const memberCount = Number(delBtn.getAttribute('data-member-count') || 0);
+
+          if (memberCount > 0) {
+            showToast(`Cannot delete ${tierCode}: ${memberCount} staff member(s) are assigned to this tier.`);
+            return;
+          }
+
+          openDeleteModal('clearance_tier', tierId, `${tierCode} — ${tierTitle}`);
+        }
+      });
+    }
+
     // Call Time Modal Handlers
     const callTimeModal = document.getElementById('call-time-modal');
     const closeCallTimeBtn = document.getElementById('close-call-time-modal');
@@ -5192,6 +5473,7 @@
         let action = 'delete_stock_item';
         if (type === 'warehouse') action = 'delete_warehouse';
         else if (type === 'user') action = 'delete_user';
+        else if (type === 'clearance_tier') action = 'delete_clearance_tier';
         confirmDelBtn.disabled = true;
 
         try {
@@ -5204,7 +5486,11 @@
           if (data && data.ok) {
             showToast(data.message || 'Record deleted successfully');
             document.getElementById('confirm-delete-modal')?.classList.remove('open');
-            if (type === 'user') {
+            if (type === 'clearance_tier') {
+              if (Array.isArray(data.clearanceMatrix)) state.clearanceMatrix = data.clearanceMatrix;
+              await fetchBootstrap(false);
+              renderBatchesAndMatrixScreen();
+            } else if (type === 'user') {
               await fetchBootstrap(false);
               renderUsersScreen();
             } else {

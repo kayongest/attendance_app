@@ -304,6 +304,50 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
+    // 8. Ensure `access_clearance_levels` table exists
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `access_clearance_levels` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `level_key` VARCHAR(64) NOT NULL UNIQUE,
+            `code` VARCHAR(16) NOT NULL,
+            `title` VARCHAR(255) NOT NULL,
+            `short_name` VARCHAR(100) DEFAULT NULL,
+            `color` VARCHAR(32) DEFAULT '#4f46e5',
+            `bg` VARCHAR(64) DEFAULT '#f8fafc',
+            `border` VARCHAR(64) DEFAULT '#e2e8f0',
+            `badge_bg` VARCHAR(255) DEFAULT 'rgba(79, 70, 229, 0.15)',
+            `icon` VARCHAR(64) DEFAULT 'fa-shield-halved',
+            `description` TEXT DEFAULT NULL,
+            `default_stock_access` VARCHAR(32) DEFAULT 'all',
+            `default_venue_access` VARCHAR(32) DEFAULT 'all',
+            `venue_rule` VARCHAR(50) DEFAULT 'YES',
+            `stock_rule` VARCHAR(50) DEFAULT 'NO',
+            `sort_order` INT DEFAULT 0,
+            `is_system` TINYINT(1) DEFAULT 0,
+            `is_active` TINYINT(1) DEFAULT 1,
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    try { $pdo->exec("ALTER TABLE `access_clearance_levels` ADD COLUMN `venue_rule` VARCHAR(50) DEFAULT 'YES'"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE `access_clearance_levels` ADD COLUMN `stock_rule` VARCHAR(50) DEFAULT 'NO'"); } catch (Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE `access_clearance_levels` ADD COLUMN `is_system` TINYINT(1) DEFAULT 0"); } catch (Throwable $e) {}
+
+    // Seed default access_clearance_levels if empty
+    $clrCount = (int) $pdo->query("SELECT COUNT(*) FROM `access_clearance_levels`")->fetchColumn();
+    if ($clrCount === 0) {
+        $pdo->exec("
+            INSERT INTO `access_clearance_levels`
+              (`level_key`, `code`, `title`, `short_name`, `color`, `bg`, `border`, `badge_bg`, `icon`, `description`, `default_stock_access`, `default_venue_access`, `venue_rule`, `stock_rule`, `sort_order`, `is_system`, `is_active`)
+            VALUES
+              ('L1_VENUE_BASIC', 'L1', 'Level 1 — Event Venue Crew', 'Event Venue Crew', '#16a34a', '#f8fafc', '#e2e8f0', 'rgba(22, 163, 74, 0.14)', 'fa-location-dot', 'Standard crew access restricted strictly to assigned Event Venues during scheduled calltimes.', 'none', 'assigned_or_all', 'YES', 'NO', 1, 1, 1),
+              ('L2_TECH_STAGE', 'L2', 'Level 2 — Technical & Stage', 'Technical & Stage', '#2563eb', '#f8fafc', '#e2e8f0', 'rgba(37, 99, 235, 0.14)', 'fa-sliders', 'Access to Technical Stage areas, FOH/Backstage at assigned Event Venues, and designated Dispatch Stock Locations.', 'assigned_or_all', 'assigned_or_all', 'YES', 'YES', 2, 1, 1),
+              ('L3_STOCK_WAREHOUSE', 'L3', 'Level 3 — Stock & Logistics Controller', 'Stock Controller', '#d97706', '#f8fafc', '#e2e8f0', 'rgba(217, 119, 6, 0.16)', 'fa-warehouse', 'Full access to authorized Stock Warehouses, Loading Bays, and Assigned Event Venues.', 'all', 'all', 'YES', 'FULL', 3, 1, 1),
+              ('L4_ALL_ACCESS', 'L4', 'Level 4 — Executive & All-Access', 'Executive & All-Access', '#dc2626', '#fef2f2', '#fecaca', 'rgba(220, 38, 38, 0.15)', 'fa-shield-halved', 'Unrestricted 24/7 entry to all Stock Warehouses, Production Vaults, Backstage Technical Zones, and Event Venues.', 'all', 'all', 'ALL', 'ALL', 4, 1, 1)
+        ");
+    }
+
     // Ensure `image` column exists on stock_locations if missing
     try {
         $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `image` VARCHAR(500) DEFAULT NULL");

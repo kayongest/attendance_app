@@ -26,37 +26,151 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
 
 require_once __DIR__ . '/db.php';
 
+function hexToRgbString(string $hex): string
+{
+    $clean = ltrim($hex, '#');
+    if (strlen($clean) === 3) {
+        $r = hexdec(substr($clean, 0, 1) . substr($clean, 0, 1));
+        $g = hexdec(substr($clean, 1, 1) . substr($clean, 1, 1));
+        $b = hexdec(substr($clean, 2, 1) . substr($clean, 2, 1));
+    } elseif (strlen($clean) >= 6) {
+        $r = hexdec(substr($clean, 0, 2));
+        $g = hexdec(substr($clean, 2, 2));
+        $b = hexdec(substr($clean, 4, 2));
+    } else {
+        return '37, 99, 235';
+    }
+    return "{$r}, {$g}, {$b}";
+}
+
+function getClearanceMatrixFromDb(PDO $pdo, array $tierCounts = []): array
+{
+    try {
+        $stmt = $pdo->query("SELECT * FROM `access_clearance_levels` ORDER BY `sort_order` ASC, `id` ASC");
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!empty($rows)) {
+            $list = [];
+            foreach ($rows as $r) {
+                $code = strtoupper(trim((string)$r['code']));
+                $color = trim((string)($r['color'] ?: '#2563eb'));
+                $venueRule = strtoupper(trim((string)($r['venue_rule'] ?: 'YES')));
+                $stockRule = strtoupper(trim((string)($r['stock_rule'] ?: 'NO')));
+                $title = trim((string)$r['title']);
+                $short = trim((string)($r['short_name'] ?: $title));
+                $key = trim((string)$r['level_key']);
+
+                $list[] = [
+                    'id' => (int) $r['id'],
+                    'key' => $key,
+                    'level_key' => $key,
+                    'code' => $code,
+                    'title' => $title,
+                    'short' => $short,
+                    'short_name' => $short,
+                    'color' => $color,
+                    'bg' => $r['bg'] ?: '#f8fafc',
+                    'border' => $r['border'] ?: '#e2e8f0',
+                    'badge_bg' => $r['badge_bg'] ?: ('rgba(' . hexToRgbString($color) . ', 0.14)'),
+                    'icon' => $r['icon'] ?: 'fa-shield-halved',
+                    'description' => trim((string)($r['description'] ?? '')),
+                    'venue_rule' => $venueRule,
+                    'venue_Rule' => $venueRule,
+                    'stock_rule' => $stockRule,
+                    'is_system' => (int) ($r['is_system'] ?? 0),
+                    'is_active' => (int) ($r['is_active'] ?? 1),
+                    'sort_order' => (int) ($r['sort_order'] ?? 0),
+                    'member_count' => $tierCounts[$code] ?? 0,
+                ];
+            }
+            return $list;
+        }
+    } catch (Throwable $e) {}
+
+    // Fallback if table query fails
+    $rawMatrix = getFourTierMatrixSpec();
+    $clearanceMatrix = [];
+    foreach (['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L3_STOCK_WAREHOUSE', 'L4_ALL_ACCESS'] as $mKey) {
+        $m = $rawMatrix[$mKey];
+        $m['id'] = 0;
+        $m['level_key'] = $mKey;
+        $m['short_name'] = $m['short'] ?? $m['title'];
+        $m['is_system'] = 1;
+        $m['is_active'] = 1;
+        $m['member_count'] = $tierCounts[$m['code']] ?? 0;
+        $clearanceMatrix[] = $m;
+    }
+    return $clearanceMatrix;
+}
+
 function normalizeClearanceTier(string $rawLevel, string $role = 'user'): array
 {
-    $matrix = getFourTierMatrixSpec();
+    static $cachedMatrix = null;
+    if ($cachedMatrix === null) {
+        $cachedMatrix = [];
+        try {
+            $dummy = '';
+            $pdo = getDbConnection($dummy);
+            $stmt = $pdo->query("SELECT * FROM `access_clearance_levels` ORDER BY `sort_order` ASC, `id` ASC");
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $code = strtoupper(trim((string)$r['code']));
+                $key = strtoupper(trim((string)$r['level_key']));
+                $color = trim((string)($r['color'] ?: '#2563eb'));
+                $venueRule = strtoupper(trim((string)($r['venue_rule'] ?: 'YES')));
+                $stockRule = strtoupper(trim((string)($r['stock_rule'] ?: 'NO')));
+                $spec = [
+                    'id' => (int)$r['id'],
+                    'key' => $key,
+                    'level_key' => $key,
+                    'code' => $code,
+                    'title' => trim((string)$r['title']),
+                    'short' => trim((string)($r['short_name'] ?: $r['title'])),
+                    'short_name' => trim((string)($r['short_name'] ?: $r['title'])),
+                    'color' => $color,
+                    'bg' => $r['bg'] ?: '#f8fafc',
+                    'border' => $r['border'] ?: '#e2e8f0',
+                    'badge_bg' => $r['badge_bg'] ?: ('rgba(' . hexToRgbString($color) . ', 0.14)'),
+                    'icon' => $r['icon'] ?: 'fa-shield-halved',
+                    'description' => trim((string)($r['description'] ?? '')),
+                    'venue_rule' => $venueRule,
+                    'venue_Rule' => $venueRule,
+                    'stock_rule' => $stockRule,
+                    'stock_access' => in_array(strtolower($stockRule), ['all', 'full']) ? 'all' : (strtolower($stockRule) === 'yes' ? 'assigned_or_all' : 'none'),
+                    'venue_access' => strtolower($venueRule) === 'all' ? 'all' : 'assigned_or_all',
+                    'is_system' => (int)($r['is_system'] ?? 0),
+                    'is_active' => (int)($r['is_active'] ?? 1),
+                ];
+                $cachedMatrix[$key] = $spec;
+                $cachedMatrix[$code] = $spec;
+            }
+        } catch (Throwable $e) {}
+
+        if (empty($cachedMatrix)) {
+            $cachedMatrix = getFourTierMatrixSpec();
+        }
+    }
+
     $upper = strtoupper(trim($rawLevel));
-    if (isset($matrix[$upper])) {
-        return $matrix[$upper];
+    if (isset($cachedMatrix[$upper])) {
+        return $cachedMatrix[$upper];
     }
-    if (strpos($upper, 'L4') === 0) {
-        return $matrix['L4_ALL_ACCESS'];
-    }
-    if (strpos($upper, 'L3') === 0) {
-        return $matrix['L3_STOCK_WAREHOUSE'];
-    }
-    if (strpos($upper, 'L2') === 0) {
-        return $matrix['L2_TECH_STAGE'];
-    }
-    if (strpos($upper, 'L1') === 0) {
-        return $matrix['L1_VENUE_BASIC'];
+    // Check prefix
+    foreach ($cachedMatrix as $k => $spec) {
+        if ($k === $upper || (strlen($k) >= 2 && strpos($upper, $k) === 0)) {
+            return $spec;
+        }
     }
 
     $r = strtolower(trim($role));
     if (in_array($r, ['admin', 'manager', 'stock_manager', 'tech_lead'], true)) {
-        return $matrix['L4_ALL_ACCESS'];
+        return $cachedMatrix['L4_ALL_ACCESS'] ?? $cachedMatrix['L4'] ?? reset($cachedMatrix);
     }
     if ($r === 'stock_controller') {
-        return $matrix['L3_STOCK_WAREHOUSE'];
+        return $cachedMatrix['L3_STOCK_WAREHOUSE'] ?? $cachedMatrix['L3'] ?? reset($cachedMatrix);
     }
     if ($r === 'technician') {
-        return $matrix['L2_TECH_STAGE'];
+        return $cachedMatrix['L2_TECH_STAGE'] ?? $cachedMatrix['L2'] ?? reset($cachedMatrix);
     }
-    return $matrix['L1_VENUE_BASIC'];
+    return $cachedMatrix['L1_VENUE_BASIC'] ?? $cachedMatrix['L1'] ?? reset($cachedMatrix);
 }
 
 function formatRewBadgeCode(int $userId, ?string $dbBadgeCode = null): string
@@ -725,9 +839,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $dept = trim((string) ($ur['department'] ?: 'Production'));
         $tier = normalizeClearanceTier((string) ($ur['clearance_level'] ?? ''), $role);
         $tierCode = $tier['code'];
-        if (isset($tierCounts[$tierCode])) {
-            $tierCounts[$tierCode]++;
-        }
+        $tierCounts[$tierCode] = ($tierCounts[$tierCode] ?? 0) + 1;
 
         $badgeStatus = strtolower(trim((string) ($ur['badge_status'] ?? 'active')));
         if ($badgeStatus === 'active') {
@@ -942,14 +1054,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         ? buildVerificationCardPayload($pdo, $featuredMember, $activeCpType, $activeCpId, $activeCpName)
         : null;
 
-    // 9. Build 4-Tier Matrix Summary
-    $rawMatrix = getFourTierMatrixSpec();
-    $clearanceMatrix = [];
-    foreach (['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L3_STOCK_WAREHOUSE', 'L4_ALL_ACCESS'] as $mKey) {
-        $m = $rawMatrix[$mKey];
-        $m['member_count'] = $tierCounts[$m['code']] ?? 0;
-        $clearanceMatrix[] = $m;
-    }
+    // 9. Build Clearance Matrix Summary (Dynamic from MySQL `access_clearance_levels`)
+    $clearanceMatrix = getClearanceMatrixFromDb($pdo, $tierCounts);
 
     $authUserId = (int) ($_SESSION['auth_user_id'] ?? 0);
     $currentUser = ($authUserId > 0 && isset($crewById[$authUserId])) ? $crewById[$authUserId] : null;
@@ -1627,6 +1733,177 @@ try {
         $items = $itemStmt->fetchAll();
         $batch['items'] = $items;
         echo json_encode(['ok' => true, 'batch' => $batch]);
+        exit;
+    }
+
+    if ($action === 'save_clearance_tier') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $code = strtoupper(trim((string) ($_POST['code'] ?? $jsonBody['code'] ?? '')));
+        $title = trim((string) ($_POST['title'] ?? $jsonBody['title'] ?? ''));
+        $shortName = trim((string) ($_POST['short_name'] ?? $jsonBody['short_name'] ?? ''));
+        $levelKey = strtoupper(trim((string) ($_POST['level_key'] ?? $jsonBody['level_key'] ?? '')));
+        $color = trim((string) ($_POST['color'] ?? $jsonBody['color'] ?? '#2563eb'));
+        $venueRule = strtoupper(trim((string) ($_POST['venue_rule'] ?? $jsonBody['venue_rule'] ?? 'YES')));
+        $stockRule = strtoupper(trim((string) ($_POST['stock_rule'] ?? $jsonBody['stock_rule'] ?? 'NO')));
+        $description = trim((string) ($_POST['description'] ?? $jsonBody['description'] ?? ''));
+        $sortOrder = (int) ($_POST['sort_order'] ?? $jsonBody['sort_order'] ?? 0);
+        $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (isset($jsonBody['is_active']) ? (int) $jsonBody['is_active'] : 1);
+
+        if ($code === '' || $title === '') {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Tier Code (e.g. L5) and Title are required.']);
+            exit;
+        }
+
+        if ($levelKey === '') {
+            $cleanTitle = preg_replace('/[^A-Z0-9]+/', '_', strtoupper($title));
+            $levelKey = $code . '_' . trim($cleanTitle, '_');
+        }
+
+        if ($shortName === '') {
+            $shortName = $title;
+        }
+
+        $badgeBg = 'rgba(' . hexToRgbString($color) . ', 0.16)';
+
+        if ($id > 0) {
+            $checkStmt = $pdo->prepare("SELECT * FROM `access_clearance_levels` WHERE `id` = ?");
+            $checkStmt->execute([$id]);
+            $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$existing) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Clearance tier not found.']);
+                exit;
+            }
+
+            // Protect code and level_key for system tiers (L1..L4)
+            if ((int)($existing['is_system'] ?? 0) === 1) {
+                $code = $existing['code'];
+                $levelKey = $existing['level_key'];
+            }
+
+            $upd = $pdo->prepare("
+                UPDATE `access_clearance_levels`
+                SET `code` = ?,
+                    `level_key` = ?,
+                    `title` = ?,
+                    `short_name` = ?,
+                    `color` = ?,
+                    `badge_bg` = ?,
+                    `venue_rule` = ?,
+                    `stock_rule` = ?,
+                    `description` = ?,
+                    `sort_order` = ?,
+                    `is_active` = ?,
+                    `updated_at` = NOW()
+                WHERE `id` = ?
+            ");
+            $upd->execute([
+                $code, $levelKey, $title, $shortName, $color, $badgeBg,
+                $venueRule, $stockRule, $description, $sortOrder, $isActive, $id
+            ]);
+            $tierId = $id;
+        } else {
+            // Check uniqueness of code or key
+            $dupStmt = $pdo->prepare("SELECT `id` FROM `access_clearance_levels` WHERE `code` = ? OR `level_key` = ?");
+            $dupStmt->execute([$code, $levelKey]);
+            if ($dupStmt->fetchColumn()) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => "Clearance tier with Code '{$code}' or Key '{$levelKey}' already exists."]);
+                exit;
+            }
+
+            $ins = $pdo->prepare("
+                INSERT INTO `access_clearance_levels`
+                (`level_key`, `code`, `title`, `short_name`, `color`, `bg`, `border`, `badge_bg`, `icon`, `description`, `default_stock_access`, `default_venue_access`, `venue_rule`, `stock_rule`, `sort_order`, `is_system`, `is_active`, `created_at`, `updated_at`)
+                VALUES (?, ?, ?, ?, ?, '#f8fafc', '#e2e8f0', ?, 'fa-shield-halved', ?, 'all', 'all', ?, ?, ?, 0, ?, NOW(), NOW())
+            ");
+            $ins->execute([
+                $levelKey, $code, $title, $shortName, $color, $badgeBg,
+                $description, $venueRule, $stockRule, $sortOrder, $isActive
+            ]);
+            $tierId = (int) $pdo->lastInsertId();
+        }
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode([
+            'ok' => true,
+            'message' => "Clearance tier {$code} " . ($id > 0 ? 'updated' : 'created') . ' successfully.',
+            'tier_id' => $tierId,
+            'clearanceMatrix' => $full['clearanceMatrix'],
+            'full' => $full,
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_clearance_tier') {
+        $tierId = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        if ($tierId <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid clearance tier ID.']);
+            exit;
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM `access_clearance_levels` WHERE `id` = ?");
+        $stmt->execute([$tierId]);
+        $tier = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$tier) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Clearance tier not found.']);
+            exit;
+        }
+
+        if ((int)($tier['is_system'] ?? 0) === 1) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => "System core clearance tier {$tier['code']} (L1–L4) is protected and cannot be deleted."]);
+            exit;
+        }
+
+        $code = strtoupper(trim((string)$tier['code']));
+        $key = strtoupper(trim((string)$tier['level_key']));
+
+        $badgeCheck = $pdo->prepare("
+            SELECT COUNT(*) FROM `user_badges`
+            WHERE `clearance_level` = ? OR `clearance_level` = ? OR `clearance_level` LIKE ?
+        ");
+        $badgeCheck->execute([$key, $code, $code . '%']);
+        $assignedCount = (int) $badgeCheck->fetchColumn();
+
+        if ($assignedCount > 0) {
+            http_response_code(400);
+            echo json_encode([
+                'ok' => false,
+                'error' => "Cannot delete tier {$code}: {$assignedCount} staff member(s) are currently assigned to this clearance tier. Please reassign them first."
+            ]);
+            exit;
+        }
+
+        $del = $pdo->prepare("DELETE FROM `access_clearance_levels` WHERE `id` = ?");
+        $del->execute([$tierId]);
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode([
+            'ok' => true,
+            'message' => "Clearance tier {$code} deleted successfully.",
+            'clearanceMatrix' => $full['clearanceMatrix'],
+            'full' => $full,
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_clearance_tier') {
+        $tierId = (int) ($_GET['id'] ?? $_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $stmt = $pdo->prepare("SELECT * FROM `access_clearance_levels` WHERE `id` = ?");
+        $stmt->execute([$tierId]);
+        $tier = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$tier) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Clearance tier not found.']);
+            exit;
+        }
+        echo json_encode(['ok' => true, 'tier' => $tier]);
         exit;
     }
 
