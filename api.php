@@ -562,6 +562,50 @@ function getRolesList(PDO $pdo, array $crew = []): array
     return $roles;
 }
 
+function getDepartmentsList(PDO $pdo, array $crew = []): array
+{
+    try {
+        $stmt = $pdo->query("SELECT * FROM `departments` ORDER BY `name` ASC, `id` ASC");
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!empty($rows)) {
+            $deptCounts = [];
+            foreach ($crew as $c) {
+                $d = strtolower(trim((string)($c['department'] ?? '')));
+                if ($d !== '') {
+                    $deptCounts[$d] = ($deptCounts[$d] ?? 0) + 1;
+                }
+            }
+
+            $list = [];
+            foreach ($rows as $r) {
+                $nameLower = strtolower(trim((string)$r['name']));
+                $codeLower = strtolower(trim((string)$r['code']));
+                $staffCount = $deptCounts[$nameLower] ?? $deptCounts[$codeLower] ?? 0;
+
+                $rolesCount = 0;
+                try {
+                    $rStmt = $pdo->prepare("SELECT COUNT(*) FROM `roles` WHERE LOWER(`department`) = ? OR LOWER(`department`) = ?");
+                    $rStmt->execute([$nameLower, $codeLower]);
+                    $rolesCount = (int) $rStmt->fetchColumn();
+                } catch (Throwable $e) {}
+
+                $list[] = [
+                    'id' => (int) $r['id'],
+                    'code' => strtoupper(trim((string)$r['code'])),
+                    'name' => trim((string)$r['name']),
+                    'description' => trim((string)($r['description'] ?? '')),
+                    'is_active' => (int) ($r['is_active'] ?? 1),
+                    'staff_count' => $staffCount,
+                    'roles_count' => $rolesCount,
+                    'created_at' => $r['created_at'] ?? null,
+                ];
+            }
+            return $list;
+        }
+    } catch (Throwable $e) {}
+    return [];
+}
+
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
 {
     $todayStr = date('Y-m-d');
@@ -1089,6 +1133,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'batches' => $allBatches,
         'defaultVerification' => $defaultVerification,
         'roles' => getRolesList($pdo, $crew),
+        'departments' => getDepartmentsList($pdo, $crew),
     ];
 }
 
@@ -2438,6 +2483,94 @@ try {
             'ok' => true,
             'message' => "Role '{$r['title']}' deleted successfully.",
             'roles' => $full['roles'],
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_departments') {
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode(['ok' => true, 'departments' => $full['departments']]);
+        exit;
+    }
+
+    if ($action === 'save_department') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $name = trim((string) ($_POST['name'] ?? $jsonBody['name'] ?? ''));
+        $code = strtoupper(trim((string) ($_POST['code'] ?? $jsonBody['code'] ?? '')));
+        $description = trim((string) ($_POST['description'] ?? $jsonBody['description'] ?? ''));
+        $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (int) ($jsonBody['is_active'] ?? 1);
+
+        if ($name === '') {
+            echo json_encode(['ok' => false, 'error' => 'Department name is required.']);
+            exit;
+        }
+        if ($code === '') {
+            $code = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $name), 0, 6));
+        }
+
+        if ($id > 0) {
+            $chk = $pdo->prepare("SELECT `id` FROM `departments` WHERE `code` = ? AND `id` != ?");
+            $chk->execute([$code, $id]);
+            if ($chk->fetch()) {
+                echo json_encode(['ok' => false, 'error' => "Department code '{$code}' is already in use by another department."]);
+                exit;
+            }
+            $stmt = $pdo->prepare("UPDATE `departments` SET `name` = ?, `code` = ?, `description` = ?, `is_active` = ? WHERE `id` = ?");
+            $stmt->execute([$name, $code, $description, $isActive, $id]);
+            $msg = "Department '{$name}' updated successfully.";
+        } else {
+            $chk = $pdo->prepare("SELECT `id` FROM `departments` WHERE `code` = ?");
+            $chk->execute([$code]);
+            if ($chk->fetch()) {
+                echo json_encode(['ok' => false, 'error' => "Department code '{$code}' already exists."]);
+                exit;
+            }
+            $stmt = $pdo->prepare("INSERT INTO `departments` (`name`, `code`, `description`, `is_active`) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$name, $code, $description, $isActive]);
+            $id = (int) $pdo->lastInsertId();
+            $msg = "Department '{$name}' created successfully.";
+        }
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode([
+            'ok' => true,
+            'message' => $msg,
+            'department_id' => $id,
+            'departments' => $full['departments'],
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_department') {
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $stmt = $pdo->prepare("SELECT * FROM `departments` WHERE `id` = ?");
+        $stmt->execute([$id]);
+        $dept = $stmt->fetch();
+        if (!$dept) {
+            echo json_encode(['ok' => false, 'error' => 'Department not found.']);
+            exit;
+        }
+
+        $deptName = $dept['name'];
+        $deptCode = $dept['code'];
+        $chkUsers = $pdo->prepare("SELECT COUNT(*) FROM `users` WHERE LOWER(`department`) = ? OR LOWER(`department`) = ?");
+        $chkUsers->execute([strtolower($deptName), strtolower($deptCode)]);
+        $userCount = (int) $chkUsers->fetchColumn();
+
+        if ($userCount > 0) {
+            echo json_encode([
+                'ok' => false,
+                'error' => "Cannot delete department '{$deptName}': {$userCount} staff members are currently assigned to it. Please reassign them first.",
+            ]);
+            exit;
+        }
+
+        $pdo->prepare("DELETE FROM `departments` WHERE `id` = ?")->execute([$id]);
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode([
+            'ok' => true,
+            'message' => "Department '{$deptName}' deleted successfully.",
+            'departments' => $full['departments'],
         ]);
         exit;
     }

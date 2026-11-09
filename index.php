@@ -15,5 +15,10 @@ if (empty($_SESSION['auth_user_id'])) {
     exit;
 }
 
+// Prevent browser caching of app shell so script and styling changes reflect immediately
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
 // Serve main app view
 readfile(__DIR__ . '/index.html');

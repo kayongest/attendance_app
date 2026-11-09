@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20261109_v6" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -1476,11 +1476,15 @@
                 <img src="assets/plus-white.svg" alt="" class="svg-icon" />
                 <span>+ Add Clearance Tier</span>
               </button>
+              <button type="button" class="btn btn-primary-38 js-open-create-dept-btn" id="open-add-dept-top-btn" style="display: none; background: #0284c7; border-color: #0284c7; color: #fff;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add Department</span>
+              </button>
             </div>
           </div>
 
-          <!-- View Mode Toggle: Personnel Directory vs Roles Management vs 4-Tier Access Matrix -->
-          <div class="user-subnav-pills" style="display: flex; gap: 10px; margin-top: 14px; margin-bottom: 8px;">
+          <!-- View Mode Toggle: Personnel Directory vs Roles Management vs 4-Tier Access Matrix vs Departments -->
+          <div class="user-subnav-pills" style="display: flex; gap: 10px; margin-top: 14px; margin-bottom: 8px; flex-wrap: wrap;">
             <button type="button" class="btn btn-primary-32 js-users-view-tab" id="view-tab-personnel" data-view="personnel">
               <img src="assets/metric-users.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
               <span>Personnel Directory (<span id="pill-personnel-count">21</span>)</span>
@@ -1492,6 +1496,10 @@
             <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-matrix" data-view="matrix">
               <img src="assets/lock.svg" alt="" class="svg-icon" />
               <span>4-Tier Access Matrix (<span id="pill-matrix-count">5</span>)</span>
+            </button>
+            <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-departments" data-view="departments">
+              <img src="assets/nav-integrations.svg" alt="" class="svg-icon" />
+              <span>Departments CRUD (<span id="pill-depts-count">14</span>)</span>
             </button>
           </div>
         </div><!-- End overview-top-block -->
@@ -1628,44 +1636,8 @@
 
         <!-- Roles & Clearance Management View Container (CRUD for Roles) -->
         <div id="roles-view-container" style="display: none; margin-top: 10px;">
-          <!-- 4-Tier Roles Distribution Grid -->
-          <div class="metrics-grid">
-            <div class="metric-card">
-              <div class="metric-heading">
-                <span class="metric-label-reg">Tier L1 — Venue Basic</span>
-                <span class="status-badge" style="background:#e2e8f0; color:#334155; font-size:10px;">L1 Matrix</span>
-              </div>
-              <span class="metric-value-30" id="roles-kpi-l1">03 Roles</span>
-              <span class="metric-context">Venue Crew, Security &amp; Logistics (Stock Blocked)</span>
-            </div>
-
-            <div class="metric-card">
-              <div class="metric-heading">
-                <span class="metric-label-reg">Tier L2 — Technical &amp; Stage</span>
-                <span class="status-badge status-badge-blue-sm" style="font-size:10px;">L2 Matrix</span>
-              </div>
-              <span class="metric-value-30" id="roles-kpi-l2">05 Roles</span>
-              <span class="metric-context">Audio, Video, Lighting &amp; Rigging Specialists</span>
-            </div>
-
-            <div class="metric-card">
-              <div class="metric-heading">
-                <span class="metric-label-reg">Tier L3 — Stock Warehouse</span>
-                <span class="status-badge status-badge-purple-sm" style="font-size:10px;">L3 Matrix</span>
-              </div>
-              <span class="metric-value-30" id="roles-kpi-l3">01 Role</span>
-              <span class="metric-context">Stock Controllers (#pane-kiosk &amp; Batch Custody)</span>
-            </div>
-
-            <div class="metric-card">
-              <div class="metric-heading">
-                <span class="metric-label-reg">Tier L4 — Executive All-Access</span>
-                <span class="status-badge status-badge-green-sm" style="font-size:10px;">L4 Matrix</span>
-              </div>
-              <span class="metric-value-30" id="roles-kpi-l4">03 Roles</span>
-              <span class="metric-context">System Administrators &amp; Production Tech Leads</span>
-            </div>
-          </div>
+          <!-- 4-Tier Roles Distribution Grid (2 rows, 4 per row) -->
+          <div class="metrics-grid matrix-cards-grid-4col" id="roles-tier-cards-grid" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; width: 100%;"></div>
 
           <!-- Roles Table Directory Card -->
           <section class="directory-card" style="margin-top: 20px;">
@@ -1719,6 +1691,12 @@
                 <div id="roles-table-rows"></div>
               </div>
             </div>
+
+            <!-- Roles Table Pagination Footer (5 items per page) -->
+            <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 4px 6px; border-top: 1px solid var(--border-color); margin-top: 10px;">
+              <span class="results-count" id="roles-results-footer">Showing 1-5 of 12 roles</span>
+              <div class="page-controls" id="roles-page-controls" style="display: flex; gap: 4px; align-items: center;"></div>
+            </div>
           </section>
         </div><!-- End #roles-view-container -->
 
@@ -1748,6 +1726,103 @@
             <div class="metrics-grid matrix-cards-grid-4col" id="users-matrix-tier-cards-grid" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; width: 100%;"></div>
           </div>
         </div><!-- End #matrix-view-container -->
+
+        <!-- TAB 4: DEPARTMENTS DIRECTORY & CRUD VIEW CONTAINER -->
+        <div id="departments-view-container" style="display: none; margin-top: 14px;">
+          <!-- Top Metrics Cards -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Total Departments</span>
+                <img src="assets/nav-integrations.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="depts-kpi-total">14</span>
+              <span class="metric-context">Configured Organizational Units</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Active Departments</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="depts-kpi-active">14</span>
+              <span class="metric-context">Operational Divisions</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Assigned Staff</span>
+                <img src="assets/metric-users.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="depts-kpi-staff">21</span>
+              <span class="metric-context">Total Personnel in Units</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Configured Roles</span>
+                <img src="assets/nav-payments.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="depts-kpi-roles">12</span>
+              <span class="metric-context">Technical Designations</span>
+            </div>
+          </div>
+
+          <!-- Departments Directory Table Card -->
+          <section class="directory-card" style="margin-top: 20px;">
+            <div class="directory-header">
+              <div class="directory-heading">
+                <div class="directory-title-row">
+                  <h2 class="directory-title-18">Company Departments &amp; Operational Divisions</h2>
+                  <span class="status-badge status-badge-blue-sm" id="depts-badge-count">14 Departments</span>
+                </div>
+                <p class="directory-desc">
+                  Manage company operational divisions, equipment teams, stage units, and technical crews. Departments organize staff members and roles for reporting and clearance delegation.
+                </p>
+              </div>
+            </div>
+
+            <!-- Departments Table Tools -->
+            <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <label class="table-search-box" for="depts-search-input" style="flex: 1 1 260px; min-width: 240px;">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input type="text" id="depts-search-input" class="table-search-input" placeholder="Search departments by name, code, or description..." />
+              </label>
+
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <select id="depts-filter-status" class="scan-mode-select" style="min-width: 150px;" aria-label="Filter Department Status">
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Inactive Only</option>
+                </select>
+                <button type="button" class="btn btn-primary-38 js-open-create-dept-btn" style="background: #0284c7; border-color: #0284c7; color: #fff;">
+                  <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                  <span>+ Add Department</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Departments Table Container -->
+            <div class="users-table-wrap" style="overflow-x: auto; width: 100%; margin-top: 14px;">
+              <div style="min-width: 900px;">
+                <div class="data-table-header">
+                  <div style="width: 110px;"><span class="th-label">Code</span></div>
+                  <div style="width: 220px;"><span class="th-label">Department Name</span></div>
+                  <div style="flex: 1 0 240px; min-width: 0;"><span class="th-label">Description / Scope</span></div>
+                  <div style="width: 120px; text-align: center;"><span class="th-label">Assigned Staff</span></div>
+                  <div style="width: 120px; text-align: center;"><span class="th-label">Roles Count</span></div>
+                  <div style="width: 100px;"><span class="th-label">Status</span></div>
+                  <div style="width: 120px; text-align: right;"><span class="th-label">Actions</span></div>
+                </div>
+
+                <div id="departments-table-rows"></div>
+              </div>
+            </div>
+
+            <!-- Departments Pagination Footer -->
+            <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 4px 6px; border-top: 1px solid var(--border-color); margin-top: 10px;">
+              <span class="results-count" id="depts-results-footer">Showing 1-10 of 14 departments</span>
+              <div class="page-controls" id="depts-page-controls" style="display: flex; gap: 4px; align-items: center;"></div>
+            </div>
+          </section>
+        </div><!-- End #departments-view-container -->
       </main>
     </div>
   </div>
@@ -2533,6 +2608,44 @@
     </div>
   </div>
 
+  <!-- MODAL: CREATE / EDIT DEPARTMENT (DEPARTMENTS CRUD)                     -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="dept-crud-modal" aria-hidden="true" style="display: none;">
+    <div class="modal-card" style="width: 500px; max-width: 95vw;" role="dialog" aria-labelledby="dept-crud-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h3 class="modal-title" id="dept-crud-modal-title" style="font-family: 'Share Tech', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Add New Department</h3>
+        <span class="status-badge status-badge-blue-sm" id="dept-crud-modal-tag">Department</span>
+      </div>
+      <form id="dept-crud-form">
+        <input type="hidden" id="dept-crud-id" value="0" />
+        <div style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="dept-crud-code">Code *</label>
+            <input type="text" id="dept-crud-code" class="form-input" placeholder="e.g. AUD" maxlength="10" style="text-transform: uppercase;" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="dept-crud-name">Department Name *</label>
+            <input type="text" id="dept-crud-name" class="form-input" placeholder="e.g. Audio Engineering" required />
+          </div>
+        </div>
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="dept-crud-desc">Description &amp; Operational Scope</label>
+          <textarea id="dept-crud-desc" class="form-input" rows="3" placeholder="FOH, monitor systems, mic coordination, sound stages, acoustic tuning..." style="resize: vertical;"></textarea>
+        </div>
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+            <input type="checkbox" id="dept-crud-active" checked />
+            <span>Active Department (available for staff &amp; roles assignment)</span>
+          </label>
+        </div>
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary-38 js-close-dept-crud-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="dept-crud-submit-btn" style="background: #0284c7; border-color: #0284c7; color: #fff;">Save Department</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL 7: CONFIRM DELETE MODAL                                          -->
   <!-- ====================================================================== -->
   <div class="modal-backdrop" id="confirm-delete-modal" aria-hidden="true">
@@ -2726,6 +2839,6 @@
   <!-- Toast Notification -->
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20261109_v6"></script>
 </body>
 </html>

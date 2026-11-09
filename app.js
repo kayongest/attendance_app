@@ -55,6 +55,13 @@
     rolesSearch: '',
     rolesFilterTier: 'all',
     rolesFilterDept: 'all',
+    rolesPage: 1,
+    rolesPageSize: 5,
+    departments: [],
+    deptsSearch: '',
+    deptsFilterStatus: 'all',
+    deptsPage: 1,
+    deptsPageSize: 10,
     currentVerification: null,
     selectedCrewId: 6,
 
@@ -182,6 +189,10 @@
         { id: 11, role_key: 'security', title: 'Security Officer', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Security', description: 'Front of house and gate security perimeter verification.', is_system: 0, is_active: 1, staff_count: 1 },
         { id: 12, role_key: 'driver', title: 'Logistics Driver', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Logistics', description: 'Equipment transport, loading bay check-in, and transit logistics.', is_system: 0, is_active: 1, staff_count: 1 },
       ];
+    }
+
+    if (Array.isArray(data.departments)) {
+      state.departments = data.departments;
     }
 
     if (data.currentUser) {
@@ -769,12 +780,14 @@
       const isAdmin = isCurrentUserAdmin();
       const userDropdown = document.getElementById('topbar-user-dropdown');
       const quickLogout = document.getElementById('topbar-logout-quick-btn');
-      if (userDropdown && !isAdmin) {
-        userDropdown.style.display = 'none';
-      }
       if (quickLogout) {
-        quickLogout.style.display = isAdmin ? 'none' : 'inline-flex';
+        quickLogout.style.display = 'none';
       }
+
+      const menuSwitch = document.getElementById('topbar-menu-switch-user');
+      const menuAuth = document.getElementById('topbar-menu-auth-modal');
+      if (menuSwitch) menuSwitch.style.display = isAdmin ? 'flex' : 'none';
+      if (menuAuth) menuAuth.style.display = isAdmin ? 'flex' : 'none';
 
       const authTitle = document.getElementById('topbar-menu-auth-title');
       const authSub = document.getElementById('topbar-menu-auth-sub');
@@ -1543,16 +1556,18 @@
             </span>
             <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
               <span class="${badgeClass}" style="${badgeStyle}">${escapeHtml(m.code)} Matrix</span>
-              <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 2px;">
-                <span>✏️ Edit</span>
+              <button type="button" class="btn-tier-action js-edit-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" title="Edit Tier Configuration" style="background: var(--bg-hover, #f1f5f9); border: 1px solid var(--border-color, #e2e8f0); border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 600; cursor: pointer; color: var(--text-primary); display: inline-flex; align-items: center; gap: 3px;">
+                <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" />
+                <span>Edit</span>
               </button>
               ${
                 !m.is_system
                   ? `
-              <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 2px;">
-                <span>🗑️ Del</span>
+              <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 7px; font-size: 10px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 3px;">
+                <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" />
+                <span>Del</span>
               </button>`
-                  : ''
+                  : `<span style="font-size: 10px; font-weight: 600; color: var(--text-secondary); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><img src="assets/lock.svg" alt="" class="svg-icon" style="width: 10px; height: 10px; opacity: 0.6;" /> Core</span>`
               }
             </div>
           </div>
@@ -1595,18 +1610,22 @@
     const tabPersonnel = document.getElementById('view-tab-personnel');
     const tabRoles = document.getElementById('view-tab-roles');
     const tabMatrix = document.getElementById('view-tab-matrix');
+    const tabDepts = document.getElementById('view-tab-departments');
     const personnelView = document.getElementById('personnel-view-container');
     const rolesView = document.getElementById('roles-view-container');
     const matrixView = document.getElementById('matrix-view-container');
+    const deptsView = document.getElementById('departments-view-container');
     const addStaffBtn = document.getElementById('open-add-user-btn');
     const addRoleBtn = document.getElementById('open-add-role-btn');
     const addTierTopBtn = document.getElementById('open-add-tier-top-btn');
+    const addDeptTopBtn = document.getElementById('open-add-dept-top-btn');
     const exportBtn = document.getElementById('users-export-btn');
 
     const tabs = [
       { el: tabPersonnel, active: mode === 'personnel' },
       { el: tabRoles, active: mode === 'roles' },
       { el: tabMatrix, active: mode === 'matrix' },
+      { el: tabDepts, active: mode === 'departments' },
     ];
 
     tabs.forEach(({ el, active }) => {
@@ -1625,16 +1644,20 @@
     if (personnelView) personnelView.style.display = mode === 'personnel' ? 'block' : 'none';
     if (rolesView) rolesView.style.display = mode === 'roles' ? 'block' : 'none';
     if (matrixView) matrixView.style.display = mode === 'matrix' ? 'block' : 'none';
+    if (deptsView) deptsView.style.display = mode === 'departments' ? 'block' : 'none';
 
     if (addStaffBtn) addStaffBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
     if (addRoleBtn) addRoleBtn.style.display = mode === 'roles' ? 'inline-flex' : 'none';
-    if (addTierTopBtn) addTierTopBtn.style.display = 'none';
+    if (addTierTopBtn) addTierTopBtn.style.display = mode === 'matrix' ? 'inline-flex' : 'none';
+    if (addDeptTopBtn) addDeptTopBtn.style.display = mode === 'departments' ? 'inline-flex' : 'none';
     if (exportBtn) exportBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
 
     if (mode === 'matrix') {
       renderUsersMatrixScreen();
     } else if (mode === 'roles') {
       renderRolesScreen();
+    } else if (mode === 'departments') {
+      renderDepartmentsScreen();
     } else {
       renderUsersScreen();
     }
@@ -2820,11 +2843,12 @@
   // =========================================================================
 
   function renderRolesScreen() {
+    const rolesGrid = document.getElementById('roles-tier-cards-grid');
     const rowsEl = document.getElementById('roles-table-rows');
-    if (!rowsEl) return;
 
     const roles = Array.isArray(state.roles) ? state.roles : [];
     const crew = Array.isArray(state.crew) ? state.crew : [];
+    const matrix = Array.isArray(state.clearanceMatrix) ? state.clearanceMatrix : [];
 
     // Recalculate staff counts dynamically from current crew list
     roles.forEach((r) => {
@@ -2832,41 +2856,96 @@
       r.staff_count = crew.filter((c) => (c.role || '').toLowerCase() === rKey).length;
     });
 
-    // Update KPI counters
-    const l1Roles = roles.filter((r) => (r.clearance_code || '').startsWith('L1')).length;
-    const l2Roles = roles.filter((r) => (r.clearance_code || '').startsWith('L2')).length;
-    const l3Roles = roles.filter((r) => (r.clearance_code || '').startsWith('L3')).length;
-    const l4Roles = roles.filter((r) => (r.clearance_code || '').startsWith('L4')).length;
+    // 1. Render dynamic 4-Tier Roles Distribution Grid (2 rows, 4 items per row)
+    if (rolesGrid) {
+      if (matrix.length === 0) {
+        rolesGrid.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-secondary); width: 100%;">No clearance tiers configured.</div>';
+      } else {
+        rolesGrid.innerHTML = matrix
+          .map((m) => {
+            const mCode = (m.code || '').toUpperCase();
+            const matchedRoles = roles.filter((r) => {
+              const rCode = (r.clearance_code || '').toUpperCase();
+              return rCode === mCode || (mCode === 'L1' && rCode === 'L1') || (mCode === 'L2' && rCode === 'L2') || (mCode === 'L3' && rCode === 'L3') || (mCode === 'L4' && rCode === 'L4');
+            });
+            const roleCount = matchedRoles.length;
+            const titleClean = (m.title || '').replace(/^Level\s*\d+\s*[—–-]\s*/i, '').trim() || m.short || m.code;
 
-    const elL1 = document.getElementById('roles-kpi-l1');
-    const elL2 = document.getElementById('roles-kpi-l2');
-    const elL3 = document.getElementById('roles-kpi-l3');
-    const elL4 = document.getElementById('roles-kpi-l4');
+            let badgeClass = 'status-badge';
+            let badgeStyle = 'font-size: 10px; font-weight: 600;';
+            if (m.code === 'L1') {
+              badgeStyle += ' background: #e2e8f0; color: #334155;';
+            } else if (m.code === 'L2') {
+              badgeClass += ' status-badge-blue-sm';
+            } else if (m.code === 'L3') {
+              badgeClass += ' status-badge-purple-sm';
+            } else if (m.code === 'L4') {
+              badgeClass += ' status-badge-green-sm';
+            } else {
+              const hex = (m.color || '#7c3aed').replace('#', '');
+              const r = parseInt(hex.substring(0, 2), 16) || 124;
+              const g = parseInt(hex.substring(2, 4), 16) || 58;
+              const b = parseInt(hex.substring(4, 6), 16) || 237;
+              badgeStyle += ` background: rgba(${r}, ${g}, ${b}, 0.12); color: ${m.color || '#7c3aed'};`;
+            }
+
+            return `
+              <div class="metric-card" style="border-top: 3px solid ${escapeHtml(m.color || '#2563eb')}; position: relative;">
+                <div class="metric-heading" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 6px;">
+                  <span class="metric-label-reg" style="font-weight: 600; color: var(--text-primary); font-size: 11px; white-space: normal; line-height: 1.3;">
+                    Tier ${escapeHtml(m.code)} — ${escapeHtml(titleClean)}
+                  </span>
+                  <span class="${badgeClass}" style="${badgeStyle}">${escapeHtml(m.code)} Matrix</span>
+                </div>
+                <span class="metric-value-30" style="margin-top: 8px; font-size: 26px; font-weight: 700; color: var(--text-primary); line-height: 1.1;">
+                  ${String(roleCount).padStart(2, '0')} Role${roleCount === 1 ? '' : 's'}
+                </span>
+                <span class="metric-context" style="margin-top: 6px; display: block; font-size: 11px; color: var(--text-secondary); line-height: 1.35; white-space: normal;">
+                  ${escapeHtml(m.description || `${m.short_name || m.title || 'Technical Role'} clearance scope.`)}
+                </span>
+              </div>
+            `;
+          })
+          .join('');
+      }
+    }
+
+    // Update Header and Tab Badges
     const elBadge = document.getElementById('roles-badge-count');
     const elPillRoles = document.getElementById('pill-roles-count');
     const elPillCrew = document.getElementById('pill-personnel-count');
+    const elPillMatrix = document.getElementById('pill-matrix-count');
+    const elPillDepts = document.getElementById('pill-depts-count');
 
-    if (elL1) elL1.textContent = String(l1Roles).padStart(2, '0') + ' Roles';
-    if (elL2) elL2.textContent = String(l2Roles).padStart(2, '0') + ' Roles';
-    if (elL3) elL3.textContent = String(l3Roles).padStart(2, '0') + ' Role' + (l3Roles === 1 ? '' : 's');
-    if (elL4) elL4.textContent = String(l4Roles).padStart(2, '0') + ' Roles';
     if (elBadge) elBadge.textContent = `${roles.length} Roles`;
     if (elPillRoles) elPillRoles.textContent = String(roles.length);
     if (elPillCrew) elPillCrew.textContent = String(crew.length);
-    const elPillMatrix = document.getElementById('pill-matrix-count');
-    if (elPillMatrix) elPillMatrix.textContent = String(state.clearanceMatrix ? state.clearanceMatrix.length : 0);
+    if (elPillMatrix) elPillMatrix.textContent = String(matrix.length);
+    if (elPillDepts) elPillDepts.textContent = String(state.departments ? state.departments.length : 0);
 
     // Populate roles department filter dropdown
     const deptSelect = document.getElementById('roles-filter-dept');
-    if (deptSelect && deptSelect.options.length <= 1) {
-      const depts = Array.from(new Set(roles.map((r) => r.department).filter(Boolean))).sort();
-      depts.forEach((d) => {
-        const opt = document.createElement('option');
-        opt.value = d;
-        opt.textContent = d;
-        deptSelect.appendChild(opt);
-      });
+    if (deptSelect) {
+      const currentVal = deptSelect.value;
+      const deptNames = Array.from(new Set([
+        ...roles.map((r) => r.department).filter(Boolean),
+        ...(state.departments || []).map((d) => d.name).filter(Boolean)
+      ])).sort();
+      deptSelect.innerHTML = '<option value="all">All Departments</option>' + deptNames.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+      if (currentVal && deptNames.includes(currentVal)) {
+        deptSelect.value = currentVal;
+      }
     }
+
+    // Populate clearance filter dropdown from matrix
+    const tierSelect = document.getElementById('roles-filter-tier');
+    if (tierSelect && matrix.length > 0) {
+      const currentTier = tierSelect.value;
+      tierSelect.innerHTML = '<option value="all">All Clearance Tiers</option>' + matrix.map((m) => `<option value="${escapeHtml(m.code)}">${escapeHtml(m.code)} — ${escapeHtml(m.title)}</option>`).join('');
+      if (currentTier) tierSelect.value = currentTier;
+    }
+
+    if (!rowsEl) return;
 
     // Filter roles
     const q = (state.rolesSearch || '').trim().toLowerCase();
@@ -2881,7 +2960,7 @@
         const matchDesc = (r.description || '').toLowerCase().includes(q);
         if (!matchTitle && !matchKey && !matchDept && !matchDesc) return false;
       }
-      if (filterTier !== 'all' && !(r.clearance_code || '').startsWith(filterTier)) {
+      if (filterTier !== 'all' && (r.clearance_code || '').toUpperCase() !== filterTier.toUpperCase()) {
         return false;
       }
       if (filterDept !== 'all' && (r.department || '').toLowerCase() !== filterDept.toLowerCase()) {
@@ -2890,66 +2969,140 @@
       return true;
     });
 
+    // 2. Roles Pagination (5 items per page)
+    state.rolesPage = state.rolesPage || 1;
+    state.rolesPageSize = 5;
+    const totalPages = Math.ceil(filtered.length / state.rolesPageSize) || 1;
+    if (state.rolesPage > totalPages) state.rolesPage = totalPages;
+    if (state.rolesPage < 1) state.rolesPage = 1;
+
+    const startIdx = (state.rolesPage - 1) * state.rolesPageSize;
+    const paged = filtered.slice(startIdx, startIdx + state.rolesPageSize);
+
+    // Update Pagination Footer
+    const footerCountEl = document.getElementById('roles-results-footer');
+    if (footerCountEl) {
+      if (filtered.length === 0) {
+        footerCountEl.textContent = 'Showing 0 of 0 roles';
+      } else {
+        const endIdx = Math.min(startIdx + state.rolesPageSize, filtered.length);
+        footerCountEl.textContent = `Showing ${startIdx + 1}–${endIdx} of ${filtered.length} roles`;
+      }
+    }
+
+    const pageControlsEl = document.getElementById('roles-page-controls');
+    if (pageControlsEl) {
+      if (totalPages <= 1) {
+        pageControlsEl.innerHTML = '';
+      } else {
+        let controlsHtml = `
+          <button type="button" class="btn btn-secondary-32 js-roles-prev-page" ${state.rolesPage <= 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            &larr; Prev
+          </button>
+        `;
+        for (let p = 1; p <= totalPages; p++) {
+          const isActive = p === state.rolesPage;
+          controlsHtml += `
+            <button type="button" class="btn ${isActive ? 'btn-primary-32' : 'btn-secondary-32'} js-roles-page-num" data-page="${p}" style="min-width: 32px; padding: 0 8px; font-weight: 600;">
+              ${p}
+            </button>
+          `;
+        }
+        controlsHtml += `
+          <button type="button" class="btn btn-secondary-32 js-roles-next-page" ${state.rolesPage >= totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            Next &rarr;
+          </button>
+        `;
+        pageControlsEl.innerHTML = controlsHtml;
+
+        pageControlsEl.querySelectorAll('.js-roles-page-num').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.rolesPage = Number(btn.getAttribute('data-page'));
+            renderRolesScreen();
+          });
+        });
+        const prevBtn = pageControlsEl.querySelector('.js-roles-prev-page');
+        if (prevBtn && state.rolesPage > 1) {
+          prevBtn.addEventListener('click', () => {
+            state.rolesPage--;
+            renderRolesScreen();
+          });
+        }
+        const nextBtn = pageControlsEl.querySelector('.js-roles-next-page');
+        if (nextBtn && state.rolesPage < totalPages) {
+          nextBtn.addEventListener('click', () => {
+            state.rolesPage++;
+            renderRolesScreen();
+          });
+        }
+      }
+    }
+
     if (filtered.length === 0) {
       rowsEl.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No technical roles match the selected filter.</div>`;
       return;
     }
 
-    rowsEl.innerHTML = filtered.map((r) => {
-      const tierBadgeClass =
-        r.clearance_code === 'L4' ? 'status-badge-green-sm' :
-        r.clearance_code === 'L3' ? 'status-badge-purple-sm' :
-        r.clearance_code === 'L2' ? 'status-badge-blue-sm' : 'status-badge-gray-sm';
+    rowsEl.innerHTML = paged
+      .map((r) => {
+        const tierBadgeClass =
+          r.clearance_code === 'L4' ? 'status-badge-green-sm' :
+          r.clearance_code === 'L3' ? 'status-badge-purple-sm' :
+          r.clearance_code === 'L2' ? 'status-badge-blue-sm' : 'status-badge-gray-sm';
 
-      const isSys = Number(r.is_system) === 1;
-      const typeTag = isSys
-        ? `<span class="status-badge" style="background: #e0e7ff; color: #3730a3; font-size: 10px; font-weight: 700;">SYSTEM</span>`
-        : `<span class="status-badge" style="background: #f1f5f9; color: #475569; font-size: 10px; font-weight: 600;">CUSTOM</span>`;
+        const isSys = Number(r.is_system) === 1;
+        const typeTag = isSys
+          ? `<span class="status-badge" style="background: #e0e7ff; color: #3730a3; font-size: 10px; font-weight: 700;">SYSTEM</span>`
+          : `<span class="status-badge" style="background: #f1f5f9; color: #475569; font-size: 10px; font-weight: 600;">CUSTOM</span>`;
 
-      return `
-        <div class="data-table-row" style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border-color); font-size: 12px; gap: 8px;">
-          <div style="width: 230px;">
-            <div style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(r.title)}</div>
-            <div style="font-family: monospace; font-size: 11px; color: var(--text-muted);">code: ${escapeHtml(r.role_key)}</div>
+        return `
+          <div class="data-table-row" style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border-color); font-size: 12px; gap: 8px;">
+            <div style="width: 230px;">
+              <div style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(r.title)}</div>
+              <div style="font-family: monospace; font-size: 11px; color: var(--text-muted);">code: ${escapeHtml(r.role_key)}</div>
+            </div>
+
+            <div style="width: 170px;">
+              <span class="status-badge ${tierBadgeClass}" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px;">
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" style="width: 12px; height: 12px; filter: brightness(0.6);" />
+                ${escapeHtml(r.clearance_code)} · ${escapeHtml(r.clearance_short || r.clearance_title || 'Access')}
+              </span>
+            </div>
+
+            <div style="width: 140px;">
+              <span style="font-weight: 600; color: #4a5568;">${escapeHtml(r.department || 'Production')}</span>
+            </div>
+
+            <div style="flex: 1 0 260px; min-width: 0; color: var(--text-secondary); line-height: 1.4; padding-right: 10px;">
+              ${escapeHtml(r.description || 'Standard venue operations and gate verification scope.')}
+            </div>
+
+            <div style="width: 110px; text-align: center;">
+              <button type="button" class="btn-ghost-sm js-filter-crew-by-role" data-role-key="${escapeHtml(r.role_key)}" title="Click to view assigned personnel in directory" style="background: rgba(37, 99, 235, 0.08); color: #2563eb; border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                <img src="assets/metric-users.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+                <span>${r.staff_count} Staff</span>
+              </button>
+            </div>
+
+            <div style="width: 85px;">
+              ${typeTag}
+            </div>
+
+            <div style="width: 130px; display: flex; justify-content: flex-end; gap: 6px;">
+              <button type="button" class="btn btn-secondary-32 js-edit-role" data-role-id="${r.id}" title="Edit Role & Clearance" style="padding: 0 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+                <span>Edit</span>
+              </button>
+              ${
+                isSys
+                  ? `<button type="button" class="btn btn-secondary-32" disabled title="Protected Core System Role" style="opacity: 0.45; cursor: not-allowed; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 3px;"><img src="assets/lock.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" /> <span style="font-size: 10px;">Core</span></button>`
+                  : `<button type="button" class="btn btn-secondary-32 js-delete-role" data-role-id="${r.id}" data-role-title="${escapeHtml(r.title)}" data-assigned="${r.staff_count}" title="Delete Custom Role" style="color: #dc2626; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><img src="assets/trash.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" /> <span>Del</span></button>`
+              }
+            </div>
           </div>
-
-          <div style="width: 170px;">
-            <span class="status-badge ${tierBadgeClass}" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px;">
-              <span class="status-dot"></span>
-              ${escapeHtml(r.clearance_code)} · ${escapeHtml(r.clearance_short || r.clearance_title || 'Access')}
-            </span>
-          </div>
-
-          <div style="width: 140px;">
-            <span style="font-weight: 600; color: #4a5568;">${escapeHtml(r.department || 'Production')}</span>
-          </div>
-
-          <div style="flex: 1 0 260px; min-width: 0; color: var(--text-secondary); line-height: 1.4; padding-right: 10px;">
-            ${escapeHtml(r.description || 'Standard venue operations and gate verification scope.')}
-          </div>
-
-          <div style="width: 110px; text-align: center;">
-            <button type="button" class="btn-ghost-sm js-filter-crew-by-role" data-role-key="${escapeHtml(r.role_key)}" title="Click to view assigned personnel in directory" style="background: #edf2f7; border-radius: 12px; padding: 3px 10px; font-size: 11px; font-weight: 600; cursor: pointer; border: none;">
-              👥 ${r.staff_count} Staff
-            </button>
-          </div>
-
-          <div style="width: 85px;">
-            ${typeTag}
-          </div>
-
-          <div style="width: 130px; display: flex; justify-content: flex-end; gap: 6px;">
-            <button type="button" class="btn btn-secondary-32 js-edit-role" data-role-id="${r.id}" title="Edit Role & Clearance" style="padding: 0 10px; font-size: 11px;">
-              ✏️ Edit
-            </button>
-            ${isSys
-              ? `<button type="button" class="btn btn-secondary-32" disabled title="Protected Core System Role" style="opacity: 0.35; cursor: not-allowed; padding: 0 8px; font-size: 11px;">🔒</button>`
-              : `<button type="button" class="btn btn-secondary-32 js-delete-role" data-role-id="${r.id}" data-role-title="${escapeHtml(r.title)}" data-assigned="${r.staff_count}" title="Delete Custom Role" style="color: #dc2626; padding: 0 8px; font-size: 11px;">🗑️</button>`
-            }
-          </div>
-        </div>
-      `;
-    }).join('');
+        `;
+      })
+      .join('');
   }
 
   function openRoleModal(role = null) {
@@ -3003,24 +3156,272 @@
     if (modal) modal.classList.remove('open');
   }
 
+  // =========================================================================
+  // DEPARTMENTS MANAGEMENT & CRUD (TAB 4 IN USERS SCREEN)
+  // =========================================================================
+
+  function renderDepartmentsScreen() {
+    const rowsEl = document.getElementById('departments-table-rows');
+    const depts = Array.isArray(state.departments) ? state.departments : [];
+    const crew = Array.isArray(state.crew) ? state.crew : [];
+    const roles = Array.isArray(state.roles) ? state.roles : [];
+
+    // Recalculate dynamic staff and role counts
+    depts.forEach((d) => {
+      const dName = (d.name || '').toLowerCase();
+      const dCode = (d.code || '').toLowerCase();
+      d.staff_count = crew.filter((c) => {
+        const uDept = (c.department || '').toLowerCase();
+        return uDept === dName || uDept === dCode;
+      }).length;
+      d.roles_count = roles.filter((r) => {
+        const rDept = (r.department || '').toLowerCase();
+        return rDept === dName || rDept === dCode;
+      }).length;
+    });
+
+    // Aggregate metrics
+    const totalDepts = depts.length;
+    const activeDepts = depts.filter((d) => Number(d.is_active) === 1).length;
+    const totalStaffAssigned = depts.reduce((acc, d) => acc + (d.staff_count || 0), 0);
+    const totalRolesAssigned = depts.reduce((acc, d) => acc + (d.roles_count || 0), 0);
+
+    const elTotal = document.getElementById('depts-kpi-total');
+    const elActive = document.getElementById('depts-kpi-active');
+    const elStaff = document.getElementById('depts-kpi-staff');
+    const elRoles = document.getElementById('depts-kpi-roles');
+    const elBadge = document.getElementById('depts-badge-count');
+    const elPill = document.getElementById('pill-depts-count');
+
+    if (elTotal) elTotal.textContent = String(totalDepts);
+    if (elActive) elActive.textContent = String(activeDepts);
+    if (elStaff) elStaff.textContent = String(totalStaffAssigned);
+    if (elRoles) elRoles.textContent = String(totalRolesAssigned);
+    if (elBadge) elBadge.textContent = `${totalDepts} Departments`;
+    if (elPill) elPill.textContent = String(totalDepts);
+
+    if (!rowsEl) return;
+
+    // Filter
+    const q = (state.deptsSearch || '').trim().toLowerCase();
+    const filterStatus = state.deptsFilterStatus || 'all';
+
+    const filtered = depts.filter((d) => {
+      if (q) {
+        const matchName = (d.name || '').toLowerCase().includes(q);
+        const matchCode = (d.code || '').toLowerCase().includes(q);
+        const matchDesc = (d.description || '').toLowerCase().includes(q);
+        if (!matchName && !matchCode && !matchDesc) return false;
+      }
+      if (filterStatus === 'active' && Number(d.is_active) !== 1) return false;
+      if (filterStatus === 'inactive' && Number(d.is_active) === 1) return false;
+      return true;
+    });
+
+    // Pagination
+    state.deptsPage = state.deptsPage || 1;
+    state.deptsPageSize = 10;
+    const totalPages = Math.ceil(filtered.length / state.deptsPageSize) || 1;
+    if (state.deptsPage > totalPages) state.deptsPage = totalPages;
+    if (state.deptsPage < 1) state.deptsPage = 1;
+
+    const startIdx = (state.deptsPage - 1) * state.deptsPageSize;
+    const paged = filtered.slice(startIdx, startIdx + state.deptsPageSize);
+
+    // Update Pagination Footer
+    const footerCountEl = document.getElementById('depts-results-footer');
+    if (footerCountEl) {
+      if (filtered.length === 0) {
+        footerCountEl.textContent = 'Showing 0 of 0 departments';
+      } else {
+        const endIdx = Math.min(startIdx + state.deptsPageSize, filtered.length);
+        footerCountEl.textContent = `Showing ${startIdx + 1}–${endIdx} of ${filtered.length} departments`;
+      }
+    }
+
+    const pageControlsEl = document.getElementById('depts-page-controls');
+    if (pageControlsEl) {
+      if (totalPages <= 1) {
+        pageControlsEl.innerHTML = '';
+      } else {
+        let controlsHtml = `
+          <button type="button" class="btn btn-secondary-32 js-depts-prev-page" ${state.deptsPage <= 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            &larr; Prev
+          </button>
+        `;
+        for (let p = 1; p <= totalPages; p++) {
+          const isActive = p === state.deptsPage;
+          controlsHtml += `
+            <button type="button" class="btn ${isActive ? 'btn-primary-32' : 'btn-secondary-32'} js-depts-page-num" data-page="${p}" style="min-width: 32px; padding: 0 8px; font-weight: 600;">
+              ${p}
+            </button>
+          `;
+        }
+        controlsHtml += `
+          <button type="button" class="btn btn-secondary-32 js-depts-next-page" ${state.deptsPage >= totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            Next &rarr;
+          </button>
+        `;
+        pageControlsEl.innerHTML = controlsHtml;
+
+        pageControlsEl.querySelectorAll('.js-depts-page-num').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.deptsPage = Number(btn.getAttribute('data-page'));
+            renderDepartmentsScreen();
+          });
+        });
+        const prevBtn = pageControlsEl.querySelector('.js-depts-prev-page');
+        if (prevBtn && state.deptsPage > 1) {
+          prevBtn.addEventListener('click', () => {
+            state.deptsPage--;
+            renderDepartmentsScreen();
+          });
+        }
+        const nextBtn = pageControlsEl.querySelector('.js-depts-next-page');
+        if (nextBtn && state.deptsPage < totalPages) {
+          nextBtn.addEventListener('click', () => {
+            state.deptsPage++;
+            renderDepartmentsScreen();
+          });
+        }
+      }
+    }
+
+    if (filtered.length === 0) {
+      rowsEl.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No departments match the search query.</div>`;
+      return;
+    }
+
+    rowsEl.innerHTML = paged
+      .map((d) => {
+        const isActive = Number(d.is_active) === 1;
+        const statusTag = isActive
+          ? `<span class="status-badge status-badge-green-sm" style="font-size: 11px;">Active</span>`
+          : `<span class="status-badge" style="background: #f1f5f9; color: #64748b; font-size: 11px;">Inactive</span>`;
+
+        return `
+          <div class="data-table-row" style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border-color); font-size: 12px; gap: 8px;">
+            <div style="width: 110px;">
+              <span class="status-badge status-badge-blue-sm" style="font-family: monospace; font-size: 11px; font-weight: 700; padding: 2px 7px;">
+                ${escapeHtml(d.code)}
+              </span>
+            </div>
+
+            <div style="width: 220px;">
+              <div style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(d.name)}</div>
+            </div>
+
+            <div style="flex: 1 0 240px; min-width: 0; color: var(--text-secondary); line-height: 1.4; padding-right: 10px;">
+              ${escapeHtml(d.description || 'General organizational division and equipment unit.')}
+            </div>
+
+            <div style="width: 120px; text-align: center;">
+              <button type="button" class="btn-ghost-sm js-filter-crew-by-dept" data-dept-name="${escapeHtml(d.name)}" title="View ${d.staff_count || 0} assigned crew members in directory" style="background: rgba(37, 99, 235, 0.08); color: #2563eb; border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                <img src="assets/metric-users.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+                <span>${d.staff_count || 0} Staff</span>
+              </button>
+            </div>
+
+            <div style="width: 120px; text-align: center;">
+              <button type="button" class="btn-ghost-sm js-filter-roles-by-dept" data-dept-name="${escapeHtml(d.name)}" title="View ${d.roles_count || 0} roles in this department" style="background: rgba(147, 51, 234, 0.08); color: #7c3aed; border: 1px solid rgba(147, 51, 234, 0.2); border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                <img src="assets/nav-payments.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+                <span>${d.roles_count || 0} Roles</span>
+              </button>
+            </div>
+
+            <div style="width: 100px;">
+              ${statusTag}
+            </div>
+
+            <div style="width: 120px; display: flex; justify-content: flex-end; gap: 6px;">
+              <button type="button" class="btn btn-secondary-32 js-edit-dept" data-dept-id="${d.id}" title="Edit Department" style="padding: 0 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+                <span>Edit</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32 js-delete-dept" data-dept-id="${d.id}" data-dept-name="${escapeHtml(d.name)}" data-assigned="${d.staff_count || 0}" title="Delete Department" style="color: #dc2626; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+                <span>Del</span>
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  function openDeptModal(dept = null) {
+    const modal = document.getElementById('dept-crud-modal');
+    if (!modal) return;
+    const titleEl = document.getElementById('dept-crud-modal-title');
+    const idEl = document.getElementById('dept-crud-id');
+    const codeEl = document.getElementById('dept-crud-code');
+    const nameEl = document.getElementById('dept-crud-name');
+    const descEl = document.getElementById('dept-crud-desc');
+    const activeEl = document.getElementById('dept-crud-active');
+
+    if (dept) {
+      if (titleEl) titleEl.textContent = `Edit Department: ${dept.name}`;
+      if (idEl) idEl.value = String(dept.id || 0);
+      if (codeEl) codeEl.value = dept.code || '';
+      if (nameEl) nameEl.value = dept.name || '';
+      if (descEl) descEl.value = dept.description || '';
+      if (activeEl) activeEl.checked = Number(dept.is_active) === 1;
+    } else {
+      if (titleEl) titleEl.textContent = 'Add New Department';
+      if (idEl) idEl.value = '0';
+      if (codeEl) codeEl.value = '';
+      if (nameEl) nameEl.value = '';
+      if (descEl) descEl.value = '';
+      if (activeEl) activeEl.checked = true;
+    }
+    modal.style.display = 'flex';
+  }
+
+  function closeDeptModal() {
+    const modal = document.getElementById('dept-crud-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
   function populateRoleDropdowns() {
     const roleSelects = [
       document.getElementById('user-modal-role'),
       document.getElementById('reg-role'),
     ];
 
-    if (!Array.isArray(state.roles) || state.roles.length === 0) return;
+    if (Array.isArray(state.roles) && state.roles.length > 0) {
+      roleSelects.forEach((sel) => {
+        if (!sel) return;
+        const currentVal = sel.value;
+        sel.innerHTML = state.roles.map((r) => `
+          <option value="${escapeHtml(r.role_key)}">${escapeHtml(r.title)} (${escapeHtml(r.clearance_code || 'L2')})</option>
+        `).join('');
+        if (currentVal && Array.from(sel.options).some((o) => o.value === currentVal)) {
+          sel.value = currentVal;
+        }
+      });
+    }
 
-    roleSelects.forEach((sel) => {
-      if (!sel) return;
-      const currentVal = sel.value;
-      sel.innerHTML = state.roles.map((r) => `
-        <option value="${escapeHtml(r.role_key)}">${escapeHtml(r.title)} (${escapeHtml(r.clearance_code || 'L2')})</option>
-      `).join('');
-      if (currentVal && Array.from(sel.options).some((o) => o.value === currentVal)) {
-        sel.value = currentVal;
-      }
-    });
+    // Populate department select dropdowns in Role modal, User modal, and filters
+    const deptSelects = [
+      document.getElementById('role-modal-dept-select'),
+      document.getElementById('filter-dept'),
+      document.getElementById('user-modal-department'),
+      document.getElementById('reg-department'),
+    ];
+    const depts = (state.departments || []).map((d) => d.name).filter(Boolean);
+    if (depts.length > 0) {
+      deptSelects.forEach((sel) => {
+        if (!sel) return;
+        const currentVal = sel.value;
+        const isFilter = sel.id === 'filter-dept';
+        let opts = isFilter ? '<option value="all">All Departments</option>' : '';
+        opts += depts.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+        sel.innerHTML = opts;
+        if (currentVal && Array.from(sel.options).some((o) => o.value === currentVal)) {
+          sel.value = currentVal;
+        }
+      });
+    }
   }
 
   function renderUsersScreen() {
@@ -3743,10 +4144,6 @@
     if (topAvatar && userDropdown) {
       topAvatar.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (!isCurrentUserAdmin()) {
-          closeAllTopbarDropdowns();
-          return;
-        }
         const isOpen = userDropdown.style.display === 'block';
         closeAllTopbarDropdowns();
         if (!isOpen) userDropdown.style.display = 'block';
@@ -4989,20 +5386,34 @@
     });
 
     
-    // View Switcher between Personnel Directory, Roles Management, and 4-Tier Access Matrix
+    // View Switcher between Personnel Directory, Roles Management, 4-Tier Access Matrix, and Departments
     const tabPersonnel = document.getElementById('view-tab-personnel');
     const tabRoles = document.getElementById('view-tab-roles');
     const tabMatrix = document.getElementById('view-tab-matrix');
+    const tabDepts = document.getElementById('view-tab-departments');
     const addRoleBtn = document.getElementById('open-add-role-btn');
+    const addDeptTopBtn = document.getElementById('open-add-dept-top-btn');
 
     if (tabPersonnel) tabPersonnel.addEventListener('click', () => switchUsersView('personnel'));
     if (tabRoles) tabRoles.addEventListener('click', () => switchUsersView('roles'));
     if (tabMatrix) tabMatrix.addEventListener('click', () => switchUsersView('matrix'));
+    if (tabDepts) tabDepts.addEventListener('click', () => switchUsersView('departments'));
 
     // Open Add Role Modal
     if (addRoleBtn) {
       addRoleBtn.addEventListener('click', () => openRoleModal(null));
     }
+
+    // Open Add Department Modal
+    if (addDeptTopBtn) {
+      addDeptTopBtn.addEventListener('click', () => openDeptModal(null));
+    }
+    document.querySelectorAll('.js-open-create-dept-btn').forEach((btn) => {
+      btn.addEventListener('click', () => openDeptModal(null));
+    });
+    document.querySelectorAll('.js-close-dept-crud-modal').forEach((btn) => {
+      btn.addEventListener('click', () => closeDeptModal());
+    });
 
     // Close Role Modal
     document.querySelectorAll('.js-close-role-modal').forEach((btn) => {
@@ -5176,7 +5587,155 @@
         }
         return;
       }
+
+      // 4. Edit Department
+      const editDeptBtn = e.target.closest('.js-edit-dept');
+      if (editDeptBtn) {
+        const did = Number(editDeptBtn.getAttribute('data-dept-id'));
+        const d = (state.departments || []).find((x) => Number(x.id) === did);
+        if (d) openDeptModal(d);
+        return;
+      }
+
+      // 5. Delete Department
+      const delDeptBtn = e.target.closest('.js-delete-dept');
+      if (delDeptBtn) {
+        const did = Number(delDeptBtn.getAttribute('data-dept-id'));
+        const name = delDeptBtn.getAttribute('data-dept-name') || 'this department';
+        const assigned = Number(delDeptBtn.getAttribute('data-assigned') || 0);
+
+        if (assigned > 0) {
+          showToast(`Cannot delete "${name}": ${assigned} staff member(s) are currently assigned. Reassign them first.`);
+          return;
+        }
+
+        const confirmDelete = confirm(`Are you sure you want to permanently delete department "${name}"?`);
+        if (!confirmDelete) return;
+
+        try {
+          const res = await fetch('api.php?action=delete_department', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: did }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            if (Array.isArray(data.departments)) state.departments = data.departments;
+            else state.departments = state.departments.filter((x) => Number(x.id) !== did);
+            renderDepartmentsScreen();
+            populateRoleDropdowns();
+            showToast(data.message || `Department "${name}" deleted successfully.`);
+          } else {
+            showToast(data.error || 'Failed to delete department.');
+          }
+        } catch (err) {
+          state.departments = state.departments.filter((x) => Number(x.id) !== did);
+          renderDepartmentsScreen();
+          populateRoleDropdowns();
+          showToast(`Department "${name}" deleted (Offline mode).`);
+        }
+        return;
+      }
+
+      // 6. Filter Crew by Dept pill
+      const filterCrewDept = e.target.closest('.js-filter-crew-by-dept');
+      if (filterCrewDept) {
+        const deptName = filterCrewDept.getAttribute('data-dept-name');
+        switchUsersView('personnel');
+        const deptFilter = document.getElementById('filter-dept');
+        if (deptFilter) {
+          deptFilter.value = deptName;
+          state.usersFilterDept = deptName;
+        }
+        state.usersPage = 1;
+        renderUsersScreen();
+        return;
+      }
+
+      // 7. Filter Roles by Dept pill
+      const filterRolesDept = e.target.closest('.js-filter-roles-by-dept');
+      if (filterRolesDept) {
+        const deptName = filterRolesDept.getAttribute('data-dept-name');
+        switchUsersView('roles');
+        const rolesDeptFilter = document.getElementById('roles-filter-dept');
+        if (rolesDeptFilter) {
+          rolesDeptFilter.value = deptName;
+          state.rolesFilterDept = deptName;
+        }
+        state.rolesPage = 1;
+        renderRolesScreen();
+        return;
+      }
     });
+
+    // Department search & filter listeners
+    const deptsSearchInp = document.getElementById('depts-search-input');
+    if (deptsSearchInp) {
+      deptsSearchInp.addEventListener('input', (e) => {
+        state.deptsSearch = e.target.value;
+        state.deptsPage = 1;
+        renderDepartmentsScreen();
+      });
+    }
+    const deptsStatusSel = document.getElementById('depts-filter-status');
+    if (deptsStatusSel) {
+      deptsStatusSel.addEventListener('change', (e) => {
+        state.deptsFilterStatus = e.target.value;
+        state.deptsPage = 1;
+        renderDepartmentsScreen();
+      });
+    }
+
+    // Department CRUD Form Submit
+    const deptForm = document.getElementById('dept-crud-form');
+    if (deptForm) {
+      deptForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = Number(document.getElementById('dept-crud-id').value);
+        const code = document.getElementById('dept-crud-code').value.trim().toUpperCase();
+        const name = document.getElementById('dept-crud-name').value.trim();
+        const description = document.getElementById('dept-crud-desc').value.trim();
+        const is_active = document.getElementById('dept-crud-active').checked ? 1 : 0;
+        const submitBtn = document.getElementById('dept-crud-submit-btn');
+
+        if (!name || !code) {
+          showToast('Please provide both department code and name.');
+          return;
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving Department...';
+        }
+
+        try {
+          const res = await fetch('api.php?action=save_department', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, code, name, description, is_active }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            closeDeptModal();
+            if (Array.isArray(data.departments)) {
+              state.departments = data.departments;
+            }
+            renderDepartmentsScreen();
+            populateRoleDropdowns();
+            showToast(data.message || `Department "${name}" saved successfully.`);
+          } else {
+            showToast(data.error || 'Failed to save department.');
+          }
+        } catch (err) {
+          showToast('Network error saving department.');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save Department';
+          }
+        }
+      });
+    }
 
     // Submit Call Time Form
     const callTimeForm = document.getElementById('call-time-form');

@@ -780,16 +780,27 @@ button {
 /* 4-Tier Access Matrix Cards: 4 items per row, 2 rows */
 #matrix-tier-cards-grid,
 #users-matrix-tier-cards-grid,
+#roles-tier-cards-grid,
 .matrix-cards-grid-4col {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 16px;
-  width: 100%;
+  gap: 16px !important;
+  width: 100% !important;
+}
+
+#matrix-tier-cards-grid > .metric-card,
+#users-matrix-tier-cards-grid > .metric-card,
+#roles-tier-cards-grid > .metric-card,
+.matrix-cards-grid-4col > .metric-card {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  flex: none !important;
 }
 
 @media (max-width: 1200px) {
   #matrix-tier-cards-grid,
   #users-matrix-tier-cards-grid,
+  #roles-tier-cards-grid,
   .matrix-cards-grid-4col {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -798,6 +809,7 @@ button {
 @media (max-width: 640px) {
   #matrix-tier-cards-grid,
   #users-matrix-tier-cards-grid,
+  #roles-tier-cards-grid,
   .matrix-cards-grid-4col {
     grid-template-columns: 1fr !important;
   }
