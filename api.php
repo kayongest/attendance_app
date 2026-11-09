@@ -989,6 +989,7 @@ try {
         }
 
         $_SESSION['auth_user_id'] = (int) $userRow['id'];
+        $_SESSION['auth_user_role'] = strtolower((string)$userRow['role']);
 
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $matchedMember = null;
@@ -1153,6 +1154,7 @@ try {
         }
 
         $_SESSION['auth_user_id'] = (int) $found['id'];
+        $_SESSION['auth_user_role'] = strtolower((string)($found['role'] ?? ''));
 
         echo json_encode([
             'ok' => true,

@@ -790,7 +790,24 @@ if (isset($_GET['logout'])) {
         </div>
       </div>
     </div>
+  </div>
 
+  <!-- Fast Demo Account Switcher for Instant Testing -->
+  <div style="margin-top: 20px; text-align: center; max-width: 780px; width: 100%;">
+    <div style="font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; font-weight: 600;">
+      ⚡ Quick Role Test (1-Click Sign In)
+    </div>
+    <div class="demo-pills">
+      <button type="button" class="demo-pill-btn js-demo-btn" data-user="mirene@ability.rw" data-pass="password123" data-name="Mirene Uwase" data-role="stock_controller" data-is-admin="0" title="Redirects to Staff ID Badges & Gate Terminal (#pane-kiosk)">
+        📦 <strong>Mirene Uwase</strong> (Stock Controller &bull; L3) &rarr; #pane-kiosk
+      </button>
+      <button type="button" class="demo-pill-btn js-demo-btn" data-user="didier@ability.rw" data-pass="admin123" data-name="Didier Kayonge" data-role="admin" data-is-admin="1" title="Unlocks Sign Up toggle + Full Access">
+        👑 <strong>Didier Kayonge</strong> (Admin &bull; L4 All Access)
+      </button>
+      <button type="button" class="demo-pill-btn js-demo-btn" data-user="eric@ability.rw" data-pass="password123" data-name="Eric Ndahiro" data-role="technician" data-is-admin="0" title="Standard Tech Access">
+        🏗️ <strong>Eric Ndahiro</strong> (Rigging Tech &bull; L2)
+      </button>
+    </div>
   </div>
 
   <!-- Administrator PIN Verification Modal (to unlock Sign Up toggle) -->
@@ -976,13 +993,18 @@ if (isset($_GET['logout'])) {
           document.getElementById('signin-password').value = p;
           container.classList.remove('right-panel-active');
 
+          const role = btn.getAttribute('data-role');
           if (isDemoAdmin) {
             enableAdminControls();
           } else {
             disableAdminControls();
           }
 
-          showToast(`Loaded ${name} credentials. Signing in...`, 'info', 1000);
+          if (role === 'stock_controller') {
+            showToast(`Loaded ${name} (Stock Controller). Redirecting to #pane-kiosk...`, 'info', 1200);
+          } else {
+            showToast(`Loaded ${name} credentials. Signing in...`, 'info', 1000);
+          }
           setTimeout(() => {
             document.getElementById('signin-form').requestSubmit();
           }, 350);
@@ -1016,17 +1038,30 @@ if (isset($_GET['logout'])) {
 
             if (data && data.ok) {
               const name = (data.user && (data.user.full_name || data.user.username)) || 'Lorem Ipsum';
-              // Display exact top-right green toast matching screenshot
-              showToast(`Welcome back, ${name}!`, 'success', 3500);
+              const role = (data.user && data.user.role) ? data.user.role.toLowerCase() : '';
+              const isStock = (role === 'stock_controller' || role === 'stock_manager');
+              const targetUrl = isStock ? 'index.php#pane-kiosk' : 'index.php';
+
+              if (isStock) {
+                showToast(`Welcome back, ${name}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
+              } else {
+                showToast(`Welcome back, ${name}!`, 'success', 3500);
+              }
               setTimeout(() => {
-                window.location.href = 'index.php';
+                window.location.href = targetUrl;
               }, 600);
             } else {
               // Local fallback for offline mode
               if (password === 'password123' || password === 'admin123') {
-                showToast(`Welcome back, ${username}!`, 'success', 3500);
+                const isStock = username.toLowerCase().includes('mirene') || username.toLowerCase().includes('stock');
+                const targetUrl = isStock ? 'index.php#pane-kiosk' : 'index.php';
+                if (isStock) {
+                  showToast(`Welcome back, ${username}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
+                } else {
+                  showToast(`Welcome back, ${username}!`, 'success', 3500);
+                }
                 setTimeout(() => {
-                  window.location.href = 'index.php';
+                  window.location.href = targetUrl;
                 }, 600);
               } else {
                 showToast(data.error || 'Invalid username or password.', 'error');
@@ -1036,9 +1071,15 @@ if (isset($_GET['logout'])) {
             }
           } catch (err) {
             // Offline fallback
-            showToast(`Welcome back, ${username}!`, 'success', 3500);
+            const isStock = username.toLowerCase().includes('mirene') || username.toLowerCase().includes('stock');
+            const targetUrl = isStock ? 'index.php#pane-kiosk' : 'index.php';
+            if (isStock) {
+              showToast(`Welcome back, ${username}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
+            } else {
+              showToast(`Welcome back, ${username}!`, 'success', 3500);
+            }
             setTimeout(() => {
-              window.location.href = 'index.php';
+              window.location.href = targetUrl;
             }, 600);
           }
         });

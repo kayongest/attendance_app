@@ -343,6 +343,11 @@
   }
 
   function switchScreen(screenKey, scrollToId = null) {
+    if (isCurrentUserStockController() && screenKey !== 'attendees') {
+      showToast('Access Restricted: Stock Controllers are assigned exclusively to Staff ID Badges & Gate Terminal (#pane-kiosk).');
+      screenKey = 'attendees';
+      scrollToId = 'pane-kiosk';
+    }
     state.activeScreen = screenKey;
     const screens = {
       overview: document.getElementById('screen-overview'),
@@ -459,6 +464,57 @@
       clearance.includes('L4') ||
       clearance === 'L4_ALL_ACCESS'
     );
+  }
+
+  function isCurrentUserStockController() {
+    if (!state.currentUser) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    const clearance = (state.currentUser.clearance_code || '').toUpperCase();
+    return (
+      role === 'stock_controller' ||
+      role === 'stock_manager' ||
+      clearance === 'L3' ||
+      clearance.startsWith('L3')
+    );
+  }
+
+  function applyNavigationRestrictions() {
+    const isStock = isCurrentUserStockController();
+    const navItems = document.querySelectorAll('.sidebar .nav-item[data-nav-target]');
+    navItems.forEach((btn) => {
+      const target = btn.getAttribute('data-nav-target');
+      if (isStock) {
+        if (target !== 'attendees') {
+          btn.style.opacity = '0.35';
+          btn.style.filter = 'grayscale(1)';
+          btn.style.cursor = 'not-allowed';
+          btn.setAttribute('data-restricted', 'true');
+          btn.title = 'Access Restricted: Stock Controllers are assigned exclusively to Staff ID Badges & Gate Terminal (#pane-kiosk)';
+        } else {
+          btn.style.opacity = '1';
+          btn.style.filter = 'none';
+          btn.style.cursor = 'pointer';
+          btn.removeAttribute('data-restricted');
+          btn.title = 'Staff ID Badges & Gate Terminal (#pane-kiosk)';
+        }
+      } else {
+        btn.style.opacity = '1';
+        btn.style.filter = 'none';
+        btn.style.cursor = 'pointer';
+        btn.removeAttribute('data-restricted');
+        btn.removeAttribute('title');
+      }
+    });
+
+    const bcRoot = document.getElementById('breadcrumb-workspace');
+    if (bcRoot) {
+      bcRoot.textContent = isStock ? 'aBility Gate Station (Stock Controller)' : 'aBility Manager';
+    }
+
+    const kioskBanner = document.getElementById('kiosk-stock-role-banner');
+    if (kioskBanner) {
+      kioskBanner.style.display = isStock ? 'flex' : 'none';
+    }
   }
 
   function openAuthModal(defaultTab = 'login') {
@@ -613,6 +669,8 @@
       if (authSub) {
         authSub.textContent = isAdmin ? 'Admin toggle: Sign In & Register' : 'Login with personal credentials';
       }
+
+      applyNavigationRestrictions();
     }
 
     // Render Notifications Bubble
@@ -2555,15 +2613,28 @@
   // =========================================================================
 
   function bindEvents() {
-    // Sidebar navigation
+    // Sidebar navigation (Restricted for Stock Controllers)
     document.querySelectorAll('.sidebar .nav-item[data-nav-target]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        switchScreen(btn.getAttribute('data-nav-target'));
+        const target = btn.getAttribute('data-nav-target');
+        if (isCurrentUserStockController() && target !== 'attendees') {
+          showToast('Access Restricted: Stock Controllers are assigned exclusively to Staff ID Badges & Gate Terminal (#pane-kiosk).');
+          return;
+        }
+        switchScreen(target);
       });
     });
 
     const brandHome = document.getElementById('brand-home-btn');
-    if (brandHome) brandHome.addEventListener('click', () => switchScreen('overview'));
+    if (brandHome) {
+      brandHome.addEventListener('click', () => {
+        if (isCurrentUserStockController()) {
+          switchScreen('attendees', 'pane-kiosk');
+        } else {
+          switchScreen('overview');
+        }
+      });
+    }
 
     // Venue Security Portal nav shortcut
     const venueSecBtn = document.getElementById('nav-venue-security-btn');
@@ -3063,7 +3134,12 @@
             state.currentUser = data.user;
             closeAuthModal();
             renderTopbarAndKpis();
-            showToast(data.message || `Welcome back, ${data.user.full_name}!`);
+            if (isCurrentUserStockController()) {
+              switchScreen('attendees', 'pane-kiosk');
+              showToast(data.message || `Welcome back, ${data.user.full_name}! Redirected to Staff ID Badges & Gate Terminal.`);
+            } else {
+              showToast(data.message || `Welcome back, ${data.user.full_name}!`);
+            }
           } else {
             // Local fallback if server check fails or offline
             const localMatched = state.crew.find((c) =>
@@ -3222,6 +3298,9 @@
           if (data && data.ok) {
             state.currentUser = data.user;
             renderTopbarAndKpis();
+            if (isCurrentUserStockController()) {
+              switchScreen('attendees', 'pane-kiosk');
+            }
             showToast(data.message || `Switched active operator to ${data.user.full_name}`);
           } else {
             const localUser = state.crew.find((c) => Number(c.id) === uid);
@@ -4249,6 +4328,10 @@
       switchScreen('attendees', 'pane-kiosk');
     }
     await fetchBootstrap(false);
+    if (isCurrentUserStockController()) {
+      switchScreen('attendees', 'pane-kiosk');
+      applyNavigationRestrictions();
+    }
     loadStockManagerData();
   });
 })();
