@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261109_v9_theme" />
+  <link rel="stylesheet" href="styles.css?v=20261110_kiosk_search_v3" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -966,6 +966,53 @@
           </div>
         </div>
 
+        <!-- Dedicated On-Page Gate Scanner Hero Deck (#pane-kiosk) -->
+        <section class="kiosk-scanner-hero-card" id="pane-kiosk">
+          <div class="kiosk-scanner-hero-header">
+            <div class="kiosk-scanner-hero-title">
+              <span class="station-live-dot"></span>
+              <h3>Gate Terminal Barcode &amp; Badge Scanner</h3>
+              <span class="kiosk-scanner-chip" id="kiosk-scanner-station-chip">Scanner Active</span>
+            </div>
+            <div class="kiosk-scanner-quick-tips">
+              <span class="kbd-hint-pill"><kbd>/</kbd> to focus</span>
+              <span class="kbd-hint-pill"><kbd>Enter</kbd> to verify</span>
+            </div>
+          </div>
+
+          <form class="kiosk-hero-input-form" id="kiosk-scan-form" autocomplete="off">
+            <div class="kiosk-hero-input-wrap">
+              <div class="kiosk-hero-input-icon">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+              </div>
+              <input
+                type="text"
+                id="kiosk-badge-input"
+                class="kiosk-hero-input-field"
+                placeholder="Scan barcode or type badge (e.g. REW-BADGE-0006, ABL-006, or staff name)..."
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <span class="kiosk-search-match-tag" id="kiosk-search-match-tag" style="display: none;"></span>
+              <button type="button" class="kiosk-input-clear-btn" id="kiosk-input-clear-btn" style="display: none;" title="Clear search">✕</button>
+            </div>
+            <button type="submit" class="btn btn-primary-38 kiosk-hero-scan-btn">
+              <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1); width: 16px; height: 16px;" />
+              <span>Verify &amp; Record</span>
+            </button>
+          </form>
+
+          <div class="kiosk-scanner-hero-footer">
+            <div class="kiosk-quick-badges-label">Quick Scan Demo Badges:</div>
+            <div class="kiosk-quick-badge-pills">
+              <button type="button" class="kiosk-quick-badge-btn" data-badge="REW-BADGE-0006">Patrick NYIRIMBIBI (L2 · In/Out)</button>
+              <button type="button" class="kiosk-quick-badge-btn" data-badge="REW-BADGE-0001">Sarah UWASE (L4 · Master Key)</button>
+              <button type="button" class="kiosk-quick-badge-btn" data-badge="REW-BADGE-0003">Diane MUKESHIMANA (L3 · Stock)</button>
+              <button type="button" class="kiosk-quick-badge-btn" data-badge="REW-BADGE-0008">Eric HAVUGIMANA (L1 · Venue Only)</button>
+            </div>
+          </div>
+        </section>
+
         <!-- Crew Roster & Paired Gate Controls Table (Full-Width) -->
         <section class="directory-card" data-node-id="2:8614">
           <div class="directory-header" data-node-id="2:8615">
@@ -1069,140 +1116,147 @@
         </section>
 
         <!-- ============================================================== -->
-        <!-- CENTERED LIGHTBOX MODAL: GATE KIOSK VERIFICATION DECK          -->
+        <!-- CENTERED LIGHTBOX MODAL: GATE VERIFICATION RESULT POPUP         -->
         <!-- ============================================================== -->
         <div class="kiosk-modal-backdrop" id="kiosk-modal-backdrop" style="display: none;" aria-hidden="true">
           <div class="kiosk-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="kiosk-staff-name">
-            <button type="button" class="kiosk-modal-close-btn" id="kiosk-modal-close-btn" aria-label="Close modal">✕</button>
 
-            <!-- The Gate Kiosk Verification Deck (#pane-kiosk) -->
-            <section class="kiosk-deck-wrapper" id="pane-kiosk">
-              <!-- Badge Code Search / Barcode Scanner Bar -->
-              <div class="kiosk-scanner-bar">
-                <form class="kiosk-input-group" id="kiosk-scan-form">
-                  <div class="kiosk-badge-input-wrap">
-                    <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
-                    <input
-                      type="text"
-                      id="kiosk-badge-input"
-                      class="kiosk-badge-input"
-                      placeholder="Scan barcode or type badge (e.g. REW-BADGE-0006, ABL-006, or name)..."
-                      autocomplete="off"
-                    />
-                    <span class="kiosk-search-match-tag" id="kiosk-search-match-tag" style="display: none;"></span>
-                    <button type="button" class="kiosk-input-clear-btn" id="kiosk-input-clear-btn" style="display: none;" title="Clear search">✕</button>
-                  </div>
-                  <button type="submit" class="btn btn-primary-38">
-                    <span>Verify &amp; Record Scan</span>
-                  </button>
-                </form>
+            <!-- Result Verification Card (#kiosk-verification-card) -->
+            <div class="kiosk-verification-card" id="kiosk-verification-card">
+              <!-- Visual Auto-Return Countdown Progress Bar -->
+              <div class="kiosk-timeout-container" id="kiosk-timeout-container">
+                <div class="kiosk-timeout-progress" id="kiosk-timeout-progress"></div>
               </div>
 
-              <!-- 12-Column Split Verification Card -->
-              <div class="kiosk-verification-card" id="kiosk-verification-card">
-                <!-- Left Column (5 cols): Portrait / Initials on Navy Gradient + Cyan Role Pill -->
-                <div class="kiosk-card-left">
-                  <div class="kiosk-left-meta-top">
-                    <span id="kiosk-staff-code">ABL-006</span>
-                    <span id="kiosk-checkpoint-tag">NDERA WAREHOUSE</span>
-                  </div>
-                  <div class="kiosk-portrait-container">
-                    <img
-                      src=""
-                      alt="Staff Portrait"
-                      id="kiosk-portrait-img"
-                      class="kiosk-portrait-img"
-                      style="display: none;"
-                    />
-                    <div class="kiosk-initials-avatar" id="kiosk-initials-avatar">EH</div>
-                    <div class="kiosk-left-contact" id="kiosk-staff-phone">+250 788 100 006</div>
-                  </div>
-                  <div class="kiosk-role-cyan-pill" id="kiosk-role-pill">TECHNICIAN - RIGGING</div>
+              <!-- Left Column (5 cols): Official ID Credential (Photo, Name, Role, Clearance) -->
+              <div class="kiosk-card-left">
+                <div class="kiosk-left-meta-top">
+                  <span id="kiosk-staff-code">ABL-006</span>
+                  <span id="kiosk-checkpoint-tag">NDERA WAREHOUSE</span>
                 </div>
 
-                <!-- Right Column (7 cols): Top Navy Header, Big Status Ring, In/Out Triggers, Batch Bar, Footer -->
-                <div class="kiosk-card-right">
-                  <div class="kiosk-right-navy-header">
-                    <div class="kiosk-staff-name-wrap">
-                      <h3 class="kiosk-staff-name" id="kiosk-staff-name">Eric Havugimana</h3>
-                      <span class="kiosk-clearance-title-pill" id="kiosk-clearance-title">Level 2 — Technical &amp; Stage</span>
+                <div class="kiosk-portrait-container">
+                  <img
+                    src=""
+                    alt="Staff Portrait"
+                    id="kiosk-portrait-img"
+                    class="kiosk-portrait-img"
+                    style="display: none;"
+                  />
+                  <div class="kiosk-initials-avatar" id="kiosk-initials-avatar">EH</div>
+                  <h3 class="kiosk-staff-name" id="kiosk-staff-name">Eric Havugimana</h3>
+                  <div class="kiosk-role-cyan-pill" id="kiosk-role-pill">TECHNICIAN - RIGGING</div>
+                  <div class="kiosk-left-contact" id="kiosk-staff-phone">+250 788 100 006</div>
+                </div>
+
+                <div class="kiosk-left-clearance-bar">
+                  <div class="kiosk-clearance-circle" id="kiosk-clearance-circle" style="background-color: #2563eb;">L2</div>
+                  <span class="kiosk-clearance-title-pill" id="kiosk-clearance-title">Level 2 — Technical &amp; Stage</span>
+                </div>
+              </div>
+
+              <!-- Right Column (7 cols): Live Verification Console -->
+              <div class="kiosk-card-right">
+                <div class="kiosk-right-top-meta">
+                  <span class="kiosk-station-status-indicator">
+                    <span class="station-live-dot"></span>
+                    Gate Checkpoint Terminal
+                  </span>
+                  <!-- Options to return to input search -->
+                  <div class="kiosk-modal-header-actions">
+                    <button type="button" class="kiosk-back-search-btn" id="kiosk-back-search-btn" title="Close result &amp; return to search (or press Esc)">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                      </svg>
+                      <span>Back to Search</span>
+                      <kbd class="kiosk-kbd-pill">Esc</kbd>
+                    </button>
+                    <span class="kiosk-timeout-label" id="kiosk-timeout-label">Auto-closing in 4s...</span>
+                  </div>
+                </div>
+
+                <div class="kiosk-decision-body">
+                  <!-- Hero Status Banner with Universal Green Checkmark & Emerald Glow Pop Card -->
+                  <div class="kiosk-status-banner granted" id="kiosk-status-banner">
+                    <div class="kiosk-status-ring granted" id="kiosk-status-ring">
+                      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" id="kiosk-status-svg">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
                     </div>
-                    <div class="kiosk-clearance-circle" id="kiosk-clearance-circle" style="background-color: #2563eb;">L2</div>
+                    <div class="kiosk-status-texts">
+                      <div class="kiosk-status-headline-row">
+                        <span class="kiosk-status-headline granted" id="kiosk-status-headline">ACCESS GRANTED</span>
+                        <span class="kiosk-punctuality-pill on_time" id="kiosk-punctuality-pill">ON TIME</span>
+                      </div>
+                      <!-- Hero Timestamp Display for Exit Action -->
+                      <div class="kiosk-prominent-timestamp" id="kiosk-prominent-timestamp" style="display: none;">
+                        <span class="kiosk-ts-badge" id="kiosk-hero-ts-value">02:22:15 PM</span>
+                      </div>
+                      <span class="kiosk-status-reason" id="kiosk-status-reason">
+                        Authorized for Stock Warehouse access (L2 — Technical &amp; Stage)
+                      </span>
+                    </div>
                   </div>
 
-                  <div class="kiosk-decision-body">
-                    <!-- Big Status Ring & Banner -->
-                    <div class="kiosk-status-banner granted" id="kiosk-status-banner">
-                      <div class="kiosk-status-ring granted" id="kiosk-status-ring">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" id="kiosk-status-svg">
-                          <polyline points="20 6 9 17 4 12"></polyline>
+                  <!-- Non-Clickable Passive Timestamp Indicators (State Dictated by Scanner) -->
+                  <div class="kiosk-timestamps-row">
+                    <div class="kiosk-ts-indicator in-active" id="kiosk-indicator-in">
+                      <div class="kiosk-ts-icon in-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                          <polyline points="10 17 15 12 10 7"></polyline>
+                          <line x1="15" y1="12" x2="3" y2="12"></line>
                         </svg>
                       </div>
-                      <div class="kiosk-status-texts">
-                        <div class="kiosk-status-headline-row">
-                          <span class="kiosk-status-headline granted" id="kiosk-status-headline">ACCESS GRANTED</span>
-                          <span class="kiosk-punctuality-pill on_time" id="kiosk-punctuality-pill">ON TIME</span>
-                        </div>
-                        <span class="kiosk-status-reason" id="kiosk-status-reason">
-                          Authorized for Stock Warehouse access (L2 — Technical &amp; Stage)
-                        </span>
+                      <div class="kiosk-ts-meta">
+                        <span class="kiosk-ts-label">Gate Check-In</span>
+                        <span class="kiosk-ts-value" id="kiosk-in-time">In: 08:14:22 AM</span>
                       </div>
                     </div>
 
-                    <!-- Interactive Inbound (In) & Outbound (Out) Timestamp Triggers -->
-                    <div class="kiosk-timestamps-row">
-                      <button type="button" class="kiosk-ts-trigger in-active" id="kiosk-trigger-in" title="Click to record or update Gate Check-In timestamp">
-                        <div class="kiosk-ts-icon in-icon">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-                            <polyline points="10 17 15 12 10 7"></polyline>
-                            <line x1="15" y1="12" x2="3" y2="12"></line>
-                          </svg>
-                        </div>
-                        <div class="kiosk-ts-meta">
-                          <span class="kiosk-ts-label">Inbound Check-In (In)</span>
-                          <span class="kiosk-ts-value" id="kiosk-in-time">In: 08:14:22 AM</span>
-                        </div>
-                      </button>
-
-                      <button type="button" class="kiosk-ts-trigger" id="kiosk-trigger-out" title="Click to record Gate Check-Out timestamp">
-                        <div class="kiosk-ts-icon out-icon">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                            <polyline points="16 17 21 12 16 7"></polyline>
-                            <line x1="21" y1="12" x2="9" y2="12"></line>
-                          </svg>
-                        </div>
-                        <div class="kiosk-ts-meta">
-                          <span class="kiosk-ts-label">Outbound Check-Out (Out)</span>
-                          <span class="kiosk-ts-value" id="kiosk-out-time">Click to Check-Out</span>
-                        </div>
-                      </button>
-                    </div>
-
-                    <!-- Linked Stock Batch Custody Bar -->
-                    <div class="kiosk-batch-custody-bar" id="kiosk-batch-bar">
-                      <div class="kiosk-batch-info">
-                        <span>Linked Equipment Batch:</span>
-                        <span class="kiosk-batch-code" id="kiosk-batch-number">BATCH-20261104-73E3EB</span>
-                        <span id="kiosk-batch-route">Ndera Warehouse → Kigali Convention Centre [approved]</span>
+                    <div class="kiosk-ts-indicator" id="kiosk-indicator-out">
+                      <div class="kiosk-ts-icon out-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                          <polyline points="16 17 21 12 16 7"></polyline>
+                          <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
                       </div>
-                      <button type="button" class="kiosk-batch-link-btn" id="kiosk-inspect-batch-btn">
-                        Inspect Batch ↗
-                      </button>
+                      <div class="kiosk-ts-meta">
+                        <span class="kiosk-ts-label">Gate Check-Out</span>
+                        <span class="kiosk-ts-value" id="kiosk-out-time">--:--:--</span>
+                      </div>
                     </div>
                   </div>
 
-                  <!-- Footer Bar (#edf2f7) -->
-                  <div class="kiosk-card-footer">
+                  <!-- Linked Stock Batch Custody Bar -->
+                  <div class="kiosk-batch-custody-bar" id="kiosk-batch-bar">
+                    <div class="kiosk-batch-info">
+                      <span>Linked Equipment Batch:</span>
+                      <span class="kiosk-batch-code" id="kiosk-batch-number">BATCH-20261104-73E3EB</span>
+                      <span id="kiosk-batch-route">Ndera Warehouse → Kigali Convention Centre [approved]</span>
+                    </div>
+                    <button type="button" class="kiosk-batch-link-btn" id="kiosk-inspect-batch-btn">
+                      Inspect Batch ↗
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Dark Navy Footer Bar with Quick Action -->
+                <div class="kiosk-card-footer">
+                  <div class="kiosk-footer-meta">
                     <span class="kiosk-footer-badge-code" id="kiosk-footer-badge">BADGE #: REW-BADGE-0006</span>
                     <span class="kiosk-footer-clearance-status verified" id="kiosk-footer-status">
                       Ndera Warehouse Clearance - Verified
                     </span>
                   </div>
+                  <button type="button" class="kiosk-scan-next-btn" id="kiosk-scan-next-btn">
+                    <span>Scan Next Badge →</span>
+                  </button>
                 </div>
               </div>
-            </section>
+            </div>
           </div>
         </div>
       </main>
@@ -2888,6 +2942,6 @@
   <!-- Toast Notification -->
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=20261109_v9_theme"></script>
+  <script src="app.js?v=20261110_kiosk_search_v3"></script>
 </body>
 </html>

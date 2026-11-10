@@ -340,6 +340,102 @@
     }
   }
 
+  // =========================================================================
+  // KIOSK CONTROLLER: MODAL RESULTS & AUTO-RETURN TO SEARCH
+  // =========================================================================
+
+  let kioskCountdownTimer = null;
+  let kioskCountdownInterval = null;
+  let kioskCountdownRemaining = 0;
+  let kioskCountdownDuration = 4000;
+  let kioskCountdownPaused = false;
+
+  // Camera is disabled per configuration — scanner operates via optical barcode reader & input search
+  function startKioskCamera() {}
+  function stopKioskCamera() {}
+
+  function clearKioskCountdown() {
+    if (kioskCountdownTimer) {
+      clearTimeout(kioskCountdownTimer);
+      kioskCountdownTimer = null;
+    }
+    if (kioskCountdownInterval) {
+      clearInterval(kioskCountdownInterval);
+      kioskCountdownInterval = null;
+    }
+    kioskCountdownPaused = false;
+    const prog = document.getElementById('kiosk-timeout-progress');
+    if (prog) prog.style.width = '100%';
+  }
+
+  function returnToSearchInput() {
+    clearKioskCountdown();
+    closeKioskModal();
+    const inp = document.getElementById('kiosk-badge-input');
+    if (inp) {
+      setTimeout(() => {
+        inp.focus();
+        inp.select();
+      }, 60);
+    }
+  }
+
+  function showVerificationCard() {
+    const card = document.getElementById('kiosk-verification-card');
+    if (card) card.style.display = 'grid';
+  }
+
+  function startKioskCountdown(durationMs = 4000) {
+    clearKioskCountdown();
+    showVerificationCard();
+
+    kioskCountdownDuration = durationMs;
+    kioskCountdownRemaining = durationMs;
+    kioskCountdownPaused = false;
+
+    const prog = document.getElementById('kiosk-timeout-progress');
+    const label = document.getElementById('kiosk-timeout-label');
+    const card = document.getElementById('kiosk-verification-card');
+    let lastTick = Date.now();
+
+    if (prog) prog.style.width = '100%';
+    if (label) label.textContent = `Auto-closing in ${Math.ceil(durationMs / 1000)}s...`;
+
+    // Pause countdown when hovering over the card so user can review info comfortably
+    if (card && !card.__hasHoverListeners) {
+      card.__hasHoverListeners = true;
+      card.addEventListener('mouseenter', () => {
+        kioskCountdownPaused = true;
+        const l = document.getElementById('kiosk-timeout-label');
+        if (l) l.textContent = 'Paused (Hovering)';
+      });
+      card.addEventListener('mouseleave', () => {
+        kioskCountdownPaused = false;
+        lastTick = Date.now();
+      });
+    }
+
+    kioskCountdownInterval = setInterval(() => {
+      const now = Date.now();
+      const delta = now - lastTick;
+      lastTick = now;
+
+      if (!kioskCountdownPaused) {
+        kioskCountdownRemaining = Math.max(0, kioskCountdownRemaining - delta);
+        const remainingSec = Math.ceil(kioskCountdownRemaining / 1000);
+        const pct = Math.max(0, (kioskCountdownRemaining / kioskCountdownDuration) * 100);
+
+        if (prog) prog.style.width = `${pct}%`;
+        if (label) label.textContent = `Auto-closing in ${remainingSec}s...`;
+
+        if (kioskCountdownRemaining <= 0) {
+          clearKioskCountdown();
+          returnToSearchInput();
+        }
+      }
+    }, 50);
+  }
+
   async function triggerGateScan(scanInput, forcedMode = null) {
     const modeToUse = forcedMode || state.scanMode || 'auto';
     try {
@@ -388,8 +484,19 @@
         kioskInp.select();
       }
 
+      // Open Centered Kiosk Modal, render Full Navy / Amber Checked-Out Card, start 4s auto-return
+      const backdrop = document.getElementById('kiosk-modal-backdrop');
+      if (backdrop) {
+        backdrop.style.display = 'flex';
+        backdrop.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      }
+      showVerificationCard();
+      renderVerificationDeck();
+      startKioskCountdown(4000);
+
       const statusTxt = data.allowed
-        ? `ACCESS GRANTED (${data.action === 'check_out' ? 'Checked Out' : 'Checked In'})`
+        ? `${data.action === 'check_out' ? 'CHECKED OUT' : 'ACCESS GRANTED'}`
         : `ACCESS DENIED — ${data.reason}`;
       showToast(`${data.badge ? data.badge.full_name : scanInput}: ${statusTxt}`);
     } catch (err) {
@@ -453,7 +560,13 @@
 
     if (scrollToId === 'pane-kiosk') {
       setTimeout(() => {
-        openKioskModal();
+        const el = document.getElementById('pane-kiosk');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const inp = document.getElementById('kiosk-badge-input');
+        if (inp) {
+          inp.focus();
+          inp.select();
+        }
       }, 70);
     } else if (scrollToId) {
       setTimeout(() => {
@@ -948,6 +1061,9 @@
     if (!v || !v.badge) return;
     const b = v.badge;
 
+    const cardEl = document.getElementById('kiosk-verification-card');
+    const backdropEl = document.getElementById('kiosk-modal-backdrop');
+
     const staffCodeEl = document.getElementById('kiosk-staff-code');
     const cpTagEl = document.getElementById('kiosk-checkpoint-tag');
     const portraitImg = document.getElementById('kiosk-portrait-img');
@@ -991,51 +1107,125 @@
     const headlineEl = document.getElementById('kiosk-status-headline');
     const punctEl = document.getElementById('kiosk-punctuality-pill');
     const reasonEl = document.getElementById('kiosk-status-reason');
+    const heroTsWrap = document.getElementById('kiosk-prominent-timestamp');
+    const heroTsVal = document.getElementById('kiosk-hero-ts-value');
 
     const granted = Boolean(v.allowed);
-    if (bannerEl) {
-      bannerEl.classList.toggle('granted', granted);
-      bannerEl.classList.toggle('denied', !granted);
+    const isCheckOut = granted && (
+      v.action === 'check_out' ||
+      (v.badge && v.badge.daily_state === 'checked_out') ||
+      (v.check_out_time && !v.check_in_time)
+    );
+
+    if (cardEl) {
+      cardEl.classList.toggle('kiosk-state-checkout', isCheckOut);
     }
-    if (ringEl) {
-      ringEl.classList.toggle('granted', granted);
-      ringEl.classList.toggle('denied', !granted);
-    }
-    if (svgEl) {
-      svgEl.innerHTML = granted
-        ? '<polyline points="20 6 9 17 4 12"></polyline>'
-        : '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>';
-    }
-    if (headlineEl) {
-      headlineEl.textContent = granted ? 'ACCESS GRANTED' : 'ACCESS DENIED';
-      headlineEl.classList.toggle('granted', granted);
-      headlineEl.classList.toggle('denied', !granted);
-    }
-    if (punctEl) {
-      punctEl.textContent = v.punctuality_label || (granted ? 'ON TIME' : 'RESTRICTED');
-      punctEl.className = `kiosk-punctuality-pill ${granted ? (v.punctuality || 'on_time') : 'restricted'}`;
-    }
-    if (reasonEl) {
-      reasonEl.textContent = v.reason || '';
+    if (backdropEl) {
+      backdropEl.classList.toggle('kiosk-state-checkout', isCheckOut);
     }
 
-    // Inbound & Outbound Timestamps
-    const inTrigger = document.getElementById('kiosk-trigger-in');
-    const outTrigger = document.getElementById('kiosk-trigger-out');
+    if (isCheckOut) {
+      // Exit Action: Instantly flip to Amber / Orange with "CHECKED OUT"
+      if (bannerEl) bannerEl.className = 'kiosk-status-banner checked-out';
+      if (ringEl) ringEl.className = 'kiosk-status-ring checked-out';
+      if (svgEl) {
+        svgEl.innerHTML = `
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+        `;
+      }
+      if (headlineEl) {
+        headlineEl.textContent = 'CHECKED OUT';
+        headlineEl.className = 'kiosk-status-headline checked-out';
+      }
+      if (punctEl) {
+        punctEl.textContent = 'SHIFT CHECK-OUT';
+        punctEl.className = 'kiosk-punctuality-pill late';
+      }
+      if (heroTsWrap && heroTsVal) {
+        heroTsWrap.style.display = 'flex';
+        heroTsVal.textContent = `CHECKED OUT AT ${v.check_out_time || v.scanned_at || new Date().toLocaleTimeString()}`;
+      }
+      if (reasonEl) {
+        reasonEl.textContent = v.reason || `Departure logged at ${v.checkpoint_name || state.activeCheckpoint.name}`;
+      }
+    } else if (granted) {
+      // Inbound Action: Full Navy with Giant "ACCESS GRANTED" + Universal Green Checkmark
+      if (bannerEl) bannerEl.className = 'kiosk-status-banner granted';
+      if (ringEl) ringEl.className = 'kiosk-status-ring granted';
+      if (svgEl) {
+        svgEl.innerHTML = `
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        `;
+      }
+      if (headlineEl) {
+        headlineEl.textContent = 'ACCESS GRANTED';
+        headlineEl.className = 'kiosk-status-headline granted';
+      }
+      if (punctEl) {
+        punctEl.textContent = v.punctuality_label || 'ON TIME';
+        punctEl.className = `kiosk-punctuality-pill ${v.punctuality || 'on_time'}`;
+      }
+      if (heroTsWrap && heroTsVal) {
+        if (v.check_in_time) {
+          heroTsWrap.style.display = 'flex';
+          heroTsVal.textContent = `CHECKED IN AT ${v.check_in_time}`;
+        } else {
+          heroTsWrap.style.display = 'none';
+        }
+      }
+      if (reasonEl) {
+        reasonEl.textContent = v.reason || '';
+      }
+    } else {
+      // Access Denied
+      if (bannerEl) bannerEl.className = 'kiosk-status-banner denied';
+      if (ringEl) ringEl.className = 'kiosk-status-ring denied';
+      if (svgEl) {
+        svgEl.innerHTML = `
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        `;
+      }
+      if (headlineEl) {
+        headlineEl.textContent = 'ACCESS DENIED';
+        headlineEl.className = 'kiosk-status-headline denied';
+      }
+      if (punctEl) {
+        punctEl.textContent = 'RESTRICTED';
+        punctEl.className = 'kiosk-punctuality-pill restricted';
+      }
+      if (heroTsWrap) {
+        heroTsWrap.style.display = 'none';
+      }
+      if (reasonEl) {
+        reasonEl.textContent = v.reason || 'Access denied for active checkpoint.';
+      }
+    }
+
+    // Passive Inbound & Outbound Timestamp Indicators (State Dictated by Scanner)
+    const inIndicator = document.getElementById('kiosk-indicator-in');
+    const outIndicator = document.getElementById('kiosk-indicator-out');
     const inTimeEl = document.getElementById('kiosk-in-time');
     const outTimeEl = document.getElementById('kiosk-out-time');
 
     if (inTimeEl) {
-      inTimeEl.textContent = v.check_in_time ? `In: ${v.check_in_time}` : 'Click to Record Check-In';
+      inTimeEl.textContent = v.check_in_time ? `In: ${v.check_in_time}` : 'Not Checked In';
     }
     if (outTimeEl) {
-      outTimeEl.textContent = v.check_out_time ? `Out: ${v.check_out_time}` : 'Click to Record Check-Out';
+      outTimeEl.textContent = v.check_out_time ? `Out: ${v.check_out_time}` : '--:--:--';
     }
-    if (inTrigger) {
-      inTrigger.classList.toggle('in-active', Boolean(v.check_in_time));
+    if (inIndicator) {
+      inIndicator.classList.toggle('in-active', Boolean(v.check_in_time));
     }
-    if (outTrigger) {
-      outTrigger.classList.toggle('out-active', Boolean(v.check_out_time));
+    if (outIndicator) {
+      outIndicator.classList.toggle('out-active', Boolean(v.check_out_time));
     }
 
     // Linked Stock Batch Custody Bar
@@ -1084,10 +1274,15 @@
       footerBadgeEl.textContent = `BADGE #: ${b.badge_code}`;
     }
     if (footerStatusEl) {
-      footerStatusEl.textContent = `${v.checkpoint_name || state.activeCheckpoint.name} Clearance - ${
-        granted ? 'Verified' : 'Denied'
-      }`;
-      footerStatusEl.className = `kiosk-footer-clearance-status ${granted ? 'verified' : 'denied'}`;
+      if (isCheckOut) {
+        footerStatusEl.textContent = `${v.checkpoint_name || state.activeCheckpoint.name} - Checked Out`;
+        footerStatusEl.className = 'kiosk-footer-clearance-status verified';
+      } else {
+        footerStatusEl.textContent = `${v.checkpoint_name || state.activeCheckpoint.name} Clearance - ${
+          granted ? 'Verified' : 'Denied'
+        }`;
+        footerStatusEl.className = `kiosk-footer-clearance-status ${granted ? 'verified' : 'denied'}`;
+      }
     }
   }
 
@@ -1910,57 +2105,66 @@
       .join('');
   }
 
-  function openKioskModal(memberOrId = null) {
+  function openKioskModal(memberOrVerification = null) {
     let member = null;
-    if (typeof memberOrId === 'object' && memberOrId !== null) {
-      member = memberOrId;
-    } else if (memberOrId != null) {
-      member = (state.crew || []).find((c) => Number(c.id) === Number(memberOrId));
-    } else if (state.selectedCrewId) {
-      member = (state.crew || []).find((c) => Number(c.id) === Number(state.selectedCrewId));
-    }
-    if (!member && state.crew && state.crew.length > 0) {
-      member = state.crew[0];
+    let verification = null;
+
+    if (memberOrVerification && memberOrVerification.badge) {
+      verification = memberOrVerification;
+      member = verification.badge;
+    } else if (typeof memberOrVerification === 'object' && memberOrVerification !== null) {
+      member = memberOrVerification;
+    } else if (memberOrVerification != null) {
+      member = (state.crew || []).find((c) => Number(c.id) === Number(memberOrVerification));
     }
 
-    if (member) {
+    if (!member && !verification) {
+      // Modal ONLY pops up with results! Return to input search.
+      returnToSearchInput();
+      return;
+    }
+
+    if (verification) {
+      state.currentVerification = verification;
+      if (verification.badge && verification.badge.user_id) {
+        state.selectedCrewId = Number(verification.badge.user_id);
+      }
+    } else if (member) {
       state.selectedCrewId = Number(member.id);
       state.currentVerification = buildClientVerificationFromMember(member);
-      const inp = document.getElementById('kiosk-badge-input');
-      const matchTag = document.getElementById('kiosk-search-match-tag');
-      const clearBtn = document.getElementById('kiosk-input-clear-btn');
-      if (inp) {
-        inp.value = member.badge_code || member.staff_code || '';
-        if (clearBtn) clearBtn.style.display = 'flex';
-        if (matchTag) {
-          matchTag.style.display = 'inline-flex';
-          matchTag.innerHTML = `
-            <span class="tier-code-badge tier-code-${escapeHtml(member.clearance_code)}">${escapeHtml(member.clearance_code)}</span>
-            <span>${escapeHtml(member.full_name)} (${escapeHtml(member.badge_code)})</span>
-          `;
-        }
-      }
     }
 
-    renderVerificationDeck();
-    highlightSelectedCrewRow(state.selectedCrewId);
+    const b = state.currentVerification ? state.currentVerification.badge : member;
+    const inp = document.getElementById('kiosk-badge-input');
+    const matchTag = document.getElementById('kiosk-search-match-tag');
+    const clearBtn = document.getElementById('kiosk-input-clear-btn');
+    if (inp && b) {
+      inp.value = b.badge_code || b.staff_code || '';
+      if (clearBtn) clearBtn.style.display = 'flex';
+      if (matchTag) {
+        matchTag.style.display = 'inline-flex';
+        matchTag.innerHTML = `
+          <span class="tier-code-badge tier-code-${escapeHtml(b.clearance_code)}">${escapeHtml(b.clearance_code)}</span>
+          <span>${escapeHtml(b.full_name)} (${escapeHtml(b.badge_code)})</span>
+        `;
+      }
+    }
 
     const backdrop = document.getElementById('kiosk-modal-backdrop');
     if (backdrop) {
       backdrop.style.display = 'flex';
       backdrop.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
-      const inp = document.getElementById('kiosk-badge-input');
-      if (inp) {
-        setTimeout(() => {
-          inp.focus();
-          inp.select();
-        }, 90);
-      }
     }
+
+    showVerificationCard();
+    renderVerificationDeck();
+    highlightSelectedCrewRow(state.selectedCrewId);
+    startKioskCountdown(4000);
   }
 
   function closeKioskModal() {
+    clearKioskCountdown();
     const backdrop = document.getElementById('kiosk-modal-backdrop');
     if (backdrop) {
       backdrop.style.display = 'none';
@@ -4541,34 +4745,33 @@
       }
     });
 
-    // Inbound (`In`) & Outbound (`Out`) Timestamp Triggers inside `#pane-kiosk`
-    const inTrigger = document.getElementById('kiosk-trigger-in');
-    if (inTrigger) {
-      inTrigger.addEventListener('click', () => {
-        if (state.currentVerification && state.currentVerification.badge) {
-          triggerGateScan(state.currentVerification.badge.badge_code, 'check_in');
-        }
-      });
-    }
-
-    const outTrigger = document.getElementById('kiosk-trigger-out');
-    if (outTrigger) {
-      outTrigger.addEventListener('click', () => {
-        if (state.currentVerification && state.currentVerification.badge) {
-          triggerGateScan(state.currentVerification.badge.badge_code, 'check_out');
-        }
-      });
-    }
-
     // Delegated clicks for Crew Rows, Paired Checkin/Checkout buttons, Timeline items, Checkpoint activation, and Matrix config
     document.body.addEventListener('click', async (e) => {
-      // 0. Close Kiosk Modal if close button or backdrop clicked
-      if (e.target.closest('#kiosk-modal-close-btn') || e.target.id === 'kiosk-modal-backdrop') {
-        closeKioskModal();
+      // 0. Close Kiosk Modal if backdrop clicked outside dialog
+      if (e.target.id === 'kiosk-modal-backdrop') {
+        returnToSearchInput();
         return;
       }
 
-      // 0b. Open Kiosk from search suggestion click
+      // 0a. Return to Search button in Kiosk Modal header or footer
+      if (e.target.closest('#kiosk-back-search-btn') || e.target.closest('#kiosk-scan-next-btn')) {
+        returnToSearchInput();
+        return;
+      }
+
+      // 0b. Quick Scan Demo Badges
+      const quickBadgeBtn = e.target.closest('.kiosk-quick-badge-btn');
+      if (quickBadgeBtn) {
+        const badge = quickBadgeBtn.getAttribute('data-badge');
+        if (badge) {
+          const inp = document.getElementById('kiosk-badge-input');
+          if (inp) inp.value = badge;
+          triggerGateScan(badge);
+        }
+        return;
+      }
+
+      // 0c. Open Kiosk from search suggestion click
       const suggestItem = e.target.closest('.js-suggest-kiosk-item');
       if (suggestItem) {
         const cid = Number(suggestItem.getAttribute('data-crew-id'));
@@ -4982,12 +5185,21 @@
       }
     });
 
-    // Global Escape key to dismiss Kiosk modal or search suggestions
+    // Global Escape key to dismiss Kiosk modal or search suggestions and return to search
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        closeKioskModal();
+        returnToSearchInput();
         const sEl = document.getElementById('directory-search-suggest');
         if (sEl) sEl.style.display = 'none';
+      }
+      // Quick '/' key to focus barcode scanner anytime
+      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement || {}).tagName)) {
+        e.preventDefault();
+        const inp = document.getElementById('kiosk-badge-input');
+        if (inp) {
+          inp.focus();
+          inp.select();
+        }
       }
     });
 

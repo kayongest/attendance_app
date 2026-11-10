@@ -2770,15 +2770,18 @@ button {
   background-color: #e2e8f0;
 }
 
-/* 12-Column Split Verification Card */
+/* Full Premium Navy Verification Card */
 .kiosk-verification-card {
   display: grid;
   grid-template-columns: 5fr 7fr;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
-  border: 1px solid #cbd5e1;
-  background-color: #ffffff;
-  min-height: 320px;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  background: linear-gradient(150deg, #090e1a 0%, #0f172a 50%, #151f33 100%);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  min-height: 360px;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @media (max-width: 980px) {
@@ -2787,15 +2790,51 @@ button {
   }
 }
 
-/* Left 5-Col Portrait / Initials Column */
+/* Visual Auto-Return Countdown Progress Bar */
+.kiosk-timeout-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  z-index: 50;
+}
+
+.kiosk-timeout-progress {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #10b981, #22c55e, #4ade80);
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+  transition: width 0.05s linear;
+}
+
+/* Left 5-Col ID Credential (Photo, Name, Role, Clearance) */
 .kiosk-card-left {
-  background: linear-gradient(155deg, var(--kiosk-navy-dark) 0%, var(--kiosk-navy-mid) 100%);
+  background: linear-gradient(160deg, #070c18 0%, #0d1629 60%, #111d38 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  align-items: center;
   position: relative;
-  min-height: 300px;
+  min-height: 420px;
   color: #ffffff;
+  padding-bottom: 18px;
+}
+
+.kiosk-left-meta-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 0 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--font-mono);
+  box-sizing: border-box;
 }
 
 .kiosk-portrait-container {
@@ -2804,176 +2843,209 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px 20px 16px 20px;
-  position: relative;
+  padding: 16px 20px 10px 20px;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .kiosk-portrait-img {
-  width: 152px;
-  height: 152px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 4px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
-}
-
-.kiosk-initials-avatar {
   width: 140px;
   height: 140px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  border: 3px solid rgba(255, 255, 255, 0.28);
+  object-fit: cover;
+  border: 4px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.kiosk-initials-avatar {
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 3px solid rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 44px;
-  font-weight: 700;
+  font-weight: 800;
   color: #ffffff;
   letter-spacing: 1px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.28);
-}
-
-.kiosk-left-meta-top {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px 0 18px;
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
-  font-family: var(--font-mono);
-}
-
-.kiosk-left-contact {
-  margin-top: 12px;
-  text-align: center;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.kiosk-role-cyan-pill {
-  background-color: var(--kiosk-cyan-pill);
-  color: #ffffff;
-  text-align: center;
-  padding: 12px 16px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-}
-
-/* Right 7-Col Decision Panel */
-.kiosk-card-right {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  background-color: #ffffff;
-}
-
-.kiosk-right-navy-header {
-  background-color: var(--kiosk-header-navy);
-  color: #ffffff;
-  padding: 16px 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.kiosk-staff-name-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
 }
 
 .kiosk-staff-name {
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 800;
   color: #ffffff;
+  margin: 12px 0 6px 0;
   line-height: 1.2;
+  letter-spacing: -0.2px;
+}
+
+.kiosk-role-cyan-pill {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 100px;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.kiosk-left-contact {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+}
+
+.kiosk-left-clearance-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 20px 0 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.kiosk-clearance-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
 .kiosk-clearance-title-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 100px;
-  background-color: rgba(255, 255, 255, 0.16);
-  color: #f8fafc;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f1f5f9;
   font-size: 11px;
   font-weight: 600;
-  width: fit-content;
+  white-space: nowrap;
 }
 
-.kiosk-clearance-circle {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
+/* Right 7-Col Live Verification Console */
+.kiosk-card-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(155deg, #0a1122 0%, #0f172a 50%, #121c32 100%);
+  color: #f8fafc;
+  position: relative;
+}
+
+.kiosk-right-top-meta {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 800;
-  color: #ffffff;
-  border: 3px solid rgba(255, 255, 255, 0.4);
-  flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  justify-content: space-between;
+  padding: 16px 24px 0 24px;
+}
+
+.kiosk-station-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.station-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.kiosk-timeout-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(6px);
+  padding: 4px 12px;
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .kiosk-decision-body {
-  padding: 18px 22px;
+  padding: 18px 24px 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   flex: 1 0 0;
 }
 
+/* Hero Status Banner with Universal Green Checkmark & Emerald Glow Pop Card */
 .kiosk-status-banner {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  border: 1px solid transparent;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  border: 1.5px solid transparent;
+  transition: all 0.25s ease;
 }
 
 .kiosk-status-banner.granted {
-  background-color: #f0fdf4;
-  border-color: #bbf7d0;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.16) 0%, rgba(16, 185, 129, 0.08) 100%);
+  border-color: rgba(74, 222, 128, 0.45);
+  box-shadow: 0 0 35px -5px rgba(34, 197, 94, 0.35), inset 0 0 20px rgba(34, 197, 94, 0.12);
 }
 
 .kiosk-status-banner.denied {
-  background-color: #fef2f2;
-  border-color: #fecaca;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.18) 0%, rgba(185, 28, 28, 0.08) 100%);
+  border-color: rgba(248, 113, 113, 0.45);
+  box-shadow: 0 0 35px -5px rgba(239, 68, 68, 0.35), inset 0 0 20px rgba(239, 68, 68, 0.12);
 }
 
 .kiosk-status-ring {
-  width: 44px;
-  height: 44px;
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   color: #ffffff;
+  transition: all 0.25s ease;
 }
 
 .kiosk-status-ring.granted {
-  background-color: #22c55e;
-  box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.18);
+  background: #22c55e;
+  box-shadow: 0 0 25px rgba(34, 197, 94, 0.65), 0 0 0 4px rgba(34, 197, 94, 0.2);
 }
 
 .kiosk-status-ring.denied {
-  background-color: #ef4444;
-  box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.18);
+  background: #ef4444;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.65), 0 0 0 4px rgba(239, 68, 68, 0.2);
 }
 
 .kiosk-status-texts {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
   flex: 1 0 0;
 }
 
@@ -2981,90 +3053,180 @@ button {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
+/* Largest text on screen */
 .kiosk-status-headline {
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  line-height: 1.1;
+  text-transform: uppercase;
 }
 
-.kiosk-status-headline.granted { color: #16a34a; }
-.kiosk-status-headline.denied { color: #dc2626; }
+.kiosk-status-headline.granted {
+  color: #4ade80;
+  text-shadow: 0 0 22px rgba(74, 222, 128, 0.6);
+}
+
+.kiosk-status-headline.denied {
+  color: #f87171;
+  text-shadow: 0 0 22px rgba(248, 113, 113, 0.6);
+}
 
 .kiosk-punctuality-pill {
   display: inline-flex;
   align-items: center;
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: 100px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
 .kiosk-punctuality-pill.on_time,
 .kiosk-punctuality-pill.early {
-  background-color: #dcfce7;
-  color: #15803d;
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.35);
 }
 
 .kiosk-punctuality-pill.late {
-  background-color: #fef3c7;
-  color: #b45309;
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.35);
 }
 
 .kiosk-punctuality-pill.restricted {
-  background-color: #fee2e2;
-  color: #b91c1c;
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.35);
 }
 
 .kiosk-status-reason {
-  font-size: 12px;
-  color: #475569;
+  font-size: 13px;
+  color: #cbd5e1;
   font-weight: 500;
+  line-height: 1.4;
 }
 
-/* Interactive Inbound (In) & Outbound (Out) Timestamp Triggers */
+/* Prominent Hero Timestamp */
+.kiosk-prominent-timestamp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.kiosk-ts-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+/* ======================================================================== */
+/* THE EXIT ACTION: AMBER / ORANGE FLIPPED SCREEN (.kiosk-state-checkout)   */
+/* ======================================================================== */
+
+.kiosk-verification-card.kiosk-state-checkout {
+  background: linear-gradient(150deg, #1c1002 0%, #291804 50%, #1e1102 100%);
+  border: 2px solid rgba(245, 158, 11, 0.65);
+  box-shadow: 0 0 55px rgba(245, 158, 11, 0.35), 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-card-left {
+  background: linear-gradient(160deg, #201203 0%, #190d02 100%);
+  border-right: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-role-cyan-pill {
+  background: linear-gradient(90deg, #d97706 0%, #b45309 100%);
+  box-shadow: 0 -2px 10px rgba(217, 119, 6, 0.3);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-card-right {
+  background: linear-gradient(155deg, #241403 0%, #1a0f02 100%);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-right-navy-header {
+  background: rgba(30, 16, 2, 0.7);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-status-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.1) 100%);
+  border-color: rgba(251, 191, 36, 0.6);
+  box-shadow: 0 0 40px -5px rgba(245, 158, 11, 0.45), inset 0 0 20px rgba(245, 158, 11, 0.15);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-status-ring {
+  background: #f59e0b;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.7), 0 0 0 4px rgba(245, 158, 11, 0.2);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-status-headline {
+  color: #fbbf24;
+  text-shadow: 0 0 22px rgba(245, 158, 11, 0.65);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-ts-badge {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1.5px solid rgba(245, 158, 11, 0.5);
+  color: #fef08a;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-timeout-progress {
+  background: linear-gradient(90deg, #d97706, #f59e0b, #fbbf24);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.7);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-card-footer {
+  background: rgba(26, 14, 2, 0.75);
+  border-top: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+/* Non-Clickable Passive Timestamp Indicators */
 .kiosk-timestamps-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
-.kiosk-ts-trigger {
+.kiosk-ts-indicator {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 13px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-canvas);
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(15, 23, 42, 0.6);
   text-align: left;
-  transition: all 0.15s ease;
+  backdrop-filter: blur(6px);
 }
 
-.kiosk-ts-trigger:hover {
-  border-color: var(--brand-primary);
-  background-color: #ffffff;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+.kiosk-ts-indicator.in-active {
+  border-color: rgba(34, 197, 94, 0.35);
+  background-color: rgba(34, 197, 94, 0.08);
 }
 
-.kiosk-ts-trigger.in-active {
-  border-color: #86efac;
-  background-color: #f0fdf4;
-}
-
-.kiosk-ts-trigger.out-active {
-  border-color: #fcd34d;
-  background-color: #fffbeb;
+.kiosk-ts-indicator.out-active {
+  border-color: rgba(245, 158, 11, 0.4);
+  background-color: rgba(245, 158, 11, 0.1);
 }
 
 .kiosk-ts-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3072,13 +3234,13 @@ button {
 }
 
 .kiosk-ts-icon.in-icon {
-  background-color: rgba(22, 163, 74, 0.14);
-  color: #16a34a;
+  background-color: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
 }
 
 .kiosk-ts-icon.out-icon {
-  background-color: rgba(220, 38, 38, 0.12);
-  color: #dc2626;
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
 }
 
 .kiosk-ts-meta {
@@ -3090,28 +3252,29 @@ button {
 
 .kiosk-ts-label {
   font-size: 10px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: #94a3b8;
   text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .kiosk-ts-value {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+  color: #f1f5f9;
   font-family: var(--font-mono);
 }
 
-/* Linked Stock Batch Custody Bar */
+/* Linked Stock Batch Custody Bar (Dark Navy Theme) */
 .kiosk-batch-custody-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background-color: #eff6ff;
-  border: 1px solid #bfdbfe;
+  padding: 11px 16px;
+  border-radius: 10px;
+  background-color: rgba(30, 58, 138, 0.25);
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .kiosk-batch-info {
@@ -3119,61 +3282,68 @@ button {
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  color: #1e3a8a;
+  color: #93c5fd;
   font-weight: 600;
   flex-wrap: wrap;
 }
 
 .kiosk-batch-code {
   font-family: var(--font-mono);
-  font-weight: 700;
-  background-color: #dbeafe;
+  font-weight: 800;
+  background-color: rgba(59, 130, 246, 0.3);
   padding: 2px 7px;
   border-radius: 4px;
-  color: #1d4ed8;
+  color: #bfdbfe;
 }
 
 .kiosk-batch-link-btn {
   font-size: 11px;
   font-weight: 700;
-  color: #2563eb;
+  color: #38bdf8;
   white-space: nowrap;
-  padding: 4px 9px;
+  padding: 4px 10px;
   border-radius: 6px;
-  background-color: #ffffff;
-  border: 1px solid #93c5fd;
+  background-color: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .kiosk-batch-link-btn:hover {
-  background-color: #2563eb;
+  background-color: #0284c7;
   color: #ffffff;
 }
 
-/* Footer Bar (#edf2f7) */
+/* Dark Navy Footer Bar */
 .kiosk-card-footer {
-  background-color: var(--kiosk-footer-bg);
-  padding: 11px 22px;
+  background: rgba(8, 14, 28, 0.75);
+  padding: 12px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-top: 1px solid #e2e8f0;
-  font-size: 11px;
-  font-weight: 700;
-  color: #334155;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .kiosk-footer-badge-code {
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbd5e1;
   font-family: var(--font-mono);
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
+}
+
+.kiosk-footer-clearance-status {
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .kiosk-footer-clearance-status.verified {
-  color: #15803d;
+  color: #4ade80;
 }
 
 .kiosk-footer-clearance-status.denied {
-  color: #b91c1c;
+  color: #f87171;
 }
 
 /* ========================================================================== */
@@ -3931,14 +4101,13 @@ button {
 
 .kiosk-modal-dialog {
   position: relative;
-  max-width: 980px;
+  max-width: 960px;
   width: 100%;
-  max-height: 92vh;
-  overflow-y: auto;
-  border-radius: 16px;
-  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.45);
+  max-height: 94vh;
+  overflow: visible;
+  border-radius: 18px;
   animation: kioskModalScaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  background: #ffffff;
+  background: transparent;
 }
 
 @keyframes kioskModalScaleUp {
@@ -3952,40 +4121,307 @@ button {
   }
 }
 
-.kiosk-modal-close-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
-  font-size: 16px;
+.kiosk-modal-dialog .kiosk-deck-wrapper {
+  border: none;
+  border-radius: 18px;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+}
+
+/* ========================================================================== */
+/* DEDICATED ON-PAGE GATE SCANNER HERO CARD (#pane-kiosk)                    */
+/* ========================================================================== */
+
+.kiosk-scanner-hero-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.kiosk-scanner-hero-card:focus-within {
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 8px 30px rgba(139, 92, 246, 0.08);
+}
+
+.kiosk-scanner-hero-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.kiosk-scanner-hero-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kiosk-scanner-hero-title h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.kiosk-scanner-chip {
+  font-size: 10px;
   font-weight: 700;
-  color: #475569;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #16a34a;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+
+.kiosk-scanner-quick-tips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kbd-hint-pill {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kbd-hint-pill kbd {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.kiosk-hero-input-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kiosk-hero-input-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  background: var(--bg-canvas);
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0 14px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.kiosk-hero-input-wrap:focus-within {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 4px var(--brand-soft);
+  background: var(--bg-surface);
+}
+
+.kiosk-hero-input-icon {
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-muted);
+  margin-right: 10px;
+}
+
+.kiosk-hero-input-icon .svg-icon {
+  width: 20px;
+  height: 20px;
+  opacity: 0.7;
+}
+
+.kiosk-hero-input-wrap:focus-within .kiosk-hero-input-icon .svg-icon {
+  opacity: 1;
+  filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.5));
+}
+
+.kiosk-hero-input-field {
+  width: 100%;
+  height: 46px;
+  background: transparent;
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+}
+
+.kiosk-hero-input-field::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.kiosk-hero-scan-btn {
+  height: 48px;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+}
+
+.kiosk-scanner-hero-footer {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.kiosk-quick-badges-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kiosk-quick-badge-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kiosk-quick-badge-btn {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
   cursor: pointer;
-  z-index: 40;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   transition: all 0.15s ease;
 }
 
-.kiosk-modal-close-btn:hover {
-  background-color: #fee2e2;
-  border-color: #fca5a5;
-  color: #dc2626;
-  transform: scale(1.08);
+.kiosk-quick-badge-btn:hover {
+  background: var(--brand-soft);
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+  transform: translateY(-1px);
 }
 
-.kiosk-modal-dialog .kiosk-deck-wrapper {
-  border: none;
-  border-radius: 16px;
-  box-shadow: none;
-  background: #ffffff;
-  padding: 24px;
+/* ========================================================================== */
+/* MODAL VERIFICATION CARD NAVIGATION & QUICK ACTION BUTTONS                  */
+/* ========================================================================== */
+
+.kiosk-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kiosk-back-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f1f5f9;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(6px);
+}
+
+.kiosk-back-search-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.kiosk-kbd-pill {
+  font-size: 9px;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+}
+
+.kiosk-footer-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.kiosk-scan-next-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: #3b82f6;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+  transition: all 0.15s ease;
+}
+
+.kiosk-scan-next-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
+}
+
+/* Checked Out (Amber Screen Flip) Action Button Styling */
+.kiosk-verification-card.kiosk-state-checkout .kiosk-back-search-btn {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fef08a;
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-back-search-btn:hover {
+  background: rgba(245, 158, 11, 0.3);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #ffffff;
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-scan-next-btn {
+  background: #f59e0b;
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #0f172a;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.kiosk-verification-card.kiosk-state-checkout .kiosk-scan-next-btn:hover {
+  background: #fbbf24;
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.6);
 }
 
 /* ========================================================================== */
@@ -4846,50 +5282,43 @@ html.theme-transitioning *::after {
 }
 
 [data-theme="dark"] .kiosk-modal-backdrop {
-  background-color: rgba(0, 0, 0, 0.76);
+  background-color: rgba(0, 0, 0, 0.82);
 }
 
 [data-theme="dark"] .kiosk-modal-dialog {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 [data-theme="dark"] .kiosk-modal-dialog .kiosk-deck-wrapper {
-  background: var(--bg-surface);
+  background: transparent;
+  padding: 0;
 }
 
-[data-theme="dark"] .kiosk-modal-close-btn {
-  background: var(--bg-subtle);
-  border-color: var(--border-color);
-  color: var(--text-primary);
+[data-theme="dark"] .kiosk-scanner-hero-card {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 
-[data-theme="dark"] .kiosk-modal-close-btn:hover {
-  background-color: rgba(239, 68, 68, 0.2);
-  border-color: #f87171;
-  color: #f87171;
-}
-
-/* Kiosk 12-Col Verification Deck Dark Mode */
-[data-theme="dark"] .kiosk-verification-card {
-  background-color: var(--bg-surface);
+[data-theme="dark"] .kiosk-hero-input-wrap {
+  background-color: var(--bg-canvas);
   border-color: var(--border-color);
 }
 
-[data-theme="dark"] .kiosk-card-right {
+[data-theme="dark"] .kiosk-hero-input-wrap:focus-within {
   background-color: var(--bg-surface);
+  border-color: var(--brand-primary);
 }
 
 [data-theme="dark"] .kiosk-badge-input-wrap {
-  background-color: var(--bg-subtle);
-  border-color: var(--border-color);
+  background-color: rgba(15, 23, 42, 0.8);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 [data-theme="dark"] .kiosk-badge-input-wrap:focus-within {
-  background-color: var(--bg-surface);
+  background-color: #0f172a;
   border-color: var(--brand-primary);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
 }
 
 [data-theme="dark"] .kiosk-input-clear-btn:hover {
