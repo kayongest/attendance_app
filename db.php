@@ -243,12 +243,25 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `scan_action` ENUM('check_in','check_out','access_verify') NOT NULL DEFAULT 'check_in',
             `access_status` ENUM('granted','denied') NOT NULL DEFAULT 'granted',
             `denial_reason` VARCHAR(255) DEFAULT NULL,
-            `punctuality_status` ENUM('on_time','late','early','n/a') NOT NULL DEFAULT 'on_time',
+            `punctuality_status` VARCHAR(50) NOT NULL DEFAULT 'on_time',
             `scanned_by` INT DEFAULT 1,
+            `override_by` INT DEFAULT NULL,
+            `override_reason` VARCHAR(255) DEFAULT NULL,
             `notes` VARCHAR(255) DEFAULT NULL,
             `scanned_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
+
+    try {
+        $cols = $pdo->query("SHOW COLUMNS FROM `attendance_logs`")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('override_by', $cols, true)) {
+            $pdo->exec("ALTER TABLE `attendance_logs` ADD COLUMN `override_by` INT NULL AFTER `scanned_by`");
+        }
+        if (!in_array('override_reason', $cols, true)) {
+            $pdo->exec("ALTER TABLE `attendance_logs` ADD COLUMN `override_reason` VARCHAR(255) NULL AFTER `override_by`");
+        }
+        $pdo->exec("ALTER TABLE `attendance_logs` MODIFY COLUMN `punctuality_status` VARCHAR(50) NOT NULL DEFAULT 'on_time'");
+    } catch (Throwable $e) {}
 
     // 6. Ensure `stock_movements` and `batch_items` exist
     $pdo->exec("

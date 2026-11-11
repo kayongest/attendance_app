@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261110_kiosk_search_v3" />
+  <link rel="stylesheet" href="styles.css?v=20261111_phase1_kiosk_lightmode_v1" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -98,7 +98,7 @@
           <img src="assets/nav-integrations.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Station Lock (PIN)</span>
         </button>
-        <button type="button" class="nav-item" id="sidebar-reset-demo-btn" data-node-id="2:3313">
+        <button type="button" class="nav-item" id="sidebar-reset-demo-btn" data-node-id="2:3313" style="display: flex; opacity: 1; filter: none; cursor: pointer;" title="Reset all gate scans for today">
           <img src="assets/nav-settings.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Reset Today’s Scans</span>
         </button>
@@ -980,6 +980,25 @@
             </div>
           </div>
 
+          <!-- Interactive Shift Call-Time Quickbar (Extension & Reset) -->
+          <div class="kiosk-calltime-quickbar" id="kiosk-calltime-quickbar">
+            <div class="kiosk-calltime-quickbar-left">
+              <span class="calltime-clock-icon">🕒</span>
+              <div class="calltime-info-stack">
+                <span class="calltime-quickbar-title">Active Shift Call-Time: <strong id="kiosk-quickbar-time">08:00 AM</strong></span>
+                <span class="calltime-quickbar-sub" id="kiosk-quickbar-sub">15m grace window · Live arrival punctuality active</span>
+              </div>
+            </div>
+            <div class="kiosk-calltime-quickbar-actions">
+              <span class="quick-extend-label">Extend:</span>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="15" title="Extend call-time by +15 mins">+15m</button>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="30" title="Extend call-time by +30 mins">+30m</button>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="60" title="Extend call-time by +1 hour">+1h</button>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-reset-btn" id="kiosk-quick-reset-calltime-btn" title="Reset call-time back to default baseline (08:00 AM)" style="color: #b45309; border-color: #fde68a;">↺ Reset</button>
+              <button type="button" class="btn btn-secondary-32-sm js-open-active-calltime-modal" title="Open Call-Time Settings Modal">⚙ Edit</button>
+            </div>
+          </div>
+
           <form class="kiosk-hero-input-form" id="kiosk-scan-form" autocomplete="off">
             <div class="kiosk-hero-input-wrap">
               <div class="kiosk-hero-input-icon">
@@ -1013,107 +1032,148 @@
           </div>
         </section>
 
-        <!-- Crew Roster & Paired Gate Controls Table (Full-Width) -->
-        <section class="directory-card" data-node-id="2:8614">
-          <div class="directory-header" data-node-id="2:8615">
-            <div class="directory-heading" data-node-id="2:8616">
-              <div class="directory-title-row" data-node-id="2:8617">
-                <h2 class="directory-title-18" data-node-id="2:8618">Crew Roster &amp; Paired Gate Controls</h2>
-                <span class="status-badge status-badge-purple-sm js-stat-total-people" data-node-id="2:8619">14</span>
+        <!-- Split Row: Crew Roster & Paired Gate Controls Table (Left) + User Activity Timeline Widget (Right) Side-by-Side -->
+        <div class="split-row attendees-kiosk-split-row">
+          <!-- Left Column: Crew Roster & Paired Gate Controls Table -->
+          <section class="directory-card" data-node-id="2:8614">
+            <div class="directory-header" data-node-id="2:8615">
+              <div class="directory-heading" data-node-id="2:8616">
+                <div class="directory-title-row" data-node-id="2:8617">
+                  <h2 class="directory-title-18" data-node-id="2:8618">Crew Roster &amp; Paired Gate Controls</h2>
+                  <span class="status-badge status-badge-purple-sm js-stat-total-people" data-node-id="2:8619">14</span>
+                </div>
+                <p class="directory-desc" data-node-id="2:8621">
+                  Click any crew row to open the Centered Gate Kiosk Verification Modal, or use the paired Checkin / Checkout buttons.
+                </p>
               </div>
-              <p class="directory-desc" data-node-id="2:8621">
-                Click any crew row to open the Centered Gate Kiosk Verification Modal, or use the paired Checkin / Checkout buttons.
-              </p>
+              <div class="directory-actions" data-node-id="2:8622">
+                <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:8627">
+                  <img src="assets/download.svg" alt="" class="svg-icon" />
+                  <span>Export Roster</span>
+                </button>
+              </div>
             </div>
-            <div class="directory-actions" data-node-id="2:8622">
-              <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:8627">
-                <img src="assets/download.svg" alt="" class="svg-icon" />
-                <span>Export Roster</span>
+
+            <!-- Status Tabs -->
+            <div class="status-tabs" id="directory-attendee-tabs" data-node-id="2:8630">
+              <button type="button" class="status-tab active" data-tab="all" data-node-id="2:8631">
+                <span class="status-tab-label">All Crew</span>
+                <span class="status-tab-count js-tab-count-all">14</span>
+              </button>
+              <button type="button" class="status-tab" data-tab="checked_in" data-node-id="2:8634">
+                <span class="status-tab-label">Checked In (On-Site)</span>
+                <span class="status-tab-count js-tab-count-in">4</span>
+              </button>
+              <button type="button" class="status-tab" data-tab="checked_out" data-node-id="2:8637">
+                <span class="status-tab-label">Checked Out</span>
+                <span class="status-tab-count js-tab-count-out">1</span>
+              </button>
+              <button type="button" class="status-tab" data-tab="stock_auth" data-node-id="2:8640">
+                <span class="status-tab-label">Stock Authorized (L2–L4)</span>
+                <span class="status-tab-count js-tab-count-stock">10</span>
+              </button>
+              <button type="button" class="status-tab" data-tab="restricted" data-node-id="2:8643">
+                <span class="status-tab-label">Denied / Restricted (L1)</span>
+                <span class="status-tab-count js-tab-count-l1">4</span>
               </button>
             </div>
-          </div>
 
-          <!-- Status Tabs -->
-          <div class="status-tabs" id="directory-attendee-tabs" data-node-id="2:8630">
-            <button type="button" class="status-tab active" data-tab="all" data-node-id="2:8631">
-              <span class="status-tab-label">All Crew</span>
-              <span class="status-tab-count js-tab-count-all">14</span>
-            </button>
-            <button type="button" class="status-tab" data-tab="checked_in" data-node-id="2:8634">
-              <span class="status-tab-label">Checked In (On-Site)</span>
-              <span class="status-tab-count js-tab-count-in">4</span>
-            </button>
-            <button type="button" class="status-tab" data-tab="checked_out" data-node-id="2:8637">
-              <span class="status-tab-label">Checked Out</span>
-              <span class="status-tab-count js-tab-count-out">1</span>
-            </button>
-            <button type="button" class="status-tab" data-tab="stock_auth" data-node-id="2:8640">
-              <span class="status-tab-label">Stock Authorized (L2–L4)</span>
-              <span class="status-tab-count js-tab-count-stock">10</span>
-            </button>
-            <button type="button" class="status-tab" data-tab="restricted" data-node-id="2:8643">
-              <span class="status-tab-label">Denied / Restricted (L1)</span>
-              <span class="status-tab-count js-tab-count-l1">4</span>
-            </button>
-          </div>
-
-          <!-- Table Tools with Live Auto-Suggest Kiosk Trigger -->
-          <div class="table-tools" data-node-id="2:8646">
-            <div class="table-search-box-wrap">
-              <label class="table-search-box" for="directory-attendee-search" data-node-id="2:8647">
-                <img src="assets/search-table.svg" alt="" class="svg-icon" />
-                <input
-                  type="text"
-                  id="directory-attendee-search"
-                  class="table-search-input"
-                  placeholder="Search by name, REW-BADGE-XXXX, ABL-XXX, role or department..."
-                  autocomplete="off"
-                />
-              </label>
-              <!-- Live Auto-Suggest Dropdown for Instant Kiosk Modal Trigger -->
-              <div class="search-suggest-dropdown" id="directory-search-suggest" style="display: none;"></div>
-            </div>
-            <div class="table-filters" data-node-id="2:8650">
-              <button type="button" class="filter-pill" id="directory-ticket-filter" data-node-id="2:8651">
-                <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
-                <span id="directory-ticket-filter-label">Clearance: All Tiers</span>
-              </button>
-              <button type="button" class="filter-pill" id="directory-checkin-filter" data-node-id="2:8657">
-                <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
-                <span id="directory-checkin-filter-label">Gate State: All</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Table Container with Horizontal Scroll Support -->
-          <div class="attendees-table-wrap">
-            <!-- Table Header -->
-            <div class="data-table-header" data-node-id="2:8663">
-              <div class="col-checkbox">
-                <div class="custom-checkbox" id="directory-select-all" role="checkbox" aria-checked="false" tabindex="0"></div>
+            <!-- Table Tools with Live Auto-Suggest Kiosk Trigger -->
+            <div class="table-tools" data-node-id="2:8646">
+              <div class="table-search-box-wrap">
+                <label class="table-search-box" for="directory-attendee-search" data-node-id="2:8647">
+                  <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                  <input
+                    type="text"
+                    id="directory-attendee-search"
+                    class="table-search-input"
+                    placeholder="Search by name, REW-BADGE-XXXX, ABL-XXX, role or department..."
+                    autocomplete="off"
+                  />
+                </label>
+                <!-- Live Auto-Suggest Dropdown for Instant Kiosk Modal Trigger -->
+                <div class="search-suggest-dropdown" id="directory-search-suggest" style="display: none;"></div>
               </div>
-              <div class="col-sort-header" id="directory-sort-attendee" data-node-id="2:8666">
-                <span class="th-label">Crew Member</span>
-                <img src="assets/arrow-down-12.svg" alt="" class="svg-icon" />
+              <div class="table-filters" data-node-id="2:8650">
+                <button type="button" class="filter-pill" id="directory-ticket-filter" data-node-id="2:8651">
+                  <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
+                  <span id="directory-ticket-filter-label">Clearance: All Tiers</span>
+                </button>
+                <button type="button" class="filter-pill" id="directory-checkin-filter" data-node-id="2:8657">
+                  <img src="assets/chevron-down-13.svg" alt="" class="svg-icon" />
+                  <span id="directory-checkin-filter-label">Gate State: All</span>
+                </button>
               </div>
-              <div class="col-company"><span class="th-label">Department &amp; Role</span></div>
-              <div class="col-ticket"><span class="th-label">Clearance Level</span></div>
-              <div class="col-reg-date"><span class="th-label">Staff Badge Code</span></div>
-              <div class="col-reg-status"><span class="th-label">Today’s Timestamps</span></div>
-              <div class="col-checkin"><span class="th-label">Quick Gate Actions (In / Out)</span></div>
-              <div class="col-actions"></div>
             </div>
 
-            <!-- Table Body -->
-            <div id="directory-attendee-rows"></div>
-          </div>
+            <!-- Table Container with Horizontal Scroll Support -->
+            <div class="attendees-table-wrap">
+              <!-- Table Header -->
+              <div class="data-table-header" data-node-id="2:8663">
+                <div class="col-checkbox">
+                  <div class="custom-checkbox" id="directory-select-all" role="checkbox" aria-checked="false" tabindex="0"></div>
+                </div>
+                <div class="col-sort-header" id="directory-sort-attendee" data-node-id="2:8666">
+                  <span class="th-label">Crew Member</span>
+                  <img src="assets/arrow-down-12.svg" alt="" class="svg-icon" />
+                </div>
+                <div class="col-company"><span class="th-label">Department &amp; Role</span></div>
+                <div class="col-ticket"><span class="th-label">Clearance Level</span></div>
+                <div class="col-reg-date"><span class="th-label">Staff Badge Code</span></div>
+                <div class="col-reg-status"><span class="th-label">Today’s Timestamps</span></div>
+                <div class="col-checkin"><span class="th-label">Quick Gate Actions (In / Out)</span></div>
+                <div class="col-actions"></div>
+              </div>
 
-          <!-- Table Footer -->
-          <div class="table-footer" data-node-id="2:8956">
-            <span class="results-count" id="directory-results-count" data-node-id="2:8957">Showing crew roster</span>
-            <div class="page-controls" id="directory-page-controls" data-node-id="2:8958"></div>
+              <!-- Table Body -->
+              <div id="directory-attendee-rows"></div>
+            </div>
+
+            <!-- Table Footer -->
+            <div class="table-footer" data-node-id="2:8956">
+              <span class="results-count" id="directory-results-count" data-node-id="2:8957">Showing crew roster</span>
+              <div class="page-controls" id="directory-page-controls" data-node-id="2:8958"></div>
+            </div>
+          </section>
+
+          <!-- Right Column: User Activity Timeline Widget -->
+          <div class="timeline-card-overview" data-node-id="2:3516">
+            <div class="upcoming-heading" data-node-id="2:3517">
+              <span class="upcoming-heading-title" style="font-size: 14px; font-weight: 700;" data-node-id="2:3518">
+                User Activity Timeline
+              </span>
+              <span class="status-badge status-badge-green-sm">Live Stream</span>
+            </div>
+
+            <!-- Search + Scope Select -->
+            <div class="timeline-filter-bar">
+              <input
+                type="text"
+                class="timeline-search-input"
+                id="attendees-timeline-search-input"
+                placeholder="Search individual, venue, stock..."
+                autocomplete="off"
+              />
+              <select class="timeline-scope-select" id="attendees-timeline-scope-select" aria-label="Filter Activity Logs">
+                <option value="all">All Logs</option>
+                <option value="event_venue">Venues Only</option>
+                <option value="stock_warehouse">Stock Warehouses Only</option>
+                <option value="granted">Access Granted</option>
+                <option value="denied">Access Denied</option>
+              </select>
+            </div>
+
+            <!-- Paginated 5-item Feed -->
+            <div class="timeline-feed-list" id="attendees-timeline-feed-list"></div>
+
+            <!-- Pagination Footer -->
+            <div class="timeline-pagination-bar">
+              <button type="button" class="btn btn-secondary-32-sm js-timeline-prev-btn" id="attendees-timeline-prev-btn">← Prev</button>
+              <span class="timeline-page-info" id="attendees-timeline-page-info">Page 1 of 1 (0 logs)</span>
+              <button type="button" class="btn btn-secondary-32-sm js-timeline-next-btn" id="attendees-timeline-next-btn">Next →</button>
+            </div>
           </div>
-        </section>
+        </div>
 
         <!-- ============================================================== -->
         <!-- CENTERED LIGHTBOX MODAL: GATE VERIFICATION RESULT POPUP         -->
@@ -1230,16 +1290,92 @@
                     </div>
                   </div>
 
-                  <!-- Linked Stock Batch Custody Bar -->
-                  <div class="kiosk-batch-custody-bar" id="kiosk-batch-bar">
-                    <div class="kiosk-batch-info">
-                      <span>Linked Equipment Batch:</span>
-                      <span class="kiosk-batch-code" id="kiosk-batch-number">BATCH-20261104-73E3EB</span>
-                      <span id="kiosk-batch-route">Ndera Warehouse → Kigali Convention Centre [approved]</span>
+                  <!-- Call-Time & Live Punctuality Delta Strip -->
+                  <div class="kiosk-calltime-delta-strip" id="kiosk-calltime-delta-strip">
+                    <div class="kiosk-delta-item">
+                      <span class="kiosk-delta-label">Shift Call-Time:</span>
+                      <strong class="kiosk-delta-val" id="kiosk-delta-calltime">08:00 AM</strong>
                     </div>
-                    <button type="button" class="kiosk-batch-link-btn" id="kiosk-inspect-batch-btn">
-                      Inspect Batch ↗
+                    <div class="kiosk-delta-item">
+                      <span class="kiosk-delta-label">Arrival Window:</span>
+                      <span class="kiosk-delta-pill on_time" id="kiosk-delta-arrival-pill">On-Time (+0m)</span>
+                    </div>
+                  </div>
+
+                  <!-- Phase 1: Interactive Operator Decision Action Bar -->
+                  <div class="kiosk-action-decision-bar" id="kiosk-action-decision-bar">
+                    <button type="button" class="kiosk-decision-btn btn-approve-in" id="kiosk-btn-approve-in">
+                      <span class="decision-btn-icon">✓</span>
+                      <span class="decision-btn-label">Approve Check-In</span>
+                      <kbd class="decision-btn-kbd">Enter ↵</kbd>
                     </button>
+
+                    <button type="button" class="kiosk-decision-btn btn-approve-out" id="kiosk-btn-approve-out" style="display: none;">
+                      <span class="decision-btn-icon">➔</span>
+                      <span class="decision-btn-label">Approve Check-Out</span>
+                      <kbd class="decision-btn-kbd">Enter ↵</kbd>
+                    </button>
+
+                    <button type="button" class="kiosk-decision-btn btn-override" id="kiosk-btn-override" style="display: none;">
+                      <span class="decision-btn-icon">⚡</span>
+                      <span class="decision-btn-label">Supervisor Override</span>
+                      <kbd class="decision-btn-kbd">Space</kbd>
+                    </button>
+
+                    <button type="button" class="kiosk-decision-btn btn-decline" id="kiosk-btn-decline">
+                      <span class="decision-btn-icon">✕</span>
+                      <span class="decision-btn-label">Decline Entry</span>
+                      <kbd class="decision-btn-kbd">Esc</kbd>
+                    </button>
+                  </div>
+
+                  <!-- Collapsible Supervisor Late Override Panel -->
+                  <div class="kiosk-sub-panel" id="kiosk-override-panel" style="display: none;">
+                    <div class="kiosk-sub-panel-header">
+                      <strong>⚡ Supervisor Late Override Challenge</strong>
+                      <span style="font-size: 11px; opacity: 0.85;">Requires L4 PIN / Credentials</span>
+                    </div>
+                    <div class="kiosk-sub-panel-body">
+                      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <input type="password" id="kiosk-override-pin" class="form-input kiosk-override-input" placeholder="Enter Supervisor PIN (e.g. 1234)" style="flex: 1 1 170px; height: 36px; font-size: 12px;" />
+                        <select id="kiosk-override-reason-select" class="form-input kiosk-override-select" style="flex: 2 1 200px; height: 36px; font-size: 12px;">
+                          <option value="Traffic / Transit Disruption">Traffic / Transit Disruption</option>
+                          <option value="Emergency Stage Reassignment">Emergency Stage Reassignment</option>
+                          <option value="Pre-Approved Production Variance">Pre-Approved Production Variance</option>
+                          <option value="Flight / Travel Delay">Flight / Travel Delay</option>
+                          <option value="Other Authorized Exception">Other Authorized Exception</option>
+                        </select>
+                      </div>
+                      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
+                        <button type="button" class="btn btn-secondary-32-sm" id="kiosk-override-cancel-btn">Cancel</button>
+                        <button type="button" class="btn btn-primary-32-sm" id="kiosk-override-confirm-btn" style="background: #7c3aed; border-color: #6d28d9;">
+                          Authorize &amp; Admit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Collapsible Decline Reason Panel -->
+                  <div class="kiosk-sub-panel decline-panel" id="kiosk-decline-panel" style="display: none;">
+                    <div class="kiosk-sub-panel-header" style="color: #f87171;">
+                      <strong>✕ Decline Entry — Select Reason</strong>
+                    </div>
+                    <div class="kiosk-sub-panel-body">
+                      <select id="kiosk-decline-reason-select" class="form-input kiosk-decline-select" style="width: 100%; height: 36px; font-size: 12px; margin-bottom: 8px;">
+                        <option value="Late Call-Time Lockout (Cutoff Exceeded)">Late Call-Time Lockout (Cutoff Exceeded)</option>
+                        <option value="Missing Required PPE / Safety Gear">Missing Required PPE / Safety Gear</option>
+                        <option value="Not Scheduled on Shift Roster Today">Not Scheduled on Shift Roster Today</option>
+                        <option value="Security Concern / Unfit for Duty">Security Concern / Unfit for Duty</option>
+                        <option value="Wrong Checkpoint / Gate">Wrong Checkpoint / Gate</option>
+                        <option value="Other Discretionary Decline">Other Discretionary Decline</option>
+                      </select>
+                      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                        <button type="button" class="btn btn-secondary-32-sm" id="kiosk-decline-cancel-btn">Cancel</button>
+                        <button type="button" class="btn btn-primary-32-sm" id="kiosk-decline-confirm-btn" style="background: #dc2626; border-color: #b91c1c;">
+                          Confirm Decline
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -2056,6 +2192,19 @@
           />
         </div>
 
+        <div style="margin-bottom: 14px;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span>⚡ Shift Extension (Production Delays):</span>
+            <span style="font-size: 10px; color: var(--brand-primary); font-weight: 600;">Extends active call window</span>
+          </span>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;" id="call-time-extensions">
+            <button type="button" class="btn btn-secondary-32-sm js-modal-extend-calltime" data-mins="15">+15 Min Extension</button>
+            <button type="button" class="btn btn-secondary-32-sm js-modal-extend-calltime" data-mins="30">+30 Min Extension</button>
+            <button type="button" class="btn btn-secondary-32-sm js-modal-extend-calltime" data-mins="45">+45 Min Extension</button>
+            <button type="button" class="btn btn-secondary-32-sm js-modal-extend-calltime" data-mins="60">+1 Hour Extension</button>
+          </div>
+        </div>
+
         <div style="margin-bottom: 16px;">
           <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px;">
             Quick Presets:
@@ -2071,9 +2220,14 @@
           </div>
         </div>
 
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary-38" id="close-call-time-modal">Cancel</button>
-          <button type="submit" class="btn btn-primary-38" id="save-call-time-btn">Save Call Time</button>
+        <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 8px;">
+          <button type="button" class="btn btn-secondary-38 js-modal-reset-calltime" id="call-time-reset-default-btn" style="color: #b45309; border-color: #fde68a; background-color: #fffbeb;">
+            ↺ Reset to Default (08:00 AM)
+          </button>
+          <div style="display: flex; gap: 8px; margin-left: auto;">
+            <button type="button" class="btn btn-secondary-38" id="close-call-time-modal">Cancel</button>
+            <button type="submit" class="btn btn-primary-38" id="save-call-time-btn">Save Call Time</button>
+          </div>
         </div>
       </form>
     </div>
@@ -2977,6 +3131,6 @@
   <!-- Toast Notification -->
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=20261111_stock_pagination_v1"></script>
+  <script src="app.js?v=20261111_phase1_kiosk_actions_v1"></script>
 </body>
 </html>

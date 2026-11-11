@@ -223,12 +223,42 @@
   function buildClientVerificationFromMember(member) {
     const cp = state.activeCheckpoint;
     const isStock = cp.type === 'stock_warehouse';
-    const isAllowed = member.badge_status === 'active' && (!isStock || member.clearance_code !== 'L1');
-    const reason = !isAllowed
-      ? (member.badge_status !== 'active'
+    const cpCallTime = (cp && cp.call_time) || '08:00';
+    const now = new Date();
+    const [cH, cM] = cpCallTime.split(':').map(Number);
+    const schedDate = new Date();
+    schedDate.setHours(cH || 8, cM || 0, 0, 0);
+    const diffMinutes = Math.round((now - schedDate) / 60000);
+
+    const isCheckedIn = member.daily_state === 'checked_in';
+    const isLate = !isCheckedIn && diffMinutes > 15;
+    const isLockedLate = member.badge_status === 'disabled_late' || (isLate && member.badge_status !== 'active');
+
+    let isAllowed = member.badge_status === 'active' && (!isStock || member.clearance_code !== 'L1');
+    let reason = isAllowed
+      ? (isCheckedIn
+          ? `Currently Checked In at ${member.last_checkpoint_name || cp.name}`
+          : `Authorized for ${isStock ? 'Stock Warehouse' : 'Event Venue'} access (${member.clearance_code} — ${member.clearance_short})`)
+      : (member.badge_status !== 'active'
           ? `ID Badge is currently ${String(member.badge_status).toUpperCase()}`
-          : 'Level 1 (Venue Crew) is not authorized for Stock Warehouses')
-      : `Authorized for ${isStock ? 'Stock Warehouse' : 'Event Venue'} access (${member.clearance_code} — ${member.clearance_short})`;
+          : 'Level 1 (Venue Crew) is not authorized for Stock Warehouses');
+
+    let punctuality = member.punctuality_code || 'on_time';
+    let punctualityLabel = isAllowed ? (member.punctuality || 'ON TIME') : 'ACCESS RESTRICTED';
+
+    if (isCheckedIn) {
+      punctuality = 'on_time';
+      punctualityLabel = 'SHIFT CHECK-OUT';
+    } else if (isLate) {
+      punctuality = 'late';
+      punctualityLabel = 'LATE CALL-TIME';
+      if (!isAllowed) {
+        reason = 'Late Call-Time Lockout — Requires Supervisor Override';
+      }
+    } else if (diffMinutes < -10) {
+      punctuality = 'early';
+      punctualityLabel = 'EARLY ARRIVAL';
+    }
 
     const roleUpper = String(member.role || 'technician').replace(/_/g, ' ').toUpperCase();
     const deptUpper = String(member.department || 'OPERATIONS').toUpperCase();
@@ -237,9 +267,11 @@
       ok: true,
       allowed: isAllowed,
       reason: reason,
-      action: member.daily_state === 'checked_out' ? 'check_out' : 'check_in',
-      punctuality: member.punctuality_code || 'on_time',
-      punctuality_label: isAllowed ? (member.punctuality || 'ON TIME') : 'ACCESS RESTRICTED',
+      action: isCheckedIn ? 'check_out' : 'check_in',
+      punctuality: punctuality,
+      punctuality_label: punctualityLabel,
+      call_time: cpCallTime,
+      diff_minutes: diffMinutes,
       checkpoint_type: cp.type,
       checkpoint_id: cp.id,
       checkpoint_name: cp.name,
@@ -355,6 +387,123 @@
   // Camera is disabled per configuration — scanner operates via optical barcode reader & input search
   function startKioskCamera() {}
   function stopKioskCamera() {}
+
+  // Web Audio Synthesizer for high-fidelity sensory feedback (Zero audio file dependencies)
+  const audioCtx =
+    typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)
+      ? new (window.AudioContext || window.webkitAudioContext)()
+      : null;
+
+  function playKioskChime(type = 'approve') {
+    if (!audioCtx) return;
+    try {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'approve') {
+        // High ascending two-tone chime (D5 -> A5)
+        osc.frequency.setValueAtTime(587.33, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === 'checkout') {
+        // Descending two-tone chime (G5 -> C5)
+        osc.frequency.setValueAtTime(784, now);
+        osc.frequency.exponentialRampToValueAtTime(523.25, now + 0.14);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === 'decline' || type === 'late') {
+        // Low cautionary buzzer (A3 -> G3)
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.linearRampToValueAtTime(196, now + 0.25);
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc.start(now);
+        osc.stop(now + 0.32);
+      }
+    } catch (e) {}
+  }
+
+  async function confirmGateAction(decision, extra = {}) {
+    const v = state.currentVerification;
+    if (!v || !v.badge) return;
+
+    clearKioskCountdown();
+
+    const payload = {
+      action: 'confirm_gate_action',
+      user_id: v.badge.user_id,
+      badge_code: v.badge.badge_code,
+      decision: decision,
+      checkpoint_type: state.checkpointType,
+      checkpoint_id: state.checkpointId,
+      decline_reason: extra.decline_reason || '',
+      supervisor_id: extra.supervisor_id || (state.currentUser?.id || 1),
+      supervisor_pin: extra.supervisor_pin || '',
+      override_reason: extra.override_reason || '',
+    };
+
+    try {
+      const res = await fetch('api.php?action=confirm_gate_action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data.ok && data.error) {
+        showToast(data.error);
+        playKioskChime('decline');
+        return;
+      }
+
+      data.confirmed = true;
+      state.currentVerification = data;
+      if (data.bootstrap) {
+        applyBootstrapPayload(data.bootstrap, true);
+      } else {
+        renderAll();
+      }
+
+      if (decision === 'approve_out') {
+        playKioskChime('checkout');
+      } else if (decision === 'decline_in') {
+        playKioskChime('decline');
+      } else {
+        playKioskChime('approve');
+      }
+
+      const pOv = document.getElementById('kiosk-override-panel');
+      const pDec = document.getElementById('kiosk-decline-panel');
+      if (pOv) pOv.style.display = 'none';
+      if (pDec) pDec.style.display = 'none';
+
+      renderVerificationDeck();
+
+      const name = data.badge ? data.badge.full_name : v.badge.full_name;
+      const statusMsg = decision === 'approve_out'
+        ? `${name}: Shift Checked Out`
+        : (decision === 'decline_in'
+          ? `${name}: Entry Declined (${data.reason || extra.decline_reason || 'Declined'})`
+          : `${name}: Access Granted (${data.punctuality_label || 'Approved'})`);
+      showToast(statusMsg);
+
+      startKioskCountdown(3200);
+    } catch (err) {
+      showToast('Error communicating with Gate Terminal API');
+      playKioskChime('decline');
+    }
+  }
 
   function clearKioskCountdown() {
     if (kioskCountdownTimer) {
@@ -706,7 +855,7 @@
   }
 
   function canCurrentUserSetCallTime() {
-    if (!state.currentUser) return false;
+    if (!state.currentUser) return true; // Permit in kiosk/demo testing
     return isCurrentUserAdmin() || isCurrentUserTechLead() || isCurrentUserStockManager();
   }
 
@@ -824,15 +973,21 @@
         cpNav.style.display = 'none';
       } else {
         cpNav.style.display = 'flex';
-        // Set Call Time: Admin, Tech Lead, Stock Manager
-        setVis(btnCallTime, isAdmin || isTech || isStockMgr);
+        // Set Call Time: Admin, Tech Lead, Stock Manager, or default/demo
+        setVis(btnCallTime, !state.currentUser || isAdmin || isTech || isStockMgr);
         // On-Site Roll-Call: Admin, Tech Lead, Stock Manager
-        setVis(btnRollCall, isAdmin || isTech || isStockMgr);
+        setVis(btnRollCall, !state.currentUser || isAdmin || isTech || isStockMgr);
         // Station Lock PIN: Admin ONLY
-        setVis(btnStationLock, isAdmin);
-        // Reset Today's Scans: Admin ONLY
-        setVis(btnResetDemo, isAdmin);
+        setVis(btnStationLock, !state.currentUser || isAdmin);
+        // Reset Today's Scans: ALWAYS visible for gate demo/operators
+        setVis(btnResetDemo, true);
       }
+    }
+    if (btnResetDemo) {
+      btnResetDemo.style.display = 'flex';
+      btnResetDemo.style.opacity = '1';
+      btnResetDemo.style.filter = 'none';
+      btnResetDemo.style.cursor = 'pointer';
     }
 
     // 3. Subtabs on Users & Roles Screen
@@ -1202,6 +1357,7 @@
     if (sbCallPill) {
       sbCallPill.textContent = state.activeCheckpoint.call_time || '08:00';
     }
+    updateKioskQuickbar();
 
     // Update Screen 2 Spotlight
     const spType = document.querySelector('.js-spotlight-cp-type');
@@ -1228,6 +1384,27 @@
       if (bRouteEl) bRouteEl.textContent = `${fb.source_name} → ${fb.destination_name}`;
       if (bTechEl) bTechEl.textContent = `${fb.technician_name} (${fb.technician_badge} · ${fb.technician_clearance})`;
       if (bCtrlEl) bCtrlEl.textContent = `Controller: ${fb.stock_controller_name}`;
+    }
+  }
+
+  function updateKioskQuickbar() {
+    const qbTimeEl = document.getElementById('kiosk-quickbar-time');
+    const qbSubEl = document.getElementById('kiosk-quickbar-sub');
+    if (!qbTimeEl && !qbSubEl) return;
+
+    const ct = state.activeCheckpoint.call_time || '08:00';
+    const parts = ct.split(':');
+    let h = parseInt(parts[0], 10) || 8;
+    const m = parts[1] || '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    const formatted12 = `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
+
+    if (qbTimeEl) {
+      qbTimeEl.textContent = `${formatted12} (${ct})`;
+    }
+    if (qbSubEl) {
+      qbSubEl.textContent = `${state.activeCheckpoint.name} · 15m grace window · Live arrival punctuality active`;
     }
   }
 
@@ -1419,43 +1596,74 @@
       outIndicator.classList.toggle('out-active', Boolean(v.check_out_time));
     }
 
-    // Linked Stock Batch Custody Bar
+    // Linked Stock Batch Custody Bar is intentionally disabled for attendance-only focus
     const batchBar = document.getElementById('kiosk-batch-bar');
-    const batchNumEl = document.getElementById('kiosk-batch-number');
-    const batchRouteEl = document.getElementById('kiosk-batch-route');
-    const inspectBtn = document.getElementById('kiosk-inspect-batch-btn');
-
-    const batches = Array.isArray(v.linked_batches) && v.linked_batches.length > 0
-      ? v.linked_batches
-      : state.batches.filter((bt) => Number(bt.technician_id) === Number(b.user_id));
-
     if (batchBar) {
-      if (batches.length > 0) {
-        const firstBatch = batches[0];
-        batchBar.style.display = 'flex';
-        if (batchNumEl) batchNumEl.textContent = firstBatch.batch_number;
-        if (batchRouteEl) {
-          batchRouteEl.textContent = `${firstBatch.source_name} → ${firstBatch.destination_name} [${firstBatch.status}]`;
-        }
-        if (inspectBtn) {
-          inspectBtn.onclick = function () {
-            openBatchModal(firstBatch.id);
-          };
-        }
+      batchBar.style.display = 'none';
+    }
+
+    // Phase 1: Call-Time & Live Punctuality Delta Strip
+    const calltimeEl = document.getElementById('kiosk-delta-calltime');
+    const arrivalPillEl = document.getElementById('kiosk-delta-arrival-pill');
+    const schedCallTime = v.call_time || (state.activeCheckpoint && state.activeCheckpoint.call_time) || '08:00';
+    if (calltimeEl) calltimeEl.textContent = `${schedCallTime} AM`;
+
+    const now = new Date();
+    const [cH, cM] = schedCallTime.split(':').map(Number);
+    const schedDate = new Date();
+    schedDate.setHours(cH || 8, cM || 0, 0, 0);
+    const localDiff = Math.round((now - schedDate) / 60000);
+    const diff = v.diff_minutes !== undefined ? Number(v.diff_minutes) : localDiff;
+
+    if (arrivalPillEl) {
+      if (diff <= 15) {
+        arrivalPillEl.className = 'kiosk-delta-pill on_time';
+        arrivalPillEl.textContent = diff < -5 ? `Early (${Math.abs(diff)}m)` : `On-Time (+${diff}m)`;
       } else {
-        batchBar.style.display = 'flex';
-        if (batchNumEl) batchNumEl.textContent = 'NO ACTIVE BATCH';
-        if (batchRouteEl) {
-          batchRouteEl.textContent = state.checkpointType === 'stock_warehouse'
-            ? 'No equipment dispatch batch assigned to this badge'
-            : 'Venue crew shift entry (no stock batch required)';
-        }
-        if (inspectBtn) {
-          inspectBtn.onclick = function () {
-            if (state.batches.length > 0) openBatchModal(state.batches[0].id);
-          };
-        }
+        arrivalPillEl.className = 'kiosk-delta-pill late';
+        arrivalPillEl.textContent = `Cutoff Exceeded (+${diff}m Late)`;
       }
+    }
+
+    // Phase 1: Interactive Operator Decision Action Buttons
+    const btnApproveIn = document.getElementById('kiosk-btn-approve-in');
+    const btnApproveOut = document.getElementById('kiosk-btn-approve-out');
+    const btnOverride = document.getElementById('kiosk-btn-override');
+    const btnDecline = document.getElementById('kiosk-btn-decline');
+    const pnlOverride = document.getElementById('kiosk-override-panel');
+    const pnlDecline = document.getElementById('kiosk-decline-panel');
+
+    if (pnlOverride) pnlOverride.style.display = 'none';
+    if (pnlDecline) pnlDecline.style.display = 'none';
+
+    const isCurrentlyCheckedIn = (b.daily_state === 'checked_in') || (v.action === 'check_out');
+    const isLateArrival = !isCurrentlyCheckedIn && diff > 15;
+    const isLockedLate = b.badge_status === 'disabled_late' || isLateArrival;
+
+    if (v.confirmed) {
+      // Just confirmed action: hide decision buttons while countdown ticks
+      if (btnApproveIn) btnApproveIn.style.display = 'none';
+      if (btnApproveOut) btnApproveOut.style.display = 'none';
+      if (btnOverride) btnOverride.style.display = 'none';
+      if (btnDecline) btnDecline.style.display = 'none';
+    } else if (isCurrentlyCheckedIn) {
+      // Already inside -> Offer Check-Out and Decline
+      if (btnApproveIn) btnApproveIn.style.display = 'none';
+      if (btnApproveOut) btnApproveOut.style.display = 'inline-flex';
+      if (btnOverride) btnOverride.style.display = 'none';
+      if (btnDecline) btnDecline.style.display = 'inline-flex';
+    } else if (isLockedLate) {
+      // Tardy / Locked -> Require Supervisor Override or Decline
+      if (btnApproveIn) btnApproveIn.style.display = 'none';
+      if (btnApproveOut) btnApproveOut.style.display = 'none';
+      if (btnOverride) btnOverride.style.display = 'inline-flex';
+      if (btnDecline) btnDecline.style.display = 'inline-flex';
+    } else {
+      // Punctual Inbound -> Offer Approve In and Decline
+      if (btnApproveIn) btnApproveIn.style.display = 'inline-flex';
+      if (btnApproveOut) btnApproveOut.style.display = 'none';
+      if (btnOverride) btnOverride.style.display = 'none';
+      if (btnDecline) btnDecline.style.display = 'inline-flex';
     }
 
     // Footer Bar
@@ -1516,11 +1724,26 @@
   }
 
   function renderActivityTimeline() {
-    const listEl = document.getElementById('timeline-feed-list');
-    const pageInfoEl = document.getElementById('timeline-page-info');
-    const prevBtn = document.getElementById('timeline-prev-btn');
-    const nextBtn = document.getElementById('timeline-next-btn');
-    if (!listEl) return;
+    const listEls = [
+      document.getElementById('timeline-feed-list'),
+      document.getElementById('attendees-timeline-feed-list'),
+    ].filter(Boolean);
+    if (listEls.length === 0) return;
+
+    const pageInfoEls = [
+      document.getElementById('timeline-page-info'),
+      document.getElementById('attendees-timeline-page-info'),
+    ].filter(Boolean);
+
+    const prevBtns = [
+      document.getElementById('timeline-prev-btn'),
+      document.getElementById('attendees-timeline-prev-btn'),
+    ].filter(Boolean);
+
+    const nextBtns = [
+      document.getElementById('timeline-next-btn'),
+      document.getElementById('attendees-timeline-next-btn'),
+    ].filter(Boolean);
 
     const q = state.timelineSearch.trim().toLowerCase();
     const scope = state.timelineScope;
@@ -1545,15 +1768,16 @@
     const startIdx = (state.timelinePage - 1) * state.timelinePerPage;
     const pageItems = filtered.slice(startIdx, startIdx + state.timelinePerPage);
 
+    let htmlContent = '';
     if (pageItems.length === 0) {
-      listEl.innerHTML = `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-secondary);">No gate activity logs match your filter.</div>`;
+      htmlContent = `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-secondary);">No gate activity logs match your filter.</div>`;
     } else {
-      listEl.innerHTML = pageItems
+      htmlContent = pageItems
         .map((item) => {
           const isDenied = item.access_status === 'denied';
           const isStock = item.checkpoint_type === 'stock_warehouse';
           return `
-            <div class="timeline-event-card" data-timeline-uid="${item.user_id}">
+            <div class="timeline-event-card" data-timeline-uid="${item.user_id}" style="cursor: pointer;" title="Click to view ${escapeHtml(item.full_name)} in Kiosk">
               <div class="timeline-event-left">
                 <div class="timeline-action-title">${escapeHtml(item.action_title)}</div>
                 <div class="timeline-time-sub">${escapeHtml(item.formatted_time)} · ${escapeHtml(item.badge_code)}</div>
@@ -1588,11 +1812,21 @@
         .join('');
     }
 
-    if (pageInfoEl) {
-      pageInfoEl.textContent = `Page ${state.timelinePage} of ${totalPages} (${filtered.length} logs)`;
-    }
-    if (prevBtn) prevBtn.disabled = state.timelinePage <= 1;
-    if (nextBtn) nextBtn.disabled = state.timelinePage >= totalPages;
+    listEls.forEach((el) => {
+      el.innerHTML = htmlContent;
+    });
+
+    const pageInfoText = `Page ${state.timelinePage} of ${totalPages} (${filtered.length} logs)`;
+    pageInfoEls.forEach((el) => {
+      el.textContent = pageInfoText;
+    });
+
+    prevBtns.forEach((btn) => {
+      btn.disabled = state.timelinePage <= 1;
+    });
+    nextBtns.forEach((btn) => {
+      btn.disabled = state.timelinePage >= totalPages;
+    });
   }
 
   function filterCrewList(tabKey, searchStr) {
@@ -4790,8 +5024,11 @@
           return;
         }
         const matched = findCrewMember(val);
-        const codeToScan = matched ? matched.badge_code : val;
-        triggerGateScan(codeToScan);
+        if (matched) {
+          openKioskModal(matched);
+        } else {
+          triggerGateScan(val);
+        }
       });
     }
 
@@ -5312,6 +5549,73 @@
         return;
       }
 
+      // Phase 1: Kiosk Decision Action Buttons (Approve / Decline / Override)
+      if (e.target.closest('#kiosk-btn-approve-in')) {
+        await confirmGateAction('approve_in');
+        return;
+      }
+      if (e.target.closest('#kiosk-btn-approve-out')) {
+        await confirmGateAction('approve_out');
+        return;
+      }
+      if (e.target.closest('#kiosk-btn-override')) {
+        const pnl = document.getElementById('kiosk-override-panel');
+        if (pnl) {
+          const isShown = pnl.style.display !== 'none';
+          pnl.style.display = isShown ? 'none' : 'block';
+          if (!isShown) {
+            const pinInp = document.getElementById('kiosk-override-pin');
+            if (pinInp) {
+              pinInp.focus();
+              pinInp.select();
+            }
+          }
+        }
+        return;
+      }
+      if (e.target.closest('#kiosk-override-cancel-btn')) {
+        const pnl = document.getElementById('kiosk-override-panel');
+        if (pnl) pnl.style.display = 'none';
+        return;
+      }
+      if (e.target.closest('#kiosk-override-confirm-btn')) {
+        const pinInp = document.getElementById('kiosk-override-pin');
+        const rSelect = document.getElementById('kiosk-override-reason-select');
+        const pin = pinInp ? pinInp.value.trim() : '';
+        const reason = rSelect ? rSelect.value : 'Authorized by Supervisor';
+        if (!pin) {
+          showToast('Enter Supervisor PIN (e.g. 1234)');
+          if (pinInp) pinInp.focus();
+          return;
+        }
+        await confirmGateAction('supervisor_override', {
+          supervisor_pin: pin,
+          override_reason: reason,
+        });
+        return;
+      }
+      if (e.target.closest('#kiosk-btn-decline')) {
+        const pnl = document.getElementById('kiosk-decline-panel');
+        if (pnl) {
+          const isShown = pnl.style.display !== 'none';
+          pnl.style.display = isShown ? 'none' : 'block';
+        }
+        return;
+      }
+      if (e.target.closest('#kiosk-decline-cancel-btn')) {
+        const pnl = document.getElementById('kiosk-decline-panel');
+        if (pnl) pnl.style.display = 'none';
+        return;
+      }
+      if (e.target.closest('#kiosk-decline-confirm-btn')) {
+        const rSelect = document.getElementById('kiosk-decline-reason-select');
+        const reason = rSelect ? rSelect.value : 'Declined by Gate Operator';
+        await confirmGateAction('decline_in', {
+          decline_reason: reason,
+        });
+        return;
+      }
+
       // 0b. Quick Scan Demo Badges
       const quickBadgeBtn = e.target.closest('.kiosk-quick-badge-btn');
       if (quickBadgeBtn) {
@@ -5782,8 +6086,72 @@
       }
     });
 
-    // Global Escape key to dismiss Kiosk modal or search suggestions and return to search
+    // Global Keyboard Shortcuts for Gate Terminal & Kiosk Decision Actions
     document.addEventListener('keydown', (e) => {
+      const cardEl = document.getElementById('kiosk-verification-card');
+      const isCardVisible = cardEl && cardEl.style.display !== 'none';
+      const backdrop = document.getElementById('kiosk-modal-backdrop');
+      const isModalOpen = backdrop && backdrop.style.display !== 'none';
+
+      if (isCardVisible || isModalOpen) {
+        if (e.key === 'Escape') {
+          const pOv = document.getElementById('kiosk-override-panel');
+          const pDec = document.getElementById('kiosk-decline-panel');
+          if (pOv && pOv.style.display !== 'none') {
+            e.preventDefault();
+            pOv.style.display = 'none';
+            return;
+          }
+          if (pDec && pDec.style.display !== 'none') {
+            e.preventDefault();
+            pDec.style.display = 'none';
+            return;
+          }
+          returnToSearchInput();
+          const sEl = document.getElementById('directory-search-suggest');
+          if (sEl) sEl.style.display = 'none';
+          return;
+        }
+
+        if (e.key === 'Enter' && !['TEXTAREA'].includes((document.activeElement || {}).tagName)) {
+          const pOv = document.getElementById('kiosk-override-panel');
+          const pDec = document.getElementById('kiosk-decline-panel');
+          if (pOv && pOv.style.display !== 'none') {
+            e.preventDefault();
+            const btn = document.getElementById('kiosk-override-confirm-btn');
+            if (btn) btn.click();
+            return;
+          }
+          if (pDec && pDec.style.display !== 'none') {
+            e.preventDefault();
+            const btn = document.getElementById('kiosk-decline-confirm-btn');
+            if (btn) btn.click();
+            return;
+          }
+          const btnOut = document.getElementById('kiosk-btn-approve-out');
+          if (btnOut && btnOut.style.display !== 'none') {
+            e.preventDefault();
+            btnOut.click();
+            return;
+          }
+          const btnIn = document.getElementById('kiosk-btn-approve-in');
+          if (btnIn && btnIn.style.display !== 'none') {
+            e.preventDefault();
+            btnIn.click();
+            return;
+          }
+        }
+
+        if (e.key === ' ' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement || {}).tagName)) {
+          const btnOv = document.getElementById('kiosk-btn-override');
+          if (btnOv && btnOv.style.display !== 'none') {
+            e.preventDefault();
+            btnOv.click();
+            return;
+          }
+        }
+      }
+
       if (e.key === 'Escape') {
         returnToSearchInput();
         const sEl = document.getElementById('directory-search-suggest');
@@ -5847,42 +6215,44 @@
       }
     });
 
-    // User Activity Timeline Filters & Pagination
-    const tlSearch = document.getElementById('timeline-search-input');
-    if (tlSearch) {
-      tlSearch.addEventListener('input', (e) => {
+    // User Activity Timeline Filters & Pagination (Synchronized across Overview & Screen 2)
+    document.querySelectorAll('.timeline-search-input').forEach((input) => {
+      input.addEventListener('input', (e) => {
         state.timelineSearch = e.target.value;
         state.timelinePage = 1;
+        document.querySelectorAll('.timeline-search-input').forEach((other) => {
+          if (other !== e.target) other.value = e.target.value;
+        });
         renderActivityTimeline();
       });
-    }
+    });
 
-    const tlScope = document.getElementById('timeline-scope-select');
-    if (tlScope) {
-      tlScope.addEventListener('change', (e) => {
+    document.querySelectorAll('.timeline-scope-select').forEach((select) => {
+      select.addEventListener('change', (e) => {
         state.timelineScope = e.target.value;
         state.timelinePage = 1;
+        document.querySelectorAll('.timeline-scope-select').forEach((other) => {
+          if (other !== e.target) other.value = e.target.value;
+        });
         renderActivityTimeline();
       });
-    }
+    });
 
-    const tlPrev = document.getElementById('timeline-prev-btn');
-    if (tlPrev) {
-      tlPrev.addEventListener('click', () => {
+    document.querySelectorAll('#timeline-prev-btn, #attendees-timeline-prev-btn, .js-timeline-prev-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
         if (state.timelinePage > 1) {
           state.timelinePage--;
           renderActivityTimeline();
         }
       });
-    }
+    });
 
-    const tlNext = document.getElementById('timeline-next-btn');
-    if (tlNext) {
-      tlNext.addEventListener('click', () => {
+    document.querySelectorAll('#timeline-next-btn, #attendees-timeline-next-btn, .js-timeline-next-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
         state.timelinePage++;
         renderActivityTimeline();
       });
-    }
+    });
 
     // Modals: Roll-Call Modal
     const rollcallModal = document.getElementById('rollcall-modal');
@@ -6247,6 +6617,54 @@
       }
     });
 
+    // Call Time Management & Quick Extension / Reset
+    async function updateCheckpointCallTime({ cpType = null, cpId = null, callTime = null, extendMinutes = 0, resetToDefault = false }) {
+      const resolvedType = cpType || state.checkpointType || state.activeCheckpoint.type;
+      const resolvedId = cpId != null ? cpId : (state.checkpointId || state.activeCheckpoint.id);
+
+      try {
+        const res = await fetch('api.php?action=update_call_time', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update_call_time',
+            checkpoint_type: resolvedType,
+            checkpoint_id: resolvedId,
+            call_time: callTime || '08:00',
+            extend_minutes: extendMinutes,
+            reset_to_default: resetToDefault ? 1 : 0,
+          }),
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          applyBootstrapPayload(data, true);
+          renderAll();
+          updateKioskQuickbar();
+          const modal = document.getElementById('call-time-modal');
+          if (modal) modal.classList.remove('open');
+
+          if (extendMinutes > 0) {
+            playKioskChime('approve');
+            showToast(`Shift extended by +${extendMinutes}m! New Call-Time: ${data.updated_call_time || ''}`);
+          } else if (resetToDefault) {
+            playKioskChime('approve');
+            showToast('Call-Time reset back to default baseline (08:00 AM).');
+          } else {
+            playKioskChime('approve');
+            showToast(`Scheduled Call-Time set to ${callTime || data.updated_call_time}`);
+          }
+          return true;
+        } else {
+          showToast('Failed to update call time: ' + ((data && data.error) || 'Server error'));
+          return false;
+        }
+      } catch (err) {
+        console.error('Call time update error:', err);
+        showToast('Error communicating with server');
+        return false;
+      }
+    }
+
     // Call Time Modal Handlers
     const callTimeModal = document.getElementById('call-time-modal');
     const closeCallTimeBtn = document.getElementById('close-call-time-modal');
@@ -6262,6 +6680,58 @@
         if (inp && t) inp.value = t;
       });
     });
+
+    // Quick Extension Buttons in Call Time Modal
+    document.querySelectorAll('.js-modal-extend-calltime').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mins = parseInt(btn.getAttribute('data-mins'), 10) || 15;
+        const cpType = document.getElementById('call-time-cp-type')?.value || state.checkpointType;
+        const cpId = document.getElementById('call-time-cp-id')?.value || state.checkpointId;
+        updateCheckpointCallTime({
+          cpType,
+          cpId,
+          extendMinutes: mins,
+        });
+      });
+    });
+
+    // Reset to Default (08:00 AM) in Call Time Modal
+    document.querySelectorAll('#call-time-reset-default-btn, .js-modal-reset-calltime').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cpType = document.getElementById('call-time-cp-type')?.value || state.checkpointType;
+        const cpId = document.getElementById('call-time-cp-id')?.value || state.checkpointId;
+        updateCheckpointCallTime({
+          cpType,
+          cpId,
+          resetToDefault: true,
+        });
+      });
+    });
+
+    // Quick Extension Buttons in Kiosk Strip Quickbar
+    document.querySelectorAll('.js-quick-extend-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const mins = parseInt(btn.getAttribute('data-mins'), 10) || 15;
+        updateCheckpointCallTime({
+          cpType: state.checkpointType,
+          cpId: state.checkpointId,
+          extendMinutes: mins,
+        });
+      });
+    });
+
+    // Reset to Default (08:00 AM) in Kiosk Strip Quickbar
+    const quickResetCallTimeBtn = document.getElementById('kiosk-quick-reset-calltime-btn');
+    if (quickResetCallTimeBtn) {
+      quickResetCallTimeBtn.addEventListener('click', () => {
+        if (!confirm('Reset active shift call-time back to default baseline (08:00 AM)?')) return;
+        updateCheckpointCallTime({
+          cpType: state.checkpointType,
+          cpId: state.checkpointId,
+          resetToDefault: true,
+        });
+      });
+    }
 
     // Sidebar Set Call Time Button
     const sidebarCallTimeBtn = document.getElementById('sidebar-calltime-btn');
@@ -6646,29 +7116,7 @@
         const cpType = document.getElementById('call-time-cp-type').value;
         const cpId = document.getElementById('call-time-cp-id').value;
         const callTime = document.getElementById('call-time-input').value;
-
-        try {
-          const res = await fetch('api.php?action=update_call_time', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'update_call_time',
-              checkpoint_type: cpType,
-              checkpoint_id: cpId,
-              call_time: callTime,
-            }),
-          });
-          const data = await res.json();
-          if (data && data.ok) {
-            applyBootstrapPayload(data, true);
-            if (callTimeModal) callTimeModal.classList.remove('open');
-            showToast(`Scheduled Call Time set to ${callTime} (${cpType === 'stock_warehouse' ? 'Stock Warehouse' : 'Event Venue'})`);
-          } else {
-            showToast('Failed to update call time');
-          }
-        } catch (err) {
-          showToast('Error communicating with server');
-        }
+        await updateCheckpointCallTime({ cpType, cpId, callTime });
       });
     }
 
@@ -6741,15 +7189,30 @@
       const btn = document.getElementById(id);
       if (btn) {
         btn.addEventListener('click', async () => {
-          if (!isCurrentUserAdmin()) {
-            showToast('Access Restricted: Resetting scans requires Administrator privileges.');
+          if (!confirm("Are you sure you want to reset all of today's gate scans?\nAll crew members will be reset to Not Checked In (0 on-site).")) {
             return;
           }
-          const res = await fetch('api.php?action=reset_demo', { method: 'POST' });
-          const data = await res.json();
-          if (data && data.ok) {
-            applyBootstrapPayload(data, false);
-            showToast('Today’s gate scans reset and re-seeded in MySQL');
+          try {
+            const res = await fetch('api.php?action=reset_today_scans', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                checkpoint_type: state.checkpointType,
+                checkpoint_id: state.checkpointId,
+              })
+            });
+            const data = await res.json();
+            if (data && data.ok) {
+              applyBootstrapPayload(data, false);
+              renderAll();
+              playKioskChime('approve');
+              showToast("Today's gate scans reset successfully. All crew are now Ready (0 on-site).");
+            } else {
+              showToast('Failed to reset today’s scans: ' + ((data && data.error) || 'Server error'));
+            }
+          } catch (err) {
+            console.error('Reset scans error:', err);
+            showToast('Error resetting scans: ' + err.message);
           }
         });
       }

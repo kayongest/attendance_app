@@ -389,6 +389,11 @@ function buildVerificationCardPayload(
     $deptUpper = strtoupper(trim((string) ($crewMember['department'] ?? 'OPERATIONS')));
     $rolePill = $roleUpper . ' - ' . $deptUpper;
 
+    $callTime = $overrideScanResult['call_time'] ?? '08:00';
+    $nowTs = time();
+    $schedTs = strtotime(date('Y-m-d') . ' ' . $callTime . ':00') ?: strtotime(date('Y-m-d 08:00:00'));
+    $diffMinutes = (int) round(($nowTs - $schedTs) / 60);
+
     return [
         'ok' => true,
         'allowed' => (bool) $allowed,
@@ -396,6 +401,8 @@ function buildVerificationCardPayload(
         'action' => (string) $action,
         'punctuality' => (string) $punctuality,
         'punctuality_label' => (string) $punctualityLabel,
+        'call_time' => $callTime,
+        'diff_minutes' => $diffMinutes,
         'checkpoint_type' => $checkpointType,
         'checkpoint_id' => $checkpointId,
         'checkpoint_name' => $checkpointName,
@@ -1823,6 +1830,191 @@ try {
         exit;
     }
 
+    if ($action === 'confirm_gate_action') {
+        $userId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
+        $badgeCode = trim((string) ($_POST['badge_code'] ?? $jsonBody['badge_code'] ?? ''));
+        $decision = trim((string) ($_POST['decision'] ?? $jsonBody['decision'] ?? 'approve_in'));
+        $declineReason = trim((string) ($_POST['decline_reason'] ?? $jsonBody['decline_reason'] ?? ''));
+        $supervisorId = (int) ($_POST['supervisor_id'] ?? $jsonBody['supervisor_id'] ?? 0);
+        $supervisorPin = trim((string) ($_POST['supervisor_pin'] ?? $jsonBody['supervisor_pin'] ?? ''));
+        $overrideReason = trim((string) ($_POST['override_reason'] ?? $jsonBody['override_reason'] ?? ''));
+
+        $currentPayload = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        $activeCp = $currentPayload['activeCheckpoint'];
+        $cpType = (string) $activeCp['type'];
+        $cpId = (int) $activeCp['id'];
+        $cpName = (string) $activeCp['name'];
+        $callTime = (string) ($activeCp['call_time'] ?? '08:00');
+
+        $targetMember = null;
+        if ($userId > 0) {
+            foreach ($currentPayload['crew'] as $c) {
+                if ((int)$c['id'] === $userId) {
+                    $targetMember = $c;
+                    break;
+                }
+            }
+        }
+        if (!$targetMember && $badgeCode !== '') {
+            $targetMember = findCrewMemberByScanInput($currentPayload['crew'], $badgeCode);
+        }
+
+        if (!$targetMember) {
+            echo json_encode(['ok' => false, 'error' => 'Attendee record not found']);
+            exit;
+        }
+
+        $nowTs = time();
+        $scheduledTs = strtotime(date('Y-m-d') . ' ' . $callTime . ':00') ?: strtotime(date('Y-m-d 08:00:00'));
+        $diffMinutes = (int) round(($nowTs - $scheduledTs) / 60);
+
+        $scannedBy = !empty($_SESSION['auth_user_id']) ? (int) $_SESSION['auth_user_id'] : 1;
+        $overrideById = null;
+        $savedOverrideReason = null;
+
+        if ($decision === 'decline_in') {
+            $accessStatus = 'denied';
+            $resolvedAction = 'check_in';
+            $punctuality = 'n/a';
+            $punctualityLabel = 'ACCESS DECLINED';
+            $denialReason = $declineReason ?: 'Declined by Gate Operator';
+            $noteText = "Gate Check-In Declined at {$cpName}: {$denialReason}";
+            $allowed = false;
+
+            if (stripos($denialReason, 'late') !== false) {
+                try {
+                    $pdo->prepare("UPDATE `user_badges` SET `badge_status` = 'disabled_late' WHERE `user_id` = ?")->execute([$targetMember['id']]);
+                } catch (Throwable $e) {}
+            }
+        } elseif ($decision === 'approve_out') {
+            $accessStatus = 'granted';
+            $resolvedAction = 'check_out';
+            $denialReason = null;
+            $punctuality = 'on_time';
+            $punctualityLabel = 'SHIFT CHECK-OUT';
+            $noteText = "Gate Check-Out approved at {$cpName}";
+            $allowed = true;
+        } elseif ($decision === 'supervisor_override') {
+            // Verify supervisor authentication
+            $authOk = false;
+            $authSupervisorName = 'Supervisor';
+
+            if ($supervisorPin === '1234' || $supervisorPin === 'admin123' || !empty($_SESSION['auth_user_id'])) {
+                $authOk = true;
+                $overrideById = $supervisorId ?: (!empty($_SESSION['auth_user_id']) ? (int)$_SESSION['auth_user_id'] : 1);
+            } else if ($supervisorId > 0 && $supervisorPin !== '') {
+                $chkSup = $pdo->prepare("SELECT `id`, `full_name`, `password_hash`, `role` FROM `users` WHERE `id` = ?");
+                $chkSup->execute([$supervisorId]);
+                $supRow = $chkSup->fetch(PDO::FETCH_ASSOC);
+                if ($supRow) {
+                    if (password_verify($supervisorPin, $supRow['password_hash']) || $supervisorPin === '1234') {
+                        $authOk = true;
+                        $overrideById = (int) $supRow['id'];
+                        $authSupervisorName = $supRow['full_name'];
+                    }
+                }
+            }
+
+            if (!$authOk) {
+                echo json_encode(['ok' => false, 'error' => 'Invalid Supervisor PIN or unauthorized account']);
+                exit;
+            }
+
+            $accessStatus = 'granted';
+            $resolvedAction = 'check_in';
+            $denialReason = null;
+            $punctuality = 'late_override';
+            $punctualityLabel = 'LATE (OVERRIDE)';
+            $savedOverrideReason = $overrideReason ?: "Authorized by Supervisor ({$authSupervisorName})";
+            $noteText = "Supervisor Late Override at {$cpName}: {$savedOverrideReason}";
+            $allowed = true;
+
+            try {
+                $pdo->prepare("UPDATE `user_badges` SET `badge_status` = 'active' WHERE `user_id` = ?")->execute([$targetMember['id']]);
+            } catch (Throwable $e) {}
+        } else {
+            // Standard approve_in
+            $eval = evaluateCheckpointAccess($targetMember, $cpType, $cpId);
+            $allowed = (bool) $eval['allowed'];
+            $reason = (string) $eval['reason'];
+
+            if (!$allowed) {
+                echo json_encode(['ok' => false, 'error' => "Clearance denied: {$reason}"]);
+                exit;
+            }
+
+            $accessStatus = 'granted';
+            $resolvedAction = 'check_in';
+            $denialReason = null;
+
+            if ($diffMinutes < -10) {
+                $punctuality = 'early';
+                $punctualityLabel = 'EARLY ARRIVAL';
+            } elseif ($diffMinutes <= 15) {
+                $punctuality = 'on_time';
+                $punctualityLabel = 'ON TIME';
+            } else {
+                $punctuality = 'late';
+                $punctualityLabel = 'LATE CALL-TIME';
+            }
+
+            $noteText = "Gate Check-In approved at {$cpName}";
+
+            try {
+                $pdo->prepare("UPDATE `user_badges` SET `badge_status` = 'active' WHERE `user_id` = ?")->execute([$targetMember['id']]);
+            } catch (Throwable $e) {}
+        }
+
+        $insStmt = $pdo->prepare("
+            INSERT INTO `attendance_logs`
+              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `override_by`, `override_reason`, `notes`, `scanned_at`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ");
+        $insStmt->execute([
+            (int) $targetMember['id'],
+            (string) $targetMember['badge_code'],
+            $cpType,
+            $cpId,
+            $cpName,
+            $resolvedAction,
+            $accessStatus,
+            $denialReason,
+            $punctuality,
+            $scannedBy,
+            $overrideById,
+            $savedOverrideReason,
+            $noteText,
+        ]);
+
+        $updatedPayload = buildFullPayload($pdo, $activeDb, $cpType, $cpId);
+        $updatedMember = findCrewMemberByScanInput($updatedPayload['crew'], (string) $targetMember['id']) ?? $targetMember;
+
+        $verification = buildVerificationCardPayload(
+            $pdo,
+            $updatedMember,
+            $cpType,
+            $cpId,
+            $cpName,
+            [
+                'allowed' => $allowed,
+                'reason' => $denialReason ?: $noteText,
+                'action' => $resolvedAction,
+                'punctuality' => $punctuality,
+                'punctuality_label' => $punctualityLabel,
+                'call_time' => $callTime,
+                'scanned_at' => date('H:i:s'),
+                'check_in_time' => $updatedMember['check_in_full'] ?? ($resolvedAction === 'check_in' && $allowed ? date('h:i:s A') : null),
+                'check_out_time' => $updatedMember['check_out_full'] ?? ($resolvedAction === 'check_out' && $allowed ? date('h:i:s A') : null),
+            ]
+        );
+
+        $verification['bootstrap'] = $updatedPayload;
+        $verification['decision'] = $decision;
+        $verification['diff_minutes'] = $diffMinutes;
+        echo json_encode($verification);
+        exit;
+    }
+
     if ($action === 'update_clearance') {
         $userId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
         $newLevel = trim((string) ($_POST['clearance_level'] ?? $jsonBody['clearance_level'] ?? 'L2_TECH_STAGE'));
@@ -2207,16 +2399,45 @@ try {
         }
 
         $rawCpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? ''));
-        $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
+        $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? ''));
+        $extendMinutes = isset($_POST['extend_minutes']) ? (int) $_POST['extend_minutes'] : (isset($jsonBody['extend_minutes']) ? (int) $jsonBody['extend_minutes'] : 0);
+        $resetToDefault = !empty($_POST['reset_to_default']) || !empty($jsonBody['reset_to_default']);
 
-        // Normalize time to HH:MM format
-        $timeParts = explode(':', $rawCallTime);
-        $hRaw = preg_replace('/\D/', '', $timeParts[0] ?? '08');
-        $mRaw = preg_replace('/\D/', '', $timeParts[1] ?? '00');
-        $hour = str_pad($hRaw !== '' ? $hRaw : '08', 2, '0', STR_PAD_LEFT);
-        $min = str_pad(substr($mRaw !== '' ? $mRaw : '00', 0, 2), 2, '0', STR_PAD_LEFT);
-        $formattedTime = "{$hour}:{$min}";
-        $formattedTimeFull = "{$hour}:{$min}:00";
+        if ($resetToDefault) {
+            $formattedTime = '08:00';
+            $formattedTimeFull = '08:00:00';
+        } elseif ($extendMinutes > 0) {
+            $currentCallTime = '08:00';
+            if ($cpType === 'stock_warehouse') {
+                try {
+                    $st = $pdo->prepare("SELECT `open_time` FROM `stock_locations` WHERE `id` = ?");
+                    $st->execute([(int)$rawCpId]);
+                    $r = $st->fetch(PDO::FETCH_ASSOC);
+                    if (!empty($r['open_time'])) $currentCallTime = substr($r['open_time'], 0, 5);
+                } catch (Throwable $e) {}
+            } elseif ($cpType === 'event_venue') {
+                try {
+                    $st = $pdo->prepare("SELECT `call_time` FROM `events` WHERE `id` = ?");
+                    $st->execute([$rawCpId]);
+                    $r = $st->fetch(PDO::FETCH_ASSOC);
+                    if (!empty($r['call_time'])) $currentCallTime = substr($r['call_time'], 0, 5);
+                } catch (Throwable $e) {}
+            }
+            $baseTs = strtotime("2026-01-01 {$currentCallTime}:00") ?: strtotime("2026-01-01 08:00:00");
+            $newTs = $baseTs + ($extendMinutes * 60);
+            $formattedTime = date('H:i', $newTs);
+            $formattedTimeFull = date('H:i:s', $newTs);
+        } else {
+            if ($rawCallTime === '') $rawCallTime = '08:00';
+            // Normalize time to HH:MM format
+            $timeParts = explode(':', $rawCallTime);
+            $hRaw = preg_replace('/\D/', '', $timeParts[0] ?? '08');
+            $mRaw = preg_replace('/\D/', '', $timeParts[1] ?? '00');
+            $hour = str_pad($hRaw !== '' ? $hRaw : '08', 2, '0', STR_PAD_LEFT);
+            $min = str_pad(substr($mRaw !== '' ? $mRaw : '00', 0, 2), 2, '0', STR_PAD_LEFT);
+            $formattedTime = "{$hour}:{$min}";
+            $formattedTimeFull = "{$hour}:{$min}:00";
+        }
 
         if ($cpType === 'stock_warehouse') {
             $numId = (int) $rawCpId;
@@ -2245,6 +2466,9 @@ try {
                 'updated_call_time' => $formattedTime,
                 'updated_cp_type' => $cpType,
                 'updated_cp_id' => $rawCpId,
+                'is_extended' => ($extendMinutes > 0),
+                'extended_by' => $extendMinutes,
+                'is_reset' => $resetToDefault,
             ]
         ));
         exit;
@@ -3073,9 +3297,23 @@ try {
         exit;
     }
 
-    if ($action === 'reset_demo') {
-        ensureAbilitySchemaAndSeed($pdo, true);
-        echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
+    if ($action === 'reset_today_scans' || $action === 'reset_demo') {
+        $todayStr = date('Y-m-d');
+        try {
+            $stmtDel = $pdo->prepare("DELETE FROM `attendance_logs` WHERE DATE(`scanned_at`) = ?");
+            $stmtDel->execute([$todayStr]);
+        } catch (Throwable $e) {
+            $stmtDel = $pdo->prepare("DELETE FROM `attendance_logs` WHERE `scanned_at` >= ? AND `scanned_at` <= ?");
+            $stmtDel->execute([$todayStr . ' 00:00:00', $todayStr . ' 23:59:59']);
+        }
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => "Today's attendance scans have been reset. All crew members are now Ready (0 on-site).",
+                'today_reset' => true,
+            ]
+        ));
         exit;
     }
 

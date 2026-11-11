@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>aBility Attendance &amp; Access Manager — Enterprise Roles, Permissions &amp; Workforce Attendance Proposal</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 16mm 14mm 16mm 14mm;
+    @top-left {
+      content: "aBility Workforce Attendance & Access Manager — Client Proposal";
+      font-size: 8pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #64748b;
+    }
+    @top-right {
+      content: "Confidential • Enterprise Proposal";
+      font-size: 8pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    @bottom-left {
+      content: "4-Tier RBAC Matrix & Technician Punctuality Lifecycle (On-Time, Late Disable, Permission, Missing Proof)";
+      font-size: 7.5pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #64748b;
+    }
+    @bottom-right {
+      content: "Page " counter(page);
+      font-size: 8pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #0f172a;
+      font-weight: bold;
+    }
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    line-height: 1.45;
+    font-size: 9pt;
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .page {
+    page-break-after: always;
+    position: relative;
+    padding-bottom: 8px;
+  }
+  .page:last-child {
+    page-break-after: avoid;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+
+  /* COVER STYLING */
+  .cover-container {
+    padding: 30px 10px 0 10px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .cover-badge-top {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+  .cover-title {
+    font-size: 27pt;
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1.15;
+    margin: 22px 0 12px 0;
+    letter-spacing: -0.8px;
+  }
+  .cover-subtitle {
+    font-size: 12.5pt;
+    font-weight: 500;
+    color: #475569;
+    line-height: 1.45;
+    max-width: 680px;
+    margin: 0 0 28px 0;
+  }
+  .cover-divider {
+    height: 4px;
+    background: linear-gradient(90deg, #2563eb, #16a34a, #d97706, #dc2626);
+    border-radius: 2px;
+    margin-bottom: 30px;
+  }
+
+  .cover-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+  .cover-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 15px 16px;
+  }
+  .cover-card h4 {
+    margin: 0 0 6px 0;
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #0f172a;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .cover-card p {
+    margin: 0;
+    font-size: 8.5pt;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  .cover-footer {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 8.5pt;
+    color: #64748b;
+  }
+  .cover-footer strong {
+    color: #0f172a;
+  }
+
+  /* HEADINGS */
+  h1 {
+    font-size: 16pt;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 10px 0;
+    letter-spacing: -0.4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h2 {
+    font-size: 12pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 16px 0 6px 0;
+    letter-spacing: -0.2px;
+    border-bottom: 1.5px solid #e2e8f0;
+    padding-bottom: 4px;
+  }
+  h3 {
+    font-size: 10pt;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 12px 0 4px 0;
+  }
+  p {
+    margin: 0 0 8px 0;
+    color: #334155;
+    font-size: 8.8pt;
+  }
+
+  /* CALLOUTS */
+  .callout-box {
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    border-left: 4px solid #2563eb;
+    background: #f0f7ff;
+    font-size: 8.5pt;
+  }
+  .callout-box.amber {
+    border-left-color: #d97706;
+    background: #fffbeb;
+  }
+  .callout-box.green {
+    border-left-color: #16a34a;
+    background: #f0fdf4;
+  }
+  .callout-box.red {
+    border-left-color: #dc2626;
+    background: #fef2f2;
+  }
+  .callout-title {
+    font-weight: 700;
+    font-size: 8.8pt;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* BADGES & PILLS */
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .badge-l1 { background: rgba(22, 163, 74, 0.14); color: #15803d; border: 1px solid rgba(22, 163, 74, 0.3); }
+  .badge-l2 { background: rgba(37, 99, 235, 0.14); color: #1d4ed8; border: 1px solid rgba(37, 99, 235, 0.3); }
+  .badge-l3 { background: rgba(217, 119, 6, 0.15); color: #b45309; border: 1px solid rgba(217, 119, 6, 0.35); }
+  .badge-l4 { background: rgba(220, 38, 38, 0.14); color: #b91c1c; border: 1px solid rgba(220, 38, 38, 0.3); }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .status-on-time { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .status-late { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .status-permission { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+  .status-missing { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+
+  /* TABLES */
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 14px 0;
+    font-size: 8.2pt;
+  }
+  table.data-table th {
+    background: #0f172a;
+    color: #ffffff;
+    font-weight: 600;
+    text-align: left;
+    padding: 6px 9px;
+    font-size: 7.8pt;
+    letter-spacing: 0.3px;
+    border: 1px solid #0f172a;
+  }
+  table.data-table td {
+    padding: 6px 9px;
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+    color: #334155;
+  }
+  table.data-table tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  /* TIER CARDS GRID */
+  .tier-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 10px 0 14px 0;
+  }
+  .tier-box {
+    border-radius: 8px;
+    border: 1.5px solid #e2e8f0;
+    background: #ffffff;
+    overflow: hidden;
+  }
+  .tier-box-header {
+    padding: 7px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .tier-box-body {
+    padding: 9px 12px;
+    font-size: 8pt;
+  }
+  .tier-box-body ul {
+    margin: 5px 0 0 0;
+    padding-left: 16px;
+  }
+  .tier-box-body li {
+    margin-bottom: 3px;
+  }
+
+  /* WORKFLOW STEP DIAGRAM */
+  .workflow-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 12px 0 14px 0;
+  }
+  .workflow-step {
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 9px;
+    background: #ffffff;
+  }
+  .step-num {
+    font-size: 7.5pt;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .step-title {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+  }
+  .step-desc {
+    font-size: 7.8pt;
+    color: #475569;
+    line-height: 1.35;
+  }
+
+  .lifecycle-card {
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    background: #ffffff;
+  }
+  .lifecycle-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 5px;
+  }
+  .lifecycle-header strong {
+    font-size: 9.5pt;
+    color: #0f172a;
+  }
+
+  .summary-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .metric-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 9px 10px;
+    text-align: center;
+  }
+  .metric-val {
+    font-size: 15pt;
+    font-weight: 800;
+    color: #0f172a;
+  }
+  .metric-lbl {
+    font-size: 7.2pt;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+  }
+
+  .header-decor {
+    display: inline-block;
+    width: 5px;
+    height: 16px;
+    background: #2563eb;
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1: COVER -->
+<div class="page">
+  <div class="cover-container">
+    <div>
+      <div class="cover-badge-top">
+        <span>Enterprise Attendance &amp; Workforce Access Proposal</span>
+      </div>
+
+      <div class="cover-title">
+        aBility Workforce Attendance &amp; Gate Access Manager
+      </div>
+      <div class="cover-subtitle">
+        Enterprise 4-Tier Role-Based Access Control (RBAC), Interactive Gate Kiosk Scanning, Real-Time Punctuality Tracking, and Comprehensive Technician Call-Time Lifecycle Enforcement.
+      </div>
+
+      <div class="cover-divider"></div>
+
+      <div class="cover-grid">
+        <div class="cover-card">
+          <h4>Zero Ghost Crew &amp; Anti-Buddy Punching</h4>
+          <p>Instant visual verification deck displaying high-resolution technician headshots, badge IDs, assigned roles, and clearance tiers at the turnstile gate terminal.</p>
+        </div>
+        <div class="cover-card">
+          <h4>Technician Call-Time Punctuality Engine</h4>
+          <p>Strict 4-state lifecycle: <strong>On-Time</strong> green pass, <strong>Late Arrival Auto-Disable</strong> with supervisor unlock gate, <strong>With Permission</strong> exemption, and <strong>Missing / Proof</strong> auditing.</p>
+        </div>
+        <div class="cover-card">
+          <h4>4-Tier Security Clearance Matrix (L1 – L4)</h4>
+          <p>Granular venue perimeter rights separating Executive Management (L4), Gate Supervisors (L3), Stage &amp; Technical Crews (L2), and General Venue Support Staff (L1).</p>
+        </div>
+        <div class="cover-card">
+          <h4>Real-Time Muster Roll &amp; Payroll Integrity</h4>
+          <p>Second-by-second paired check-in/out state machine providing live emergency evacuation roll calls and certified, audit-proof attendance data for vendor payroll.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <div>
+        <strong>Prepared For:</strong> Enterprise Client Operations, Production Producers &amp; Venue HR Leadership<br>
+        <strong>Document Version:</strong> 3.0 (Attendance-Dedicated Edition) • <strong>Classification:</strong> Confidential
+      </div>
+      <div style="text-align: right;">
+        <strong>Workforce Systems Architecture Team</strong><br>
+        aBility Attendance &amp; Security Engineering
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2: WHAT THE CLIENT CAN EXPECT (EXECUTIVE VALUE PROPOSITION) -->
+<div class="page page-break">
+  <h1><span class="header-decor"></span>1. Executive Overview &amp; Client Expectations</h1>
+  
+  <p>
+    Live event venues, arena concerts, broadcast summits, and convention facilities face chronic challenges with workforce punctuality and attendance security. Standard biometric or paper sign-in sheets fail because they lack <strong>perimeter zone awareness, real-time call-time enforcement, and instant visual verification</strong>.
+  </p>
+  <p>
+    The <strong>aBility Attendance &amp; Access Manager</strong> delivers a dedicated, turnkey gate security and timekeeping ecosystem built to solve these vulnerabilities with uncompromising reliability.
+  </p>
+
+  <h2>What the Client Can Expect: Core Attendance Deliverables</h2>
+  
+  <div class="summary-metrics">
+    <div class="metric-card">
+      <div class="metric-val" style="color: #16a34a;">0%</div>
+      <div class="metric-lbl">Ghost Workers Tolerated</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" style="color: #2563eb;">&lt; 0.5s</div>
+      <div class="metric-lbl">Turnstile Scan Speed</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" style="color: #d97706;">100%</div>
+      <div class="metric-lbl">Punctuality Traceability</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-val" style="color: #dc2626;">Real-Time</div>
+      <div class="metric-lbl">Emergency Muster Roll</div>
+    </div>
+  </div>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 26%;">Client Operational Goal</th>
+        <th style="width: 38%;">How the aBility Attendance System Delivers It</th>
+        <th style="width: 36%;">Client Financial &amp; Operational Benefit</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Elimination of Ghost Crew &amp; Buddy Swiping</strong></td>
+        <td>When an RFID badge is presented at the gate, the terminal kiosk (<code>#pane-kiosk</code>) projects the crew member's high-resolution headshot, full legal name, badge number, department, and role in full screen. Gate security physically matches the face to the screen.</td>
+        <td>Prevents fraudulent billing by contractors claiming hours for absent peers; guarantees only verified personnel enter the premises.</td>
+      </tr>
+      <tr>
+        <td><strong>Strict Call-Time Discipline on Live Stages</strong></td>
+        <td>Every production shift has a strictly enforced Call-Time. Technicians arriving within the grace window (+15 min) are admitted. Any technician arriving past the cutoff is <strong>automatically locked out</strong> at the gate turnstile.</td>
+        <td>Ensures stage managers, lighting operators, and audio crews are on-site and briefed well before rehearsals and live showtime commence.</td>
+      </tr>
+      <tr>
+        <td><strong>Controlled Late Arrival Reactivation</strong></td>
+        <td>A late-locked technician cannot scan through. Entry requires an authorized supervisor (Technical Lead or HR) to log an in-person override with documented justification, stamping the incident in the audit log.</td>
+        <td>Eliminates casual unrecorded tardiness; creates peer accountability and complete visibility for project leadership.</td>
+      </tr>
+      <tr>
+        <td><strong>Verified Absence &amp; Proof Audit Trail</strong></td>
+        <td>Unaccounted no-shows are flagged as <strong>Missing</strong> at shift cutoff. Hard suspension remains active until the technician submits verified proof (medical certificate, police report, transit delay proof) approved by HR.</td>
+        <td>Full contractual compliance for production labor unions, client billing reconciliations, and disciplinary transparency.</td>
+      </tr>
+      <tr>
+        <td><strong>Live Emergency Muster Roll &amp; Evacuation Safety</strong></td>
+        <td>The system maintains a live, paired state machine (<code>Ready</code> &rarr; <code>Checked In</code> &rarr; <code>Checked Out</code>). In the event of a fire alarm or security evacuation, an instantaneous muster roll report shows exact names currently inside the facility.</td>
+        <td>Meets international venue safety standards (OSHA/NFPA) and ensures zero staff are unaccounted for during building emergencies.</td>
+      </tr>
+      <tr>
+        <td><strong>Automated Timesheet &amp; Payroll Reconciliation</strong></td>
+        <td>Attendance logs record exact timestamps to the second. Lunch breaks, check-outs, and overtime are calculated automatically, ready for one-click export into payroll and billing software.</td>
+        <td>Eliminates manual timesheet math, dispute friction, and overpayment of unapproved contractor hours.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout-box">
+    <div class="callout-title" style="color: #1e40af;">
+      <strong>High-Throughput Concurrency for Peak Shift Influx</strong>
+    </div>
+    During 07:00–08:30 AM crew call-ins, the Gate Kiosk processes up to <strong>60 badge scans per minute per lane</strong> with sub-500ms latency, preventing security queue backups at turnstiles while executing complete identity and clearance checks.
+  </div>
+</div>
+
+<!-- PAGE 3: 4-TIER SECURITY CLEARANCE MATRIX -->
+<div class="page page-break">
+  <h1><span class="header-decor"></span>2. The 4-Tier Security Clearance Matrix (L1 – L4)</h1>
+  <p>
+    Access privileges within the venue are governed by four distinct security clearance levels. Each tier enforces clear perimeter boundaries, turnstile rules, badge color coding, and administrative capabilities.
+  </p>
+
+  <div class="tier-cards-grid">
+    <!-- L1 -->
+    <div class="tier-box" style="border-top: 4px solid #16a34a;">
+      <div class="tier-box-header" style="background: #f0fdf4;">
+        <span class="badge badge-l1">Level 1 (L1)</span>
+        <strong style="color: #166534; font-size: 8.5pt;">Event Venue Basic Crew</strong>
+      </div>
+      <div class="tier-box-body">
+        <strong>Roles:</strong> General Venue Crew, Catering, Cleaners, Hospitality, Drivers, Security.<br>
+        <strong>Clearance Scope:</strong> Front of House, General Access, Perimeter Gates.<br>
+        <strong>High-Security Zones:</strong> <span style="color: #dc2626; font-weight: 700;">RESTRICTED (Stage, FOH &amp; Control Rooms)</span>
+        <ul>
+          <li>Authorized for staff entrance turnstiles and perimeter gates only.</li>
+          <li>Turnstile scans at backstage and control room doors trigger <em>"ACCESS RESTRICTED: L1 BASIC"</em>.</li>
+          <li>Standard shift attendance logging; zero administrative or override privileges.</li>
+          <li>Subject to basic shift attendance recording and check-out verification.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- L2 -->
+    <div class="tier-box" style="border-top: 4px solid #2563eb;">
+      <div class="tier-box-header" style="background: #eff6ff;">
+        <span class="badge badge-l2">Level 2 (L2)</span>
+        <strong style="color: #1e40af; font-size: 8.5pt;">Technical &amp; Production Crew</strong>
+      </div>
+      <div class="tier-box-body">
+        <strong>Roles:</strong> Sound Engineers, Lighting Techs, Video Directors, Riggers, Stage Managers.<br>
+        <strong>Clearance Scope:</strong> Full Venue Production Perimeters, Backstage, Stage Left/Right, FOH.<br>
+        <strong>Call-Time Enforcement:</strong> <span style="color: #2563eb; font-weight: 700;">STRICT 4-STATE PUNCTUALITY</span>
+        <ul>
+          <li>Unrestricted movement across live production zones, truss access points, and technical booths.</li>
+          <li>Bound to strict scheduled Call-Times: <strong>Auto-disabled if arriving &gt; 15 min late</strong>.</li>
+          <li>Requires in-person supervisor override to restore access if tardy.</li>
+          <li>Profile links to punctuality scorecards, show assignments, and department rosters.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- L3 -->
+    <div class="tier-box" style="border-top: 4px solid #d97706;">
+      <div class="tier-box-header" style="background: #fffbeb;">
+        <span class="badge badge-l3">Level 3 (L3)</span>
+        <strong style="color: #b45309; font-size: 8.5pt;">Gate Supervisors &amp; Attendance Controllers</strong>
+      </div>
+      <div class="tier-box-body">
+        <strong>Roles:</strong> Gate Kiosk Operators, Check-In Desk Marshals, Turnstile Supervisors.<br>
+        <strong>Clearance Scope:</strong> Access Checkpoints, Security Gates, Loading Docks.<br>
+        <strong>Gate Authority:</strong> <span style="color: #d97706; font-weight: 700;">TERMINAL OPERATOR &amp; VERIFIER</span>
+        <ul>
+          <li>Operates Gate Kiosks (<code>#pane-kiosk</code>), executes RFID scans, verifies photo matches.</li>
+          <li>Monitors turnstile flow and flags badge anomalies or visual mismatches.</li>
+          <li><strong>Separation of Duties:</strong> Strictly prohibited from creating or modifying crew accounts (prevents internal credential fabrication).</li>
+          <li>Registers manual check-in/out under supervisor supervision when badges are damaged.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- L4 -->
+    <div class="tier-box" style="border-top: 4px solid #dc2626;">
+      <div class="tier-box-header" style="background: #fef2f2;">
+        <span class="badge badge-l4">Level 4 (L4)</span>
+        <strong style="color: #991b1b; font-size: 8.5pt;">Executive &amp; Operations Management</strong>
+      </div>
+      <div class="tier-box-body">
+        <strong>Roles:</strong> Technical Leads, Production Directors, Operations Managers, Administrators.<br>
+        <strong>Clearance Scope:</strong> Universal 24/7 All-Access across all doors, gates, and perimeters.<br>
+        <strong>Governance:</strong> <span style="color: #dc2626; font-weight: 700;">CALL-TIMES, OVERRIDES &amp; HR APPROVALS</span>
+        <ul>
+          <li>Defines event Call-Times, shift schedules, and grace periods.</li>
+          <li>Empowered with <strong>Emergency Late Override</strong> to reactivate disabled badges.</li>
+          <li>Issues advance <em>"With Permission"</em> exemption passes for unavoidable delays.</li>
+          <li>Reviews and approves/rejects <em>"Missing / Proof"</em> submissions; certifies payroll.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2>Attendance Clearance Tier Matrix Specification</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 10%;">Tier</th>
+        <th style="width: 22%;">Designation</th>
+        <th style="width: 18%;">Badge Header Color</th>
+        <th style="width: 25%;">Perimeter Access Rights</th>
+        <th style="width: 25%;">Attendance &amp; Schedule Rules</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-l1">L1</span></td>
+        <td>Basic Venue Crew</td>
+        <td>Emerald Green (#16a34a)</td>
+        <td>General Staff Entrance &amp; Public Gates</td>
+        <td>Standard shift clock-in; no production call-time binding.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-l2">L2</span></td>
+        <td>Technical &amp; Stage Crew</td>
+        <td>Royal Blue (#2563eb)</td>
+        <td>All Production &amp; Backstage Zones</td>
+        <td><strong style="color: #dc2626;">Strict Call-Time; Auto-Disabled if &gt; 15 min late.</strong></td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-l3">L3</span></td>
+        <td>Gate Attendance Controller</td>
+        <td>Amber Orange (#d97706)</td>
+        <td>Gate Checkpoints &amp; Security Stations</td>
+        <td>Kiosk operator; validates attendees; no user editing rights.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-l4">L4</span></td>
+        <td>Executive &amp; All-Access</td>
+        <td>Crimson Red (#dc2626)</td>
+        <td>Universal (24/7 All Gates &amp; Zones)</td>
+        <td>Sets call-times, executes overrides, approves missing proof.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- PAGE 4: DETAILED ROLES & PERMISSIONS GOVERNANCE MATRIX -->
+<div class="page page-break">
+  <h1><span class="header-decor"></span>3. Comprehensive Roles &amp; Permissions Governance</h1>
+  <p>
+    The aBility platform enforces zero-trust Role-Based Access Control on every API call. The matrix below defines the exact attendance authorities, administrative scopes, and security boundaries per role:
+  </p>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 18%;">Role Title</th>
+        <th style="width: 9%;">Tier</th>
+        <th style="width: 14%;">Gate Scanning Authority</th>
+        <th style="width: 15%;">Call-Time Scheduling</th>
+        <th style="width: 15%;">Late Badge Override</th>
+        <th style="width: 15%;">Proof Verification</th>
+        <th style="width: 14%;">Crew Provisioning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>System Administrator</strong></td>
+        <td><span class="badge badge-l4">L4</span></td>
+        <td>All Gates &amp; Terminals</td>
+        <td>All Events &amp; Shifts</td>
+        <td>Universal Master Override</td>
+        <td>Final HR Certification</td>
+        <td>Full Access (All Tiers)</td>
+      </tr>
+      <tr>
+        <td><strong>Production Director</strong></td>
+        <td><span class="badge badge-l4">L4</span></td>
+        <td>All Gates &amp; Terminals</td>
+        <td>All Production Shifts</td>
+        <td>Authorized for All Crew</td>
+        <td>Approve / Reject Proof</td>
+        <td>Onboard L1 / L2 Crew</td>
+      </tr>
+      <tr>
+        <td><strong>Technical Lead</strong></td>
+        <td><span class="badge badge-l4">L4</span></td>
+        <td>All Gates &amp; Terminals</td>
+        <td>Stage &amp; Technical Shifts</td>
+        <td>Authorized for Stage Techs</td>
+        <td>Approve / Reject Proof</td>
+        <td>Onboard Technical Crew</td>
+      </tr>
+      <tr>
+        <td><strong>Gate Controller</strong></td>
+        <td><span class="badge badge-l3">L3</span></td>
+        <td>Operates Gate Kiosk</td>
+        <td><strong style="color: #dc2626;">Restricted (Read-Only)</strong></td>
+        <td><strong style="color: #dc2626;">Restricted (Requires L4)</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted (No Access)</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Lead Sound Engineer</strong></td>
+        <td><span class="badge badge-l2">L2</span></td>
+        <td>Self Scan at Gates</td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Lighting Technician</strong></td>
+        <td><span class="badge badge-l2">L2</span></td>
+        <td>Self Scan at Gates</td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Video Director</strong></td>
+        <td><span class="badge badge-l2">L2</span></td>
+        <td>Self Scan at Gates</td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Stage Manager</strong></td>
+        <td><span class="badge badge-l2">L2</span></td>
+        <td>Self Scan at Gates</td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Stage / Audio Tech</strong></td>
+        <td><span class="badge badge-l2">L2</span></td>
+        <td>Self Scan at Gates</td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Venue Support Crew</strong></td>
+        <td><span class="badge badge-l1">L1</span></td>
+        <td>Self Scan at Gates</td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Security Guard</strong></td>
+        <td><span class="badge badge-l1">L1</span></td>
+        <td>Self Scan at Gates</td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Logistics Driver</strong></td>
+        <td><span class="badge badge-l1">L1</span></td>
+        <td>Self Scan at Gates</td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+        <td><strong style="color: #dc2626;">Restricted</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Separation of Duties: Anti-Fraud Architecture</h2>
+  <div class="callout-box amber">
+    <div class="callout-title" style="color: #b45309;">
+      <strong>Why Gate Controllers (L3) Cannot Create Users or Execute Overrides Alone</strong>
+    </div>
+    To prevent gate collusion (where a turnstile marshal secretly admits friends or fake employees), <strong>Gate Controllers (L3) are physically locked out from user creation and late override permissions</strong>. Overriding a disabled badge requires a two-party interaction: the technician at the gate and an authenticated Level 4 supervisor logging the override with individual credentials.
+  </div>
+</div>
+
+<!-- PAGE 5: DEDICATED TECHNICIAN ATTENDANCE & PUNCTUALITY LIFECYCLE -->
+<div class="page page-break">
+  <h1><span class="header-decor"></span>4. Dedicated Technician Attendance &amp; Punctuality Lifecycle</h1>
+  <p>
+    Live event production is hyper-sensitive to call-time punctuality. If a Front of House audio engineer or lighting tech arrives late, rehearsals stall, sound checks fail, and show schedules crumble. The aBility system enforces an automated <strong>4-State Punctuality State Machine</strong>:
+  </p>
+
+  <div class="workflow-grid">
+    <div class="workflow-step" style="border-top: 3px solid #16a34a;">
+      <div class="step-num" style="color: #16a34a;">State 1</div>
+      <div class="step-title">ON TIME</div>
+      <div class="step-desc">Arrival within call-time window (+15m grace). Full green badge admission. Shift active.</div>
+    </div>
+    <div class="workflow-step" style="border-top: 3px solid #dc2626;">
+      <div class="step-num" style="color: #dc2626;">State 2</div>
+      <div class="step-title">LATE (DISABLE)</div>
+      <div class="step-desc">Arrival past cutoff (&gt;15m late). Badge locked at gate. In-person supervisor unlock required.</div>
+    </div>
+    <div class="workflow-step" style="border-top: 3px solid #2563eb;">
+      <div class="step-num" style="color: #2563eb;">State 3</div>
+      <div class="step-title">WITH PERMISSION</div>
+      <div class="step-desc">Pre-approved late pass or shift adjustment. Admitted cleanly with audit attribution.</div>
+    </div>
+    <div class="workflow-step" style="border-top: 3px solid #d97706;">
+      <div class="step-num" style="color: #d97706;">State 4</div>
+      <div class="step-title">MISSING / PROOF</div>
+      <div class="step-desc">No-show at shift cutoff. Hard suspension until verified documentary proof uploaded.</div>
+    </div>
+  </div>
+
+  <!-- THE 4 LIFECYCLE CARDS -->
+
+  <div class="lifecycle-card" style="border-left: 5px solid #16a34a;">
+    <div class="lifecycle-header">
+      <div>
+        <span class="status-pill status-on-time">STATE 1: ON TIME</span>
+        <strong style="margin-left: 8px;">Punctual Check-In &amp; Immediate Gate Clearance</strong>
+      </div>
+      <span style="font-size: 8pt; color: #16a34a; font-weight: 700;">GREEN PASS • ACTIVE</span>
+    </div>
+    <p><strong>Qualification Rule:</strong> Technician scans at any authorized venue checkpoint between 60 minutes prior to Call-Time up to 15 minutes after Call-Time (Standard Grace Period).</p>
+    <p><strong>System &amp; Turnstile Behavior:</strong></p>
+    <ul>
+      <li>Instant acoustic chime and green terminal banner: <em>"ACCESS GRANTED — ON TIME"</em>.</li>
+      <li>Attendance log record generated with <code>access_status = 'granted'</code> and <code>punctuality_status = 'on_time'</code>.</li>
+      <li>Workforce state transitions from <code>Ready</code> to <code>Checked In</code> with timestamp down to the second.</li>
+      <li>Full access rights across assigned production perimeters (Backstage, Stage Left/Right, FOH).</li>
+    </ul>
+  </div>
+
+  <div class="lifecycle-card" style="border-left: 5px solid #dc2626;">
+    <div class="lifecycle-header">
+      <div>
+        <span class="status-pill status-late">STATE 2: LATE (DISABLE)</span>
+        <strong style="margin-left: 8px;">Automated Access Suspension &amp; Supervisor Override Gate</strong>
+      </div>
+      <span style="font-size: 8pt; color: #dc2626; font-weight: 700;">GATE LOCKOUT • HARD STOP</span>
+    </div>
+    <p><strong>Qualification Rule:</strong> Technician scans &gt; 15 minutes after the scheduled Call-Time with zero pre-authorized exemption on record.</p>
+    <p><strong>System &amp; Turnstile Behavior:</strong></p>
+    <ul>
+      <li><strong>Automatic Badge Disable:</strong> Turnstile physically rejects entry. Terminal flashes red visual alert: <em>"ACCESS RESTRICTED: LATE CALL-TIME — BADGE LOCKED"</em>.</li>
+      <li>Prevents late technicians from quietly slipping onto live stages, bypassing safety briefings, or billing unworked hours.</li>
+      <li><strong>Supervisor Unlock Protocol:</strong> To admit the technician, a Level 4 supervisor (Technical Lead or Operations Manager) must log into the supervisor terminal, enter authorization credentials, document the reason for tardiness, and execute an <em>"Override &amp; Admit"</em> command.</li>
+      <li>The incident is permanently stamped in the audit log, recording the exact minutes of tardiness and the supervisor who authorized entry.</li>
+    </ul>
+  </div>
+
+  <div class="lifecycle-card" style="border-left: 5px solid #2563eb;">
+    <div class="lifecycle-header">
+      <div>
+        <span class="status-pill status-permission">STATE 3: WITH PERMISSION</span>
+        <strong style="margin-left: 8px;">Pre-Authorized Schedule Variance &amp; Protected Scorecard</strong>
+      </div>
+      <span style="font-size: 8pt; color: #1d4ed8; font-weight: 700;">APPROVED OVERRIDE • NO PENALTY</span>
+    </div>
+    <p><strong>Qualification Rule:</strong> Technician notified production management in advance (e.g., flight delay, transit disruption, sound check rescheduling, medical appointment) and received an authorized exemption pass.</p>
+    <p><strong>System &amp; Turnstile Behavior:</strong></p>
+    <ul>
+      <li>Supervisor issues a <em>"Permission Token"</em> in the management portal with expected arrival time and reason.</li>
+      <li>When the technician presents their badge at the gate, the terminal reads the active permission token.</li>
+      <li>Kiosk projects: <em>"ACCESS GRANTED — WITH PERMISSION (Authorized by Tech Lead)"</em>.</li>
+      <li>Technician is admitted without delay; punctuality logs record <code>with_permission</code>, protecting the technician's reliability scorecard and payroll contract from penalty deductions.</li>
+    </ul>
+  </div>
+
+  <div class="lifecycle-card" style="border-left: 5px solid #d97706;">
+    <div class="lifecycle-header">
+      <div>
+        <span class="status-pill status-missing">STATE 4: MISSING — PROVIDE PROOF</span>
+        <strong style="margin-left: 8px;">Unaccounted No-Show &amp; Mandatory Documentary Evidence Workflow</strong>
+      </div>
+      <span style="font-size: 8pt; color: #b45309; font-weight: 700;">SUSPENSION • PROOF AUDIT</span>
+    </div>
+    <p><strong>Qualification Rule:</strong> Scheduled technician fails to scan at any venue gate before the shift call-time cutoff, with no pre-approved permission logged.</p>
+    <p><strong>System &amp; Turnstile Behavior:</strong></p>
+    <ul>
+      <li>Automated background job flags the technician profile as <strong>MISSING / NO-SHOW</strong>.</li>
+      <li>Immediate alert sent to the Technical Lead to dispatch a backup/stand-in technician so show operations are not left uncrewed.</li>
+      <li><strong>Hard Perimeter Suspension:</strong> The technician's badge is blacklisted from all venue gates.</li>
+      <li><strong>Mandatory Proof Submission:</strong> To clear the flag and authorize hours, the technician must submit official documentary evidence (hospital note, official transit delay slip, police incident log).</li>
+      <li>HR / Management reviews proof -> <strong>If Approved:</strong> Tagged as <em>"Excused Absence (Proof Verified)"</em> and badge restored; <strong>If Rejected:</strong> Confirmed as <em>"Unexcused Absence (Disciplinary Flag)"</em> with contracted penalties.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- PAGE 6: GATE KIOSK ARCHITECTURE & TURNSTILE FLOW -->
+<div class="page page-break">
+  <h1><span class="header-decor"></span>5. Gate Terminal Kiosk (#pane-kiosk) &amp; Checkpoint Architecture</h1>
+  <p>
+    The interactive Gate Kiosk is the frontline defense of the client's venue attendance. Designed for rapid, high-throughput scanning during morning call-in rushes, the terminal guarantees absolute identity verification and smooth turnstile operation.
+  </p>
+
+  <h2>Interactive Gate Kiosk Core Specifications</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 25%;">Terminal Feature</th>
+        <th style="width: 40%;">Technical Implementation</th>
+        <th style="width: 35%;">Client Operational Benefit</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Instant Photo Verification Deck</strong></td>
+        <td>On badge scan, modal instantly presents the crew member's high-resolution headshot, full legal name, badge number, department, and role in full screen.</td>
+        <td>Security staff visually verify that the person presenting the card is the actual employee. Zero buddy punching.</td>
+      </tr>
+      <tr>
+        <td><strong>Paired State Machine Tracking</strong></td>
+        <td>Enforces logical transition sequence: <code>Ready</code> &rarr; <code>Checked In</code> &rarr; <code>Checked Out</code>. Prevents duplicate check-ins or phantom exits.</td>
+        <td>Guarantees exact timesheet accuracy; prevents technicians from claiming hours while off-site.</td>
+      </tr>
+      <tr>
+        <td><strong>Multi-Gate Synchronization</strong></td>
+        <td>All turnstiles and security gates communicate over local LAN/WAN. Checking in at Gate A immediately updates status across Gate B, C, and D.</td>
+        <td>Prevents badge sharing across multiple perimeter doors (Anti-Passback protection).</td>
+      </tr>
+      <tr>
+        <td><strong>High-Throughput Sub-500ms Scan</strong></td>
+        <td>Scan evaluation executes in &lt; 0.5s including database check, call-time calculation, and visual render.</td>
+        <td>Eliminates entrance bottlenecks and keeps 500+ crew moving efficiently during shift changes.</td>
+      </tr>
+      <tr>
+        <td><strong>Visual &amp; Acoustic Status Feedback</strong></td>
+        <td>Distinct acoustic chimes and color banners: Green for On-Time, Red/Amber alarm for Late Lockout, Blue for With-Permission.</td>
+        <td>Security marshals receive immediate sensory feedback without having to read small screen text.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Anti-Passback &amp; Real-Time Perimeter Enforcement</h2>
+  <div class="callout-box green">
+    <div class="callout-title" style="color: #15803d;">
+      <strong>Anti-Passback Security Rule: Preventing Badge Hand-Backs</strong>
+    </div>
+    The aBility state machine enforces strict Anti-Passback logic: Once a badge is scanned as <code>Checked In</code>, it cannot be scanned again for entry at any gate until a corresponding <code>Checked Out</code> scan is recorded. If a technician attempts to hand their badge backward over the turnstile to an accomplice, the terminal immediately alarms: <em>"DENIED: BADGE ALREADY CHECKED IN"</em>.
+  </div>
+
+  <h2>Offline Local Resilience &amp; Network Redundancy</h2>
+  <p>
+    Production venues often experience network dropouts. The aBility Gate Kiosk operates with an intelligent local caching engine on XAMPP/MySQL:
+  </p>
+  <ul>
+    <li>If external internet drops, the local gate server continues processing scans, verifying headshots, and enforcing call-time rules without interruption.</li>
+    <li>Once network connectivity resumes, all attendance logs synchronize automatically to the central management database with original timestamps preserved.</li>
+  </ul>
+</div>
+
+<!-- PAGE 7: MUSTER ROLL, AUDIT TRAIL, SLA ROADMAP & SIGN-OFF -->
+<div class="page page-break">
+  <h1><span class="header-decor"></span>6. Muster Roll, Audit Trail, SLA &amp; Sign-Off</h1>
+  <p>
+    Every scan, punctuality status, supervisor override, and proof submission is logged into an immutable MySQL audit table. This data provides 100% legal compliance for labor audits, venue safety, and client billing reconciliations.
+  </p>
+
+  <h2>Live Emergency Evacuation Muster Roll</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 25%;">Muster Roll Capability</th>
+        <th style="width: 45%;">Functionality</th>
+        <th style="width: 30%;">Safety &amp; Compliance Benefit</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Real-Time On-Site Headcount</strong></td>
+        <td>Displays active count of all personnel currently inside the venue per gate, department, and company.</td>
+        <td>Instant verification of total souls inside the building for fire department incident commanders.</td>
+      </tr>
+      <tr>
+        <td><strong>One-Click Evacuation List</strong></td>
+        <td>Dedicated emergency button prints/exports an alphabetical roster of all checked-in personnel with phone numbers and supervisor contacts.</td>
+        <td>Roll-call marshals at exterior assembly points can verify every individual within minutes of alarm.</td>
+      </tr>
+      <tr>
+        <td><strong>Missing Person Identification</strong></td>
+        <td>Highlights personnel who checked in but have not checked out through assembly point scanners.</td>
+        <td>Directs emergency rescue personnel straight to missing crew members' assigned workstations.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Turnkey 4-Phase Deployment Roadmap</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Implementation Phase</th>
+        <th style="width: 35%;">Key Milestones &amp; Actions</th>
+        <th style="width: 45%;">Client Operational Outcome</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Phase 1: Setup &amp; Matrix Config</strong><br><small style="color: #64748b;">Days 1 – 3</small></td>
+        <td>Deploy gate server, configure 4-Tier matrix, configure gate checkpoints and Call-Time rules.</td>
+        <td>Complete software and hardware infrastructure active and ready for badge provisioning.</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 2: Crew Onboarding</strong><br><small style="color: #64748b;">Days 4 – 7</small></td>
+        <td>Import crew rosters, capture high-res headshots, assign clearance tiers, issue RFID badges.</td>
+        <td>Every crew member receives an encoded badge with printed clearance tier and QR/barcode.</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 3: Turnstile Dry-Run</strong><br><small style="color: #64748b;">Days 8 – 10</small></td>
+        <td>Deploy kiosks at venue gates; train controllers on photo verification; rehearse late disable &amp; override flows.</td>
+        <td>Security staff fully proficient in rapid scanning, anti-passback rules, and override procedures.</td>
+      </tr>
+      <tr>
+        <td><strong>Phase 4: Live Event Launch</strong><br><small style="color: #64748b;">Days 11+</small></td>
+        <td>Full live operations across all perimeter gates; real-time muster roll active; daily automated punctuality scorecards.</td>
+        <td>100% transparent attendance, zero buddy punching, and complete workforce punctuality discipline.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout-box" style="margin-top: 20px;">
+    <div class="callout-title" style="color: #0f172a;">
+      <strong>Proposal Summary &amp; Client Commitment</strong>
+    </div>
+    The <strong>aBility Attendance &amp; Access Manager</strong> delivers unprecedented accountability for event labor and venue operations. By pairing the strict 4-Tier security clearance matrix with the automated Technician Punctuality Lifecycle (On-Time, Late Disable, With Permission, Missing Proof), the client is guaranteed an airtight attendance system that eliminates ghost workers, protects budgets, and maintains show discipline.
+  </div>
+
+  <div style="margin-top: 32px; padding-top: 14px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; font-size: 8.5pt; color: #64748b;">
+    <div>
+      <strong>Submitted By:</strong> aBility Workforce Systems Architecture Team<br>
+      <strong>Contact:</strong> attendance-ops@ability-manager.internal
+    </div>
+    <div style="text-align: right;">
+      <strong>Accepted &amp; Authorized By:</strong> ____________________________<br>
+      <strong>Title &amp; Date:</strong> ________________________________________
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
