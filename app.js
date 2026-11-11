@@ -103,6 +103,8 @@
       itemSearch: '',
       categoryFilter: 'all',
       locationFilter: 'all',
+      itemPage: 1,
+      itemPerPage: 10,
     },
 
     // User Activity Timeline pagination (5 items per page)
@@ -505,10 +507,27 @@
   }
 
   function switchScreen(screenKey, scrollToId = null) {
-    if (isCurrentUserStockController() && screenKey !== 'attendees') {
-      showToast('Access Restricted: Stock Controllers are assigned exclusively to Staff ID Badges & Gate Terminal (#pane-kiosk).');
-      screenKey = 'attendees';
-      scrollToId = 'pane-kiosk';
+    if (!isScreenPermittedForCurrentUser(screenKey)) {
+      const rawRole = (state.currentUser?.role || '').toLowerCase();
+      const isStockCtrl = rawRole === 'stock_controller';
+      const isTech = rawRole === 'tech_lead';
+      const isStockMgr = rawRole === 'stock_manager';
+
+      if (isStockCtrl) {
+        showToast('Access Scoped: Stock Controllers are assigned to Gate Kiosk (#pane-kiosk) and Stock Batch Approvals.');
+        screenKey = 'attendees';
+        scrollToId = 'pane-kiosk';
+      } else if (isTech) {
+        showToast('Access Restricted: Warehouse inventory management is reserved for Stock Managers.');
+        screenKey = 'overview';
+      } else if (isStockMgr) {
+        showToast('Access Restricted: Venue Security Portal is reserved for Technical Leads and Administrators.');
+        screenKey = 'overview';
+      } else {
+        showToast('Access Restricted: Crew members are scoped to Personal Badge & Gate Kiosk view.');
+        screenKey = 'attendees';
+        scrollToId = 'pane-kiosk';
+      }
     }
     state.activeScreen = screenKey;
     const screens = {
@@ -544,7 +563,7 @@
       events: 'Venues & Stock Gates',
       users: 'Staff, Technicians & Role Management',
       attendees: 'Staff ID Badges & Gate Terminal (#pane-kiosk)',
-      analytics: 'Stock Batch Approvals & 4-Tier Access Matrix',
+      analytics: 'Stock Batch Approvals & Clearance Matrix',
       'stock-manager': 'Stocks & Warehouses Inventory Manager',
     };
     const bc = document.getElementById('breadcrumb-page');
@@ -628,124 +647,268 @@
   function isCurrentUserAdmin() {
     if (!state.currentUser) return false;
     const role = (state.currentUser.role || '').toLowerCase();
-    const clearance = (state.currentUser.clearance_code || '').toUpperCase();
-    return (
-      role === 'admin' ||
-      role === 'manager' ||
-      role === 'tech_lead' ||
-      clearance.includes('L4') ||
-      clearance === 'L4_ALL_ACCESS'
-    );
+    return role === 'admin' || role === 'manager' || role === 'administrator';
+  }
+
+  function isCurrentUserTechLead() {
+    if (!state.currentUser) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return role === 'tech_lead' || isCurrentUserAdmin();
+  }
+
+  function isCurrentUserStockManager() {
+    if (!state.currentUser) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return role === 'stock_manager' || isCurrentUserAdmin();
   }
 
   function isCurrentUserStockController() {
     if (!state.currentUser) return false;
     const role = (state.currentUser.role || '').toLowerCase();
-    const clearance = (state.currentUser.clearance_code || '').toUpperCase();
-    return (
-      role === 'stock_controller' ||
-      role === 'stock_manager' ||
-      clearance === 'L3' ||
-      clearance.startsWith('L3')
-    );
+    return role === 'stock_controller';
+  }
+
+  function isCurrentUserTechnician() {
+    if (!state.currentUser) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return role === 'technician' || (!isCurrentUserAdmin() && !isCurrentUserTechLead() && !isCurrentUserStockManager() && !isCurrentUserStockController());
+  }
+
+  function isScreenPermittedForCurrentUser(screenKey) {
+    if (isCurrentUserAdmin()) return true;
+    const rawRole = (state.currentUser?.role || '').toLowerCase();
+    const isAdmin = isCurrentUserAdmin();
+    const isTech = rawRole === 'tech_lead' && !isAdmin;
+    const isStockMgr = rawRole === 'stock_manager' && !isAdmin;
+    const isStockCtrl = rawRole === 'stock_controller';
+
+    if (isStockCtrl) {
+      return screenKey === 'attendees' || screenKey === 'analytics';
+    }
+    if (isTech) {
+      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees';
+    }
+    if (isStockMgr) {
+      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'analytics' || screenKey === 'stock-manager';
+    }
+    // Technician / Standard crew:
+    return screenKey === 'attendees';
+  }
+
+  function canCurrentUserAddUser() {
+    if (!state.currentUser) return false;
+    return isCurrentUserAdmin() || isCurrentUserTechLead() || isCurrentUserStockManager();
+  }
+
+  function canCurrentUserAssignEvents() {
+    if (!state.currentUser) return false;
+    return isCurrentUserAdmin() || isCurrentUserTechLead();
+  }
+
+  function canCurrentUserSetCallTime() {
+    if (!state.currentUser) return false;
+    return isCurrentUserAdmin() || isCurrentUserTechLead() || isCurrentUserStockManager();
+  }
+
+  function renderUsersDelegationBanner() {
+    const bannerEl = document.getElementById('users-page-delegation-banner');
+    if (!bannerEl) return;
+    const isAdmin = isCurrentUserAdmin();
+    const isTech = (state.currentUser?.role || '').toLowerCase() === 'tech_lead' && !isAdmin;
+    const isStockMgr = (state.currentUser?.role || '').toLowerCase() === 'stock_manager' && !isAdmin;
+
+    const iconEl = document.getElementById('users-page-delegation-icon');
+    const titleEl = document.getElementById('users-page-delegation-title');
+    const descEl = document.getElementById('users-page-delegation-desc');
+    const pillEl = document.getElementById('users-page-delegation-pill');
+
+    if (isStockMgr) {
+      bannerEl.style.display = 'flex';
+      bannerEl.style.background = 'rgba(217, 119, 6, 0.08)';
+      bannerEl.style.border = '1px solid rgba(217, 119, 6, 0.3)';
+      bannerEl.style.color = '#92400e';
+      if (iconEl) iconEl.textContent = '🏭';
+      if (titleEl) titleEl.textContent = 'Stock Manager Scoped Delegation Active';
+      if (descEl) descEl.innerHTML = 'You are authorized to onboard and manage warehouse, logistics, and technical stage personnel with <strong>Level 1 (Venue/Logistics)</strong> or <strong>Level 2 (Technical)</strong> clearance. Higher clearance tiers (L3–L8) and management roles require Administrator clearance.';
+      if (pillEl) {
+        pillEl.textContent = 'Scoped L1 / L2';
+        pillEl.style.background = 'rgba(217, 119, 6, 0.15)';
+        pillEl.style.color = '#b45309';
+      }
+    } else if (isTech) {
+      bannerEl.style.display = 'flex';
+      bannerEl.style.background = 'rgba(37, 99, 235, 0.08)';
+      bannerEl.style.border = '1px solid rgba(37, 99, 235, 0.3)';
+      bannerEl.style.color = '#1e40af';
+      if (iconEl) iconEl.textContent = '🎛️';
+      if (titleEl) titleEl.textContent = 'Technical Lead Scoped Delegation Active';
+      if (descEl) descEl.innerHTML = 'You are authorized to assign event call times, manage crew rosters, and onboard technical personnel with <strong>Level 1 or Level 2</strong> clearance. Higher clearance tiers require Administrator clearance.';
+      if (pillEl) {
+        pillEl.textContent = 'Scoped L1 / L2';
+        pillEl.style.background = 'rgba(37, 99, 235, 0.15)';
+        pillEl.style.color = '#1d4ed8';
+      }
+    } else {
+      bannerEl.style.display = 'none';
+    }
   }
 
   function applyNavigationRestrictions() {
-    const isStock = isCurrentUserStockController();
-    const navItems = document.querySelectorAll('.sidebar .nav-item[data-nav-target]');
-    navItems.forEach((btn) => {
-      const target = btn.getAttribute('data-nav-target');
-      if (isStock) {
-        if (target !== 'attendees') {
-          btn.style.opacity = '0.35';
-          btn.style.filter = 'grayscale(1)';
-          btn.style.cursor = 'not-allowed';
-          btn.setAttribute('data-restricted', 'true');
-          btn.title = 'Access Restricted: Stock Controllers are assigned exclusively to Staff ID Badges & Gate Terminal (#pane-kiosk)';
-        } else {
-          btn.style.opacity = '1';
-          btn.style.filter = 'none';
-          btn.style.cursor = 'pointer';
-          btn.removeAttribute('data-restricted');
-          btn.title = 'Staff ID Badges & Gate Terminal (#pane-kiosk)';
-        }
-      } else {
-        btn.style.opacity = '1';
-        btn.style.filter = 'none';
-        btn.style.cursor = 'pointer';
-        btn.removeAttribute('data-restricted');
-        btn.removeAttribute('title');
-      }
-    });
+    const rawRole = (state.currentUser?.role || '').toLowerCase();
+    const isAdmin = isCurrentUserAdmin();
+    const isTech = rawRole === 'tech_lead' && !isAdmin;
+    const isStockMgr = rawRole === 'stock_manager' && !isAdmin;
+    const isStockCtrl = rawRole === 'stock_controller';
+    const isTechCrew = !isAdmin && !isTech && !isStockMgr && !isStockCtrl;
 
+    const setVis = (el, isVis) => {
+      if (!el) return;
+      el.style.display = isVis ? 'flex' : 'none';
+      if (isVis) {
+        el.removeAttribute('data-restricted');
+        el.removeAttribute('title');
+        el.style.opacity = '1';
+        el.style.filter = 'none';
+        el.style.cursor = 'pointer';
+        el.removeAttribute('tabindex');
+      } else {
+        el.setAttribute('data-restricted', 'true');
+        el.setAttribute('tabindex', '-1');
+      }
+    };
+
+    // 1. Main Navigation Items (Sidebar)
+    const navOverview = document.querySelector('.sidebar .nav-item[data-nav-target="overview"]');
+    const navEvents = document.querySelector('.sidebar .nav-item[data-nav-target="events"]');
+    const navUsers = document.getElementById('nav-users-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="users"]');
+    const navAttendees = document.querySelector('.sidebar .nav-item[data-nav-target="attendees"]');
+    const navVenueSec = document.getElementById('nav-venue-security-btn');
+    const navAnalytics = document.querySelector('.sidebar .nav-item[data-nav-target="analytics"]');
+    const navStockMgr = document.getElementById('nav-stock-manager-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="stock-manager"]');
+    const navMatrix = document.getElementById('nav-access-matrix-btn');
+
+    // Gate Dashboard: Admin, Tech Lead, Stock Manager (Hidden for Stock Controller & Technician)
+    setVis(navOverview, isAdmin || isTech || isStockMgr);
+
+    // Venues & Stock Gates: Admin, Tech Lead, Stock Manager (Hidden for Stock Controller & Technician)
+    setVis(navEvents, isAdmin || isTech || isStockMgr);
+
+    // Users & Roles: Admin, Tech Lead, Stock Manager (Hidden for Stock Controller & Technician)
+    setVis(navUsers, isAdmin || isTech || isStockMgr);
+
+    // ID Badges & Kiosk: Visible to all personas
+    setVis(navAttendees, true);
+
+    // Venue Security Portal: Admin and Tech Lead (Hidden for Stock Manager, Stock Controller, Technician)
+    setVis(navVenueSec, isAdmin || isTech);
+
+    // Stock Batch Approvals: Admin, Stock Manager, Stock Controller (Hidden for Tech Lead & Technician)
+    setVis(navAnalytics, isAdmin || isStockMgr || isStockCtrl);
+
+    // Stocks & Warehouses: Admin, Stock Manager (Hidden for Tech Lead, Stock Controller, Technician)
+    setVis(navStockMgr, isAdmin || isStockMgr);
+
+    // Clearance Matrix: Admin ONLY (Hidden for all other roles)
+    setVis(navMatrix, isAdmin);
+
+    // 2. Checkpoint Controls Navigation Group
+    const cpNav = document.getElementById('sidebar-checkpoint-controls') || document.querySelector('.nav-group-workspace');
+    const btnCallTime = document.getElementById('sidebar-calltime-btn');
+    const btnRollCall = document.getElementById('sidebar-rollcall-btn');
+    const btnStationLock = document.getElementById('sidebar-station-lock-btn');
+    const btnResetDemo = document.getElementById('sidebar-reset-demo-btn');
+
+    if (cpNav) {
+      if (isStockCtrl || isTechCrew) {
+        // Entire section hidden for Stock Controllers & Technicians
+        cpNav.style.display = 'none';
+      } else {
+        cpNav.style.display = 'flex';
+        // Set Call Time: Admin, Tech Lead, Stock Manager
+        setVis(btnCallTime, isAdmin || isTech || isStockMgr);
+        // On-Site Roll-Call: Admin, Tech Lead, Stock Manager
+        setVis(btnRollCall, isAdmin || isTech || isStockMgr);
+        // Station Lock PIN: Admin ONLY
+        setVis(btnStationLock, isAdmin);
+        // Reset Today's Scans: Admin ONLY
+        setVis(btnResetDemo, isAdmin);
+      }
+    }
+
+    // 3. Subtabs on Users & Roles Screen
+    const tabRoles = document.getElementById('view-tab-roles');
+    const tabMatrix = document.getElementById('view-tab-matrix');
+    const tabDepts = document.getElementById('view-tab-departments');
+    if (tabRoles) tabRoles.style.display = isAdmin ? 'inline-flex' : 'none';
+    if (tabMatrix) tabMatrix.style.display = isAdmin ? 'inline-flex' : 'none';
+    if (tabDepts) tabDepts.style.display = isAdmin ? 'inline-flex' : 'none';
+
+    // 4. Breadcrumb Workspace Title
     const bcRoot = document.getElementById('breadcrumb-workspace');
     if (bcRoot) {
-      bcRoot.textContent = isStock ? 'aBility Gate Station (Stock Controller)' : 'aBility Manager';
-    }
-
-    // Disable CHECKPOINT CONTROLS navigation group for Stock Controllers
-    const cpNav = document.getElementById('sidebar-checkpoint-controls') || document.querySelector('.nav-group-workspace');
-    if (cpNav) {
-      if (isStock) {
-        cpNav.classList.add('nav-group-disabled');
-        cpNav.querySelectorAll('button').forEach((b) => {
-          b.disabled = true;
-          b.setAttribute('tabindex', '-1');
-          b.title = 'Access Restricted: Checkpoint controls require Supervisor or Administrator privileges';
-        });
+      if (isStockCtrl) {
+        bcRoot.textContent = 'aBility Gate Station (Stock Controller)';
+      } else if (isStockMgr) {
+        bcRoot.textContent = 'aBility Logistics Hub (Stock Manager)';
+      } else if (isTech) {
+        bcRoot.textContent = 'aBility Production Deck (Tech Lead)';
+      } else if (isTechCrew) {
+        bcRoot.textContent = 'aBility Crew Station (Technician)';
       } else {
-        cpNav.classList.remove('nav-group-disabled');
-        cpNav.querySelectorAll('button').forEach((b) => {
-          b.disabled = false;
-          b.removeAttribute('tabindex');
-          b.removeAttribute('title');
-        });
+        bcRoot.textContent = 'aBility Manager';
       }
     }
 
-    // Disable Venue Security Portal and 4-Tier Access Matrix shortcuts for Stock Controllers
-    const venueSecBtn = document.getElementById('nav-venue-security-btn');
-    const matrixNavBtn = document.getElementById('nav-access-matrix-btn');
-
-    if (venueSecBtn) {
-      if (isStock) {
-        venueSecBtn.disabled = true;
-        venueSecBtn.style.opacity = '0.35';
-        venueSecBtn.style.filter = 'grayscale(1)';
-        venueSecBtn.style.cursor = 'not-allowed';
-        venueSecBtn.setAttribute('tabindex', '-1');
-        venueSecBtn.title = 'Access Restricted: Venue Security Portal is restricted for Stock Controllers (Stock Warehouse Terminal Only)';
+    // 5. Control "Add New Team Member" button based on delegation matrix
+    const addUserBtn = document.getElementById('open-add-user-btn');
+    if (addUserBtn) {
+      if (canCurrentUserAddUser()) {
+        addUserBtn.style.display = 'inline-flex';
+        addUserBtn.disabled = false;
+        addUserBtn.removeAttribute('title');
       } else {
-        venueSecBtn.disabled = false;
-        venueSecBtn.style.opacity = '1';
-        venueSecBtn.style.filter = 'none';
-        venueSecBtn.style.cursor = 'pointer';
-        venueSecBtn.removeAttribute('tabindex');
-        venueSecBtn.removeAttribute('title');
+        addUserBtn.style.display = 'none';
+        addUserBtn.disabled = true;
       }
     }
 
-    if (matrixNavBtn) {
-      if (isStock) {
-        matrixNavBtn.disabled = true;
-        matrixNavBtn.style.opacity = '0.35';
-        matrixNavBtn.style.filter = 'grayscale(1)';
-        matrixNavBtn.style.cursor = 'not-allowed';
-        matrixNavBtn.setAttribute('tabindex', '-1');
-        matrixNavBtn.title = 'Access Restricted: 4-Tier Access Matrix configuration requires Supervisor or Administrator privileges';
+    renderUsersDelegationBanner();
+
+    // 6. Support Card Context
+    const supportTitle = document.querySelector('.support-card .support-card-title');
+    const supportDesc = document.querySelector('.support-card .support-card-desc') || document.getElementById('sidebar-support-desc');
+    if (supportTitle && supportDesc) {
+      if (isStockCtrl) {
+        supportTitle.textContent = 'Stock Gate Kiosk Active';
+        supportDesc.textContent = 'Warehouse loading dock access & batch verification terminal.';
+      } else if (isTechCrew) {
+        supportTitle.textContent = 'Technician Terminal';
+        supportDesc.textContent = 'Personal RFID credentials & event call time check-in.';
+      } else if (isTech) {
+        supportTitle.textContent = 'Tech Lead Operations';
+        supportDesc.textContent = 'Event rosters, call time scheduling & L1/L2 technical onboarding.';
+      } else if (isStockMgr) {
+        supportTitle.textContent = 'Warehouse Logistics';
+        supportDesc.textContent = 'Inventory hubs, equipment dispatches & L1/L2 warehouse onboarding.';
       } else {
-        matrixNavBtn.disabled = false;
-        matrixNavBtn.style.opacity = '1';
-        matrixNavBtn.style.filter = 'none';
-        matrixNavBtn.style.cursor = 'pointer';
-        matrixNavBtn.removeAttribute('tabindex');
-        matrixNavBtn.removeAttribute('title');
+        supportTitle.textContent = 'Clearance Enforcement';
+        supportDesc.textContent = `All ${state.clearanceMatrix?.length || 7} security tiers and physical perimeter checkpoints active.`;
       }
     }
 
+    // 7. Kiosk Banner
     const kioskBanner = document.getElementById('kiosk-stock-role-banner');
     if (kioskBanner) {
-      kioskBanner.style.display = isStock ? 'flex' : 'none';
+      kioskBanner.style.display = isStockCtrl ? 'flex' : 'none';
+    }
+
+    // 8. Auto-redirect if active screen is not permitted for new role
+    if (!isScreenPermittedForCurrentUser(state.activeScreen)) {
+      if (isStockCtrl || isTechCrew) {
+        switchScreen('attendees', 'pane-kiosk');
+      } else {
+        switchScreen('overview');
+      }
     }
   }
 
@@ -837,7 +1000,7 @@
     grid.innerHTML = list.map((m) => {
       const isCur = Number(m.id) === currentId;
       return `
-        <div class="switch-user-item ${isCur ? 'active-user' : ''} js-switch-to-user" data-user-id="${m.id}" data-badge="${escapeHtml(m.badge_code)}" style="cursor: pointer;">
+        <div class="switch-user-item ${isCur ? 'active-user' : ''} js-switch-to-user" data-user-id="${m.id}" data-badge="${escapeHtml(m.badge_code)}" data-email="${escapeHtml(m.email || '')}" data-username="${escapeHtml(m.username || '')}" data-role="${escapeHtml(m.role || '')}" style="cursor: pointer;">
           <div style="display: flex; align-items: center; gap: 10px;">
             <div class="avatar-circle avatar-jl" style="width: 32px; height: 32px; font-size: 12px;">${escapeHtml(m.initials || 'CR')}</div>
             <div>
@@ -886,6 +1049,11 @@
       const menuName = document.getElementById('user-menu-name');
       if (menuName) menuName.textContent = u.full_name || 'Active Operator';
 
+      const topName = document.getElementById('topbar-user-name');
+      const topRole = document.getElementById('topbar-user-role-badge');
+      if (topName) topName.textContent = u.full_name || 'Active Operator';
+      if (topRole) topRole.textContent = `${u.role_display || u.role} (${u.clearance_code || 'L2'})`;
+
       const menuRole = document.getElementById('user-menu-role');
       if (menuRole) menuRole.textContent = `${u.role_display || u.role} · ${u.clearance_code || 'L2'}`;
 
@@ -901,8 +1069,8 @@
 
       const menuSwitch = document.getElementById('topbar-menu-switch-user');
       const menuAuth = document.getElementById('topbar-menu-auth-modal');
-      if (menuSwitch) menuSwitch.style.display = isAdmin ? 'flex' : 'none';
-      if (menuAuth) menuAuth.style.display = isAdmin ? 'flex' : 'none';
+      if (menuSwitch) menuSwitch.style.display = 'flex';
+      if (menuAuth) menuAuth.style.display = 'flex';
 
       const authTitle = document.getElementById('topbar-menu-auth-title');
       const authSub = document.getElementById('topbar-menu-auth-sub');
@@ -960,10 +1128,17 @@
       el.textContent = `${k.lateArrivalsToday ?? 0} Late · ${k.deniedScansToday ?? 0} Denied`;
     });
 
-    const tc = k.tierCounts || { L1: 0, L2: 0, L3: 0, L4: 0 };
+    const tc = k.tierCounts || {};
     const breakdownEl = document.getElementById('overview-tier-breakdown');
     if (breakdownEl) {
-      breakdownEl.textContent = `L1:${tc.L1 || 0} · L2:${tc.L2 || 0} · L3:${tc.L3 || 0} · L4:${tc.L4 || 0}`;
+      if (Array.isArray(state.clearanceMatrix) && state.clearanceMatrix.length) {
+        breakdownEl.textContent = state.clearanceMatrix
+          .map((t) => `${t.code}:${tc[t.code] ?? (t.member_count ?? 0)}`)
+          .join(' · ');
+      } else {
+        const parts = Object.entries(tc).map(([lvl, cnt]) => `${lvl}:${cnt}`);
+        breakdownEl.textContent = parts.length ? parts.join(' · ') : 'No data';
+      }
     }
 
     // Tab counts
@@ -1073,6 +1248,22 @@
 
     if (staffCodeEl) staffCodeEl.textContent = b.staff_code || 'ABL-006';
     if (cpTagEl) cpTagEl.textContent = String(v.checkpoint_name || state.activeCheckpoint.name).toUpperCase();
+
+    const assignmentTagEl = document.getElementById('kiosk-assignment-tag');
+    if (assignmentTagEl) {
+      if (state.activeCheckpoint.type === 'event_venue' && v.is_assigned_to_event !== undefined) {
+        assignmentTagEl.style.display = 'inline-flex';
+        if (v.is_assigned_to_event) {
+          assignmentTagEl.className = 'status-badge status-badge-green-sm';
+          assignmentTagEl.textContent = 'Assigned Event Crew';
+        } else {
+          assignmentTagEl.className = 'status-badge status-badge-amber-sm';
+          assignmentTagEl.textContent = 'Unassigned Roster';
+        }
+      } else {
+        assignmentTagEl.style.display = 'none';
+      }
+    }
 
     if (b.profile_image && portraitImg && initialsEl) {
       portraitImg.src = b.profile_image;
@@ -1740,7 +1931,7 @@
             </div>
             <div class="col-event-schedule">
               <div class="company-stack">
-                <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                   <span class="company-name">Call: <strong>${escapeHtml(cp.call_time || '08:00')}</strong></span>
                   <button
                     type="button"
@@ -1755,6 +1946,20 @@
                     <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 10px; height: 10px;" />
                     <span>Set</span>
                   </button>
+                  ${
+                    !isStock
+                      ? `<button
+                          type="button"
+                          class="calltime-edit-trigger js-open-event-assign-modal"
+                          data-event-id="${cp.raw_id || cp.id}"
+                          title="Assign Technicians & Call Time"
+                          style="display: inline-flex; align-items: center; gap: 3px; background: rgba(37, 99, 235, 0.08); color: #2563eb; border-color: rgba(37, 99, 235, 0.2);"
+                        >
+                          <img src="assets/team-members.svg" alt="" class="svg-icon" style="width: 10px; height: 10px;" />
+                          <span>Crew (${cp.assigned_count || 0})</span>
+                        </button>`
+                      : ''
+                  }
                 </div>
                 <span class="company-role">${escapeHtml(cp.lead_label || '')}</span>
               </div>
@@ -1777,7 +1982,7 @@
                 ${isStock ? 'Stock Warehouse' : 'Event Venue'}
               </span>
             </div>
-            <div class="col-event-action">
+            <div class="col-event-action" style="display: flex; gap: 6px; align-items: center;">
               <button
                 type="button"
                 class="btn btn-primary-32 js-activate-checkpoint-btn"
@@ -1786,6 +1991,20 @@
               >
                 ${isActive ? 'Active Terminal (#pane-kiosk)' : 'Open Gate Terminal'}
               </button>
+              ${
+                !isStock
+                  ? `<button
+                      type="button"
+                      class="btn btn-secondary-32 js-open-event-assign-modal"
+                      data-event-id="${cp.raw_id || cp.id}"
+                      title="Assign Technical Crew & Call Time"
+                      style="padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"
+                    >
+                      <img src="assets/team-members.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+                      <span>Roster</span>
+                    </button>`
+                  : ''
+              }
             </div>
             <div class="col-actions"></div>
           </div>
@@ -2592,6 +2811,110 @@
     modal.classList.add('open');
   }
 
+  function openEventAssignModal(eventId) {
+    const modal = document.getElementById('event-assign-modal');
+    if (!modal) return;
+
+    const allCps = state.checkpoints.directory || [];
+    const event = allCps.find((c) => String(c.raw_id || c.id) === String(eventId) && c.type === 'event_venue') ||
+      (state.checkpoints.event_venues || []).find((v) => String(v.raw_id || v.id) === String(eventId));
+
+    if (!event) {
+      showToast('Event not found.');
+      return;
+    }
+
+    const idInput = document.getElementById('event-assign-id');
+    const nameInput = document.getElementById('event-assign-name');
+    const callTimeInput = document.getElementById('event-assign-calltime');
+    const techLeadSelect = document.getElementById('event-assign-techlead');
+    const pmInput = document.getElementById('event-assign-pm');
+    const countBadge = document.getElementById('event-assign-count-badge');
+    const crewListEl = document.getElementById('event-assign-crew-list');
+
+    if (idInput) idInput.value = event.raw_id || event.id;
+    if (nameInput) nameInput.value = event.name || event.title;
+    if (callTimeInput) callTimeInput.value = event.call_time || '08:00';
+    if (pmInput) pmInput.value = event.project_manager || 'Operations PM';
+
+    // Populate Tech Leads dropdown
+    if (techLeadSelect) {
+      const candidates = (state.crew || []).filter((c) =>
+        ['admin', 'manager', 'tech_lead', 'sound_engineer', 'stage_manager', 'rigging_lead'].includes((c.role || '').toLowerCase()) ||
+        ['Audio', 'Production', 'Executive'].includes(c.department || '')
+      );
+      techLeadSelect.innerHTML = candidates.map((c) => {
+        const isSel = (event.tech_lead && event.tech_lead.toLowerCase() === (c.full_name || '').toLowerCase()) ||
+          (c.role === 'tech_lead');
+        return `<option value="${escapeHtml(c.full_name)}" ${isSel ? 'selected' : ''}>${escapeHtml(c.full_name)} (${escapeHtml(c.role_display || c.role)} · ${escapeHtml(c.department || '')})</option>`;
+      }).join('');
+    }
+
+    let currentAssigned = Array.isArray(event.assigned_technicians)
+      ? event.assigned_technicians.map(Number)
+      : [];
+
+    function renderAssignCrewList(searchQuery = '') {
+      if (!crewListEl) return;
+      const q = searchQuery.toLowerCase().trim();
+      const techCrew = (state.crew || []).filter((c) => {
+        if (q) {
+          const hay = `${c.full_name} ${c.role} ${c.department} ${c.badge_code}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      const checkedCount = crewListEl.querySelectorAll('.js-assign-tech-check:checked').length || currentAssigned.length;
+      if (countBadge) countBadge.textContent = `${checkedCount} Assigned`;
+
+      crewListEl.innerHTML = techCrew.map((c) => {
+        const isAssigned = currentAssigned.includes(Number(c.id));
+        const isOnSite = c.daily_state === 'checked_in';
+        return `
+          <label style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 6px; background: var(--bg-card, #ffffff); border: 1px solid var(--border-color, #e2e8f0); cursor: pointer; user-select: none;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" class="js-assign-tech-check" value="${c.id}" ${isAssigned ? 'checked' : ''} style="cursor: pointer; width: 15px; height: 15px;" />
+              <div>
+                <strong style="font-size: 12px; color: var(--text-primary);">${escapeHtml(c.full_name)}</strong>
+                <span style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">(${escapeHtml(c.badge_code || '')})</span>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                  <span>${escapeHtml(c.role_display || c.role)}</span> · <span>${escapeHtml(c.department || 'Production')}</span>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="status-badge" style="background: rgba(37, 99, 235, 0.1); color: #2563eb; font-size: 10px;">${escapeHtml(c.clearance_code || 'L2')}</span>
+              ${isOnSite ? '<span class="status-badge status-badge-green-sm" style="font-size: 10px;">On-Site</span>' : ''}
+            </div>
+          </label>
+        `;
+      }).join('');
+
+      crewListEl.querySelectorAll('.js-assign-tech-check').forEach((cb) => {
+        cb.addEventListener('change', () => {
+          const totalChecked = crewListEl.querySelectorAll('.js-assign-tech-check:checked').length;
+          if (countBadge) countBadge.textContent = `${totalChecked} Assigned`;
+        });
+      });
+    }
+
+    renderAssignCrewList();
+
+    const searchInput = document.getElementById('event-assign-search');
+    if (searchInput) {
+      searchInput.value = '';
+      searchInput.oninput = () => renderAssignCrewList(searchInput.value);
+    }
+
+    modal.classList.add('open');
+  }
+
+  function closeEventAssignModal() {
+    const modal = document.getElementById('event-assign-modal');
+    if (modal) modal.classList.remove('open');
+  }
+
   // =========================================================================
   // STOCKS & WAREHOUSES CRUD MANAGER
   // =========================================================================
@@ -2665,6 +2988,10 @@
         whSection.style.display = 'block';
         itemsSection.style.display = 'none';
         renderWarehousesGrid();
+        const smPageControls = document.getElementById('sm-page-controls');
+        if (smPageControls) {
+          smPageControls.innerHTML = `<span style="font-size: 11px; color: var(--text-secondary);">Supports drag-and-drop image uploads for warehouses &amp; equipment items</span>`;
+        }
       } else {
         whSection.style.display = 'none';
         itemsSection.style.display = 'block';
@@ -2677,8 +3004,6 @@
     if (footerEl) {
       if (isWh) {
         footerEl.textContent = `Showing ${state.stockManager.warehouses.length} warehouse ${state.stockManager.warehouses.length === 1 ? 'facility' : 'facilities'}`;
-      } else {
-        footerEl.textContent = `Showing ${state.stockManager.items.length} inventory equipment items`;
       }
     }
 
@@ -2799,9 +3124,25 @@
       .join('');
   }
 
+  function getPaginationPageNumbers(currentPage, totalPages) {
+    if (totalPages <= 7) {
+      const pages = [];
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+      return pages;
+    }
+    if (currentPage <= 4) {
+      return [1, 2, 3, 4, 5, '...', totalPages];
+    }
+    if (currentPage >= totalPages - 3) {
+      return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    }
+    return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+  }
+
   function renderStockItemsTable() {
     const rowsEl = document.getElementById('sm-items-rows');
     const footerEl = document.getElementById('sm-results-footer');
+    const pageControlsEl = document.getElementById('sm-page-controls');
     if (!rowsEl) return;
 
     const q = (state.stockManager.itemSearch || '').toLowerCase().trim();
@@ -2821,11 +3162,31 @@
       );
     });
 
+    const totalItems = list.length;
+    const perPageVal = state.stockManager.itemPerPage;
+    const isAll = perPageVal === 'all';
+    const perPage = isAll ? (totalItems || 1) : Number(perPageVal || 10);
+    const totalPages = isAll ? 1 : Math.max(1, Math.ceil(totalItems / perPage));
+
+    if (state.stockManager.itemPage > totalPages) state.stockManager.itemPage = totalPages;
+    if (state.stockManager.itemPage < 1) state.stockManager.itemPage = 1;
+
+    const startIdx = isAll ? 0 : (state.stockManager.itemPage - 1) * perPage;
+    const endIdx = isAll ? totalItems : Math.min(startIdx + perPage, totalItems);
+    const pagedList = isAll ? list : list.slice(startIdx, endIdx);
+
     if (footerEl) {
-      footerEl.textContent = `Showing ${list.length} of ${state.stockManager.items.length} inventory equipment items`;
+      if (totalItems === 0) {
+        footerEl.textContent = 'Showing 0 equipment items';
+      } else if (isAll) {
+        footerEl.textContent = `Showing all ${totalItems} of ${state.stockManager.items.length} inventory equipment items`;
+      } else {
+        footerEl.textContent = `Showing ${startIdx + 1}–${endIdx} of ${totalItems} inventory equipment items (Page ${state.stockManager.itemPage} of ${totalPages})`;
+      }
     }
 
     if (list.length === 0) {
+      if (pageControlsEl) pageControlsEl.innerHTML = '';
       rowsEl.innerHTML = `
         <div style="padding: 40px 20px; text-align: center; background: var(--bg-surface);">
           <div style="font-size: 32px; margin-bottom: 8px;">📦</div>
@@ -2855,7 +3216,7 @@
       maintenance: '<span class="status-badge status-badge-red-sm">Maintenance</span>',
     };
 
-    rowsEl.innerHTML = list
+    rowsEl.innerHTML = pagedList
       .map((it) => {
         const thumbHtml = it.image
           ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.item_name)}" class="stock-thumb-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" /><span class="stock-thumb-placeholder" style="display:none;">📦</span>`
@@ -2905,6 +3266,42 @@
       `;
       })
       .join('');
+
+    // Render pagination controls
+    if (pageControlsEl) {
+      if (totalPages <= 1) {
+        pageControlsEl.innerHTML = '';
+      } else {
+        const curPage = state.stockManager.itemPage;
+        let controlsHtml = `
+          <button type="button" class="btn btn-secondary-32-sm js-sm-items-prev-page" ${curPage <= 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} aria-label="Previous Page">
+            <span>&larr; Prev</span>
+          </button>
+        `;
+
+        const pages = getPaginationPageNumbers(curPage, totalPages);
+        pages.forEach((p) => {
+          if (p === '...') {
+            controlsHtml += `<span style="display: inline-flex; align-items: center; justify-content: center; width: 20px; color: var(--text-muted); font-size: 12px;">…</span>`;
+          } else {
+            const isActive = p === curPage;
+            controlsHtml += `
+              <button type="button" class="page-number-btn ${isActive ? 'active' : ''} js-sm-items-page-num" data-page="${p}" aria-label="Page ${p}">
+                ${p}
+              </button>
+            `;
+          }
+        });
+
+        controlsHtml += `
+          <button type="button" class="btn btn-secondary-32-sm js-sm-items-next-page" ${curPage >= totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} aria-label="Next Page">
+            <span>Next &rarr;</span>
+          </button>
+        `;
+
+        pageControlsEl.innerHTML = controlsHtml;
+      }
+    }
   }
 
   function openWarehouseModal(warehouseId = null) {
@@ -2956,6 +3353,47 @@
     modal.classList.add('open');
   }
 
+  function updateItemModalMatchCount() {
+    const nameInput = document.getElementById('item-modal-name');
+    const brandInput = document.getElementById('item-modal-brand');
+    const modelInput = document.getElementById('item-modal-model');
+    const idInput = document.getElementById('item-modal-id');
+    const badgeEl = document.getElementById('item-modal-match-count');
+    if (!nameInput || !badgeEl) return;
+
+    const curId = Number(idInput?.value || 0);
+    const name = (nameInput.value || '').trim().toLowerCase();
+    const brand = (brandInput?.value || '').trim().toLowerCase();
+    const model = (modelInput?.value || '').trim().toLowerCase();
+
+    if (!name) {
+      badgeEl.textContent = '0';
+      return;
+    }
+
+    const matches = (state.stockManager.items || []).filter((other) => {
+      if (Number(other.id) === curId) return false;
+      if ((other.item_name || '').trim().toLowerCase() !== name) return false;
+      if (model && other.model && other.model.trim().toLowerCase() !== model) return false;
+      if (brand && other.brand && other.brand.trim().toLowerCase() !== brand) return false;
+      return true;
+    });
+
+    badgeEl.textContent = String(matches.length);
+
+    // If current dropzone has no preview, but matching sibling has image, preview the shared image
+    const previewEl = document.getElementById('item-dropzone-preview');
+    const fileInput = document.getElementById('item-modal-image');
+    const hasManualFile = fileInput && fileInput.files && fileInput.files.length > 0;
+    const curHasImg = previewEl && previewEl.style.display !== 'none';
+    if (!curHasImg && !hasManualFile) {
+      const siblingWithImg = matches.find((m) => m.image && m.image.trim() !== '');
+      if (siblingWithImg) {
+        setDropzonePreview('item', siblingWithImg.image, `Shared photo from identical units (${siblingWithImg.serial_number || 'Stock Unit'})`);
+      }
+    }
+  }
+
   function openStockItemModal(itemId = null) {
     const modal = document.getElementById('stock-item-crud-modal');
     if (!modal) return;
@@ -3003,6 +3441,17 @@
 
         if (it.image) {
           setDropzonePreview('item', it.image, it.image.split('/').pop());
+        } else {
+          // Check sibling immediately
+          const siblingWithImg = state.stockManager.items.find((other) => {
+            if (Number(other.id) === Number(it.id)) return false;
+            if ((other.item_name || '').trim().toLowerCase() !== (it.item_name || '').trim().toLowerCase()) return false;
+            if (it.model && other.model && other.model.trim().toLowerCase() !== it.model.trim().toLowerCase()) return false;
+            return !!(other.image && other.image.trim());
+          });
+          if (siblingWithImg) {
+            setDropzonePreview('item', siblingWithImg.image, `Shared photo from identical units (${siblingWithImg.serial_number || 'Unit'})`);
+          }
         }
       }
     } else {
@@ -3013,10 +3462,17 @@
       if (statusSelect) statusSelect.value = 'available';
     }
 
+    updateItemModalMatchCount();
     modal.classList.add('open');
   }
 
   function openUserModal(userId = null) {
+    const isStockCtrl = isCurrentUserStockController();
+    if (isStockCtrl) {
+      showToast('Access Restricted: Stock Controllers are assigned exclusively to gate terminal scanning and batch custody and cannot create or modify personnel accounts.');
+      return;
+    }
+
     populateClearanceDropdowns();
     const modal = document.getElementById('user-crud-modal');
     if (!modal) return;
@@ -3038,6 +3494,89 @@
     const rfidInput = document.getElementById('user-modal-rfid-uid');
     const badgeStatusSelect = document.getElementById('user-modal-badge-status');
     const activeCheck = document.getElementById('user-modal-active');
+
+    const isAdmin = isCurrentUserAdmin();
+    const isTech = (state.currentUser?.role || '').toLowerCase() === 'tech_lead' && !isAdmin;
+    const isStockMgr = (state.currentUser?.role || '').toLowerCase() === 'stock_manager' && !isAdmin;
+
+    const noticeEl = document.getElementById('user-modal-delegation-notice');
+    if (noticeEl) {
+      if (isAdmin) {
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = 'rgba(16, 185, 129, 0.08)';
+        noticeEl.style.border = '1px solid rgba(16, 185, 129, 0.25)';
+        noticeEl.style.color = '#065f46';
+        noticeEl.innerHTML = '<strong>👑 Administrator Delegation:</strong> Full system access enabled. Authorized to grant any Clearance Tier (L1–L8) and assign all roles.';
+      } else if (isStockMgr) {
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = 'rgba(217, 119, 6, 0.08)';
+        noticeEl.style.border = '1px solid rgba(217, 119, 6, 0.25)';
+        noticeEl.style.color = '#92400e';
+        noticeEl.innerHTML = '<strong>🏭 Stock Manager Delegation Active:</strong> You are authorized to onboard warehouse crew & logistics staff with <strong>Level 1 (Venue/Logistics)</strong> or <strong>Level 2 (Technical)</strong> clearance. Higher security tiers (L3–L8) and administrative roles require Administrator clearance.';
+      } else if (isTech) {
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = 'rgba(37, 99, 235, 0.08)';
+        noticeEl.style.border = '1px solid rgba(37, 99, 235, 0.25)';
+        noticeEl.style.color = '#1e40af';
+        noticeEl.innerHTML = '<strong>🎛️ Tech Lead Delegation Active:</strong> You are authorized to onboard technical and stage personnel with <strong>Level 1 or Level 2</strong> clearance. Higher security tiers (L3–L8) and administrative roles require Administrator clearance.';
+      } else {
+        noticeEl.style.display = 'none';
+      }
+    }
+
+    const hintEl = document.getElementById('user-modal-clearance-hint');
+    if (hintEl) {
+      hintEl.style.display = (!isAdmin && (isStockMgr || isTech)) ? 'flex' : 'none';
+    }
+
+    // Role select filter
+    if (roleSelect) {
+      Array.from(roleSelect.options).forEach((opt) => {
+        const val = opt.value.toLowerCase();
+        const restrictedForStock = ['admin', 'administrator', 'manager', 'project_manager', 'tech_lead', 'stock_manager'];
+        const restrictedForTech = ['admin', 'administrator', 'manager', 'project_manager', 'stock_manager'];
+        const baseText = opt.text.replace(/^\[🔒 Admin Only\]\s*/i, '');
+        if (!isAdmin) {
+          let shouldDisable = false;
+          if (isStockMgr && restrictedForStock.includes(val)) shouldDisable = true;
+          if (isTech && restrictedForTech.includes(val)) shouldDisable = true;
+          if (!isStockMgr && !isTech) shouldDisable = true;
+
+          if (shouldDisable) {
+            opt.disabled = true;
+            opt.text = `[🔒 Admin Only] ${baseText}`;
+          } else {
+            opt.disabled = false;
+            opt.text = baseText;
+          }
+        } else {
+          opt.disabled = false;
+          opt.text = baseText;
+        }
+      });
+    }
+
+    // Clearance select filter
+    if (clearanceSelect) {
+      Array.from(clearanceSelect.options).forEach((opt) => {
+        const val = opt.value.toUpperCase();
+        // Permitted under delegation: only L1 and L2
+        const isPermitted = val.startsWith('L1') || val.startsWith('L2');
+        const baseText = opt.text.replace(/^\[🔒 Admin Only\]\s*/i, '');
+        if (!isAdmin) {
+          if (!isPermitted) {
+            opt.disabled = true;
+            opt.text = `[🔒 Admin Only] ${baseText}`;
+          } else {
+            opt.disabled = false;
+            opt.text = baseText;
+          }
+        } else {
+          opt.disabled = false;
+          opt.text = baseText;
+        }
+      });
+    }
 
     resetDropzone('user');
 
@@ -3067,10 +3606,16 @@
     } else {
       if (titleEl) titleEl.textContent = 'Add New Team Member';
       if (idInput) idInput.value = '0';
-      if (roleSelect) roleSelect.value = 'technician';
-      if (deptSelect) deptSelect.value = 'Audio';
-      if (clearanceSelect) clearanceSelect.value = 'L2_TECH_STAGE';
-      if (stockAccessSelect) stockAccessSelect.value = 'assigned_only';
+      if (roleSelect) {
+        const firstValidRole = Array.from(roleSelect.options).find((o) => !o.disabled);
+        roleSelect.value = firstValidRole ? firstValidRole.value : 'technician';
+      }
+      if (deptSelect) deptSelect.value = isStockMgr ? 'Warehouse' : 'Audio';
+      if (clearanceSelect) {
+        const firstValidClr = Array.from(clearanceSelect.options).find((o) => !o.disabled && (o.value.startsWith('L2') || o.value.startsWith('L1')));
+        clearanceSelect.value = firstValidClr ? firstValidClr.value : 'L2_TECH_STAGE';
+      }
+      if (stockAccessSelect) stockAccessSelect.value = isStockMgr ? 'all' : 'assigned_only';
       if (venueAccessSelect) venueAccessSelect.value = 'all';
       if (badgeStatusSelect) badgeStatusSelect.value = 'active';
       if (activeCheck) activeCheck.checked = true;
@@ -3707,6 +4252,7 @@
     const rowsEl = document.getElementById('users-table-rows') || document.getElementById('users-table-body');
     if (!rowsEl) return;
     populateRoleDropdowns();
+    renderUsersDelegationBanner();
     renderRolesScreen();
 
     const crew = Array.isArray(state.crew) ? state.crew : [];
@@ -4023,14 +4569,10 @@
   // =========================================================================
 
   function bindEvents() {
-    // Sidebar navigation (Restricted for Stock Controllers)
+    // Sidebar navigation
     document.querySelectorAll('.sidebar .nav-item[data-nav-target]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const target = btn.getAttribute('data-nav-target');
-        if (isCurrentUserStockController() && target !== 'attendees') {
-          showToast('Access Restricted: Stock Controllers are assigned exclusively to Staff ID Badges & Gate Terminal (#pane-kiosk).');
-          return;
-        }
         switchScreen(target);
       });
     });
@@ -4038,7 +4580,7 @@
     const brandHome = document.getElementById('brand-home-btn');
     if (brandHome) {
       brandHome.addEventListener('click', () => {
-        if (isCurrentUserStockController()) {
+        if (isCurrentUserStockController() || isCurrentUserTechnician()) {
           switchScreen('attendees', 'pane-kiosk');
         } else {
           switchScreen('overview');
@@ -4050,8 +4592,8 @@
     const venueSecBtn = document.getElementById('nav-venue-security-btn');
     if (venueSecBtn) {
       venueSecBtn.addEventListener('click', () => {
-        if (isCurrentUserStockController()) {
-          showToast('Access Restricted: Stock Controllers are assigned exclusively to Stock Warehouse Gate Terminal (#pane-kiosk).');
+        if (!isCurrentUserAdmin() && !isCurrentUserTechLead()) {
+          showToast('Access Restricted: Venue Security Portal is reserved for Technical Leads and Administrators.');
           return;
         }
         if (state.stationLocked && state.checkpointType !== 'event_venue') {
@@ -4067,12 +4609,12 @@
       });
     }
 
-    // 4-Tier Access Matrix nav shortcut
+    // Clearance Matrix nav shortcut
     const matrixNavBtn = document.getElementById('nav-access-matrix-btn');
     if (matrixNavBtn) {
       matrixNavBtn.addEventListener('click', () => {
-        if (isCurrentUserStockController()) {
-          showToast('Access Restricted: 4-Tier Access Matrix configuration requires Supervisor or Administrator privileges.');
+        if (!isCurrentUserAdmin()) {
+          showToast('Access Restricted: Security Clearance Matrix configuration requires Administrator privileges.');
           return;
         }
         switchScreen('analytics', 'matrix-config-section');
@@ -4420,8 +4962,9 @@
         window.location.href = 'login.php?logout=1';
       });
     }
-    if (topAvatar && userDropdown) {
-      topAvatar.addEventListener('click', (e) => {
+    const userTrigger = document.getElementById('topbar-user-trigger') || topAvatar;
+    if (userTrigger && userDropdown) {
+      userTrigger.addEventListener('click', (e) => {
         e.stopPropagation();
         const isOpen = userDropdown.style.display === 'block';
         closeAllTopbarDropdowns();
@@ -4709,20 +5252,30 @@
     document.addEventListener('click', async (e) => {
       const switchRow = e.target.closest('.js-switch-to-user');
       if (switchRow) {
-        const uid = Number(switchRow.getAttribute('data-user-id'));
-        const badge = switchRow.getAttribute('data-badge');
+        const uid = Number(switchRow.getAttribute('data-user-id') || 0);
+        const badge = switchRow.getAttribute('data-badge') || '';
+        const email = switchRow.getAttribute('data-email') || '';
+        const username = switchRow.getAttribute('data-username') || '';
+        const role = switchRow.getAttribute('data-role') || '';
         closeSwitchUserModal();
+        closeAllTopbarDropdowns();
         try {
           const res = await fetch('api.php?action=switch_user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ user_id: uid, badge_code: badge }),
+            body: new URLSearchParams({ 
+              user_id: uid, 
+              badge_code: badge,
+              email: email,
+              username: username,
+              role: role,
+            }),
           });
           const data = await res.json();
           if (data && data.ok) {
             state.currentUser = data.user;
             renderTopbarAndKpis();
-            if (isCurrentUserStockController()) {
+            if (isCurrentUserStockController() || isCurrentUserTechnician()) {
               switchScreen('attendees', 'pane-kiosk');
             }
             showToast(data.message || `Switched active operator to ${data.user.full_name}`);
@@ -4899,6 +5452,21 @@
         return;
       }
 
+      // 8b. Open Event Assign Modal from table row
+      const eventAssignBtn = e.target.closest('.js-open-event-assign-modal');
+      if (eventAssignBtn) {
+        e.stopPropagation();
+        if (isCurrentUserStockController()) {
+          showToast('Access Restricted: Assigning event crew requires Tech Lead or Supervisor privileges.');
+          return;
+        }
+        const eventId = eventAssignBtn.getAttribute('data-event-id');
+        if (eventId) {
+          openEventAssignModal(eventId);
+        }
+        return;
+      }
+
       // 8. Approve Batch button
       const approveBatchBtn = e.target.closest('.js-approve-batch-btn');
       if (approveBatchBtn) {
@@ -5051,6 +5619,35 @@
       if (userNumBtn) {
         state.usersPage = Number(userNumBtn.getAttribute('data-page'));
         renderUsersScreen();
+        return;
+      }
+
+      // 20. Stock Items Pagination: Prev
+      const smPrevBtn = e.target.closest('.js-sm-items-prev-page');
+      if (smPrevBtn && !smPrevBtn.hasAttribute('disabled')) {
+        if (state.stockManager.itemPage > 1) {
+          state.stockManager.itemPage--;
+          renderStockItemsTable();
+        }
+        return;
+      }
+
+      // 21. Stock Items Pagination: Next
+      const smNextBtn = e.target.closest('.js-sm-items-next-page');
+      if (smNextBtn && !smNextBtn.hasAttribute('disabled')) {
+        state.stockManager.itemPage++;
+        renderStockItemsTable();
+        return;
+      }
+
+      // 22. Stock Items Pagination: Page Num
+      const smPageBtn = e.target.closest('.js-sm-items-page-num');
+      if (smPageBtn) {
+        const targetPage = Number(smPageBtn.getAttribute('data-page'));
+        if (targetPage && targetPage !== state.stockManager.itemPage) {
+          state.stockManager.itemPage = targetPage;
+          renderStockItemsTable();
+        }
         return;
       }
     });
@@ -5291,7 +5888,7 @@
     const rollcallModal = document.getElementById('rollcall-modal');
     document.querySelectorAll('.js-open-rollcall-modal, #sidebar-rollcall-btn, #topbar-help-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        if (btn.id === 'sidebar-rollcall-btn' && isCurrentUserStockController()) {
+        if (btn.id === 'sidebar-rollcall-btn' && (isCurrentUserStockController() || isCurrentUserTechnician())) {
           showToast('Access Restricted: Roll-Call inspection requires Supervisor or Administrator privileges.');
           return;
         }
@@ -5308,8 +5905,8 @@
     const lockModal = document.getElementById('station-lock-modal');
     document.querySelectorAll('.js-station-lock-btn, #sidebar-station-lock-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        if (btn.id === 'sidebar-station-lock-btn' && isCurrentUserStockController()) {
-          showToast('Access Restricted: Station PIN Locking requires Supervisor or Administrator privileges.');
+        if (!isCurrentUserAdmin()) {
+          showToast('Access Restricted: Station PIN Locking requires Administrator privileges.');
           return;
         }
         if (lockModal) lockModal.classList.add('open');
@@ -5670,8 +6267,8 @@
     const sidebarCallTimeBtn = document.getElementById('sidebar-calltime-btn');
     if (sidebarCallTimeBtn) {
       sidebarCallTimeBtn.addEventListener('click', () => {
-        if (isCurrentUserStockController()) {
-          showToast('Access Restricted: Setting Call Times requires Supervisor or Administrator privileges.');
+        if (!canCurrentUserSetCallTime()) {
+          showToast('Access Restricted: Setting Call Times requires Tech Lead, Stock Manager, or Administrator privileges.');
           return;
         }
         const cp = state.activeCheckpoint;
@@ -6075,12 +6672,76 @@
       });
     }
 
-    // Reset Today's Scans
+    // Submit Event Crew Assignment Form
+    const eventAssignForm = document.getElementById('event-assign-form');
+    if (eventAssignForm) {
+      eventAssignForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const eventId = document.getElementById('event-assign-id').value;
+        const callTime = document.getElementById('event-assign-calltime').value;
+        const techLead = document.getElementById('event-assign-techlead').value;
+        const pm = document.getElementById('event-assign-pm').value;
+
+        const checkedTechs = Array.from(document.querySelectorAll('#event-assign-crew-list .js-assign-tech-check:checked'))
+          .map((cb) => Number(cb.value));
+
+        try {
+          const res = await fetch('api.php?action=save_event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              event_id: eventId,
+              call_time: callTime,
+              tech_lead: techLead,
+              project_manager: pm,
+              assigned_technicians: JSON.stringify(checkedTechs),
+            }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            closeEventAssignModal();
+            applyBootstrapPayload(data, true);
+            showToast(data.message || `Event roster updated: ${checkedTechs.length} technicians assigned.`);
+          } else {
+            showToast(data.error || 'Failed to save event roster.');
+          }
+        } catch (err) {
+          showToast('Network error saving event roster.');
+        }
+      });
+    }
+
+    document.querySelectorAll('.js-close-event-assign-modal').forEach((btn) => {
+      btn.addEventListener('click', closeEventAssignModal);
+    });
+
+    const selectAllTechsBtn = document.querySelector('.js-event-select-all-techs');
+    if (selectAllTechsBtn) {
+      selectAllTechsBtn.addEventListener('click', () => {
+        document.querySelectorAll('#event-assign-crew-list .js-assign-tech-check').forEach((cb) => {
+          cb.checked = true;
+        });
+        const countBadge = document.getElementById('event-assign-count-badge');
+        const total = document.querySelectorAll('#event-assign-crew-list .js-assign-tech-check:checked').length;
+        if (countBadge) countBadge.textContent = `${total} Assigned`;
+      });
+    }
+
+    const clearCrewBtn = document.querySelector('.js-event-clear-crew');
+    if (clearCrewBtn) {
+      clearCrewBtn.addEventListener('click', () => {
+        document.querySelectorAll('#event-assign-crew-list .js-assign-tech-check').forEach((cb) => {
+          cb.checked = false;
+        });
+        const countBadge = document.getElementById('event-assign-count-badge');
+        if (countBadge) countBadge.textContent = '0 Assigned';
+      });
+    }
     ['reset-demo-db-btn', 'sidebar-reset-demo-btn', 'users-matrix-reset-logs-btn'].forEach((id) => {
       const btn = document.getElementById(id);
       if (btn) {
         btn.addEventListener('click', async () => {
-          if (isCurrentUserStockController()) {
+          if (!isCurrentUserAdmin()) {
             showToast('Access Restricted: Resetting scans requires Administrator privileges.');
             return;
           }
@@ -6149,6 +6810,7 @@
     if (itemSearch) {
       itemSearch.addEventListener('input', (e) => {
         state.stockManager.itemSearch = e.target.value;
+        state.stockManager.itemPage = 1;
         renderStockItemsTable();
       });
     }
@@ -6157,6 +6819,7 @@
     if (catFilter) {
       catFilter.addEventListener('change', (e) => {
         state.stockManager.categoryFilter = e.target.value;
+        state.stockManager.itemPage = 1;
         renderStockItemsTable();
       });
     }
@@ -6165,6 +6828,16 @@
     if (locFilter) {
       locFilter.addEventListener('change', (e) => {
         state.stockManager.locationFilter = e.target.value;
+        state.stockManager.itemPage = 1;
+        renderStockItemsTable();
+      });
+    }
+
+    const smPageSizeFilter = document.getElementById('sm-page-size-filter');
+    if (smPageSizeFilter) {
+      smPageSizeFilter.addEventListener('change', (e) => {
+        state.stockManager.itemPerPage = e.target.value === 'all' ? 'all' : Number(e.target.value);
+        state.stockManager.itemPage = 1;
         renderStockItemsTable();
       });
     }
@@ -6256,6 +6929,20 @@
     const userExportBtn = document.getElementById('users-export-btn');
     if (userExportBtn) {
       userExportBtn.addEventListener('click', () => exportUsersCsv());
+    }
+
+    // Safety guard on Clearance select in modal
+    const userClrSelect = document.getElementById('user-modal-clearance');
+    if (userClrSelect) {
+      userClrSelect.addEventListener('change', () => {
+        if (!isCurrentUserAdmin()) {
+          const val = userClrSelect.value.toUpperCase();
+          if (!val.startsWith('L1') && !val.startsWith('L2')) {
+            showToast('Permission restricted: Delegated operators may only assign Level 1 or Level 2 clearance.', 'error');
+            userClrSelect.value = 'L2_TECH_STAGE';
+          }
+        }
+      });
     }
 
     // User CRUD Form Submit
@@ -6378,6 +7065,9 @@
         fd.append('status', document.getElementById('item-modal-status').value);
         fd.append('notes', document.getElementById('item-modal-notes').value);
 
+        const syncCheck = document.getElementById('item-modal-sync-identical');
+        fd.append('sync_identical', syncCheck && syncCheck.checked ? '1' : '0');
+
         const fileInput = document.getElementById('item-modal-image');
         if (fileInput && fileInput.files && fileInput.files[0]) {
           fd.append('image', fileInput.files[0]);
@@ -6400,6 +7090,38 @@
           showToast('Error communicating with server');
         } finally {
           if (saveBtn) saveBtn.disabled = false;
+        }
+      });
+    }
+
+    // Dynamic match count update when typing item name, brand, model in modal
+    ['item-modal-name', 'item-modal-brand', 'item-modal-model'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => updateItemModalMatchCount());
+    });
+
+    // Sync all identical images across inventory
+    const syncAllImagesBtn = document.getElementById('sm-sync-all-images-btn');
+    if (syncAllImagesBtn) {
+      syncAllImagesBtn.addEventListener('click', async () => {
+        syncAllImagesBtn.disabled = true;
+        const icon = syncAllImagesBtn.querySelector('img');
+        if (icon) icon.style.animation = 'spin 0.8s linear infinite';
+
+        try {
+          const res = await fetch('api.php?action=sync_all_stock_images');
+          const data = await res.json();
+          if (data && data.ok) {
+            showToast(data.message || 'Photos synced across matching equipment groups');
+            await loadStockManagerData();
+          } else {
+            showToast(data.error || 'Failed to sync images');
+          }
+        } catch (err) {
+          showToast('Error communicating with server');
+        } finally {
+          syncAllImagesBtn.disabled = false;
+          if (icon) icon.style.animation = '';
         }
       });
     }

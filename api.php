@@ -468,6 +468,7 @@ function ensureRolesTable(PDO $pdo): void
         if ($cnt === 0) {
             $seedRoles = [
                 ['admin', 'Administrator', 'Administrator', 'L4_ALL_ACCESS', 'Executive', 'Full operational control, security matrix management, user provision and badge issuance.', 1],
+                ['stock_manager', 'Stock Logistics Manager', 'Stock Logistics Manager', 'L4_ALL_ACCESS', 'Warehouse', 'Oversees warehouse hubs, inventory movement, and logistics personnel onboarding.', 1],
                 ['stock_controller', 'Stock Controller', 'Stock Controller', 'L3_STOCK_WAREHOUSE', 'Warehouse', 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', 1],
                 ['tech_lead', 'Technical Lead', 'Technical Lead', 'L4_ALL_ACCESS', 'Production', 'Supervises audio, video, lighting and rigging operations across all checkpoints.', 1],
                 ['technician', 'Stage & Audio Technician', 'Stage & Audio Technician', 'L2_TECH_STAGE', 'Audio', 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 1],
@@ -484,6 +485,15 @@ function ensureRolesTable(PDO $pdo): void
             foreach ($seedRoles as $sr) {
                 $ins->execute($sr);
             }
+        } else {
+            // Ensure stock_manager role exists in roles table
+            try {
+                $hasSm = (int)$pdo->query("SELECT COUNT(*) FROM `roles` WHERE `role_key` = 'stock_manager'")->fetchColumn();
+                if ($hasSm === 0) {
+                    $pdo->prepare("INSERT INTO `roles` (`role_key`, `role_name`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, 1, 1)")
+                        ->execute(['stock_manager', 'Stock Logistics Manager', 'Stock Logistics Manager', 'L4_ALL_ACCESS', 'Warehouse', 'Oversees warehouse hubs, inventory movement, and logistics personnel onboarding.']);
+                }
+            } catch (Throwable $e) {}
         }
     } catch (Throwable $e) {}
 }
@@ -606,6 +616,108 @@ function getDepartmentsList(PDO $pdo, array $crew = []): array
     return [];
 }
 
+function getCallerUser(PDO $pdo): ?array
+{
+    $authId = (int) ($_SESSION['auth_user_id'] ?? 0);
+    if ($authId <= 0) {
+        return null;
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT u.*, b.clearance_level, b.badge_code FROM `users` u LEFT JOIN `user_badges` b ON u.id = b.user_id WHERE u.id = ?");
+        $stmt->execute([$authId]);
+        $u = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $u ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function canCallerPerformAction(string $action, ?array $caller, array $context = []): array
+{
+    // If no session is active (e.g. testing or local kiosk demo), permit demo mutations except destructive tier/role wipe
+    if ($caller === null) {
+        if (in_array($action, ['save_clearance_tier', 'delete_clearance_tier'], true)) {
+            return ['ok' => false, 'error' => 'Authentication required: Administrator session required to modify Access Matrix tiers.'];
+        }
+        return ['ok' => true];
+    }
+
+    $role = strtolower(trim((string)($caller['role'] ?? 'user')));
+    $clearance = strtoupper(trim((string)($caller['clearance_level'] ?? 'L1_VENUE_BASIC')));
+    $isAdmin = in_array($role, ['admin', 'manager', 'administrator'], true);
+
+    switch ($action) {
+        case 'save_clearance_tier':
+        case 'delete_clearance_tier':
+        case 'save_role':
+        case 'delete_role':
+        case 'save_department':
+        case 'delete_department':
+            if (!$isAdmin) {
+                return ['ok' => false, 'error' => 'Permission denied: This action requires Administrator privileges.'];
+            }
+            break;
+
+        case 'save_user':
+            // 1. Stock Controller cannot add/edit users
+            if ($role === 'stock_controller') {
+                return ['ok' => false, 'error' => 'Permission denied: Stock Controllers are assigned exclusively to gate terminal scanning and batch custody and cannot create or modify personnel accounts.'];
+            }
+            // 2. Stock Manager can onboard warehouse crew with L1 or L2 clearance only
+            if ($role === 'stock_manager') {
+                $targetTier = strtoupper(trim((string)($context['clearance_level'] ?? 'L1')));
+                $targetRole = strtolower(trim((string)($context['role'] ?? 'user')));
+                $allowedTiers = ['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L1', 'L2'];
+                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'tech_lead', 'stock_manager'];
+                if (!in_array($targetTier, $allowedTiers, true) || in_array($targetRole, $disallowedRoles, true)) {
+                    return ['ok' => false, 'error' => 'Permission denied: Stock Managers can only onboard warehouse & logistics crew with Level 1 or Level 2 clearance.'];
+                }
+            }
+            // 3. Technical Lead can onboard technical crew with L1/L2 clearance
+            if ($role === 'tech_lead') {
+                $targetTier = strtoupper(trim((string)($context['clearance_level'] ?? 'L2')));
+                $targetRole = strtolower(trim((string)($context['role'] ?? 'technician')));
+                $allowedTiers = ['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L1', 'L2'];
+                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'stock_manager'];
+                if (!in_array($targetTier, $allowedTiers, true) || in_array($targetRole, $disallowedRoles, true)) {
+                    return ['ok' => false, 'error' => 'Permission denied: Technical Leads can only onboard technical crew with Level 1 or Level 2 clearance.'];
+                }
+            }
+            // 4. Standard crew cannot add users
+            if (in_array($role, ['technician', 'driver', 'security', 'user'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: User provisioning requires Supervisor, Tech Lead, or Administrator privileges.'];
+            }
+            break;
+
+        case 'delete_user':
+            if (!$isAdmin) {
+                return ['ok' => false, 'error' => 'Permission denied: Deleting personnel accounts requires Administrator privileges.'];
+            }
+            break;
+
+        case 'update_call_time':
+        case 'save_event':
+        case 'assign_event_crew':
+            // Tech Lead, Project Manager, Admin, and Stock Manager (for warehouses)
+            if (!in_array($role, ['admin', 'manager', 'tech_lead', 'project_manager'], true)) {
+                if ($role === 'stock_manager' && ($context['checkpoint_type'] ?? '') === 'stock_warehouse') {
+                    break;
+                }
+                return ['ok' => false, 'error' => 'Permission denied: Setting Call Times and assigning event crew requires Tech Lead, Project Manager, or Administrator privileges.'];
+            }
+            break;
+
+        case 'save_warehouse':
+        case 'delete_warehouse':
+            if (!in_array($role, ['admin', 'manager', 'stock_manager'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Warehouse infrastructure management requires Stock Manager or Administrator privileges.'];
+            }
+            break;
+    }
+
+    return ['ok' => true];
+}
+
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
 {
     $todayStr = date('Y-m-d');
@@ -641,6 +753,16 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $callTime = substr((string) ($er['call_time'] ?? '08:00'), 0, 5) ?: '08:00';
         $pm = (string) ($er['project_manager'] ?? 'Operations PM');
         $tl = (string) ($er['tech_lead'] ?? 'Tech Lead');
+
+        $assignedRaw = $er['assigned_technician'] ?? '';
+        $assignedIds = [];
+        if (!empty($assignedRaw)) {
+            $dec = json_decode((string)$assignedRaw, true);
+            if (is_array($dec)) {
+                $assignedIds = array_values(array_unique(array_filter(array_map('intval', $dec))));
+            }
+        }
+
         $eventVenues[] = [
             'id' => $numId,
             'raw_id' => $rawId,
@@ -650,8 +772,12 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'location' => $loc,
             'date' => (string) ($er['date'] ?? $todayStr),
             'call_time' => $callTime,
+            'project_manager' => $pm,
+            'tech_lead' => $tl,
             'lead_label' => 'Tech Lead: ' . ($tl ?: $pm ?: 'Jean Paul'),
             'min_clearance' => 'L1 / L2 / L3 / L4 Authorized',
+            'assigned_technicians' => $assignedIds,
+            'assigned_count' => count($assignedIds),
         ];
         $fallbackIdx++;
     }
@@ -872,7 +998,19 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     $crew = [];
     $crewById = [];
     $rollCallList = [];
-    $tierCounts = ['L1' => 0, 'L2' => 0, 'L3' => 0, 'L4' => 0];
+    $tierCounts = [];
+    try {
+        $lvlStmt = $pdo->query("SELECT `code` FROM `access_clearance_levels` WHERE `is_active` = 1 ORDER BY `sort_order` ASC, `id` ASC");
+        while ($lvlRow = $lvlStmt->fetch(PDO::FETCH_ASSOC)) {
+            $c = strtoupper(trim((string)$lvlRow['code']));
+            if ($c !== '') {
+                $tierCounts[$c] = 0;
+            }
+        }
+    } catch (Throwable $e) {}
+    if (empty($tierCounts)) {
+        $tierCounts = ['L1' => 0, 'L2' => 0, 'L3' => 0, 'L4' => 0];
+    }
     $activeBadgesCount = 0;
 
     foreach ($userRows as $ur) {
@@ -1103,6 +1241,37 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
 
     $authUserId = (int) ($_SESSION['auth_user_id'] ?? 0);
     $currentUser = ($authUserId > 0 && isset($crewById[$authUserId])) ? $crewById[$authUserId] : null;
+    if ($currentUser) {
+        $cRole = strtolower(trim((string)($currentUser['role'] ?? 'user')));
+        $cClearance = strtoupper(trim((string)($currentUser['clearance_code'] ?? 'L1')));
+        $isAdmin = in_array($cRole, ['admin', 'manager', 'administrator'], true);
+        $isTechLead = $cRole === 'tech_lead' || $isAdmin;
+        $isStockMgr = $cRole === 'stock_manager' || $isAdmin;
+        $isStockCtrl = $cRole === 'stock_controller';
+
+        $currentUser['permissions'] = [
+            'is_admin' => $isAdmin,
+            'is_tech_lead' => $isTechLead,
+            'is_stock_manager' => $isStockMgr,
+            'is_stock_controller' => $isStockCtrl,
+            'can_add_user' => $isAdmin || $isTechLead || $isStockMgr,
+            'can_delete_user' => $isAdmin,
+            'can_edit_tiers' => $isAdmin,
+            'can_assign_event_crew' => $isTechLead || $isAdmin,
+            'can_set_call_time' => $isTechLead || $isAdmin || $isStockMgr,
+            'can_manage_warehouses' => $isStockMgr || $isAdmin,
+            'max_assignable_tier' => $isAdmin ? 'L4' : (($isStockMgr || $isTechLead) ? 'L2' : 'none'),
+            'delegation_summary' => $isAdmin
+                ? 'Full Administrator — All digital and physical systems unconstrained.'
+                : ($isTechLead
+                    ? 'Technical Lead — Authorized to set Call Times, assign event crew, and onboard technical personnel (L1/L2).'
+                    : ($isStockMgr
+                        ? 'Stock Manager — Authorized for warehouse infrastructure, stock dispatches, and warehouse crew onboarding (L1/L2).'
+                        : ($isStockCtrl
+                            ? 'Stock Controller — Strictly scoped to Gate Terminal (#pane-kiosk) and equipment custody verifications.'
+                            : 'Standard Personnel — View personal profile and attendance.')))
+        ];
+    }
 
     return [
         'ok' => true,
@@ -1285,11 +1454,13 @@ try {
         $_SESSION['auth_user_role'] = strtolower((string)$userRow['role']);
 
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
-        $matchedMember = null;
-        foreach ($full['crew'] as $c) {
-            if ((int)$c['id'] === (int)$userRow['id']) {
-                $matchedMember = $c;
-                break;
+        $matchedMember = $full['currentUser'] ?? null;
+        if (!$matchedMember) {
+            foreach ($full['crew'] as $c) {
+                if ((int)$c['id'] === (int)$userRow['id']) {
+                    $matchedMember = $c;
+                    break;
+                }
             }
         }
 
@@ -1427,31 +1598,73 @@ try {
     if ($action === 'switch_user') {
         $targetId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
         $targetBadge = trim((string) ($_POST['badge_code'] ?? $jsonBody['badge_code'] ?? ''));
+        $targetEmail = strtolower(trim((string) ($_POST['email'] ?? $jsonBody['email'] ?? '')));
+        $targetUsername = strtolower(trim((string) ($_POST['username'] ?? $jsonBody['username'] ?? '')));
+        $targetRole = strtolower(trim((string) ($_POST['role'] ?? $jsonBody['role'] ?? '')));
 
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $found = null;
-        foreach ($full['crew'] as $c) {
-            if ($targetId > 0 && (int)$c['id'] === $targetId) {
-                $found = $c;
-                break;
+
+        // 1. Explicit ID
+        if ($targetId > 0) {
+            foreach ($full['crew'] as $c) {
+                if ((int)$c['id'] === $targetId) {
+                    $found = $c;
+                    break;
+                }
             }
-            if ($targetBadge !== '' && (strtoupper($c['badge_code']) === strtoupper($targetBadge) || strtoupper($c['raw_badge_code']) === strtoupper($targetBadge))) {
-                $found = $c;
-                break;
+        }
+        // 2. Email
+        if (!$found && $targetEmail !== '') {
+            foreach ($full['crew'] as $c) {
+                if (strtolower((string)($c['email'] ?? '')) === $targetEmail) {
+                    $found = $c;
+                    break;
+                }
+            }
+        }
+        // 3. Username
+        if (!$found && $targetUsername !== '') {
+            foreach ($full['crew'] as $c) {
+                if (strtolower((string)($c['username'] ?? '')) === $targetUsername) {
+                    $found = $c;
+                    break;
+                }
+            }
+        }
+        // 4. Badge code
+        if (!$found && $targetBadge !== '') {
+            foreach ($full['crew'] as $c) {
+                if (strtoupper($c['badge_code']) === strtoupper($targetBadge) || strtoupper($c['raw_badge_code']) === strtoupper($targetBadge)) {
+                    $found = $c;
+                    break;
+                }
+            }
+        }
+        // 5. Role match
+        if (!$found && $targetRole !== '') {
+            foreach ($full['crew'] as $c) {
+                if (strtolower((string)($c['role'] ?? '')) === $targetRole) {
+                    $found = $c;
+                    break;
+                }
             }
         }
 
         if (!$found) {
-            echo json_encode(['ok' => false, 'error' => 'Target user or badge code not found.']);
+            echo json_encode(['ok' => false, 'error' => 'Target user or persona not found.']);
             exit;
         }
 
         $_SESSION['auth_user_id'] = (int) $found['id'];
         $_SESSION['auth_user_role'] = strtolower((string)($found['role'] ?? ''));
 
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        $found = $full['currentUser'] ?: $found;
+
         echo json_encode([
             'ok' => true,
-            'message' => "Switched active operator to {$found['full_name']} ({$found['clearance_code']}).",
+            'message' => "Switched active operator to {$found['full_name']} ({$found['role_display']}).",
             'user' => $found,
         ]);
         exit;
@@ -1553,10 +1766,21 @@ try {
                     : "Gate Check-In recorded at {$cpName}"))
             : "Denied at {$cpName}: {$reason}";
 
+        $isAssignedToEvent = false;
+        $eventAssignedCount = 0;
+        if ($cpType === 'event_venue' && !empty($activeCp['assigned_technicians'])) {
+            $eventAssignedCount = (int) ($activeCp['assigned_count'] ?? count($activeCp['assigned_technicians']));
+            $isAssignedToEvent = in_array((int)$targetMember['id'], $activeCp['assigned_technicians'], true);
+        } else {
+            $isAssignedToEvent = true;
+        }
+
+        $scannedBy = !empty($_SESSION['auth_user_id']) ? (int) $_SESSION['auth_user_id'] : 1;
+
         $insStmt = $pdo->prepare("
             INSERT INTO `attendance_logs`
               (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
         $insStmt->execute([
             (int) $targetMember['id'],
@@ -1568,6 +1792,7 @@ try {
             $accessStatus,
             $denialReason,
             $punctuality,
+            $scannedBy,
             $noteText,
         ]);
 
@@ -1782,6 +2007,14 @@ try {
     }
 
     if ($action === 'save_clearance_tier') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_clearance_tier', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $code = strtoupper(trim((string) ($_POST['code'] ?? $jsonBody['code'] ?? '')));
         $title = trim((string) ($_POST['title'] ?? $jsonBody['title'] ?? ''));
@@ -1886,6 +2119,14 @@ try {
     }
 
     if ($action === 'delete_clearance_tier') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_clearance_tier', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         $tierId = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         if ($tierId <= 0) {
             http_response_code(400);
@@ -1956,7 +2197,15 @@ try {
     }
 
     if ($action === 'update_call_time') {
+        $caller = getCallerUser($pdo);
         $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? ''));
+        $authCheck = canCallerPerformAction('update_call_time', $caller, ['checkpoint_type' => $cpType]);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         $rawCpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? ''));
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
 
@@ -1996,6 +2245,68 @@ try {
                 'updated_call_time' => $formattedTime,
                 'updated_cp_type' => $cpType,
                 'updated_cp_id' => $rawCpId,
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'save_event' || $action === 'assign_event_crew') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_event', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        $eventId = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
+        $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
+        $projectManager = trim((string) ($_POST['project_manager'] ?? $jsonBody['project_manager'] ?? ''));
+        $assignedTechs = $_POST['assigned_technicians'] ?? $jsonBody['assigned_technicians'] ?? [];
+
+        if (!is_array($assignedTechs)) {
+            $assignedTechs = json_decode((string)$assignedTechs, true) ?: [];
+        }
+        $assignedTechsInt = array_values(array_unique(array_filter(array_map('intval', (array)$assignedTechs))));
+
+        // Normalize call time
+        $timeParts = explode(':', $rawCallTime);
+        $hRaw = preg_replace('/\D/', '', $timeParts[0] ?? '08');
+        $mRaw = preg_replace('/\D/', '', $timeParts[1] ?? '00');
+        $formattedTime = str_pad($hRaw !== '' ? $hRaw : '08', 2, '0', STR_PAD_LEFT) . ':' . str_pad(substr($mRaw !== '' ? $mRaw : '00', 0, 2), 2, '0', STR_PAD_LEFT);
+
+        if ($eventId !== '') {
+            $chk = $pdo->prepare("SELECT id FROM `events` WHERE id = ?");
+            $chk->execute([$eventId]);
+            if ($chk->fetch()) {
+                $stmtUpd = $pdo->prepare("
+                    UPDATE `events`
+                    SET `call_time` = ?,
+                        `tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END,
+                        `project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END,
+                        `assigned_technician` = ?
+                    WHERE `id` = ?
+                ");
+                $stmtUpd->execute([
+                    $formattedTime,
+                    $techLead, $techLead,
+                    $projectManager, $projectManager,
+                    json_encode($assignedTechsInt),
+                    $eventId
+                ]);
+            }
+        }
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => 'Event roster and call time updated successfully by Tech Lead',
+                'event_id' => $eventId,
+                'call_time' => $formattedTime,
+                'assigned_technicians' => $assignedTechsInt,
+                'assigned_count' => count($assignedTechsInt),
             ]
         ));
         exit;
@@ -2085,6 +2396,14 @@ try {
     }
 
     if ($action === 'save_warehouse') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_warehouse', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $name = trim((string) ($_POST['name'] ?? $jsonBody['name'] ?? ''));
         $code = trim((string) ($_POST['code'] ?? $jsonBody['code'] ?? ''));
@@ -2155,6 +2474,14 @@ try {
     }
 
     if ($action === 'delete_warehouse') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_warehouse', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         if ($id > 0) {
             $del = $pdo->prepare("DELETE FROM `stock_locations` WHERE `id` = ?");
@@ -2202,25 +2529,62 @@ try {
             }
         }
 
+        // Check whether image sync to identical items is active (default true)
+        $syncIdentical = !isset($_POST['sync_identical']) || $_POST['sync_identical'] === '1' || $_POST['sync_identical'] === 'true';
+
+        $syncedCount = 0;
+
         if ($id > 0) {
-            if ($uploadedImagePath) {
-                $stmt = $pdo->prepare("
-                    UPDATE `items`
-                    SET `item_name` = ?, `serial_number` = ?, `category` = ?, `brand` = ?, `model` = ?, `department` = ?,
-                        `stock_location` = ?, `quantity` = ?, `condition` = ?, `status` = ?, `notes` = ?, `image` = ?
-                    WHERE `id` = ?
-                ");
-                $stmt->execute([$itemName, $serialNumber, $category, $brand, $model, $department, $stockLocation, $quantity, $condition, $status, $notes, $uploadedImagePath, $id]);
-            } else {
-                $stmt = $pdo->prepare("
-                    UPDATE `items`
-                    SET `item_name` = ?, `serial_number` = ?, `category` = ?, `brand` = ?, `model` = ?, `department` = ?,
-                        `stock_location` = ?, `quantity` = ?, `condition` = ?, `status` = ?, `notes` = ?
-                    WHERE `id` = ?
-                ");
-                $stmt->execute([$itemName, $serialNumber, $category, $brand, $model, $department, $stockLocation, $quantity, $condition, $status, $notes, $id]);
+            // If no new image was uploaded in this request, preserve existing image or inherit from identical sibling
+            if (!$uploadedImagePath) {
+                $chk = $pdo->prepare("SELECT `image` FROM `items` WHERE `id` = ?");
+                $chk->execute([$id]);
+                $uploadedImagePath = $chk->fetchColumn() ?: null;
             }
+
+            // If item has no image at all, check if an identical unit already has an image
+            if (!$uploadedImagePath) {
+                $findSibling = $pdo->prepare("
+                    SELECT `image` FROM `items`
+                    WHERE `id` != ?
+                      AND `image` IS NOT NULL AND `image` != ''
+                      AND TRIM(LOWER(`item_name`)) = TRIM(LOWER(?))
+                      AND (? = '' OR `model` IS NULL OR `model` = '' OR TRIM(LOWER(`model`)) = TRIM(LOWER(?)))
+                      AND (? = '' OR `brand` IS NULL OR `brand` = '' OR TRIM(LOWER(`brand`)) = TRIM(LOWER(?)))
+                    ORDER BY `id` DESC LIMIT 1
+                ");
+                $findSibling->execute([$id, $itemName, $model, $model, $brand, $brand]);
+                $inherited = $findSibling->fetchColumn();
+                if ($inherited) {
+                    $uploadedImagePath = $inherited;
+                }
+            }
+
+            $stmt = $pdo->prepare("
+                UPDATE `items`
+                SET `item_name` = ?, `serial_number` = ?, `category` = ?, `brand` = ?, `model` = ?, `department` = ?,
+                    `stock_location` = ?, `quantity` = ?, `condition` = ?, `status` = ?, `notes` = ?, `image` = ?
+                WHERE `id` = ?
+            ");
+            $stmt->execute([$itemName, $serialNumber, $category, $brand, $model, $department, $stockLocation, $quantity, $condition, $status, $notes, $uploadedImagePath, $id]);
         } else {
+            // If creating a new item without photo, check if an identical unit already has one
+            if (!$uploadedImagePath) {
+                $findSibling = $pdo->prepare("
+                    SELECT `image` FROM `items`
+                    WHERE `image` IS NOT NULL AND `image` != ''
+                      AND TRIM(LOWER(`item_name`)) = TRIM(LOWER(?))
+                      AND (? = '' OR `model` IS NULL OR `model` = '' OR TRIM(LOWER(`model`)) = TRIM(LOWER(?)))
+                      AND (? = '' OR `brand` IS NULL OR `brand` = '' OR TRIM(LOWER(`brand`)) = TRIM(LOWER(?)))
+                    ORDER BY `id` DESC LIMIT 1
+                ");
+                $findSibling->execute([$itemName, $model, $model, $brand, $brand]);
+                $inherited = $findSibling->fetchColumn();
+                if ($inherited) {
+                    $uploadedImagePath = $inherited;
+                }
+            }
+
             $stmt = $pdo->prepare("
                 INSERT INTO `items`
                 (`item_name`, `serial_number`, `category`, `brand`, `model`, `department`, `stock_location`, `quantity`, `condition`, `status`, `notes`, `image`)
@@ -2230,10 +2594,93 @@ try {
             $id = (int) $pdo->lastInsertId();
         }
 
+        // SYNC IMAGE TO ALL IDENTICAL EQUIPMENT UNITS
+        if ($uploadedImagePath && $syncIdentical) {
+            $syncStmt = $pdo->prepare("
+                UPDATE `items`
+                SET `image` = ?
+                WHERE `id` != ?
+                  AND TRIM(LOWER(`item_name`)) = TRIM(LOWER(?))
+                  AND (? = '' OR `model` IS NULL OR `model` = '' OR TRIM(LOWER(`model`)) = TRIM(LOWER(?)))
+                  AND (? = '' OR `brand` IS NULL OR `brand` = '' OR TRIM(LOWER(`brand`)) = TRIM(LOWER(?)))
+            ");
+            $syncStmt->execute([
+                $uploadedImagePath,
+                $id,
+                $itemName,
+                $model,
+                $model,
+                $brand,
+                $brand,
+            ]);
+            $syncedCount = $syncStmt->rowCount();
+        }
+
+        $msg = 'Stock item saved successfully';
+        if ($syncedCount > 0) {
+            $msg = "Stock item saved and photo synced to {$syncedCount} identical equipment units ({$itemName})";
+        }
+
         echo json_encode([
             'ok' => true,
-            'message' => 'Stock item saved successfully',
+            'message' => $msg,
             'item_id' => $id,
+            'synced_count' => $syncedCount,
+            'image' => $uploadedImagePath,
+        ]);
+        exit;
+    }
+
+    if ($action === 'sync_all_stock_images') {
+        // Collect latest image per identical equipment group (item_name, brand, model)
+        $stmt = $pdo->query("
+            SELECT `item_name`, `brand`, `model`, `image`, MAX(`id`) as latest_id
+            FROM `items`
+            WHERE `image` IS NOT NULL AND `image` != ''
+            GROUP BY `item_name`, `brand`, `model`, `image`
+            ORDER BY latest_id DESC
+        ");
+        $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $totalSynced = 0;
+        $updatedGroups = 0;
+        $seen = [];
+
+        foreach ($groups as $g) {
+            $key = strtolower(trim($g['item_name'])) . '||' . strtolower(trim((string)$g['brand'])) . '||' . strtolower(trim((string)$g['model']));
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+
+            $img = $g['image'];
+            $syncStmt = $pdo->prepare("
+                UPDATE `items`
+                SET `image` = ?
+                WHERE (`image` IS NULL OR `image` = '' OR `image` != ?)
+                  AND TRIM(LOWER(`item_name`)) = TRIM(LOWER(?))
+                  AND (? = '' OR `model` IS NULL OR `model` = '' OR TRIM(LOWER(`model`)) = TRIM(LOWER(?)))
+                  AND (? = '' OR `brand` IS NULL OR `brand` = '' OR TRIM(LOWER(`brand`)) = TRIM(LOWER(?)))
+            ");
+            $syncStmt->execute([
+                $img,
+                $img,
+                $g['item_name'],
+                $g['model'] ?? '',
+                $g['model'] ?? '',
+                $g['brand'] ?? '',
+                $g['brand'] ?? '',
+            ]);
+            $cnt = $syncStmt->rowCount();
+            if ($cnt > 0) {
+                $totalSynced += $cnt;
+                $updatedGroups++;
+            }
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => "Synced equipment photos across {$updatedGroups} groups ({$totalSynced} units updated)",
+            'total_synced' => $totalSynced,
+            'updated_groups' => $updatedGroups,
         ]);
         exit;
     }
@@ -2249,6 +2696,19 @@ try {
     }
 
     if ($action === 'save_user') {
+        $caller = getCallerUser($pdo);
+        $reqClearance = trim((string) ($_POST['clearance_level'] ?? $jsonBody['clearance_level'] ?? 'L2_TECH_STAGE'));
+        $reqRole = trim((string) ($_POST['role'] ?? $jsonBody['role'] ?? 'technician'));
+        $authCheck = canCallerPerformAction('save_user', $caller, [
+            'clearance_level' => $reqClearance,
+            'role' => $reqRole,
+        ]);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $fullName = trim((string) ($_POST['full_name'] ?? $jsonBody['full_name'] ?? ''));
         $username = trim((string) ($_POST['username'] ?? $jsonBody['username'] ?? ''));
@@ -2388,6 +2848,14 @@ try {
     }
 
     if ($action === 'save_role') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_role', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         ensureRolesTable($pdo);
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $title = trim((string) ($_POST['title'] ?? $jsonBody['title'] ?? ''));
@@ -2440,6 +2908,14 @@ try {
     }
 
     if ($action === 'delete_role') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_role', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         ensureRolesTable($pdo);
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $roleKey = strtolower(trim((string) ($_POST['role_key'] ?? $jsonBody['role_key'] ?? '')));
@@ -2579,6 +3055,14 @@ try {
     }
 
     if ($action === 'delete_user') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_user', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         if ($id > 0) {
             $pdo->prepare("DELETE FROM `attendance_logs` WHERE `user_id` = ?")->execute([$id]);

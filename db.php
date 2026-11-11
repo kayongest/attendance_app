@@ -227,6 +227,10 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `assigned_technician` TEXT DEFAULT NULL");
+    } catch (Throwable $e) {}
+
     // 5. Ensure `attendance_logs` table exists
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `attendance_logs` (
@@ -382,34 +386,33 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     if ($eventCount === 0) {
         $today = date('Y-m-d');
         $stmtEv = $pdo->prepare("
-            INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`) VALUES
-            ('1001', 'World Bank Summit — KCC', 'Kigali Convention Centre', ?, '08:00', 'Jean Paul', 'Eric Havugimana'),
-            ('1002', 'Move Afrika Tour — BK Arena', 'BK Arena Main Stage', ?, '08:30', 'Mirene', 'Patrick N.'),
-            ('1003', 'African Leadership Forum', 'Intare Conference Arena', ?, '09:00', 'didier', 'Olivier M.'),
-            ('1004', 'Gala Dinner — Marriott Hotel', 'Kigali Marriott Hotel', ?, '10:00', 'Operations PM', 'Tech Lead')
+            INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`) VALUES
+            ('1001', 'World Bank Summit — KCC', 'Kigali Convention Centre', ?, '08:00', 'Jean Paul', 'Eric Havugimana', '[3, 5, 6, 8, 11]'),
+            ('1002', 'Move Afrika Tour — BK Arena', 'BK Arena Main Stage', ?, '08:30', 'Mirene', 'Patrick N.', '[5, 6, 8]'),
+            ('1003', 'African Leadership Forum', 'Intare Conference Arena', ?, '09:00', 'didier', 'Olivier M.', '[3, 11]'),
+            ('1004', 'Gala Dinner — Marriott Hotel', 'Kigali Marriott Hotel', ?, '10:00', 'Operations PM', 'Tech Lead', '[5, 8]')
         ");
         $stmtEv->execute([$today, $today, $today, $today]);
+    } else {
+        // Ensure Event 1001 (World Bank Summit) exists
+        try {
+            $stmt1001 = $pdo->query("SELECT id FROM `events` WHERE `id` = '1001'");
+            if (!$stmt1001->fetch()) {
+                $today = date('Y-m-d');
+                $pdo->prepare("
+                    INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`)
+                    VALUES ('1001', 'World Bank Summit — KCC', 'Kigali Convention Centre', ?, '08:00', 'Operations PM', 'Jean Paul Ndayisaba', '[36, 38, 9, 6]')
+                ")->execute([$today]);
+            }
+            $pdo->exec("UPDATE `events` SET `assigned_technician` = '[3, 5, 6, 8, 11, 36, 38]' WHERE `id` = '1001' AND (`assigned_technician` IS NULL OR `assigned_technician` = '')");
+            $pdo->exec("UPDATE `events` SET `assigned_technician` = '[5, 6, 8, 38]' WHERE `id` = '1002' AND (`assigned_technician` IS NULL OR `assigned_technician` = '')");
+            $pdo->exec("UPDATE `events` SET `assigned_technician` = '[3, 11, 36]' WHERE `id` = '1003' AND (`assigned_technician` IS NULL OR `assigned_technician` = '')");
+            $pdo->exec("UPDATE `events` SET `assigned_technician` = '[5, 8, 38]' WHERE `id` = '1004' AND (`assigned_technician` IS NULL OR `assigned_technician` = '')");
+        } catch (Throwable $e) {}
     }
 
-    // Seed users if empty (standalone fallback)
-    $userCount = (int) $pdo->query("SELECT COUNT(*) FROM `users`")->fetchColumn();
-    if ($userCount === 0) {
-        $pdo->exec("
-            INSERT INTO `users` (`id`, `username`, `full_name`, `email`, `phone`, `role`, `department`, `profile_image`, `is_active`) VALUES
-            (1, 'admin', 'Didier Kayonge', 'didier@ability.rw', '+250 788 100 001', 'admin', 'Executive', NULL, 1),
-            (2, 'mirene', 'Mirene Uwase', 'mirene@ability.rw', '+250 788 100 002', 'stock_controller', 'Warehouse', NULL, 1),
-            (3, 'jeanpaul', 'Jean Paul Ndayisaba', 'jp@ability.rw', '+250 788 100 003', 'tech_lead', 'Audio', NULL, 1),
-            (4, 'claude', 'Claude Habimana', 'claude@ability.rw', '+250 788 100 004', 'security', 'Venue Security', NULL, 1),
-            (5, 'patrick', 'Patrick Nshimiyimana', 'patrick@ability.rw', '+250 788 100 005', 'technician', 'Video', NULL, 1),
-            (6, 'eric', 'Eric Havugimana', 'eric@ability.rw', '+250 788 100 006', 'technician', 'Rigging', 'uploads/profiles/profile_6.jpeg', 1),
-            (7, 'aline', 'Aline Mukamana', 'aline@ability.rw', '+250 788 100 007', 'stock_controller', 'Warehouse', NULL, 1),
-            (8, 'olivier', 'Olivier Mugisha', 'olivier@ability.rw', '+250 788 100 008', 'technician', 'Lighting', NULL, 1),
-            (9, 'emmanuel', 'Emmanuel Twahirwa', 'emmanuel@ability.rw', '+250 788 100 009', 'driver', 'Logistics', NULL, 1),
-            (10, 'fabrice', 'Fabrice Tuyisenge', 'fabrice@ability.rw', '+250 788 100 010', 'user', 'Stage Crew', NULL, 1),
-            (11, 'sandrine', 'Sandrine Ingabire', 'sandrine@ability.rw', '+250 788 100 011', 'technician', 'Audio', NULL, 1),
-            (12, 'kevin', 'Kevin Mutabazi', 'kevin@ability.rw', '+250 788 100 012', 'user', 'Venue Crew', NULL, 1)
-        ");
-    }
+    // Ensure the 5 core demo personas exist and are ready for testing
+    ensureCoreDemoPersonas($pdo);
 
     // Ensure every user has a `user_badges` row with `REW-BADGE-XXXX` format if missing
     $users = $pdo->query("SELECT `id`, `username`, `full_name`, `role`, `is_active` FROM `users` ORDER BY `id` ASC")->fetchAll();
@@ -546,5 +549,103 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
                 $s[9],
             ]);
         }
+    }
+}
+
+function ensureCoreDemoPersonas(PDO $pdo): void
+{
+    $defaultPass = password_hash('password123', PASSWORD_BCRYPT);
+    $adminPass = password_hash('admin123', PASSWORD_BCRYPT);
+
+    $personas = [
+        [
+            'username' => 'didier',
+            'full_name' => 'Didier Kayonge',
+            'email' => 'didier@ability.rw',
+            'phone' => '+250 788 100 001',
+            'role' => 'admin',
+            'department' => 'Executive',
+            'pass' => $adminPass,
+            'clearance' => 'L4_ALL_ACCESS',
+        ],
+        [
+            'username' => 'jeanpaul',
+            'full_name' => 'Jean Paul Ndayisaba',
+            'email' => 'jp@ability.rw',
+            'phone' => '+250 788 100 003',
+            'role' => 'tech_lead',
+            'department' => 'Audio',
+            'pass' => $defaultPass,
+            'clearance' => 'L4_ALL_ACCESS',
+        ],
+        [
+            'username' => 'theogene',
+            'full_name' => 'Theogene Nsengiyumva',
+            'email' => 'theogene@ability.rw',
+            'phone' => '+250 788 100 013',
+            'role' => 'stock_manager',
+            'department' => 'Warehouse',
+            'pass' => $defaultPass,
+            'clearance' => 'L4_ALL_ACCESS',
+        ],
+        [
+            'username' => 'mirene',
+            'full_name' => 'Mirene Uwase',
+            'email' => 'mirene@ability.rw',
+            'phone' => '+250 788 100 002',
+            'role' => 'stock_controller',
+            'department' => 'Warehouse',
+            'pass' => $defaultPass,
+            'clearance' => 'L3_STOCK_WAREHOUSE',
+        ],
+        [
+            'username' => 'eric',
+            'full_name' => 'Eric Havugimana',
+            'email' => 'eric@ability.rw',
+            'phone' => '+250 788 100 006',
+            'role' => 'technician',
+            'department' => 'Rigging',
+            'pass' => $defaultPass,
+            'clearance' => 'L2_TECH_STAGE',
+        ],
+    ];
+
+    foreach ($personas as $p) {
+        try {
+            $stmt = $pdo->prepare("SELECT id FROM `users` WHERE email = ? OR username = ?");
+            $stmt->execute([$p['email'], $p['username']]);
+            $uid = $stmt->fetchColumn();
+
+            if ($uid) {
+                $uid = (int) $uid;
+                $pdo->prepare("
+                    UPDATE `users`
+                    SET full_name = ?, email = ?, username = ?, role = ?, department = ?, is_active = 1
+                    WHERE id = ?
+                ")->execute([$p['full_name'], $p['email'], $p['username'], $p['role'], $p['department'], $uid]);
+            } else {
+                $pdo->prepare("
+                    INSERT INTO `users` (`username`, `full_name`, `email`, `phone`, `role`, `department`, `password_hash`, `is_active`)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                ")->execute([$p['username'], $p['full_name'], $p['email'], $p['phone'], $p['role'], $p['department'], $p['pass']]);
+                $uid = (int) $pdo->lastInsertId();
+            }
+
+            // Ensure badge
+            $bStmt = $pdo->prepare("SELECT id, badge_code FROM `user_badges` WHERE `user_id` = ?");
+            $bStmt->execute([$uid]);
+            $badgeRow = $bStmt->fetch();
+            if ($badgeRow) {
+                $pdo->prepare("UPDATE `user_badges` SET clearance_level = ?, badge_status = 'active' WHERE id = ?")
+                    ->execute([$p['clearance'], (int)$badgeRow['id']]);
+            } else {
+                $bCode = 'ABL-BDG-' . str_pad((string)$uid, 4, '0', STR_PAD_LEFT);
+                $pdo->prepare("
+                    INSERT INTO `user_badges`
+                      (`user_id`, `badge_code`, `rfid_uid`, `clearance_level`, `stock_access_mode`, `venue_access_mode`, `badge_status`, `issued_at`, `expires_at`)
+                    VALUES (?, ?, ?, ?, 'all', 'all', 'active', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR))
+                ")->execute([$uid, $bCode, 'RFID-88' . str_pad((string)$uid, 2, '0', STR_PAD_LEFT), $p['clearance']]);
+            }
+        } catch (Throwable $e) {}
     }
 }

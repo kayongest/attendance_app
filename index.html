@@ -77,7 +77,7 @@
         </button>
         <button type="button" class="nav-item" id="nav-access-matrix-btn" data-node-id="2:3301">
           <img src="assets/nav-payments.svg" alt="" class="svg-icon" />
-          <span class="nav-item-label">4-Tier Access Matrix</span>
+          <span class="nav-item-label">Clearance Matrix</span>
         </button>
       </nav>
 
@@ -109,9 +109,9 @@
       <!-- Support Card -->
       <div class="support-card" data-node-id="2:3317">
         <img src="assets/sparkles.svg" alt="" class="svg-icon" />
-        <p class="support-card-title" data-node-id="2:3319">4-Tier Gate Enforcement</p>
-        <p class="support-card-desc" data-node-id="2:3320">
-          L1 Crew blocked at Stock Warehouses. L2–L4 verified with Linked Batches.
+        <p class="support-card-title" data-node-id="2:3319">Clearance Enforcement</p>
+        <p class="support-card-desc" id="sidebar-support-desc" data-node-id="2:3320">
+          Perimeter clearance verified with dual-gate RFID &amp; custody tracking.
         </p>
         <a href="#pane-kiosk" class="support-card-link" id="support-center-link" data-node-id="2:3321">Open #pane-kiosk ↗</a>
       </div>
@@ -658,7 +658,7 @@
               <img src="assets/arrow-down-11.svg" alt="" class="svg-icon" />
             </div>
             <div class="col-company"><span class="th-label th-label-med">Department &amp; Role</span></div>
-            <div class="col-ticket"><span class="th-label th-label-med">4-Tier Clearance</span></div>
+            <div class="col-ticket"><span class="th-label th-label-med">Clearance Level</span></div>
             <div class="col-reg-date"><span class="th-label th-label-med">Staff Badge &amp; ID</span></div>
             <div class="col-reg-status"><span class="th-label th-label-med">Checkpoint Auth</span></div>
             <div class="col-checkin"><span class="th-label th-label-med">Paired Gate Controls (In / Out)</span></div>
@@ -920,7 +920,7 @@
             <div class="page-intro-heading" data-node-id="2:8557">
               <h1 class="page-title" data-node-id="2:8558">Staff ID Badges &amp; Gate Terminal (#pane-kiosk)</h1>
               <p class="page-subtitle" data-node-id="2:8559">
-                Unified 4-Tier Access Matrix verification, paired Check-In (In) &amp; Check-Out (Out) timestamps, and Linked Equipment Batch custody.
+                Dynamic Access Matrix verification, paired Check-In (In) &amp; Check-Out (Out) timestamps, and Linked Equipment Batch custody.
               </p>
             </div>
           </div>
@@ -1097,7 +1097,7 @@
                 <img src="assets/arrow-down-12.svg" alt="" class="svg-icon" />
               </div>
               <div class="col-company"><span class="th-label">Department &amp; Role</span></div>
-              <div class="col-ticket"><span class="th-label">4-Tier Clearance</span></div>
+              <div class="col-ticket"><span class="th-label">Clearance Level</span></div>
               <div class="col-reg-date"><span class="th-label">Staff Badge Code</span></div>
               <div class="col-reg-status"><span class="th-label">Today’s Timestamps</span></div>
               <div class="col-checkin"><span class="th-label">Quick Gate Actions (In / Out)</span></div>
@@ -1268,9 +1268,9 @@
         <div class="overview-top-block">
           <div class="page-intro">
             <div class="page-intro-heading">
-              <h1 class="page-title">Stock Batch Approvals &amp; 4-Tier Access Matrix</h1>
+              <h1 class="page-title">Stock Batch Approvals &amp; Clearance Matrix</h1>
               <p class="page-subtitle">
-                Inspect linked equipment batches (`BATCH-YYYYMMDD-XXXXXX`) and configure L1–L4 clearance permissions.
+                Inspect linked equipment batches (<code>BATCH-YYYYMMDD-XXXXXX</code>) and configure clearance permissions.
               </p>
             </div>
             <div class="page-actions">
@@ -1353,11 +1353,11 @@
           <div class="directory-header">
             <div class="directory-heading">
               <div class="directory-title-row">
-                <h2 class="directory-title-18">4-Tier Access Matrix Configuration (L1–L4)</h2>
+                <h2 class="directory-title-18">Access Clearance Matrix Configuration</h2>
                 <span class="status-badge status-badge-green-sm">Live MySQL Persistence</span>
               </div>
               <p class="directory-desc">
-                Change any staff member’s clearance level below to test how L1 (Blocked at Stock) vs. L2–L4 behaves in the Gate Kiosk.
+                Configure staff member clearance levels and monitor gate permissions across venues and warehouse checkpoints.
               </p>
             </div>
           </div>
@@ -1506,6 +1506,17 @@
                 <select id="sm-location-filter" class="form-input" style="height: 38px; width: 160px; font-size: 12px;">
                   <option value="all">All Warehouses</option>
                 </select>
+                <select id="sm-page-size-filter" class="form-input" style="height: 38px; width: 115px; font-size: 12px;" title="Items per page">
+                  <option value="5">5 per page</option>
+                  <option value="10" selected>10 per page</option>
+                  <option value="25">25 per page</option>
+                  <option value="50">50 per page</option>
+                  <option value="all">Show All</option>
+                </select>
+                <button type="button" class="btn btn-secondary-32 js-sync-all-identical-images" id="sm-sync-all-images-btn" title="Sync equipment photos across all matching models">
+                  <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                  <span>Sync Photos</span>
+                </button>
                 <button type="button" class="btn btn-primary-32 js-trigger-add-item">
                   <img src="assets/plus-white.svg" alt="" class="svg-icon" />
                   <span>Add Stock Item</span>
@@ -1528,9 +1539,9 @@
             <div id="sm-items-rows"></div>
           </div>
 
-          <div class="table-footer">
+          <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
             <span class="results-count" id="sm-results-footer">Showing inventory records</span>
-            <div class="page-controls">
+            <div class="page-controls" id="sm-page-controls" style="display: flex; gap: 4px; align-items: center;">
               <span style="font-size: 11px; color: var(--text-secondary);">
                 Supports drag-and-drop image uploads for warehouses &amp; equipment items
               </span>
@@ -1548,7 +1559,7 @@
             <div class="page-intro-heading">
               <h1 class="page-title">Staff, Technicians &amp; Role Management</h1>
               <p class="page-subtitle">
-                Unified personnel directory and access controls. Manage technicians, engineers, controllers, 4-tier security clearance levels, and RFID badge credentials.
+                Unified personnel directory and access controls. Manage technicians, engineers, controllers, security clearance levels, and RFID badge credentials.
               </p>
             </div>
             <div class="page-actions">
@@ -1578,6 +1589,18 @@
             </div>
           </div>
 
+          <!-- Delegated Operations Banner for Stock Manager / Tech Lead -->
+          <div id="users-page-delegation-banner" style="display: none; margin-top: 14px; margin-bottom: 6px; padding: 12px 16px; border-radius: 8px; font-size: 12px; line-height: 1.5; align-items: center; justify-content: space-between; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span id="users-page-delegation-icon" style="font-size: 22px;">🏭</span>
+              <div>
+                <strong id="users-page-delegation-title" style="display: block; font-size: 13px; font-weight: 700;">Stock Manager Delegation Active</strong>
+                <span id="users-page-delegation-desc" style="font-size: 11.5px; opacity: 0.95;">You are authorized to onboard warehouse &amp; logistics personnel with <strong>Level 1 (Venue/Logistics)</strong> or <strong>Level 2 (Technical)</strong> clearance. Higher clearance tiers (L3–L8) and management roles require Administrator clearance.</span>
+              </div>
+            </div>
+            <span class="status-badge" id="users-page-delegation-pill" style="font-size: 11px; padding: 4px 10px; font-weight: 700; white-space: nowrap;">Scoped L1 / L2</span>
+          </div>
+
           <!-- View Mode Toggle: Personnel Directory vs Roles Management vs 4-Tier Access Matrix vs Departments -->
           <div class="user-subnav-pills" style="display: flex; gap: 10px; margin-top: 14px; margin-bottom: 8px; flex-wrap: wrap;">
             <button type="button" class="btn btn-primary-32 js-users-view-tab" id="view-tab-personnel" data-view="personnel">
@@ -1590,7 +1613,7 @@
             </button>
             <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-matrix" data-view="matrix">
               <img src="assets/lock.svg" alt="" class="svg-icon" />
-              <span>4-Tier Access Matrix (<span id="pill-matrix-count">5</span>)</span>
+              <span>Clearance Matrix (<span id="pill-matrix-count">7</span>)</span>
             </button>
             <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-departments" data-view="departments">
               <img src="assets/nav-integrations.svg" alt="" class="svg-icon" />
@@ -1743,7 +1766,7 @@
                   <span class="status-badge status-badge-purple-sm" id="roles-badge-count">12 Roles</span>
                 </div>
                 <p class="directory-desc">
-                  Create, configure, update, or remove technical role designations. Each role links to a 4-Tier clearance level determining gate authorization and warehouse custody permissions.
+                  Create, configure, update, or remove technical role designations. Each role links to a security clearance level determining gate authorization and warehouse custody permissions.
                 </p>
               </div>
             </div>
@@ -1800,9 +1823,9 @@
           <div class="overview-top-block" style="margin-bottom: 16px;">
             <div class="page-intro" style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px;">
               <div class="page-intro-heading">
-                <h2 class="page-title" style="font-family: 'Share Tech', sans-serif; font-size: 26px; margin: 0 0 4px; font-weight: 700; letter-spacing: -0.01em;">4-Tier Access Matrix</h2>
+                <h2 class="page-title" style="font-family: 'Share Tech', sans-serif; font-size: 26px; margin: 0 0 4px; font-weight: 700; letter-spacing: -0.01em;">Security Clearance Matrix</h2>
                 <p class="page-subtitle" style="margin: 0; font-size: 12px; color: var(--text-secondary);">
-                  Inspect linked equipment batches (<code style="background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; font-size: 11px;">BATCH-YYYYMMDD-XXXXXX</code>) and configure L1–L4 clearance permissions.
+                  Active security clearance tier specifications, gate perimeter policies, and physical checkpoint authorizations.
                 </p>
               </div>
               <div class="page-actions" style="display: flex; align-items: center; gap: 10px;">
@@ -2230,7 +2253,7 @@
         </div>
 
         <!-- Image Upload Dropzone -->
-        <div class="form-field" style="margin-bottom: 16px;">
+        <div class="form-field" style="margin-bottom: 12px;">
           <label class="form-label">Equipment Photo</label>
           <div class="image-upload-dropzone" id="item-dropzone">
             <input type="file" id="item-modal-image" accept="image/*" style="display: none;" />
@@ -2248,6 +2271,15 @@
               <button type="button" class="btn btn-secondary-32-sm" id="item-remove-image-btn">Change</button>
             </div>
           </div>
+        </div>
+
+        <!-- Auto-Sync Identical Items Option -->
+        <div style="margin-bottom: 16px; padding: 10px 12px; background: rgba(113, 71, 235, 0.06); border: 1px solid rgba(113, 71, 235, 0.2); border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary); cursor: pointer; margin: 0;">
+            <input type="checkbox" id="item-modal-sync-identical" checked style="width: 16px; height: 16px; accent-color: var(--brand-primary); cursor: pointer;" />
+            <span>Sync photo to identical items (<span id="item-modal-match-count">0</span> other units)</span>
+          </label>
+          <span class="status-badge status-badge-purple-sm" style="font-size: 10px;">Auto-Sync</span>
         </div>
 
         <div class="modal-actions">
@@ -2334,13 +2366,16 @@
           </span>
 
           <div class="form-field" style="margin-bottom: 10px;">
-            <label class="form-label" for="user-modal-clearance">4-Tier Security Clearance Level *</label>
+            <label class="form-label" for="user-modal-clearance">Security Clearance Level *</label>
             <select id="user-modal-clearance" class="form-input" required>
               <option value="L1_VENUE_BASIC">Level 1 - Event Venue Basic (No Stock Access)</option>
               <option value="L2_TECH_STAGE">Level 2 - Technical &amp; Stage (Assigned Stock Access)</option>
               <option value="L3_STOCK_WAREHOUSE">Level 3 - Stock Controller (Full Warehouse Access)</option>
               <option value="L4_ALL_ACCESS">Level 4 - Executive &amp; All-Access (Unrestricted)</option>
             </select>
+            <div id="user-modal-clearance-hint" style="display: none; font-size: 11px; margin-top: 5px; color: #b45309; background: rgba(217, 119, 6, 0.08); border: 1px solid rgba(217, 119, 6, 0.2); border-radius: 4px; padding: 4px 8px; align-items: center; gap: 5px; font-weight: 500;">
+              <span>⚠️</span> <span>Clearance restricted strictly to Level 1 and Level 2 under delegated operations. Higher tiers require Administrator clearance.</span>
+            </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
@@ -2942,6 +2977,6 @@
   <!-- Toast Notification -->
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=20261110_kiosk_search_v3"></script>
+  <script src="app.js?v=20261111_stock_pagination_v1"></script>
 </body>
 </html>

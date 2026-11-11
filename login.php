@@ -11,38 +11,51 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Detect if current session or request belongs to an Administrator
+// Prevent browser caching of login shell so persona updates reflect immediately
+header("Cache-Control: no-cache, no-store, must-revalidate");
+header("Pragma: no-cache");
+header("Expires: 0");
+
+// Handle explicit ?logout=1 first
+if (isset($_GET['logout'])) {
+    $_SESSION = [];
+    if (session_id()) {
+        session_destroy();
+    }
+}
+
+// Detect if current session or request belongs to an authenticated user / Administrator
 $isAdmin = false;
+$callerName = null;
+$callerRole = null;
+$callerBadge = null;
+
 if (!empty($_SESSION['auth_user_id'])) {
     try {
         require_once __DIR__ . '/db.php';
         $activeDb = '';
         $pdo = getDbConnection($activeDb);
-        $stmt = $pdo->prepare("SELECT role FROM `users` WHERE id = ?");
+        $stmt = $pdo->prepare("
+            SELECT u.id, u.full_name, u.username, u.role, b.badge_code 
+            FROM `users` u 
+            LEFT JOIN `user_badges` b ON b.user_id = u.id 
+            WHERE u.id = ?
+        ");
         $stmt->execute([(int)$_SESSION['auth_user_id']]);
-        $callerRole = strtolower((string)$stmt->fetchColumn());
-        if (in_array($callerRole, ['admin', 'manager', 'tech_lead'], true)) {
-            $isAdmin = true;
+        $callerRow = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($callerRow) {
+            $callerName = $callerRow['full_name'] ?: $callerRow['username'];
+            $callerRole = strtolower((string)$callerRow['role']);
+            $callerBadge = (string)($callerRow['badge_code'] ?? '');
+            if (in_array($callerRole, ['admin', 'manager', 'administrator'], true)) {
+                $isAdmin = true;
+            }
         }
     } catch (Throwable $e) {}
 }
 
 if (isset($_GET['admin']) && ($_GET['admin'] === '1' || $_GET['admin'] === 'true')) {
     $isAdmin = true;
-}
-
-// If already logged in and not explicitly staying or switching, route to index.php
-if (!empty($_SESSION['auth_user_id']) && !isset($_GET['logout']) && !isset($_GET['switch']) && !isset($_GET['mode'])) {
-    header('Location: index.php');
-    exit;
-}
-
-// If ?logout=1, clear session
-if (isset($_GET['logout'])) {
-    $_SESSION = [];
-    if (session_id()) {
-        session_destroy();
-    }
 }
 
 $initialTheme = 'light';
@@ -812,6 +825,23 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
     </button>
   </div>
 
+  <!-- Active Operator Session Banner (if signed in) -->
+  <?php if (!empty($callerName)): ?>
+  <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.22); border-radius: 10px; padding: 12px 18px; margin-bottom: 16px; max-width: 780px; width: 100%; display: flex; align-items: center; justify-content: space-between; font-size: 13px; box-sizing: border-box;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 22px;">👤</span>
+      <div>
+        <div style="font-weight: 700; color: #1e293b;">Active Operator Session: <strong><?php echo htmlspecialchars($callerName, ENT_QUOTES, 'UTF-8'); ?></strong></div>
+        <div style="font-size: 11px; color: #64748b;">Role: <code><?php echo htmlspecialchars($callerRole ?? 'staff', ENT_QUOTES, 'UTF-8'); ?></code> <?php if ($callerBadge): ?>&bull; Badge: <code><?php echo htmlspecialchars($callerBadge, ENT_QUOTES, 'UTF-8'); ?></code><?php endif; ?> &bull; Click any 1-Click Role below to switch test identity immediately.</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <a href="index.php" style="display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px; background: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 12px;">Launch Dashboard &rarr;</a>
+      <a href="login.php?logout=1" style="display: inline-flex; align-items: center; padding: 7px 12px; background: #fee2e2; color: #dc2626; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 12px;">Sign Out</a>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <!-- Main Sliding Container -->
   <div class="container" id="auth-container">
     
@@ -839,7 +869,9 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
           <select id="reg-role" class="input-select">
             <option value="technician">Technician (Tier L2)</option>
             <option value="user">Venue Crew (Tier L1)</option>
+            <option value="driver">Logistics Driver (Tier L1)</option>
             <option value="stock_controller">Stock Controller (Tier L3)</option>
+            <option value="stock_manager">Stock Manager (Tier L4)</option>
             <option value="security">Security Officer (Tier L1)</option>
             <option value="tech_lead">Tech Lead (Tier L4)</option>
             <option value="admin">Administrator (Tier L4)</option>
@@ -970,14 +1002,20 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       ⚡ Quick Role Test (1-Click Sign In)
     </div>
     <div class="demo-pills">
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="mirene@ability.rw" data-pass="password123" data-name="Mirene Uwase" data-role="stock_controller" data-is-admin="0" title="Redirects to Staff ID Badges & Gate Terminal (#pane-kiosk)">
-        📦 <strong>Mirene Uwase</strong> (Stock Controller &bull; L3) &rarr; #pane-kiosk
+      <button type="button" class="demo-pill-btn js-demo-btn" data-user="didier@ability.rw" data-pass="admin123" data-name="Didier Kayonge" data-role="admin" data-is-admin="1" title="👑 Didier Kayonge (admin • Tier L4 All Access) — Unlocks Sign Up toggle + Full Access">
+        👑 <strong>Didier Kayonge</strong> (admin &bull; Tier L4 All Access)
       </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="didier@ability.rw" data-pass="admin123" data-name="Didier Kayonge" data-role="admin" data-is-admin="1" title="Unlocks Sign Up toggle + Full Access">
-        👑 <strong>Didier Kayonge</strong> (Admin &bull; L4 All Access)
+      <button type="button" class="demo-pill-btn js-demo-btn" data-user="jp@ability.rw" data-pass="password123" data-name="Jean Paul Ndayisaba" data-role="tech_lead" data-is-admin="0" title="🎛️ Jean Paul Ndayisaba (tech_lead • Call times & Event Rosters)">
+        🎛️ <strong>Jean Paul Ndayisaba</strong> (tech_lead &bull; Call times &amp; Event Rosters)
       </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="eric@ability.rw" data-pass="password123" data-name="Eric Ndahiro" data-role="technician" data-is-admin="0" title="Standard Tech Access">
-        🏗️ <strong>Eric Ndahiro</strong> (Rigging Tech &bull; L2)
+      <button type="button" class="demo-pill-btn js-demo-btn" data-user="theogene@ability.rw" data-pass="password123" data-name="Theogene Nsengiyumva" data-role="stock_manager" data-is-admin="0" title="🏭 Theogene Nsengiyumva (stock_manager • Warehouses & Scoped Onboarding)">
+        🏭 <strong>Theogene Nsengiyumva</strong> (stock_manager &bull; Warehouses &amp; Scoped Onboarding)
+      </button>
+      <button type="button" class="demo-pill-btn js-demo-btn" data-user="mirene@ability.rw" data-pass="password123" data-name="Mirene Uwase" data-role="stock_controller" data-is-admin="0" title="📦 Mirene Uwase (stock_controller • Restricted to Gate Kiosk & Custody)">
+        📦 <strong>Mirene Uwase</strong> (stock_controller &bull; Restricted to Gate Kiosk &amp; Custody)
+      </button>
+      <button type="button" class="demo-pill-btn js-demo-btn" data-user="eric@ability.rw" data-pass="password123" data-name="Eric Havugimana" data-role="technician" data-is-admin="0" title="🏗️ Eric Havugimana (technician • Rigging L2)">
+        🏗️ <strong>Eric Havugimana</strong> (technician &bull; Rigging L2)
       </button>
     </div>
   </div>
@@ -1211,10 +1249,10 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
             if (data && data.ok) {
               const name = (data.user && (data.user.full_name || data.user.username)) || 'Lorem Ipsum';
               const role = (data.user && data.user.role) ? data.user.role.toLowerCase() : '';
-              const isStock = (role === 'stock_controller' || role === 'stock_manager');
-              const targetUrl = isStock ? 'index.php#pane-kiosk' : 'index.php';
+              const isGateOnly = (role === 'stock_controller' || role === 'technician');
+              const targetUrl = isGateOnly ? 'index.php#pane-kiosk' : 'index.php';
 
-              if (isStock) {
+              if (isGateOnly) {
                 showToast(`Welcome back, ${name}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
               } else {
                 showToast(`Welcome back, ${name}!`, 'success', 3500);
@@ -1225,9 +1263,9 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
             } else {
               // Local fallback for offline mode
               if (password === 'password123' || password === 'admin123') {
-                const isStock = username.toLowerCase().includes('mirene') || username.toLowerCase().includes('stock');
-                const targetUrl = isStock ? 'index.php#pane-kiosk' : 'index.php';
-                if (isStock) {
+                const isGateOnly = username.toLowerCase().includes('mirene') || username.toLowerCase().includes('eric');
+                const targetUrl = isGateOnly ? 'index.php#pane-kiosk' : 'index.php';
+                if (isGateOnly) {
                   showToast(`Welcome back, ${username}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
                 } else {
                   showToast(`Welcome back, ${username}!`, 'success', 3500);
@@ -1243,9 +1281,9 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
             }
           } catch (err) {
             // Offline fallback
-            const isStock = username.toLowerCase().includes('mirene') || username.toLowerCase().includes('stock');
-            const targetUrl = isStock ? 'index.php#pane-kiosk' : 'index.php';
-            if (isStock) {
+            const isGateOnly = username.toLowerCase().includes('mirene') || username.toLowerCase().includes('eric');
+            const targetUrl = isGateOnly ? 'index.php#pane-kiosk' : 'index.php';
+            if (isGateOnly) {
               showToast(`Welcome back, ${username}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
             } else {
               showToast(`Welcome back, ${username}!`, 'success', 3500);
