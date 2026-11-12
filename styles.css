@@ -6460,4 +6460,181 @@ html.theme-transitioning *::after {
   color: #a78bfa;
 }
 
+/* ========================================================================== */
+/* DUAL-FACILITY LIVE PRODUCTION DISPATCH WORKFLOW CARD (OPTION B)            */
+/* ========================================================================== */
+.kiosk-transit-flow-card {
+  margin-top: 14px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%);
+  border: 1.5px solid rgba(139, 92, 246, 0.35);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+[data-theme="light"] .kiosk-transit-flow-card,
+:root:not([data-theme="dark"]) .kiosk-transit-flow-card {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border: 1.5px solid #c4b5fd;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.12);
+}
+
+.kiosk-transit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.kiosk-transit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Share Tech', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c4b5fd;
+}
+
+[data-theme="light"] .kiosk-transit-badge,
+:root:not([data-theme="dark"]) .kiosk-transit-badge {
+  color: #6d28d9;
+}
+
+.kiosk-transit-route-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: rgba(139, 92, 246, 0.25);
+  color: #ddd6fe;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+}
+
+[data-theme="light"] .kiosk-transit-route-pill,
+:root:not([data-theme="dark"]) .kiosk-transit-route-pill {
+  background: #ede9fe;
+  color: #6d28d9;
+  border-color: #c4b5fd;
+}
+
+.kiosk-transit-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kiosk-transit-intro {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.kiosk-transit-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.kiosk-transit-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.step-bullet {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-top: 1px;
+}
+
+.step-morning { background: #3b82f6; }
+.step-transit { background: #f59e0b; }
+.step-arrival { background: #10b981; }
+.step-result { background: #8b5cf6; }
+
+.step-content {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.step-arrow {
+  color: #8b5cf6;
+  font-weight: bold;
+  margin: 0 4px;
+}
+
+.step-sub-box {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  border-left: 3px solid #10b981;
+  font-size: 11.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+[data-theme="light"] .step-sub-box,
+:root:not([data-theme="dark"]) .step-sub-box {
+  background: #ffffff;
+  border-left-color: #10b981;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.sub-log-item {
+  padding-left: 6px;
+  color: var(--text-secondary);
+}
+
+.sub-log-item code {
+  background: rgba(139, 92, 246, 0.25);
+  color: #a78bfa;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+[data-theme="light"] .sub-log-item code,
+:root:not([data-theme="dark"]) .sub-log-item code {
+  background: #ede9fe;
+  color: #7c3aed;
+}
+
+.step-result-list {
+  margin: 4px 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+}
+
+.step-result-list li {
+  color: var(--text-secondary);
+}
+
+
 

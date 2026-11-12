@@ -2012,6 +2012,59 @@
               </div>
             </div>
 
+            <!-- Dual-Facility Live Production Dispatch Workflow Card (Option B) -->
+            <div class="kiosk-transit-flow-card" id="kiosk-transit-flow-card">
+              <div class="kiosk-transit-header">
+                <div class="kiosk-transit-badge">
+                  <span class="transit-icon">🚚</span>
+                  <span>Cross-Facility Transit &amp; Dispatch Flow (Option B)</span>
+                </div>
+                <span class="kiosk-transit-route-pill" id="kiosk-transit-route-pill">Ndera Warehouse ➔ Kigali Convention Centre</span>
+              </div>
+              <div class="kiosk-transit-body">
+                <div class="kiosk-transit-intro">
+                  In live event production (especially when gear is dispatched from Ndera to KCC):
+                </div>
+                <div class="kiosk-transit-steps">
+                  <div class="kiosk-transit-step">
+                    <div class="step-bullet step-morning">1</div>
+                    <div class="step-content">
+                      <strong>Morning:</strong> <span class="kiosk-transit-tech-name">Technician</span> scans at Ndera Warehouse <span class="step-arrow">→</span> Check-In (Stock).
+                    </div>
+                  </div>
+                  <div class="kiosk-transit-step">
+                    <div class="step-bullet step-transit">2</div>
+                    <div class="step-content">
+                      <strong>Transit:</strong> <span class="kiosk-transit-tech-name">Technician</span> picks up flight cases and departs for KCC.
+                    </div>
+                  </div>
+                  <div class="kiosk-transit-step">
+                    <div class="step-bullet step-arrival">3</div>
+                    <div class="step-content">
+                      <strong>Arrival at Venue:</strong> <span class="kiosk-transit-tech-name">Technician</span> scans at KCC Gate:
+                      <div class="step-sub-box">
+                        <div class="sub-line">⚡ <strong>System detects:</strong> <span class="kiosk-transit-tech-name">Technician</span> is currently checked in at Ndera Warehouse.</div>
+                        <div class="sub-line">📝 <strong>System automatically logs:</strong></div>
+                        <div class="sub-log-item"><code>check_out</code> at Ndera Warehouse with note: <em>&ldquo;Transit departure → Transferred to Kigali Convention Centre&rdquo;</em>.</div>
+                        <div class="sub-log-item"><code>check_in</code> at Kigali Convention Centre with note: <em>&ldquo;Arrived on site from Ndera Warehouse&rdquo;</em>.</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="kiosk-transit-step">
+                    <div class="step-bullet step-result">4</div>
+                    <div class="step-content">
+                      <strong>Result:</strong>
+                      <ul class="step-result-list">
+                        <li><strong>Ndera Warehouse Roll-Call:</strong> <span class="kiosk-transit-tech-name">Technician</span> is no longer occupying warehouse headcount.</li>
+                        <li><strong>KCC Venue Roll-Call:</strong> <span class="kiosk-transit-tech-name">Technician</span> is live on-site at KCC.</li>
+                        <li><strong>Timeline:</strong> Shows clean transit flow from Warehouse to Venue.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Phase 1: Interactive Operator Decision Action Bar -->
             <div class="kiosk-action-decision-bar" id="kiosk-action-decision-bar">
               <button type="button" class="kiosk-decision-btn btn-approve-in" id="kiosk-btn-approve-in">

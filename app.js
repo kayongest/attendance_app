@@ -1702,6 +1702,22 @@
         footerStatusEl.className = `kiosk-footer-clearance-status ${granted ? 'verified' : 'denied'}`;
       }
     }
+
+    // Update Dual-Facility Live Production Dispatch Workflow Card (Option B)
+    const transitCard = document.getElementById('kiosk-transit-flow-card');
+    if (transitCard) {
+      transitCard.style.display = 'flex';
+      const techNames = transitCard.querySelectorAll('.kiosk-transit-tech-name');
+      techNames.forEach((el) => {
+        el.textContent = b.full_name || 'Technician';
+      });
+      const routePill = document.getElementById('kiosk-transit-route-pill');
+      if (routePill && v.transit_from && v.transit_to) {
+        routePill.textContent = `${v.transit_from} ➔ ${v.transit_to}`;
+      } else if (routePill) {
+        routePill.textContent = 'Ndera Warehouse ➔ Kigali Convention Centre';
+      }
+    }
   }
 
   function renderHourlyTrafficChart() {
@@ -1795,8 +1811,9 @@
         .map((item) => {
           const isDenied = item.access_status === 'denied';
           const isStock = item.checkpoint_type === 'stock_warehouse';
+          const isTransit = Boolean(item.is_transit) || (item.notes && (item.notes.includes('Transit') || item.notes.includes('Transferred') || item.notes.includes('from Ndera') || item.notes.includes('to Kigali')));
           return `
-            <div class="timeline-event-card" data-timeline-uid="${item.user_id}" data-timeline-id="${item.id}" style="cursor: pointer;" title="Click to view ${escapeHtml(item.full_name)} in Kiosk">
+            <div class="timeline-event-card" data-timeline-uid="${item.user_id}" data-timeline-id="${item.id}" style="cursor: pointer;" title="Click to view ${escapeHtml(item.full_name)} transit flow &amp; verification">
               <div class="timeline-event-left">
                 <div class="timeline-action-title">${escapeHtml(item.action_title)}</div>
                 <div class="timeline-time-sub">${escapeHtml(item.formatted_time)} · ${escapeHtml(item.badge_code)}</div>
@@ -1816,6 +1833,11 @@
                 ${
                   !isDenied && item.out_pill
                     ? `<span class="ts-mini-pill out">${escapeHtml(item.out_pill)}</span>`
+                    : ''
+                }
+                ${
+                  isTransit
+                    ? `<span class="status-badge status-badge-purple-sm" title="Option B Transit: Ndera Warehouse ➔ Kigali Convention Centre">🚚 Transit Flow</span>`
                     : ''
                 }
                 <span class="status-badge ${isDenied ? 'status-badge-red-sm' : 'status-badge-green-sm'}">
@@ -5750,6 +5772,9 @@
             check_in_time: tlItem.in_pill || member.check_in_time || null,
             check_out_time: tlItem.out_pill || member.check_out_time || null,
             scanned_at: tlItem.formatted_time || null,
+            is_transit_transfer: Boolean(tlItem.is_transit || (tlItem.notes && (tlItem.notes.includes('Transit') || tlItem.notes.includes('Transferred') || tlItem.notes.includes('from Ndera')))),
+            transit_from: 'Ndera Warehouse',
+            transit_to: 'Kigali Convention Centre',
             badge: {
               id: member.id,
               user_id: member.id,

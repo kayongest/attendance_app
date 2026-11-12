@@ -1078,6 +1078,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'punctuality_code' => $uDaily['punctuality_code'] ?? 'on_time',
             'punctuality' => $uDaily['punctuality_label'] ?? 'READY',
             'last_checkpoint_type' => $uDaily['last_checkpoint_type'] ?? null,
+            'last_checkpoint_id' => $uDaily['last_checkpoint_id'] ?? null,
             'last_checkpoint_name' => $uDaily['last_checkpoint_name'] ?? null,
             'is_active' => (int) ($ur['is_active'] ?? 1),
             'linked_batches' => $linkedBatches,
@@ -1183,14 +1184,25 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $accessStatus = (string) ($tr['access_status'] ?? 'granted');
         $ts = strtotime((string) $tr['scanned_at']) ?: time();
 
+        $notes = (string) ($tr['notes'] ?? '');
+        $isTransit = (stripos($notes, 'Transit departure') !== false || stripos($notes, 'Transferred') !== false || stripos($notes, 'Arrived on site from') !== false);
+
         if ($accessStatus === 'denied') {
             $actionTitle = 'Access Denied at ' . ($cpType === 'stock_warehouse' ? 'Stock — ' : 'Venue — ') . $cpName;
         } elseif ($scanAction === 'check_out') {
-            $actionTitle = ($cpType === 'stock_warehouse' ? 'Signed out from stock — ' : 'Checked out from Venue — ') . $cpName;
+            if (stripos($notes, 'Transit departure') !== false) {
+                $actionTitle = 'Transit Departure from ' . $cpName;
+            } else {
+                $actionTitle = ($cpType === 'stock_warehouse' ? 'Signed out from stock — ' : 'Checked out from Venue — ') . $cpName;
+            }
         } elseif ($scanAction === 'access_verify') {
             $actionTitle = 'Verified clearance at ' . $cpName;
         } else {
-            $actionTitle = ($cpType === 'stock_warehouse' ? 'Checked in to Stock — ' : 'Entered Venue — ') . $cpName;
+            if (stripos($notes, 'Arrived on site from') !== false) {
+                $actionTitle = 'Arrived at Venue — ' . $cpName . ' (Transferred from Stock)';
+            } else {
+                $actionTitle = ($cpType === 'stock_warehouse' ? 'Checked in to Stock — ' : 'Entered Venue — ') . $cpName;
+            }
         }
 
         $uDaily = $userDailyMap[$uid] ?? null;
@@ -1216,7 +1228,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'access_status' => $accessStatus,
             'denial_reason' => (string) ($tr['denial_reason'] ?? ''),
             'punctuality_status' => (string) ($tr['punctuality_status'] ?? 'on_time'),
-            'notes' => (string) ($tr['notes'] ?? ''),
+            'notes' => $notes,
+            'is_transit' => $isTransit,
             'action_title' => $actionTitle,
             'scanned_at' => (string) $tr['scanned_at'],
             'formatted_time' => date('M j, Y • h:i:s A', $ts),
@@ -1732,6 +1745,11 @@ try {
         $allowed = (bool) $eval['allowed'];
         $reason = (string) $eval['reason'];
 
+        $scannedBy = !empty($_SESSION['auth_user_id']) ? (int) $_SESSION['auth_user_id'] : 1;
+
+        $isCrossFacilityTransfer = false;
+        $prevFacilityName = null;
+
         // Determine scan_action
         if (!$allowed) {
             $resolvedAction = 'access_verify';
@@ -1740,7 +1758,44 @@ try {
         } else {
             $accessStatus = 'granted';
             $denialReason = null;
-            if ($scanMode === 'verify_only') {
+
+            $isCurrentlyCheckedIn = ($targetMember['daily_state'] === 'checked_in');
+            $prevCpType = (string) ($targetMember['last_checkpoint_type'] ?? '');
+            $prevCpId = (int) ($targetMember['last_checkpoint_id'] ?? 0);
+            $prevCpName = (string) ($targetMember['last_checkpoint_name'] ?? '');
+
+            // Option B: Smart Cross-Facility Transit Transfer
+            // If technician is currently checked in at another facility (e.g. Ndera Warehouse) and scans at this facility (e.g. KCC),
+            // auto-checkout from previous facility with transit note, and check-in to current facility.
+            $isCrossFacilityTransfer = $isCurrentlyCheckedIn && (
+                ($prevCpType !== '' && $prevCpType !== $cpType) ||
+                ($prevCpId > 0 && $prevCpId !== $cpId)
+            );
+
+            if ($isCrossFacilityTransfer) {
+                $prevFacilityName = $prevCpName ?: ($prevCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
+                $transitOutNotes = "Transit departure → Transferred to {$cpName}";
+
+                // 1. Auto-log checkout at previous facility
+                $transitOutStmt = $pdo->prepare("
+                    INSERT INTO `attendance_logs`
+                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'on_time', ?, ?, NOW())
+                ");
+                $transitOutStmt->execute([
+                    (int) $targetMember['id'],
+                    (string) $targetMember['badge_code'],
+                    $prevCpType ?: ($cpType === 'event_venue' ? 'stock_warehouse' : 'event_venue'),
+                    $prevCpId ?: 1,
+                    $prevFacilityName,
+                    $scannedBy,
+                    $transitOutNotes,
+                ]);
+
+                // 2. Resolve current scan as check_in at the new facility
+                $resolvedAction = 'check_in';
+                $reason = "Authorized for {$cpName} — Arrived on site from {$prevFacilityName}";
+            } elseif ($scanMode === 'verify_only') {
                 $resolvedAction = 'access_verify';
             } elseif ($scanMode === 'check_in') {
                 $resolvedAction = 'check_in';
@@ -1748,7 +1803,7 @@ try {
                 $resolvedAction = 'check_out';
             } else {
                 // Auto Smart Check-In / Check-Out
-                $resolvedAction = ($targetMember['daily_state'] === 'checked_in') ? 'check_out' : 'check_in';
+                $resolvedAction = $isCurrentlyCheckedIn ? 'check_out' : 'check_in';
             }
         }
 
@@ -1776,11 +1831,13 @@ try {
         }
 
         $noteText = $allowed
-            ? ($resolvedAction === 'check_out'
-                ? "Gate Check-Out recorded at {$cpName}"
-                : ($resolvedAction === 'access_verify'
-                    ? "Clearance verified at {$cpName}"
-                    : "Gate Check-In recorded at {$cpName}"))
+            ? ($isCrossFacilityTransfer
+                ? "Arrived on site from {$prevFacilityName}"
+                : ($resolvedAction === 'check_out'
+                    ? "Gate Check-Out recorded at {$cpName}"
+                    : ($resolvedAction === 'access_verify'
+                        ? "Clearance verified at {$cpName}"
+                        : "Gate Check-In recorded at {$cpName}")))
             : "Denied at {$cpName}: {$reason}";
 
         $isAssignedToEvent = false;
@@ -1830,6 +1887,9 @@ try {
                 'punctuality' => $punctuality,
                 'punctuality_label' => $punctualityLabel,
                 'scanned_at' => date('H:i:s'),
+                'is_transit_transfer' => $isCrossFacilityTransfer,
+                'transit_from' => $isCrossFacilityTransfer ? $prevFacilityName : null,
+                'transit_to' => $isCrossFacilityTransfer ? $cpName : null,
                 'check_in_time' => $updatedMember['check_in_full'] ?? ($resolvedAction === 'check_in' ? date('h:i:s A') : null),
                 'check_out_time' => $updatedMember['check_out_full'] ?? ($resolvedAction === 'check_out' ? date('h:i:s A') : null),
             ]
@@ -1968,7 +2028,38 @@ try {
                 $punctualityLabel = 'LATE CALL-TIME';
             }
 
-            $noteText = "Gate Check-In approved at {$cpName}";
+            // Option B: Cross-Facility Transit Transfer on approve_in
+            $isCurrentlyCheckedIn = ($targetMember['daily_state'] === 'checked_in');
+            $prevCpType = (string) ($targetMember['last_checkpoint_type'] ?? '');
+            $prevCpId = (int) ($targetMember['last_checkpoint_id'] ?? 0);
+            $prevCpName = (string) ($targetMember['last_checkpoint_name'] ?? '');
+
+            $isCrossFacilityTransfer = $isCurrentlyCheckedIn && (
+                ($prevCpType !== '' && $prevCpType !== $cpType) ||
+                ($prevCpId > 0 && $prevCpId !== $cpId)
+            );
+
+            if ($isCrossFacilityTransfer) {
+                $prevFacilityName = $prevCpName ?: ($prevCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
+                $transitOutNotes = "Transit departure → Transferred to {$cpName}";
+                $transitOutStmt = $pdo->prepare("
+                    INSERT INTO `attendance_logs`
+                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'on_time', ?, ?, NOW())
+                ");
+                $transitOutStmt->execute([
+                    (int) $targetMember['id'],
+                    (string) $targetMember['badge_code'],
+                    $prevCpType ?: ($cpType === 'event_venue' ? 'stock_warehouse' : 'event_venue'),
+                    $prevCpId ?: 1,
+                    $prevFacilityName,
+                    $scannedBy,
+                    $transitOutNotes,
+                ]);
+                $noteText = "Arrived on site from {$prevFacilityName}";
+            } else {
+                $noteText = "Gate Check-In approved at {$cpName}";
+            }
 
             try {
                 $pdo->prepare("UPDATE `user_badges` SET `badge_status` = 'active' WHERE `user_id` = ?")->execute([$targetMember['id']]);

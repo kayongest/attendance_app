@@ -540,11 +540,13 @@ function seedSampleAttendanceLogs(PDO $pdo, array $users = []): void
     $seedScans = [
         [0, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'early', 'Executive inspection arrival', $todayStr . ' 07:45:12'],
         [1, 'stock_warehouse', $firstStockId, $firstStockName, 'check_in', 'granted', null, 'on_time', 'Stock controller shift open', $todayStr . ' 07:52:08'],
-        [5, 'stock_warehouse', $firstStockId, $firstStockName, 'check_in', 'granted', null, 'on_time', 'Batch BATCH-20261104-73E3EB verification', $todayStr . ' 08:14:22'],
+        [5, 'stock_warehouse', $firstStockId, $firstStockName, 'check_in', 'granted', null, 'on_time', 'Morning shift check-in & batch load at Ndera Warehouse', $todayStr . ' 08:14:22'],
         [2, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'on_time', 'Audio FOH setup call-time', $todayStr . ' 08:02:40'],
         [4, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'late', 'Video LED wall crew check-in', $todayStr . ' 08:27:19'],
+        [5, 'stock_warehouse', $firstStockId, $firstStockName, 'check_out', 'granted', null, 'on_time', 'Transit departure → Transferred to ' . $firstVenueName, $todayStr . ' 11:30:15'],
         [3, 'stock_warehouse', $firstStockId, $firstStockName, 'access_verify', 'denied', 'Level 1 (Venue Crew) is not authorized for Stock Warehouses', 'n/a', 'Attempted entry at Ndera Warehouse gate', $todayStr . ' 08:41:05'],
         [2, 'event_venue', $firstVenueId, $firstVenueName, 'check_out', 'granted', null, 'on_time', 'Soundcheck wrap check-out', $todayStr . ' 12:18:44'],
+        [5, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'on_time', 'Arrived on site from ' . $firstStockName, $todayStr . ' 12:45:00'],
     ];
 
     foreach ($seedScans as $s) {
