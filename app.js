@@ -2679,7 +2679,9 @@
     showVerificationCard();
     renderVerificationDeck();
     highlightSelectedCrewRow(state.selectedCrewId);
-    startKioskCountdown(4000);
+    clearKioskCountdown();
+    const timeoutLabel = document.getElementById('kiosk-timeout-label');
+    if (timeoutLabel) timeoutLabel.style.display = 'none';
   }
 
   function closeKioskModal() {
