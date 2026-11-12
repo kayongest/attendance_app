@@ -1368,6 +1368,16 @@ try {
     $activeDb = '';
     $pdo = getDbConnection($activeDb);
 
+    // One-time log reset hook if requested
+    if (file_exists(__DIR__ . '/.reset_logs_pending')) {
+        try {
+            $pdo->exec("TRUNCATE TABLE `attendance_logs`");
+        } catch (Throwable $e) {
+            $pdo->exec("DELETE FROM `attendance_logs`");
+        }
+        @unlink(__DIR__ . '/.reset_logs_pending');
+    }
+
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $rawBody = file_get_contents('php://input');
     $jsonBody = ($rawBody !== false && $rawBody !== '') ? json_decode($rawBody, true) : [];
@@ -3297,21 +3307,30 @@ try {
         exit;
     }
 
-    if ($action === 'reset_today_scans' || $action === 'reset_demo') {
-        $todayStr = date('Y-m-d');
+    if ($action === 'reset_today_scans' || $action === 'reset_demo' || $action === 'reset_activity_logs' || $action === 'reset_timeline_logs') {
         try {
-            $stmtDel = $pdo->prepare("DELETE FROM `attendance_logs` WHERE DATE(`scanned_at`) = ?");
-            $stmtDel->execute([$todayStr]);
+            $pdo->exec("TRUNCATE TABLE `attendance_logs`");
         } catch (Throwable $e) {
-            $stmtDel = $pdo->prepare("DELETE FROM `attendance_logs` WHERE `scanned_at` >= ? AND `scanned_at` <= ?");
-            $stmtDel->execute([$todayStr . ' 00:00:00', $todayStr . ' 23:59:59']);
+            $pdo->exec("DELETE FROM `attendance_logs`");
         }
         echo json_encode(array_merge(
             buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
             [
                 'ok' => true,
-                'message' => "Today's attendance scans have been reset. All crew members are now Ready (0 on-site).",
+                'message' => "All gate attendance and activity timeline logs have been successfully reset. All crew members are now Ready (0 on-site).",
                 'today_reset' => true,
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'seed_demo_scans') {
+        seedSampleAttendanceLogs($pdo);
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => "Sample demo scans have been loaded.",
             ]
         ));
         exit;

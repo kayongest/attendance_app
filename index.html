@@ -13,10 +13,10 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261111_phase1_kiosk_lightmode_v1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=20261112_reset_logs_v3" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -471,9 +471,59 @@
           </div>
         </div>
 
-        <!-- Split Row: Hourly Venue vs Stock Traffic Chart (2:3454) + User Activity Timeline (2:3516) -->
+        <!-- Split Row: User Activity Timeline (2:3516) 1st + Hourly Venue vs Stock Traffic Chart (2:3454) 2nd -->
         <div class="split-row" data-node-id="2:3453">
-          <!-- Left: Hourly Venue & Stock Gate Traffic Chart -->
+          <!-- 1st: User Activity Timeline Widget (Node 2:3516 — 5 items per page) -->
+          <div class="timeline-card-overview" data-node-id="2:3516">
+            <div class="upcoming-heading" data-node-id="2:3517">
+              <span class="upcoming-heading-title" style="font-size: 14px; font-weight: 700;" data-node-id="2:3518">
+                User Activity Timeline
+              </span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button
+                  type="button"
+                  class="btn btn-secondary-32-sm js-reset-activity-logs"
+                  id="timeline-clear-btn"
+                  title="Reset all User Activity Timeline logs"
+                  style="height: 24px; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"
+                >
+                  <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 11px; height: 11px; opacity: 0.7;" />
+                  <span>Reset Logs</span>
+                </button>
+                <span class="status-badge status-badge-green-sm">Live Stream</span>
+              </div>
+            </div>
+
+            <!-- Search + Scope Select -->
+            <div class="timeline-filter-bar">
+              <input
+                type="text"
+                id="timeline-search-input"
+                class="timeline-search-input"
+                placeholder="Search individual, venue, stock..."
+                autocomplete="off"
+              />
+              <select id="timeline-scope-select" class="timeline-scope-select" aria-label="Filter Activity Logs">
+                <option value="all">All Logs</option>
+                <option value="event_venue">Venues Only</option>
+                <option value="stock_warehouse">Stock Warehouses Only</option>
+                <option value="granted">Access Granted</option>
+                <option value="denied">Access Denied</option>
+              </select>
+            </div>
+
+            <!-- Paginated 5-item Feed -->
+            <div class="timeline-feed-list" id="timeline-feed-list"></div>
+
+            <!-- Pagination Footer -->
+            <div class="timeline-pagination-bar">
+              <button type="button" class="btn btn-secondary-32-sm" id="timeline-prev-btn">← Prev</button>
+              <span id="timeline-page-info">Page 1 of 2 (7 logs)</span>
+              <button type="button" class="btn btn-secondary-32-sm" id="timeline-next-btn">Next →</button>
+            </div>
+          </div>
+
+          <!-- 2nd: Hourly Venue & Stock Gate Traffic Chart -->
           <div class="insights-card" data-node-id="2:3454">
             <div class="chart-header" data-node-id="2:3455">
               <div class="chart-heading" data-node-id="2:3456">
@@ -534,44 +584,6 @@
                   <span>16:00</span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- Right: User Activity Timeline Widget (Node 2:3516 — 5 items per page) -->
-          <div class="timeline-card-overview" data-node-id="2:3516">
-            <div class="upcoming-heading" data-node-id="2:3517">
-              <span class="upcoming-heading-title" style="font-size: 14px; font-weight: 700;" data-node-id="2:3518">
-                User Activity Timeline
-              </span>
-              <span class="status-badge status-badge-green-sm">Live Stream</span>
-            </div>
-
-            <!-- Search + Scope Select -->
-            <div class="timeline-filter-bar">
-              <input
-                type="text"
-                id="timeline-search-input"
-                class="timeline-search-input"
-                placeholder="Search individual, venue, stock..."
-                autocomplete="off"
-              />
-              <select id="timeline-scope-select" class="timeline-scope-select" aria-label="Filter Activity Logs">
-                <option value="all">All Logs</option>
-                <option value="event_venue">Venues Only</option>
-                <option value="stock_warehouse">Stock Warehouses Only</option>
-                <option value="granted">Access Granted</option>
-                <option value="denied">Access Denied</option>
-              </select>
-            </div>
-
-            <!-- Paginated 5-item Feed -->
-            <div class="timeline-feed-list" id="timeline-feed-list"></div>
-
-            <!-- Pagination Footer -->
-            <div class="timeline-pagination-bar">
-              <button type="button" class="btn btn-secondary-32-sm" id="timeline-prev-btn">← Prev</button>
-              <span id="timeline-page-info">Page 1 of 2 (7 logs)</span>
-              <button type="button" class="btn btn-secondary-32-sm" id="timeline-next-btn">Next →</button>
             </div>
           </div>
         </div>
@@ -1142,7 +1154,19 @@
               <span class="upcoming-heading-title" style="font-size: 14px; font-weight: 700;" data-node-id="2:3518">
                 User Activity Timeline
               </span>
-              <span class="status-badge status-badge-green-sm">Live Stream</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button
+                  type="button"
+                  class="btn btn-secondary-32-sm js-reset-activity-logs"
+                  id="timeline-clear-btn"
+                  title="Reset all User Activity Timeline logs"
+                  style="height: 24px; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"
+                >
+                  <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 11px; height: 11px; opacity: 0.7;" />
+                  <span>Reset Logs</span>
+                </button>
+                <span class="status-badge status-badge-green-sm">Live Stream</span>
+              </div>
             </div>
 
             <!-- Search + Scope Select -->
@@ -1171,227 +1195,6 @@
               <button type="button" class="btn btn-secondary-32-sm js-timeline-prev-btn" id="attendees-timeline-prev-btn">← Prev</button>
               <span class="timeline-page-info" id="attendees-timeline-page-info">Page 1 of 1 (0 logs)</span>
               <button type="button" class="btn btn-secondary-32-sm js-timeline-next-btn" id="attendees-timeline-next-btn">Next →</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- ============================================================== -->
-        <!-- CENTERED LIGHTBOX MODAL: GATE VERIFICATION RESULT POPUP         -->
-        <!-- ============================================================== -->
-        <div class="kiosk-modal-backdrop" id="kiosk-modal-backdrop" style="display: none;" aria-hidden="true">
-          <div class="kiosk-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="kiosk-staff-name">
-
-            <!-- Result Verification Card (#kiosk-verification-card) -->
-            <div class="kiosk-verification-card" id="kiosk-verification-card">
-              <!-- Visual Auto-Return Countdown Progress Bar -->
-              <div class="kiosk-timeout-container" id="kiosk-timeout-container">
-                <div class="kiosk-timeout-progress" id="kiosk-timeout-progress"></div>
-              </div>
-
-              <!-- Left Column (5 cols): Official ID Credential (Photo, Name, Role, Clearance) -->
-              <div class="kiosk-card-left">
-                <div class="kiosk-left-meta-top">
-                  <span id="kiosk-staff-code">ABL-006</span>
-                  <span id="kiosk-checkpoint-tag">NDERA WAREHOUSE</span>
-                </div>
-
-                <div class="kiosk-portrait-container">
-                  <img
-                    src=""
-                    alt="Staff Portrait"
-                    id="kiosk-portrait-img"
-                    class="kiosk-portrait-img"
-                    style="display: none;"
-                  />
-                  <div class="kiosk-initials-avatar" id="kiosk-initials-avatar">EH</div>
-                  <h3 class="kiosk-staff-name" id="kiosk-staff-name">Eric Havugimana</h3>
-                  <div class="kiosk-role-cyan-pill" id="kiosk-role-pill">TECHNICIAN - RIGGING</div>
-                  <div class="kiosk-left-contact" id="kiosk-staff-phone">+250 788 100 006</div>
-                </div>
-
-                <div class="kiosk-left-clearance-bar">
-                  <div class="kiosk-clearance-circle" id="kiosk-clearance-circle" style="background-color: #2563eb;">L2</div>
-                  <span class="kiosk-clearance-title-pill" id="kiosk-clearance-title">Level 2 — Technical &amp; Stage</span>
-                </div>
-              </div>
-
-              <!-- Right Column (7 cols): Live Verification Console -->
-              <div class="kiosk-card-right">
-                <div class="kiosk-right-top-meta">
-                  <span class="kiosk-station-status-indicator">
-                    <span class="station-live-dot"></span>
-                    Gate Checkpoint Terminal
-                  </span>
-                  <!-- Options to return to input search -->
-                  <div class="kiosk-modal-header-actions">
-                    <button type="button" class="kiosk-back-search-btn" id="kiosk-back-search-btn" title="Close result &amp; return to search (or press Esc)">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="19" y1="12" x2="5" y2="12"></line>
-                        <polyline points="12 19 5 12 12 5"></polyline>
-                      </svg>
-                      <span>Back to Search</span>
-                      <kbd class="kiosk-kbd-pill">Esc</kbd>
-                    </button>
-                    <span class="kiosk-timeout-label" id="kiosk-timeout-label">Auto-closing in 4s...</span>
-                  </div>
-                </div>
-
-                <div class="kiosk-decision-body">
-                  <!-- Hero Status Banner with Universal Green Checkmark & Emerald Glow Pop Card -->
-                  <div class="kiosk-status-banner granted" id="kiosk-status-banner">
-                    <div class="kiosk-status-ring granted" id="kiosk-status-ring">
-                      <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" id="kiosk-status-svg">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </div>
-                    <div class="kiosk-status-texts">
-                      <div class="kiosk-status-headline-row">
-                        <span class="kiosk-status-headline granted" id="kiosk-status-headline">ACCESS GRANTED</span>
-                        <span class="kiosk-punctuality-pill on_time" id="kiosk-punctuality-pill">ON TIME</span>
-                      </div>
-                      <!-- Hero Timestamp Display for Exit Action -->
-                      <div class="kiosk-prominent-timestamp" id="kiosk-prominent-timestamp" style="display: none;">
-                        <span class="kiosk-ts-badge" id="kiosk-hero-ts-value">02:22:15 PM</span>
-                      </div>
-                      <span class="kiosk-status-reason" id="kiosk-status-reason">
-                        Authorized for Stock Warehouse access (L2 — Technical &amp; Stage)
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Non-Clickable Passive Timestamp Indicators (State Dictated by Scanner) -->
-                  <div class="kiosk-timestamps-row">
-                    <div class="kiosk-ts-indicator in-active" id="kiosk-indicator-in">
-                      <div class="kiosk-ts-icon in-icon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-                          <polyline points="10 17 15 12 10 7"></polyline>
-                          <line x1="15" y1="12" x2="3" y2="12"></line>
-                        </svg>
-                      </div>
-                      <div class="kiosk-ts-meta">
-                        <span class="kiosk-ts-label">Gate Check-In</span>
-                        <span class="kiosk-ts-value" id="kiosk-in-time">In: 08:14:22 AM</span>
-                      </div>
-                    </div>
-
-                    <div class="kiosk-ts-indicator" id="kiosk-indicator-out">
-                      <div class="kiosk-ts-icon out-icon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                          <polyline points="16 17 21 12 16 7"></polyline>
-                          <line x1="21" y1="12" x2="9" y2="12"></line>
-                        </svg>
-                      </div>
-                      <div class="kiosk-ts-meta">
-                        <span class="kiosk-ts-label">Gate Check-Out</span>
-                        <span class="kiosk-ts-value" id="kiosk-out-time">--:--:--</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Call-Time & Live Punctuality Delta Strip -->
-                  <div class="kiosk-calltime-delta-strip" id="kiosk-calltime-delta-strip">
-                    <div class="kiosk-delta-item">
-                      <span class="kiosk-delta-label">Shift Call-Time:</span>
-                      <strong class="kiosk-delta-val" id="kiosk-delta-calltime">08:00 AM</strong>
-                    </div>
-                    <div class="kiosk-delta-item">
-                      <span class="kiosk-delta-label">Arrival Window:</span>
-                      <span class="kiosk-delta-pill on_time" id="kiosk-delta-arrival-pill">On-Time (+0m)</span>
-                    </div>
-                  </div>
-
-                  <!-- Phase 1: Interactive Operator Decision Action Bar -->
-                  <div class="kiosk-action-decision-bar" id="kiosk-action-decision-bar">
-                    <button type="button" class="kiosk-decision-btn btn-approve-in" id="kiosk-btn-approve-in">
-                      <span class="decision-btn-icon">✓</span>
-                      <span class="decision-btn-label">Approve Check-In</span>
-                      <kbd class="decision-btn-kbd">Enter ↵</kbd>
-                    </button>
-
-                    <button type="button" class="kiosk-decision-btn btn-approve-out" id="kiosk-btn-approve-out" style="display: none;">
-                      <span class="decision-btn-icon">➔</span>
-                      <span class="decision-btn-label">Approve Check-Out</span>
-                      <kbd class="decision-btn-kbd">Enter ↵</kbd>
-                    </button>
-
-                    <button type="button" class="kiosk-decision-btn btn-override" id="kiosk-btn-override" style="display: none;">
-                      <span class="decision-btn-icon">⚡</span>
-                      <span class="decision-btn-label">Supervisor Override</span>
-                      <kbd class="decision-btn-kbd">Space</kbd>
-                    </button>
-
-                    <button type="button" class="kiosk-decision-btn btn-decline" id="kiosk-btn-decline">
-                      <span class="decision-btn-icon">✕</span>
-                      <span class="decision-btn-label">Decline Entry</span>
-                      <kbd class="decision-btn-kbd">Esc</kbd>
-                    </button>
-                  </div>
-
-                  <!-- Collapsible Supervisor Late Override Panel -->
-                  <div class="kiosk-sub-panel" id="kiosk-override-panel" style="display: none;">
-                    <div class="kiosk-sub-panel-header">
-                      <strong>⚡ Supervisor Late Override Challenge</strong>
-                      <span style="font-size: 11px; opacity: 0.85;">Requires L4 PIN / Credentials</span>
-                    </div>
-                    <div class="kiosk-sub-panel-body">
-                      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <input type="password" id="kiosk-override-pin" class="form-input kiosk-override-input" placeholder="Enter Supervisor PIN (e.g. 1234)" style="flex: 1 1 170px; height: 36px; font-size: 12px;" />
-                        <select id="kiosk-override-reason-select" class="form-input kiosk-override-select" style="flex: 2 1 200px; height: 36px; font-size: 12px;">
-                          <option value="Traffic / Transit Disruption">Traffic / Transit Disruption</option>
-                          <option value="Emergency Stage Reassignment">Emergency Stage Reassignment</option>
-                          <option value="Pre-Approved Production Variance">Pre-Approved Production Variance</option>
-                          <option value="Flight / Travel Delay">Flight / Travel Delay</option>
-                          <option value="Other Authorized Exception">Other Authorized Exception</option>
-                        </select>
-                      </div>
-                      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
-                        <button type="button" class="btn btn-secondary-32-sm" id="kiosk-override-cancel-btn">Cancel</button>
-                        <button type="button" class="btn btn-primary-32-sm" id="kiosk-override-confirm-btn" style="background: #7c3aed; border-color: #6d28d9;">
-                          Authorize &amp; Admit
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Collapsible Decline Reason Panel -->
-                  <div class="kiosk-sub-panel decline-panel" id="kiosk-decline-panel" style="display: none;">
-                    <div class="kiosk-sub-panel-header" style="color: #f87171;">
-                      <strong>✕ Decline Entry — Select Reason</strong>
-                    </div>
-                    <div class="kiosk-sub-panel-body">
-                      <select id="kiosk-decline-reason-select" class="form-input kiosk-decline-select" style="width: 100%; height: 36px; font-size: 12px; margin-bottom: 8px;">
-                        <option value="Late Call-Time Lockout (Cutoff Exceeded)">Late Call-Time Lockout (Cutoff Exceeded)</option>
-                        <option value="Missing Required PPE / Safety Gear">Missing Required PPE / Safety Gear</option>
-                        <option value="Not Scheduled on Shift Roster Today">Not Scheduled on Shift Roster Today</option>
-                        <option value="Security Concern / Unfit for Duty">Security Concern / Unfit for Duty</option>
-                        <option value="Wrong Checkpoint / Gate">Wrong Checkpoint / Gate</option>
-                        <option value="Other Discretionary Decline">Other Discretionary Decline</option>
-                      </select>
-                      <div style="display: flex; justify-content: flex-end; gap: 8px;">
-                        <button type="button" class="btn btn-secondary-32-sm" id="kiosk-decline-cancel-btn">Cancel</button>
-                        <button type="button" class="btn btn-primary-32-sm" id="kiosk-decline-confirm-btn" style="background: #dc2626; border-color: #b91c1c;">
-                          Confirm Decline
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Dark Navy Footer Bar with Quick Action -->
-                <div class="kiosk-card-footer">
-                  <div class="kiosk-footer-meta">
-                    <span class="kiosk-footer-badge-code" id="kiosk-footer-badge">BADGE #: REW-BADGE-0006</span>
-                    <span class="kiosk-footer-clearance-status verified" id="kiosk-footer-status">
-                      Ndera Warehouse Clearance - Verified
-                    </span>
-                  </div>
-                  <button type="button" class="kiosk-scan-next-btn" id="kiosk-scan-next-btn">
-                    <span>Scan Next Badge →</span>
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -2078,6 +1881,228 @@
           </section>
         </div><!-- End #departments-view-container -->
       </main>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- CENTERED LIGHTBOX MODAL: GATE VERIFICATION RESULT POPUP                -->
+  <!-- ====================================================================== -->
+  <div class="kiosk-modal-backdrop" id="kiosk-modal-backdrop" style="display: none;" aria-hidden="true">
+    <div class="kiosk-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="kiosk-staff-name">
+
+      <!-- Result Verification Card (#kiosk-verification-card) -->
+      <div class="kiosk-verification-card" id="kiosk-verification-card">
+        <!-- Visual Auto-Return Countdown Progress Bar -->
+        <div class="kiosk-timeout-container" id="kiosk-timeout-container">
+          <div class="kiosk-timeout-progress" id="kiosk-timeout-progress"></div>
+        </div>
+
+        <!-- Left Column (5 cols): Official ID Credential (Photo, Name, Role, Clearance) -->
+        <div class="kiosk-card-left">
+          <div class="kiosk-left-meta-top">
+            <span id="kiosk-staff-code">ABL-006</span>
+            <span id="kiosk-checkpoint-tag">NDERA WAREHOUSE</span>
+          </div>
+
+          <div class="kiosk-portrait-container">
+            <img
+              src=""
+              alt="Staff Portrait"
+              id="kiosk-portrait-img"
+              class="kiosk-portrait-img"
+              style="display: none;"
+            />
+            <div class="kiosk-initials-avatar" id="kiosk-initials-avatar">EH</div>
+            <h3 class="kiosk-staff-name" id="kiosk-staff-name">Eric Havugimana</h3>
+            <div class="kiosk-role-cyan-pill" id="kiosk-role-pill">TECHNICIAN - RIGGING</div>
+            <div class="kiosk-left-contact" id="kiosk-staff-phone">+250 788 100 006</div>
+          </div>
+
+          <div class="kiosk-left-clearance-bar">
+            <div class="kiosk-clearance-circle" id="kiosk-clearance-circle" style="background-color: #2563eb;">L2</div>
+            <span class="kiosk-clearance-title-pill" id="kiosk-clearance-title">Level 2 — Technical &amp; Stage</span>
+          </div>
+        </div>
+
+        <!-- Right Column (7 cols): Live Verification Console -->
+        <div class="kiosk-card-right">
+          <div class="kiosk-right-top-meta">
+            <span class="kiosk-station-status-indicator">
+              <span class="station-live-dot"></span>
+              Gate Checkpoint Terminal
+            </span>
+            <!-- Options to return to input search -->
+            <div class="kiosk-modal-header-actions">
+              <button type="button" class="kiosk-back-search-btn" id="kiosk-back-search-btn" title="Close result &amp; return to search (or press Esc)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Back to Search</span>
+                <kbd class="kiosk-kbd-pill">Esc</kbd>
+              </button>
+              <button type="button" class="btn-ghost-sm js-close-kiosk-modal" id="kiosk-modal-close-btn" title="Close Modal (Esc)" style="font-size: 15px; padding: 2px 8px; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; color: var(--text-primary); line-height: 1.4;">✕</button>
+              <span class="kiosk-timeout-label" id="kiosk-timeout-label">Auto-closing in 4s...</span>
+            </div>
+          </div>
+
+          <div class="kiosk-decision-body">
+            <!-- Hero Status Banner with Universal Green Checkmark & Emerald Glow Pop Card -->
+            <div class="kiosk-status-banner granted" id="kiosk-status-banner">
+              <div class="kiosk-status-ring granted" id="kiosk-status-ring">
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" id="kiosk-status-svg">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <div class="kiosk-status-texts">
+                <div class="kiosk-status-headline-row">
+                  <span class="kiosk-status-headline granted" id="kiosk-status-headline">ACCESS GRANTED</span>
+                  <span class="kiosk-punctuality-pill on_time" id="kiosk-punctuality-pill">ON TIME</span>
+                </div>
+                <!-- Hero Timestamp Display for Exit Action -->
+                <div class="kiosk-prominent-timestamp" id="kiosk-prominent-timestamp" style="display: none;">
+                  <span class="kiosk-ts-badge" id="kiosk-hero-ts-value">02:22:15 PM</span>
+                </div>
+                <span class="kiosk-status-reason" id="kiosk-status-reason">
+                  Authorized for Stock Warehouse access (L2 — Technical &amp; Stage)
+                </span>
+              </div>
+            </div>
+
+            <!-- Non-Clickable Passive Timestamp Indicators (State Dictated by Scanner) -->
+            <div class="kiosk-timestamps-row">
+              <div class="kiosk-ts-indicator in-active" id="kiosk-indicator-in">
+                <div class="kiosk-ts-icon in-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                    <polyline points="10 17 15 12 10 7"></polyline>
+                    <line x1="15" y1="12" x2="3" y2="12"></line>
+                  </svg>
+                </div>
+                <div class="kiosk-ts-meta">
+                  <span class="kiosk-ts-label">Gate Check-In</span>
+                  <span class="kiosk-ts-value" id="kiosk-in-time">In: 08:14:22 AM</span>
+                </div>
+              </div>
+
+              <div class="kiosk-ts-indicator" id="kiosk-indicator-out">
+                <div class="kiosk-ts-icon out-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                  </svg>
+                </div>
+                <div class="kiosk-ts-meta">
+                  <span class="kiosk-ts-label">Gate Check-Out</span>
+                  <span class="kiosk-ts-value" id="kiosk-out-time">--:--:--</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Call-Time & Live Punctuality Delta Strip -->
+            <div class="kiosk-calltime-delta-strip" id="kiosk-calltime-delta-strip">
+              <div class="kiosk-delta-item">
+                <span class="kiosk-delta-label">Shift Call-Time:</span>
+                <strong class="kiosk-delta-val" id="kiosk-delta-calltime">08:00 AM</strong>
+              </div>
+              <div class="kiosk-delta-item">
+                <span class="kiosk-delta-label">Arrival Window:</span>
+                <span class="kiosk-delta-pill on_time" id="kiosk-delta-arrival-pill">On-Time (+0m)</span>
+              </div>
+            </div>
+
+            <!-- Phase 1: Interactive Operator Decision Action Bar -->
+            <div class="kiosk-action-decision-bar" id="kiosk-action-decision-bar">
+              <button type="button" class="kiosk-decision-btn btn-approve-in" id="kiosk-btn-approve-in">
+                <span class="decision-btn-icon">✓</span>
+                <span class="decision-btn-label">Approve Check-In</span>
+                <kbd class="decision-btn-kbd">Enter ↵</kbd>
+              </button>
+
+              <button type="button" class="kiosk-decision-btn btn-approve-out" id="kiosk-btn-approve-out" style="display: none;">
+                <span class="decision-btn-icon">➔</span>
+                <span class="decision-btn-label">Approve Check-Out</span>
+                <kbd class="decision-btn-kbd">Enter ↵</kbd>
+              </button>
+
+              <button type="button" class="kiosk-decision-btn btn-override" id="kiosk-btn-override" style="display: none;">
+                <span class="decision-btn-icon">⚡</span>
+                <span class="decision-btn-label">Supervisor Override</span>
+                <kbd class="decision-btn-kbd">Space</kbd>
+              </button>
+
+              <button type="button" class="kiosk-decision-btn btn-decline" id="kiosk-btn-decline">
+                <span class="decision-btn-icon">✕</span>
+                <span class="decision-btn-label">Decline Entry</span>
+                <kbd class="decision-btn-kbd">Esc</kbd>
+              </button>
+            </div>
+
+            <!-- Collapsible Supervisor Late Override Panel -->
+            <div class="kiosk-sub-panel" id="kiosk-override-panel" style="display: none;">
+              <div class="kiosk-sub-panel-header">
+                <strong>⚡ Supervisor Late Override Challenge</strong>
+                <span style="font-size: 11px; opacity: 0.85;">Requires L4 PIN / Credentials</span>
+              </div>
+              <div class="kiosk-sub-panel-body">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <input type="password" id="kiosk-override-pin" class="form-input kiosk-override-input" placeholder="Enter Supervisor PIN (e.g. 1234)" style="flex: 1 1 170px; height: 36px; font-size: 12px;" />
+                  <select id="kiosk-override-reason-select" class="form-input kiosk-override-select" style="flex: 2 1 200px; height: 36px; font-size: 12px;">
+                    <option value="Traffic / Transit Disruption">Traffic / Transit Disruption</option>
+                    <option value="Emergency Stage Reassignment">Emergency Stage Reassignment</option>
+                    <option value="Pre-Approved Production Variance">Pre-Approved Production Variance</option>
+                    <option value="Flight / Travel Delay">Flight / Travel Delay</option>
+                    <option value="Other Authorized Exception">Other Authorized Exception</option>
+                  </select>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
+                  <button type="button" class="btn btn-secondary-32-sm" id="kiosk-override-cancel-btn">Cancel</button>
+                  <button type="button" class="btn btn-primary-32-sm" id="kiosk-override-confirm-btn" style="background: #7c3aed; border-color: #6d28d9;">
+                    Authorize &amp; Admit
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Collapsible Decline Reason Panel -->
+            <div class="kiosk-sub-panel decline-panel" id="kiosk-decline-panel" style="display: none;">
+              <div class="kiosk-sub-panel-header" style="color: #f87171;">
+                <strong>✕ Decline Entry — Select Reason</strong>
+              </div>
+              <div class="kiosk-sub-panel-body">
+                <select id="kiosk-decline-reason-select" class="form-input kiosk-decline-select" style="width: 100%; height: 36px; font-size: 12px; margin-bottom: 8px;">
+                  <option value="Late Call-Time Lockout (Cutoff Exceeded)">Late Call-Time Lockout (Cutoff Exceeded)</option>
+                  <option value="Missing Required PPE / Safety Gear">Missing Required PPE / Safety Gear</option>
+                  <option value="Not Scheduled on Shift Roster Today">Not Scheduled on Shift Roster Today</option>
+                  <option value="Security Concern / Unfit for Duty">Security Concern / Unfit for Duty</option>
+                  <option value="Wrong Checkpoint / Gate">Wrong Checkpoint / Gate</option>
+                  <option value="Other Discretionary Decline">Other Discretionary Decline</option>
+                </select>
+                <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                  <button type="button" class="btn btn-secondary-32-sm" id="kiosk-decline-cancel-btn">Cancel</button>
+                  <button type="button" class="btn btn-primary-32-sm" id="kiosk-decline-confirm-btn" style="background: #dc2626; border-color: #b91c1c;">
+                    Confirm Decline
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dark Navy Footer Bar with Quick Action -->
+          <div class="kiosk-card-footer">
+            <div class="kiosk-footer-meta">
+              <span class="kiosk-footer-badge-code" id="kiosk-footer-badge">BADGE #: REW-BADGE-0006</span>
+              <span class="kiosk-footer-clearance-status verified" id="kiosk-footer-status">
+                Ndera Warehouse Clearance - Verified
+              </span>
+            </div>
+            <button type="button" class="kiosk-scan-next-btn" id="kiosk-scan-next-btn">
+              <span>Scan Next Badge →</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap');
 
 /* Identity AttendanceApp — Figma UI Clone Styles */
 *,
@@ -10,9 +10,10 @@
 }
 
 :root {
-  --font-sans: 'Share Tech', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Share Tech', 'Marvel', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Share Tech', 'Consolas', 'SFMono-Regular', monospace;
   --font-tech: 'Share Tech', sans-serif;
+  --font-marvel: 'Marvel', sans-serif;
   --bg-canvas: #f8f9fb;
   --bg-surface: #ffffff;
   --bg-subtle: #f4f5f8;
@@ -43,6 +44,37 @@
   --status-red-bg-alt: #fbefef;
   --status-red-text: #c75a60;
   --status-red-text-alt: #b96868;
+}
+
+/* User-specified font family utility classes */
+.share-tech-regular {
+  font-family: "Share Tech", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.marvel-regular {
+  font-family: "Marvel", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.marvel-bold {
+  font-family: "Marvel", sans-serif;
+  font-weight: 700;
+  font-style: normal;
+}
+
+.marvel-regular-italic {
+  font-family: "Marvel", sans-serif;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.marvel-bold-italic {
+  font-family: "Marvel", sans-serif;
+  font-weight: 700;
+  font-style: italic;
 }
 
 html,
@@ -964,7 +996,7 @@ button {
   text-decoration: underline;
 }
 
-/* Insights & Spotlight Row (2 columns: flex-1 + 354px) */
+/* Insights & Spotlight Row — Split Evenly (50% / col-md-6) */
 .split-row {
   display: flex;
   align-items: stretch;
@@ -972,11 +1004,20 @@ button {
   width: 100%;
 }
 
+.split-row > .timeline-card-overview,
+.split-row > .insights-card {
+  flex: 1 1 0;
+  width: calc(50% - 10px);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 /* Attendance Insights Card (Overview Screen) */
 .insights-card {
   flex: 1 0 0;
   min-width: 0;
-  height: 300px;
+  height: auto;
+  min-height: 100%;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -984,6 +1025,17 @@ button {
   display: flex;
   flex-direction: column;
   gap: 17px;
+}
+
+@media (max-width: 1024px) {
+  .split-row {
+    flex-direction: column;
+  }
+  .split-row > .timeline-card-overview,
+  .split-row > .insights-card {
+    width: 100%;
+    flex: 1 1 auto;
+  }
 }
 
 .chart-header {

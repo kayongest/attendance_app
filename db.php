@@ -504,64 +504,69 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     }
 
     if ($forceReset) {
-        $todayStr = date('Y-m-d');
-        $stmtDel = $pdo->prepare("DELETE FROM `attendance_logs` WHERE DATE(`scanned_at`) = ?");
-        $stmtDel->execute([$todayStr]);
+        try {
+            $pdo->exec("TRUNCATE TABLE `attendance_logs`");
+        } catch (Throwable $e) {
+            $pdo->exec("DELETE FROM `attendance_logs`");
+        }
+    }
+    // Attendance logs are never auto-seeded on connection so resets persist permanently.
+}
+
+function seedSampleAttendanceLogs(PDO $pdo, array $users = []): void
+{
+    if (empty($users)) {
+        $users = $pdo->query("SELECT `id`, `username`, `full_name`, `role`, `is_active` FROM `users` ORDER BY `id` ASC")->fetchAll();
+    }
+    if (empty($users)) {
+        return;
     }
 
-    // Seed today's initial attendance_logs if today has zero logs so dashboard & roll-call are rich immediately
+    $stocks = $pdo->query("SELECT `id`, `name` FROM `stock_locations` ORDER BY `id` ASC")->fetchAll();
+    $firstStockId = (int) ($stocks[0]['id'] ?? 1);
+    $firstStockName = (string) ($stocks[0]['name'] ?? 'Ndera Warehouse');
+
+    $evts = $pdo->query("SELECT `id`, `title`, `location` FROM `events` ORDER BY `id` ASC LIMIT 4")->fetchAll();
+    $firstVenueId = isset($evts[0]['id']) && is_numeric($evts[0]['id']) ? (int) $evts[0]['id'] : 1001;
+    $firstVenueName = !empty($evts[0]['title']) ? $evts[0]['title'] : 'Kigali Convention Centre';
+
     $todayStr = date('Y-m-d');
-    $todayCheckStmt = $pdo->prepare("SELECT COUNT(*) FROM `attendance_logs` WHERE DATE(`scanned_at`) = ?");
-    $todayCheckStmt->execute([$todayStr]);
-    $todayCount = (int) $todayCheckStmt->fetchColumn();
+    $logIns = $pdo->prepare("
+        INSERT INTO `attendance_logs`
+          (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    ");
 
-    if ($todayCount === 0 && !empty($users)) {
-        $stocks = $pdo->query("SELECT `id`, `name` FROM `stock_locations` ORDER BY `id` ASC")->fetchAll();
-        $firstStockId = (int) ($stocks[0]['id'] ?? 1);
-        $firstStockName = (string) ($stocks[0]['name'] ?? 'Ndera Warehouse');
+    $seedScans = [
+        [0, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'early', 'Executive inspection arrival', $todayStr . ' 07:45:12'],
+        [1, 'stock_warehouse', $firstStockId, $firstStockName, 'check_in', 'granted', null, 'on_time', 'Stock controller shift open', $todayStr . ' 07:52:08'],
+        [5, 'stock_warehouse', $firstStockId, $firstStockName, 'check_in', 'granted', null, 'on_time', 'Batch BATCH-20261104-73E3EB verification', $todayStr . ' 08:14:22'],
+        [2, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'on_time', 'Audio FOH setup call-time', $todayStr . ' 08:02:40'],
+        [4, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'late', 'Video LED wall crew check-in', $todayStr . ' 08:27:19'],
+        [3, 'stock_warehouse', $firstStockId, $firstStockName, 'access_verify', 'denied', 'Level 1 (Venue Crew) is not authorized for Stock Warehouses', 'n/a', 'Attempted entry at Ndera Warehouse gate', $todayStr . ' 08:41:05'],
+        [2, 'event_venue', $firstVenueId, $firstVenueName, 'check_out', 'granted', null, 'on_time', 'Soundcheck wrap check-out', $todayStr . ' 12:18:44'],
+    ];
 
-        $evts = $pdo->query("SELECT `id`, `title`, `location` FROM `events` ORDER BY `id` ASC LIMIT 4")->fetchAll();
-        $firstVenueId = isset($evts[0]['id']) && is_numeric($evts[0]['id']) ? (int) $evts[0]['id'] : 1001;
-        $firstVenueName = !empty($evts[0]['title']) ? $evts[0]['title'] : 'Kigali Convention Centre';
+    foreach ($seedScans as $s) {
+        $uRow = $users[$s[0]] ?? $users[0];
+        $uId = (int) $uRow['id'];
+        $bStmt = $pdo->prepare("SELECT `badge_code` FROM `user_badges` WHERE `user_id` = ?");
+        $bStmt->execute([$uId]);
+        $bCode = (string) ($bStmt->fetchColumn() ?: ('REW-BADGE-' . str_pad((string) $uId, 4, '0', STR_PAD_LEFT)));
 
-        $logIns = $pdo->prepare("
-            INSERT INTO `attendance_logs`
-              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-        ");
-
-        $seedScans = [
-            // [user_index, cp_type, cp_id, cp_name, action, status, denial, punctuality, notes, time_str]
-            [0, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'early', 'Executive inspection arrival', $todayStr . ' 07:45:12'],
-            [1, 'stock_warehouse', $firstStockId, $firstStockName, 'check_in', 'granted', null, 'on_time', 'Stock controller shift open', $todayStr . ' 07:52:08'],
-            [5, 'stock_warehouse', $firstStockId, $firstStockName, 'check_in', 'granted', null, 'on_time', 'Batch BATCH-20261104-73E3EB verification', $todayStr . ' 08:14:22'],
-            [2, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'on_time', 'Audio FOH setup call-time', $todayStr . ' 08:02:40'],
-            [4, 'event_venue', $firstVenueId, $firstVenueName, 'check_in', 'granted', null, 'late', 'Video LED wall crew check-in', $todayStr . ' 08:27:19'],
-            [3, 'stock_warehouse', $firstStockId, $firstStockName, 'access_verify', 'denied', 'Level 1 (Venue Crew) is not authorized for Stock Warehouses', 'n/a', 'Attempted entry at Ndera Warehouse gate', $todayStr . ' 08:41:05'],
-            [2, 'event_venue', $firstVenueId, $firstVenueName, 'check_out', 'granted', null, 'on_time', 'Soundcheck wrap check-out', $todayStr . ' 12:18:44'],
-        ];
-
-        foreach ($seedScans as $s) {
-            $uRow = $users[$s[0]] ?? $users[0];
-            $uId = (int) $uRow['id'];
-            $bStmt = $pdo->prepare("SELECT `badge_code` FROM `user_badges` WHERE `user_id` = ?");
-            $bStmt->execute([$uId]);
-            $bCode = (string) ($bStmt->fetchColumn() ?: ('REW-BADGE-' . str_pad((string) $uId, 4, '0', STR_PAD_LEFT)));
-
-            $logIns->execute([
-                $uId,
-                $bCode,
-                $s[1],
-                $s[2],
-                $s[3],
-                $s[4],
-                $s[5],
-                $s[6],
-                $s[7],
-                $s[8],
-                $s[9],
-            ]);
-        }
+        $logIns->execute([
+            $uId,
+            $bCode,
+            $s[1],
+            $s[2],
+            $s[3],
+            $s[4],
+            $s[5],
+            $s[6],
+            $s[7],
+            $s[8],
+            $s[9],
+        ]);
     }
 }
 

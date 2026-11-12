@@ -374,6 +374,25 @@
     }
   }
 
+  // Live background sync for Gate Tech Lead (auto-polls every 6 seconds)
+  let liveGateSyncTimer = null;
+  function startLiveGateSync() {
+    if (liveGateSyncTimer) clearInterval(liveGateSyncTimer);
+    liveGateSyncTimer = setInterval(async () => {
+      // Don't refresh if user is currently typing in an input or has an open editing modal
+      const hasModal = document.querySelector('.modal.open');
+      const activeEl = document.activeElement;
+      const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
+      if (hasModal || isTyping) return;
+
+      try {
+        await fetchBootstrap(true);
+      } catch (e) {
+        // silent polling catch
+      }
+    }, 6000);
+  }
+
   // =========================================================================
   // KIOSK CONTROLLER: MODAL RESULTS & AUTO-RETURN TO SEARCH
   // =========================================================================
@@ -523,7 +542,7 @@
     clearKioskCountdown();
     closeKioskModal();
     const inp = document.getElementById('kiosk-badge-input');
-    if (inp) {
+    if (inp && state.activeScreen === 'attendees') {
       setTimeout(() => {
         inp.focus();
         inp.select();
@@ -1777,7 +1796,7 @@
           const isDenied = item.access_status === 'denied';
           const isStock = item.checkpoint_type === 'stock_warehouse';
           return `
-            <div class="timeline-event-card" data-timeline-uid="${item.user_id}" style="cursor: pointer;" title="Click to view ${escapeHtml(item.full_name)} in Kiosk">
+            <div class="timeline-event-card" data-timeline-uid="${item.user_id}" data-timeline-id="${item.id}" style="cursor: pointer;" title="Click to view ${escapeHtml(item.full_name)} in Kiosk">
               <div class="timeline-event-left">
                 <div class="timeline-action-title">${escapeHtml(item.action_title)}</div>
                 <div class="timeline-time-sub">${escapeHtml(item.formatted_time)} · ${escapeHtml(item.badge_code)}</div>
@@ -5543,8 +5562,13 @@
         return;
       }
 
-      // 0a. Return to Search button in Kiosk Modal header or footer
-      if (e.target.closest('#kiosk-back-search-btn') || e.target.closest('#kiosk-scan-next-btn')) {
+      // 0a. Return to Search or Close button in Kiosk Modal header or footer
+      if (
+        e.target.closest('#kiosk-back-search-btn') ||
+        e.target.closest('#kiosk-scan-next-btn') ||
+        e.target.closest('#kiosk-modal-close-btn') ||
+        e.target.closest('.js-close-kiosk-modal')
+      ) {
         returnToSearchInput();
         return;
       }
@@ -5703,13 +5727,87 @@
         return;
       }
 
-      // 4. User Activity Timeline Card Click
+      // 4. User Activity Timeline Card Click -> Load member verification in Centered Kiosk Modal
       const tlCard = e.target.closest('.timeline-event-card[data-timeline-uid]');
       if (tlCard) {
         const uid = Number(tlCard.getAttribute('data-timeline-uid'));
-        const member = state.crew.find((m) => Number(m.id) === uid);
-        if (member) {
+        const tlId = Number(tlCard.getAttribute('data-timeline-id'));
+        const member = (state.crew || []).find((m) => Number(m.id) === uid);
+        const tlItem = (state.activityTimeline || []).find((t) => Number(t.id) === tlId);
+
+        if (tlItem && member) {
+          const isDenied = tlItem.access_status === 'denied';
+          const rolePill = `${String(member.role_display || '').toUpperCase()} - ${String(member.department || '').toUpperCase()}`;
+          const verification = {
+            allowed: !isDenied,
+            reason: isDenied
+              ? (tlItem.denial_reason || tlItem.action_title || 'Access Denied at Checkpoint')
+              : (tlItem.notes || `Access Authorized at ${tlItem.checkpoint_name}`),
+            action: tlItem.scan_action || (isDenied ? 'denied' : 'check_in'),
+            punctuality: tlItem.punctuality_status || 'on_time',
+            punctuality_label: isDenied ? 'RESTRICTED' : (tlItem.punctuality_status === 'late' ? 'LATE' : 'ON TIME'),
+            checkpoint_name: tlItem.checkpoint_name,
+            check_in_time: tlItem.in_pill || member.check_in_time || null,
+            check_out_time: tlItem.out_pill || member.check_out_time || null,
+            scanned_at: tlItem.formatted_time || null,
+            badge: {
+              id: member.id,
+              user_id: member.id,
+              full_name: member.full_name,
+              badge_code: member.badge_code,
+              staff_code: member.staff_code,
+              role: member.role,
+              role_display: member.role_display,
+              role_pill: rolePill,
+              department: member.department,
+              clearance_code: member.clearance_code,
+              clearance_title: member.clearance_title,
+              clearance_color: member.clearance_color,
+              profile_image: member.profile_image_url || null,
+              initials: member.initials,
+              phone: member.phone,
+              username: member.username,
+              daily_state: isDenied ? 'denied' : (tlItem.scan_action === 'check_out' ? 'checked_out' : 'checked_in'),
+              badge_status: member.badge_status,
+            },
+          };
+          openKioskModal(verification);
+        } else if (member) {
           openKioskModal(member);
+        } else if (tlItem) {
+          const isDenied = tlItem.access_status === 'denied';
+          const verification = {
+            allowed: !isDenied,
+            reason: isDenied ? (tlItem.denial_reason || tlItem.action_title || 'Access Denied') : (tlItem.notes || `Access at ${tlItem.checkpoint_name}`),
+            action: tlItem.scan_action || 'check_in',
+            punctuality: tlItem.punctuality_status || 'on_time',
+            punctuality_label: isDenied ? 'RESTRICTED' : 'ON TIME',
+            checkpoint_name: tlItem.checkpoint_name,
+            check_in_time: tlItem.in_pill || null,
+            check_out_time: tlItem.out_pill || null,
+            scanned_at: tlItem.formatted_time || null,
+            badge: {
+              id: tlItem.user_id,
+              user_id: tlItem.user_id,
+              full_name: tlItem.full_name,
+              badge_code: tlItem.badge_code,
+              staff_code: tlItem.staff_code,
+              role: 'technician',
+              role_display: tlItem.role_display,
+              role_pill: `${String(tlItem.role_display || '').toUpperCase()} - ${String(tlItem.department || '').toUpperCase()}`,
+              department: tlItem.department,
+              clearance_code: tlItem.clearance_code,
+              clearance_title: `Level ${tlItem.clearance_code}`,
+              clearance_color: tlItem.clearance_color || '#2563eb',
+              profile_image: tlItem.profile_image_url || null,
+              initials: tlItem.initials,
+              phone: '+250 788 100 000',
+              username: 'user',
+              daily_state: isDenied ? 'denied' : 'checked_in',
+              badge_status: 'active',
+            },
+          };
+          openKioskModal(verification);
         }
         return;
       }
@@ -7185,64 +7283,159 @@
         if (countBadge) countBadge.textContent = '0 Assigned';
       });
     }
-    ['reset-demo-db-btn', 'sidebar-reset-demo-btn', 'users-matrix-reset-logs-btn'].forEach((id) => {
+    const resetLogsHandler = async () => {
+      if (!confirm("Are you sure you want to reset the User Activity Timeline and gate scans?\nAll activity logs will be cleared and crew set to Not Checked In (0 on-site).")) {
+        return;
+      }
+      try {
+        const res = await fetch('api.php?action=reset_today_scans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            checkpoint_type: state.checkpointType,
+            checkpoint_id: state.checkpointId,
+          })
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          state.activityTimeline = [];
+          state.timelinePage = 1;
+          applyBootstrapPayload(data, false);
+          renderAll();
+          playKioskChime('approve');
+          showToast("User Activity Timeline logs and gate scans have been completely reset.");
+        } else {
+          showToast('Failed to reset logs: ' + ((data && data.error) || 'Server error'));
+        }
+      } catch (err) {
+        console.error('Reset logs error:', err);
+        showToast('Error resetting logs: ' + err.message);
+      }
+    };
+
+    ['reset-demo-db-btn', 'sidebar-reset-demo-btn', 'users-matrix-reset-logs-btn', 'timeline-clear-btn'].forEach((id) => {
       const btn = document.getElementById(id);
       if (btn) {
-        btn.addEventListener('click', async () => {
-          if (!confirm("Are you sure you want to reset all of today's gate scans?\nAll crew members will be reset to Not Checked In (0 on-site).")) {
-            return;
-          }
-          try {
-            const res = await fetch('api.php?action=reset_today_scans', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                checkpoint_type: state.checkpointType,
-                checkpoint_id: state.checkpointId,
-              })
-            });
-            const data = await res.json();
-            if (data && data.ok) {
-              applyBootstrapPayload(data, false);
-              renderAll();
-              playKioskChime('approve');
-              showToast("Today's gate scans reset successfully. All crew are now Ready (0 on-site).");
-            } else {
-              showToast('Failed to reset today’s scans: ' + ((data && data.error) || 'Server error'));
-            }
-          } catch (err) {
-            console.error('Reset scans error:', err);
-            showToast('Error resetting scans: ' + err.message);
-          }
-        });
+        btn.addEventListener('click', resetLogsHandler);
       }
     });
 
-    // Export CSV
-    document.querySelectorAll('.js-export-attendees').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const headers = ['Badge Code', 'Staff Code', 'Full Name', 'Role', 'Department', 'Clearance', 'State', 'Check-In', 'Check-Out'];
-        const rows = state.crew.map((c) => [
-          c.badge_code,
-          c.staff_code,
-          `"${c.full_name}"`,
-          c.role_display,
-          c.department,
-          c.clearance_code,
-          c.daily_state,
-          c.check_in_time || '',
-          c.check_out_time || '',
-        ]);
-        const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `ability_gate_roster_${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('Exported aBility Gate Roster CSV');
+    document.querySelectorAll('.js-reset-activity-logs').forEach((btn) => {
+      btn.addEventListener('click', resetLogsHandler);
+    });
+
+    // -----------------------------------------------------------------------
+    // DAILY CHECK-IN / CHECK-OUT MANAGEMENT EXPORT
+    // -----------------------------------------------------------------------
+
+    function formatOnSiteDuration(inStr, outStr) {
+      if (!inStr || inStr === 'N/A') return 'Not Arrived';
+      const parseTime = (str) => {
+        if (!str) return null;
+        const m = String(str).match(/(\d+):(\d+)(?::(\d+))?\s*(AM|PM)?/i);
+        if (!m) return null;
+        let h = parseInt(m[1], 10);
+        const min = parseInt(m[2], 10);
+        const meridiem = m[4] ? m[4].toUpperCase() : null;
+        if (meridiem === 'PM' && h < 12) h += 12;
+        if (meridiem === 'AM' && h === 12) h = 0;
+        return h * 60 + min;
+      };
+      const inMins = parseTime(inStr);
+      if (inMins === null) return 'N/A';
+      if (!outStr || outStr === 'N/A') return 'Currently On-Site';
+      const outMins = parseTime(outStr);
+      if (outMins === null) return 'Currently On-Site';
+      let diff = outMins - inMins;
+      if (diff < 0) diff += 24 * 60; // crossed midnight
+      const hrs = Math.floor(diff / 60);
+      const mins = diff % 60;
+      return `${hrs}h ${mins}m`;
+    }
+
+    function exportDailyAttendanceReport() {
+      let targetList = [];
+      const isOverviewFiltered = state.overviewTab !== 'all' || (state.overviewSearch && state.overviewSearch.trim());
+      const isDirFiltered = state.directoryTab !== 'all' || (state.directorySearch && state.directorySearch.trim());
+
+      if (state.activeScreen === 'overview' && isOverviewFiltered) {
+        targetList = filterCrewList(state.overviewTab, state.overviewSearch);
+      } else if (state.activeScreen === 'attendees' && isDirFiltered) {
+        targetList = filterCrewList(state.directoryTab, state.directorySearch);
+      } else {
+        targetList = state.crew || [];
+      }
+
+      if (!targetList || targetList.length === 0) {
+        showToast('No crew records available to export');
+        return;
+      }
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const venueName = (state.activeCheckpoint && state.activeCheckpoint.name) || 'Main Gate / Venue';
+      const callTime = (state.activeCheckpoint && state.activeCheckpoint.call_time) || '08:00';
+
+      const headers = [
+        'Report Date',
+        'Badge ID',
+        'Staff Code',
+        'Crew / Technician Name',
+        'Role',
+        'Department',
+        'Clearance Tier',
+        'Checkpoint / Venue',
+        'Scheduled Call Time',
+        'Gate Attendance Status',
+        'Check-In Time',
+        'Check-Out Time',
+        'Punctuality Status',
+        'Duration On-Site',
+        'Equipment Custody Batches'
+      ];
+
+      const rows = targetList.map((c) => {
+        const stateDisplay = c.daily_state === 'checked_in'
+          ? 'Checked In (On-Site)'
+          : (c.daily_state === 'checked_out' ? 'Checked Out' : 'Not Arrived');
+        const punctuality = c.punctuality || (c.punctuality_code ? c.punctuality_code.toUpperCase().replace('_', ' ') : 'ON TIME');
+        const duration = formatOnSiteDuration(c.check_in_time, c.check_out_time);
+        const batches = Array.isArray(c.equipment_batches) && c.equipment_batches.length > 0
+          ? c.equipment_batches.map((b) => (typeof b === 'object' ? b.batch_number : b)).join('; ')
+          : 'None';
+
+        return [
+          todayStr,
+          `"${c.badge_code || ''}"`,
+          `"${c.staff_code || c.username || ''}"`,
+          `"${(c.full_name || '').replace(/"/g, '""')}"`,
+          `"${(c.role_display || c.role || '').replace(/"/g, '""')}"`,
+          `"${(c.department || '').replace(/"/g, '""')}"`,
+          `"${c.clearance_code || ''} - ${(c.clearance_short || '').replace(/"/g, '""')}"`,
+          `"${venueName.replace(/"/g, '""')}"`,
+          `"${callTime}"`,
+          `"${stateDisplay}"`,
+          `"${c.check_in_time || 'N/A'}"`,
+          `"${c.check_out_time || 'N/A'}"`,
+          `"${punctuality}"`,
+          `"${duration}"`,
+          `"${batches.replace(/"/g, '""')}"`,
+        ];
       });
+
+      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Ability_Daily_Attendance_Report_${todayStr}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Exported Daily Attendance Report (${targetList.length} records) for Management`);
+    }
+
+    // Export CSV Handlers
+    document.querySelectorAll('.js-export-attendees').forEach((btn) => {
+      btn.addEventListener('click', () => exportDailyAttendanceReport());
     });
 
     // -----------------------------------------------------------------------
@@ -7779,6 +7972,7 @@
       switchScreen('attendees', 'pane-kiosk');
     }
     await fetchBootstrap(false);
+    startLiveGateSync();
     if (isCurrentUserStockController()) {
       switchScreen('attendees', 'pane-kiosk');
       applyNavigationRestrictions();

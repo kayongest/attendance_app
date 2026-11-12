@@ -78,11 +78,41 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       } catch (e) {}
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Share+Tech&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap" rel="stylesheet">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Share+Tech&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap');
+
+    .share-tech-regular {
+      font-family: "Share Tech", sans-serif;
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    .marvel-regular {
+      font-family: "Marvel", sans-serif;
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    .marvel-bold {
+      font-family: "Marvel", sans-serif;
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    .marvel-regular-italic {
+      font-family: "Marvel", sans-serif;
+      font-weight: 400;
+      font-style: italic;
+    }
+
+    .marvel-bold-italic {
+      font-family: "Marvel", sans-serif;
+      font-weight: 700;
+      font-style: italic;
+    }
 
     *, *::before, *::after {
       box-sizing: border-box;
@@ -158,7 +188,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       justify-content: center;
       align-items: center;
       flex-direction: column;
-      font-family: 'Share Tech', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Share Tech', 'Marvel', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       min-height: 100vh;
       margin: 0;
       padding: 20px;
