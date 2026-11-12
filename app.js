@@ -263,6 +263,14 @@
     const roleUpper = String(member.role || 'technician').replace(/_/g, ' ').toUpperCase();
     const deptUpper = String(member.department || 'OPERATIONS').toUpperCase();
 
+    // Cross-facility transit is ONLY active if the user was checked in at another facility without having signed out!
+    const isCrossFacilityUnsigned = Boolean(
+      isCheckedIn &&
+      member.last_checkpoint_id &&
+      cp &&
+      Number(member.last_checkpoint_id) !== Number(cp.id)
+    );
+
     return {
       ok: true,
       allowed: isAllowed,
@@ -278,6 +286,9 @@
       scanned_at: new Date().toLocaleTimeString(),
       check_in_time: member.check_in_full || member.check_in_time || null,
       check_out_time: member.check_out_full || member.check_out_time || null,
+      is_transit_transfer: isCrossFacilityUnsigned,
+      transit_from: isCrossFacilityUnsigned ? (member.last_checkpoint_name || 'Stock Warehouse') : null,
+      transit_to: isCrossFacilityUnsigned ? cp.name : null,
       linked_batches: member.linked_batches || [],
       badge: {
         user_id: member.id,
@@ -1445,6 +1456,13 @@
     if (staffCodeEl) staffCodeEl.textContent = b.staff_code || 'ABL-006';
     if (cpTagEl) cpTagEl.textContent = String(v.checkpoint_name || state.activeCheckpoint.name).toUpperCase();
 
+    const facilityBadgeEl = document.getElementById('kiosk-facility-type-badge');
+    if (facilityBadgeEl) {
+      const isStockFacility = (v.checkpoint_type === 'stock_warehouse') || (state.activeCheckpoint && state.activeCheckpoint.type === 'stock_warehouse');
+      facilityBadgeEl.textContent = isStockFacility ? '🏭 Stock Warehouse' : '🏟️ Event Venue';
+      facilityBadgeEl.className = `kiosk-facility-pill ${isStockFacility ? 'stock' : 'venue'}`;
+    }
+
     const assignmentTagEl = document.getElementById('kiosk-assignment-tag');
     if (assignmentTagEl) {
       if (state.activeCheckpoint.type === 'event_venue' && v.is_assigned_to_event !== undefined) {
@@ -1704,18 +1722,25 @@
     }
 
     // Update Dual-Facility Live Production Dispatch Workflow Card (Option B)
+    // ONLY display for users who didn't sign out from venues or stock before transferring!
     const transitCard = document.getElementById('kiosk-transit-flow-card');
+    const isTransitActive = Boolean(
+      v.is_transit_transfer ||
+      (b && b.daily_state === 'checked_in' && b.last_checkpoint_id && state.activeCheckpoint && Number(b.last_checkpoint_id) !== Number(state.activeCheckpoint.id))
+    );
     if (transitCard) {
-      transitCard.style.display = 'flex';
-      const techNames = transitCard.querySelectorAll('.kiosk-transit-tech-name');
-      techNames.forEach((el) => {
-        el.textContent = b.full_name || 'Technician';
-      });
-      const routePill = document.getElementById('kiosk-transit-route-pill');
-      if (routePill && v.transit_from && v.transit_to) {
-        routePill.textContent = `${v.transit_from} ➔ ${v.transit_to}`;
-      } else if (routePill) {
-        routePill.textContent = 'Ndera Warehouse ➔ Kigali Convention Centre';
+      transitCard.style.display = isTransitActive ? 'flex' : 'none';
+      if (isTransitActive) {
+        const techNames = transitCard.querySelectorAll('.kiosk-transit-tech-name');
+        techNames.forEach((el) => {
+          el.textContent = b.full_name || 'Technician';
+        });
+        const routePill = document.getElementById('kiosk-transit-route-pill');
+        if (routePill && v.transit_from && v.transit_to) {
+          routePill.textContent = `${v.transit_from} ➔ ${v.transit_to}`;
+        } else if (routePill) {
+          routePill.textContent = 'Ndera Warehouse ➔ Kigali Convention Centre';
+        }
       }
     }
   }
@@ -7408,14 +7433,17 @@
         'Role',
         'Department',
         'Clearance Tier',
-        'Checkpoint / Venue',
+        'Facility Type',
+        'Recorded Checkpoint / Location',
         'Scheduled Call Time',
         'Gate Attendance Status',
         'Check-In Time',
         'Check-Out Time',
         'Punctuality Status',
         'Duration On-Site',
-        'Equipment Custody Batches'
+        'Attendance Mode',
+        'Equipment Custody Batches',
+        'Operational Notes'
       ];
 
       const rows = targetList.map((c) => {
@@ -7427,6 +7455,18 @@
         const batches = Array.isArray(c.equipment_batches) && c.equipment_batches.length > 0
           ? c.equipment_batches.map((b) => (typeof b === 'object' ? b.batch_number : b)).join('; ')
           : 'None';
+        const facType = c.last_checkpoint_type === 'stock_warehouse'
+          ? 'Stock Warehouse'
+          : (c.last_checkpoint_type === 'event_venue' ? 'Event Venue' : ((state.activeCheckpoint && state.activeCheckpoint.type === 'stock_warehouse') ? 'Stock Warehouse' : 'Event Venue'));
+        const recordedLocation = c.last_checkpoint_name || venueName;
+        const isTransitTransfer = Boolean(
+          c.is_transit_transfer ||
+          (c.daily_state === 'checked_in' && c.last_checkpoint_id && state.activeCheckpoint && Number(c.last_checkpoint_id) !== Number(state.activeCheckpoint.id))
+        );
+        const attendanceMode = isTransitTransfer
+          ? 'Inter-Facility Transit Transfer'
+          : 'Single Location (Direct)';
+        const notes = c.checkpoint_auth_reason || (isTransitTransfer ? 'Transferred between facilities' : `Direct shift at ${recordedLocation}`);
 
         return [
           todayStr,
@@ -7436,14 +7476,17 @@
           `"${(c.role_display || c.role || '').replace(/"/g, '""')}"`,
           `"${(c.department || '').replace(/"/g, '""')}"`,
           `"${c.clearance_code || ''} - ${(c.clearance_short || '').replace(/"/g, '""')}"`,
-          `"${venueName.replace(/"/g, '""')}"`,
+          `"${facType}"`,
+          `"${recordedLocation.replace(/"/g, '""')}"`,
           `"${callTime}"`,
           `"${stateDisplay}"`,
           `"${c.check_in_time || 'N/A'}"`,
           `"${c.check_out_time || 'N/A'}"`,
           `"${punctuality}"`,
           `"${duration}"`,
+          `"${attendanceMode}"`,
           `"${batches.replace(/"/g, '""')}"`,
+          `"${notes.replace(/"/g, '""')}"`,
         ];
       });
 
@@ -7458,9 +7501,69 @@
       showToast(`Exported Daily Attendance Report (${targetList.length} records) for Management`);
     }
 
+    function exportAuditLogsReport() {
+      const logs = state.activityTimeline || [];
+      if (!logs || logs.length === 0) {
+        showToast('No gate activity logs available to export');
+        return;
+      }
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const headers = [
+        'Log ID',
+        'Date & Time',
+        'Badge ID',
+        'Staff Code',
+        'Crew / Technician Name',
+        'Role',
+        'Department',
+        'Clearance Tier',
+        'Facility Type',
+        'Checkpoint / Location',
+        'Gate Scan Action',
+        'Access Status',
+        'Transit Event',
+        'Punctuality Status',
+        'Operational Notes'
+      ];
+      const rows = logs.map((l) => {
+        const facType = l.checkpoint_type === 'stock_warehouse' ? 'Stock Warehouse' : 'Event Venue';
+        const isTransit = Boolean(l.is_transit);
+        return [
+          l.id || '',
+          `"${l.formatted_time || ''}"`,
+          `"${l.badge_code || ''}"`,
+          `"${l.staff_code || ''}"`,
+          `"${(l.full_name || '').replace(/"/g, '""')}"`,
+          `"${(l.role_display || '').replace(/"/g, '""')}"`,
+          `"${(l.department || '').replace(/"/g, '""')}"`,
+          `"${l.clearance_code || ''}"`,
+          `"${facType}"`,
+          `"${(l.checkpoint_name || '').replace(/"/g, '""')}"`,
+          `"${String(l.scan_action || 'check_in').toUpperCase()}"`,
+          `"${String(l.access_status || 'granted').toUpperCase()}"`,
+          `"${isTransit ? 'YES (Cross-Facility Transfer)' : 'NO (Single Location)'}"`,
+          `"${String(l.punctuality_status || 'on_time').toUpperCase()}"`,
+          `"${(l.notes || l.action_title || '').replace(/"/g, '""')}"`,
+        ];
+      });
+
+      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Ability_Gate_Audit_Logs_${todayStr}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Exported Gate Audit Logs (${logs.length} events) for Audit`);
+    }
+
     // Export CSV Handlers
     document.querySelectorAll('.js-export-attendees').forEach((btn) => {
       btn.addEventListener('click', () => exportDailyAttendanceReport());
+    });
+    document.querySelectorAll('.js-export-audit-logs').forEach((btn) => {
+      btn.addEventListener('click', () => exportAuditLogsReport());
     });
 
     // -----------------------------------------------------------------------

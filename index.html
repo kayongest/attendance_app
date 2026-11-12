@@ -601,9 +601,13 @@
               </p>
             </div>
             <div class="directory-actions" data-node-id="2:3541">
-              <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:3542">
+              <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:3542" title="Export Daily Attendance Summary CSV">
                 <img src="assets/download.svg" alt="" class="svg-icon" />
                 <span>Export CSV</span>
+              </button>
+              <button type="button" class="btn btn-secondary-38 js-export-audit-logs" title="Export Detailed Gate Activity & Audit Logs CSV">
+                <img src="assets/download.svg" alt="" class="svg-icon" />
+                <span>Export Audit Logs</span>
               </button>
               <button type="button" class="btn btn-primary-38" data-action="go-kiosk" data-node-id="2:3545">
                 <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
@@ -1059,9 +1063,13 @@
                 </p>
               </div>
               <div class="directory-actions" data-node-id="2:8622">
-                <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:8627">
+                <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:8627" title="Export Daily Attendance Summary CSV">
                   <img src="assets/download.svg" alt="" class="svg-icon" />
                   <span>Export Roster</span>
+                </button>
+                <button type="button" class="btn btn-secondary-38 js-export-audit-logs" title="Export Detailed Gate Activity & Audit Logs CSV">
+                  <img src="assets/download.svg" alt="" class="svg-icon" />
+                  <span>Export Audit Logs</span>
                 </button>
               </div>
             </div>
@@ -1905,6 +1913,7 @@
           </div>
 
           <div class="kiosk-portrait-container">
+            <span class="kiosk-facility-pill stock" id="kiosk-facility-type-badge" style="margin-bottom: 8px;">🏭 Stock Warehouse</span>
             <img
               src=""
               alt="Staff Portrait"

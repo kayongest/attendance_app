@@ -706,71 +706,81 @@ button {
 .status-badge-green-md {
   background-color: var(--status-green-bg);
   color: var(--status-green-text);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
 }
 
 .status-badge-green-sm {
   background-color: var(--status-green-bg);
   color: var(--status-green-text-alt);
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
 }
 
 .status-badge-amber-md {
   background-color: var(--status-amber-bg-alt);
   color: var(--status-amber-text-alt);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
 }
 
 .status-badge-amber-sm {
   background-color: var(--status-amber-bg);
   color: var(--status-amber-text);
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
 }
 
 .status-badge-red-md {
   background-color: var(--status-red-bg-alt);
   color: var(--status-red-text-alt);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
 }
 
 .status-badge-red-sm {
   background-color: var(--status-red-bg);
   color: var(--status-red-text);
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
 }
 
 .status-badge-purple-sm {
   background-color: var(--brand-soft);
   color: var(--brand-primary);
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
 }
 
 .status-badge-purple-md {
   background-color: var(--brand-soft);
   color: var(--brand-primary);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
 }
 
 .status-badge-neutral-sm {
   background-color: var(--bg-canvas);
   color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
 }
 
 .status-badge-neutral-md {
   background-color: var(--bg-subtle);
   color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
 }
 
 .event-date-meta {
@@ -871,16 +881,16 @@ button {
 }
 
 .metric-label-md {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-secondary);
   line-height: normal;
   white-space: nowrap;
 }
 
 .metric-label-reg {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-secondary);
   line-height: normal;
   white-space: nowrap;
@@ -894,8 +904,8 @@ button {
 }
 
 .metric-value-31 {
-  font-size: 31px;
-  font-weight: 400;
+  font-size: 32px;
+  font-weight: 700;
   letter-spacing: -1.2px;
   color: var(--text-primary);
   line-height: normal;
@@ -904,7 +914,7 @@ button {
 
 .metric-value-30 {
   font-size: 30px;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: -1px;
   color: var(--text-primary);
   line-height: normal;
@@ -937,18 +947,19 @@ button {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 11.5px;
+  font-weight: 500;
   line-height: normal;
   white-space: nowrap;
 }
 
 .metric-change-up {
   color: var(--status-green-text);
+  font-weight: 600;
 }
 
 .metric-context {
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 400;
   color: var(--text-secondary);
   line-height: normal;
@@ -1817,15 +1828,17 @@ button {
 }
 
 .th-label {
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--text-secondary);
   line-height: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .th-label-med {
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .col-company {
@@ -1926,15 +1939,15 @@ button {
 }
 
 .attendee-name {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--text-primary);
   line-height: normal;
   white-space: nowrap;
 }
 
 .attendee-email {
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 400;
   color: var(--text-secondary);
   line-height: normal;
@@ -1942,15 +1955,15 @@ button {
 }
 
 .company-name {
-  font-size: 11px;
-  font-weight: 400;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
   line-height: normal;
   white-space: nowrap;
 }
 
 .company-role {
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 400;
   color: var(--text-secondary);
   line-height: normal;
@@ -1958,8 +1971,8 @@ button {
 }
 
 .ticket-label {
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 11.5px;
+  font-weight: 500;
   color: var(--text-secondary);
   line-height: normal;
   white-space: nowrap;
@@ -1970,7 +1983,7 @@ button {
 }
 
 .reg-date-label {
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 400;
   color: var(--text-secondary);
   line-height: normal;
@@ -1990,27 +2003,27 @@ button {
 }
 
 .checkin-status-text {
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-primary);
   line-height: normal;
   white-space: nowrap;
 }
 
 .checkin-status-text-med {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .checkin-time-text {
-  font-size: 9px;
-  font-weight: 400;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-secondary);
   line-height: normal;
   white-space: nowrap;
 }
 
 .checkin-na {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--text-muted);
   line-height: normal;
@@ -2679,7 +2692,7 @@ button {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   border: 1px solid var(--border-color);
   background-color: var(--bg-canvas);
@@ -2689,11 +2702,11 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 5px;
-  font-size: 10px;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 11.5px;
   font-weight: 700;
   color: #ffffff;
   letter-spacing: 0.3px;
@@ -2882,11 +2895,35 @@ button {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px 0 20px;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.7);
   font-family: var(--font-mono);
   box-sizing: border-box;
+}
+
+.kiosk-facility-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.kiosk-facility-pill.stock {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.kiosk-facility-pill.venue {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
 }
 
 .kiosk-portrait-container {
@@ -2927,7 +2964,7 @@ button {
 }
 
 .kiosk-staff-name {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 800;
   color: #ffffff;
   margin: 12px 0 6px 0;
@@ -2942,7 +2979,7 @@ button {
   background: rgba(56, 189, 248, 0.14);
   border: 1px solid rgba(56, 189, 248, 0.35);
   color: #38bdf8;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -2950,7 +2987,7 @@ button {
 
 .kiosk-left-contact {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: 12.5px;
   color: #94a3b8;
   font-family: var(--font-mono);
 }
@@ -3015,7 +3052,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   color: #94a3b8;
   text-transform: uppercase;
@@ -3031,7 +3068,7 @@ button {
 }
 
 .kiosk-timeout-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: #cbd5e1;
   background: rgba(15, 23, 42, 0.85);
@@ -3130,9 +3167,9 @@ button {
 .kiosk-punctuality-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 4px 11px;
   border-radius: 100px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -3158,10 +3195,10 @@ button {
 }
 
 .kiosk-status-reason {
-  font-size: 13px;
+  font-size: 14px;
   color: #cbd5e1;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 /* Prominent Hero Timestamp */
@@ -3303,7 +3340,7 @@ button {
 }
 
 .kiosk-ts-label {
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 700;
   color: #94a3b8;
   text-transform: uppercase;
@@ -3311,7 +3348,7 @@ button {
 }
 
 .kiosk-ts-value {
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 800;
   color: #f1f5f9;
   font-family: var(--font-mono);
@@ -3372,7 +3409,7 @@ button {
 }
 
 .kiosk-footer-badge-code {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   color: #cbd5e1;
   font-family: var(--font-mono);
@@ -3380,7 +3417,7 @@ button {
 }
 
 .kiosk-footer-clearance-status {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
@@ -3404,18 +3441,18 @@ button {
 
 .badge-code-primary {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--text-primary);
   background-color: var(--bg-subtle);
-  padding: 3px 7px;
-  border-radius: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
   border: 1px solid var(--border-color);
   width: fit-content;
 }
 
 .badge-code-sub {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -3430,11 +3467,11 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   border: 1px solid transparent;
   transition: all 0.15s ease;
@@ -3479,11 +3516,11 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
   font-family: var(--font-mono);
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: 5px;
   width: fit-content;
 }
 
@@ -3664,30 +3701,30 @@ button {
 }
 
 .timeline-action-title {
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .timeline-time-sub {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
 .timeline-staff-mini {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .timeline-mini-avatar {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background-color: #e0e7ff;
   color: #3730a3;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -3696,13 +3733,13 @@ button {
 }
 
 .timeline-mini-name {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .timeline-mini-role {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
@@ -3710,7 +3747,7 @@ button {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 5px;
   flex-shrink: 0;
 }
 
@@ -3718,9 +3755,9 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 8px;
+  padding-top: 10px;
   border-top: 1px solid var(--border-color);
-  font-size: 11px;
+  font-size: 12.5px;
   color: var(--text-secondary);
 }
 
@@ -6497,7 +6534,7 @@ html.theme-transitioning *::after {
   align-items: center;
   gap: 6px;
   font-family: 'Share Tech', sans-serif;
-  font-size: 13px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #c4b5fd;
 }
@@ -6510,9 +6547,9 @@ html.theme-transitioning *::after {
 .kiosk-transit-route-pill {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 3px 10px;
+  padding: 3px 11px;
   border-radius: 9999px;
   background: rgba(139, 92, 246, 0.25);
   color: #ddd6fe;
@@ -6527,41 +6564,42 @@ html.theme-transitioning *::after {
 }
 
 .kiosk-transit-body {
-  font-size: 12px;
+  font-size: 13.5px;
   line-height: 1.5;
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .kiosk-transit-intro {
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: var(--text-primary);
   font-weight: 600;
+  line-height: 1.45;
 }
 
 .kiosk-transit-steps {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 
 .kiosk-transit-step {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
 }
 
 .step-bullet {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: #ffffff;
   margin-top: 1px;
@@ -6574,7 +6612,8 @@ html.theme-transitioning *::after {
 
 .step-content {
   flex: 1;
-  font-size: 12px;
+  font-size: 13.5px;
+  line-height: 1.45;
   color: var(--text-primary);
 }
 
@@ -6585,15 +6624,15 @@ html.theme-transitioning *::after {
 }
 
 .step-sub-box {
-  margin-top: 6px;
-  padding: 8px 10px;
+  margin-top: 8px;
+  padding: 10px 12px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.28);
   border-left: 3px solid #10b981;
-  font-size: 11.5px;
+  font-size: 12.5px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 [data-theme="light"] .step-sub-box,
@@ -6613,7 +6652,7 @@ html.theme-transitioning *::after {
   color: #a78bfa;
   padding: 1px 6px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -6624,12 +6663,12 @@ html.theme-transitioning *::after {
 }
 
 .step-result-list {
-  margin: 4px 0 0 16px;
+  margin: 6px 0 0 18px;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-size: 11.5px;
+  gap: 4px;
+  font-size: 12.5px;
 }
 
 .step-result-list li {
