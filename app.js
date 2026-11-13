@@ -79,6 +79,11 @@
     checkpointPage: 1,
     checkpointPerPage: 5,
 
+    // Facility & Personnel Allocation Map
+    selectedMapCheckpoint: { type: 'event_venue', id: 1 },
+    mapViewMode: 'map',
+    mapFilter: 'all',
+
     // Users & Roles CRUD Manager
     usersTab: 'all',
     usersSearch: '',
@@ -553,10 +558,17 @@
     clearKioskCountdown();
     closeKioskModal();
     const inp = document.getElementById('kiosk-badge-input');
+    const clearBtn = document.getElementById('kiosk-input-clear-btn');
+    const matchTag = document.getElementById('kiosk-search-match-tag');
+    if (inp) inp.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+    if (matchTag) {
+      matchTag.style.display = 'none';
+      matchTag.textContent = '';
+    }
     if (inp && state.activeScreen === 'attendees') {
       setTimeout(() => {
         inp.focus();
-        inp.select();
       }, 60);
     }
   }
@@ -617,7 +629,11 @@
     }, 50);
   }
 
+  let gateScanInFlight = false;
+
   async function triggerGateScan(scanInput, forcedMode = null) {
+    if (gateScanInFlight) return;
+    gateScanInFlight = true;
     const modeToUse = forcedMode || state.scanMode || 'auto';
     try {
       const res = await fetch('api.php?action=process_gate_scan', {
@@ -634,8 +650,12 @@
       const data = await res.json();
       if (!data.ok && data.error) {
         showToast(data.error);
+        playKioskChime('decline');
         return;
       }
+
+      // Scan has already been recorded on the backend; do not re-prompt for approval
+      data.confirmed = true;
 
       if (data.badge && data.badge.user_id) {
         state.selectedCrewId = Number(data.badge.user_id);
@@ -646,6 +666,14 @@
         applyBootstrapPayload(data.bootstrap, true);
       } else {
         renderAll();
+      }
+
+      if (!data.allowed) {
+        playKioskChime('decline');
+      } else if (data.action === 'check_out') {
+        playKioskChime('checkout');
+      } else {
+        playKioskChime('approve');
       }
 
       // Sync kiosk input & match tag with verified badge
@@ -676,12 +704,16 @@
       renderVerificationDeck();
       startKioskCountdown(4000);
 
-      const statusTxt = data.allowed
-        ? `${data.action === 'check_out' ? 'CHECKED OUT' : 'ACCESS GRANTED'}`
-        : `ACCESS DENIED — ${data.reason}`;
+      const statusTxt = data.duplicate_prevented
+        ? (data.reason || 'Scan already recorded')
+        : (data.allowed
+          ? `${data.action === 'check_out' ? 'CHECKED OUT' : 'ACCESS GRANTED'}`
+          : `ACCESS DENIED — ${data.reason}`);
       showToast(`${data.badge ? data.badge.full_name : scanInput}: ${statusTxt}`);
     } catch (err) {
       showToast('Error communicating with Gate Terminal API');
+    } finally {
+      gateScanInFlight = false;
     }
   }
 
@@ -785,6 +817,7 @@
     renderCheckpointSelectors();
     renderVerificationDeck();
     renderHourlyTrafficChart();
+    renderAllocationMap();
     renderActivityTimeline();
     renderCrewTables();
     renderCheckpointsDirectory();
@@ -1673,7 +1706,7 @@
     if (pnlOverride) pnlOverride.style.display = 'none';
     if (pnlDecline) pnlDecline.style.display = 'none';
 
-    const isCurrentlyCheckedIn = (b.daily_state === 'checked_in') || (v.action === 'check_out');
+    const isCurrentlyCheckedIn = (b.daily_state === 'checked_in');
     const isLateArrival = !isCurrentlyCheckedIn && diff > 15;
     const isLockedLate = b.badge_status === 'disabled_late' || isLateArrival;
 
@@ -1781,6 +1814,467 @@
         `;
       })
       .join('');
+  }
+
+  // =========================================================================
+  // REAL-TIME FACILITY & PERSONNEL ALLOCATION MAP (OVERVIEW SCREEN)
+  // =========================================================================
+
+  const KIGALI_KNOWN_COORDS = [
+    { match: /ndera/i, left: '80%', top: '20%', shortName: 'Ndera Hub' },
+    { match: /(convention|kcc)/i, left: '48%', top: '38%', shortName: 'KCC' },
+    { match: /(bk\s*arena|arena)/i, left: '68%', top: '44%', shortName: 'BK Arena' },
+    { match: /camp\s*kigali/i, left: '20%', top: '56%', shortName: 'Camp Kigali' },
+    { match: /intare/i, left: '88%', top: '48%', shortName: 'Intare Arena' },
+    { match: /gikondo/i, left: '38%', top: '72%', shortName: 'Gikondo Hub' },
+    { match: /masaka/i, left: '78%', top: '78%', shortName: 'Masaka Depot' },
+    { match: /remera/i, left: '58%', top: '58%', shortName: 'Remera Hub' },
+  ];
+
+  function getFacilityMapCoords(facility, index = 0) {
+    const haystack = `${facility.name || ''} ${facility.location || ''} ${facility.title || ''}`;
+    for (const kc of KIGALI_KNOWN_COORDS) {
+      if (kc.match.test(haystack)) {
+        return {
+          left: kc.left,
+          top: kc.top,
+          shortName: kc.shortName,
+        };
+      }
+    }
+    const isStock = facility.type === 'stock_warehouse';
+    const defaults = isStock
+      ? [
+          { left: '80%', top: '20%', shortName: 'Ndera Hub' },
+          { left: '38%', top: '72%', shortName: 'Gikondo Hub' },
+          { left: '78%', top: '78%', shortName: 'Masaka Depot' },
+          { left: '58%', top: '58%', shortName: 'Remera Hub' },
+        ]
+      : [
+          { left: '48%', top: '38%', shortName: 'KCC' },
+          { left: '68%', top: '44%', shortName: 'BK Arena' },
+          { left: '20%', top: '56%', shortName: 'Camp Kigali' },
+          { left: '88%', top: '48%', shortName: 'Intare Arena' },
+        ];
+    const item = defaults[index % defaults.length];
+    return {
+      left: item.left,
+      top: item.top,
+      shortName: facility.name?.split('—')[0]?.split('-')[0]?.trim() || item.shortName,
+    };
+  }
+
+  function getAllFacilitiesList() {
+    if (state.checkpoints && Array.isArray(state.checkpoints.directory) && state.checkpoints.directory.length > 0) {
+      return state.checkpoints.directory;
+    }
+    const merged = [
+      ...(state.checkpoints?.event_venues || []),
+      ...(state.checkpoints?.stock_warehouses || []),
+    ];
+    if (merged.length > 0) return merged;
+    return [
+      { id: 1, type: 'stock_warehouse', name: 'Ndera Warehouse', location: 'Ndera Central Logistics Hub', call_time: '08:00', lead_name: 'Mirene Uwase' },
+      { id: 1, type: 'event_venue', name: 'Kigali Convention Centre', location: 'Gasabo District', call_time: '08:00', lead_name: 'Jean Paul' },
+      { id: 2, type: 'event_venue', name: 'BK Arena', location: 'Remera', call_time: '08:00', lead_name: 'Eric Havugimana' },
+      { id: 3, type: 'event_venue', name: 'Camp Kigali', location: 'Nyarugenge', call_time: '08:30', lead_name: 'Patrick Nyirimbibi' },
+      { id: 4, type: 'event_venue', name: 'Intare Conference Arena', location: 'Rusororo', call_time: '09:00', lead_name: 'Bembeleza Valentin' },
+      { id: 2, type: 'stock_warehouse', name: 'Gikondo Logistics Hub', location: 'Gikondo Industrial Park', call_time: '07:30', lead_name: 'Mirene Uwase' },
+      { id: 3, type: 'stock_warehouse', name: 'Masaka Central Depot', location: 'Masaka Logistics Zone', call_time: '08:00', lead_name: 'Stock Controller' },
+      { id: 4, type: 'stock_warehouse', name: 'Remera Technical Hub', location: 'Remera Transit Station', call_time: '08:00', lead_name: 'Tech Lead' },
+    ];
+  }
+
+  function renderAllocationMap() {
+    const cardEl = document.getElementById('overview-allocation-card');
+    if (!cardEl) return;
+
+    const pinsContainer = document.getElementById('overview-map-pins');
+    const allFacilities = getAllFacilitiesList();
+
+    // 1. Calculate Live Quick Metrics
+    let activeHubsCount = 0;
+    const allCrew = state.crew || [];
+    const totalOnSiteCrew = allCrew.filter((c) => c.daily_state === 'checked_in').length;
+    const totalAvailableCrew = allCrew.filter((c) => c.daily_state !== 'checked_in').length;
+
+    // Batches in transit or active movements
+    const inTransitBatches = (state.batches || []).filter((b) => b.status === 'in_transit' || b.status === 'pending');
+    const inTransitCount = Math.max(1, inTransitBatches.length);
+
+    // Filter facilities based on state.mapFilter
+    const filter = state.mapFilter || 'all';
+
+    const facilityData = allFacilities.map((f, idx) => {
+      const isStock = f.type === 'stock_warehouse';
+      const facilityCrew = allCrew.filter((c) => {
+        const directMatch = c.checkpoint_type === f.type && Number(c.checkpoint_id) === Number(f.id);
+        const assignedMatch = f.type === 'event_venue' && Array.isArray(f.assigned_technicians) && f.assigned_technicians.includes(Number(c.id));
+        return directMatch || assignedMatch;
+      });
+      const onSiteCrew = facilityCrew.filter((c) => c.daily_state === 'checked_in');
+      const headCount = onSiteCrew.length > 0 ? onSiteCrew.length : Number(f.on_site_now || 0);
+
+      if (headCount > 0) activeHubsCount++;
+
+      const coords = getFacilityMapCoords(f, idx);
+      const isSelected = state.selectedMapCheckpoint &&
+        state.selectedMapCheckpoint.type === f.type &&
+        Number(state.selectedMapCheckpoint.id) === Number(f.id);
+
+      return {
+        facility: f,
+        coords,
+        headCount,
+        isSelected,
+        facilityCrew,
+        onSiteCrew,
+        isStock,
+      };
+    });
+
+    // Update Quick Metric Badges in DOM
+    const activeHubsEl = document.getElementById('map-active-facilities-count');
+    const onSiteEl = document.getElementById('map-onsite-crew-count');
+    const transitEl = document.getElementById('map-transit-crew-count');
+    const readyEl = document.getElementById('map-ready-crew-count');
+
+    if (activeHubsEl) activeHubsEl.textContent = String(Math.max(1, activeHubsCount));
+    if (onSiteEl) onSiteEl.textContent = String(totalOnSiteCrew);
+    if (transitEl) transitEl.textContent = String(inTransitCount);
+    if (readyEl) readyEl.textContent = String(totalAvailableCrew);
+
+    // 2. Render Map Pins
+    if (pinsContainer) {
+      const filteredData = facilityData.filter((item) => {
+        if (filter === 'event_venue' && item.facility.type !== 'event_venue') return false;
+        if (filter === 'stock_warehouse' && item.facility.type !== 'stock_warehouse') return false;
+        if (filter === 'active' && item.headCount === 0) return false;
+        return true;
+      });
+
+      pinsContainer.innerHTML = filteredData.map((item) => {
+        const { facility, coords, headCount, isSelected, isStock } = item;
+        const pinClasses = [
+          'map-facility-pin',
+          isStock ? 'type-stock' : 'type-venue',
+          headCount > 0 ? 'has-onsite' : '',
+          isSelected ? 'selected' : '',
+        ].filter(Boolean).join(' ');
+
+        return `
+          <div class="${pinClasses}"
+               style="left: ${coords.left}; top: ${coords.top};"
+               data-facility-type="${escapeHtml(facility.type)}"
+               data-facility-id="${escapeHtml(String(facility.id))}"
+               tabindex="0"
+               role="button"
+               aria-label="${escapeHtml(facility.name)}: ${headCount} on-site"
+               title="${escapeHtml(facility.name)} (${headCount} On-Site — Click to inspect)">
+            <div class="pin-marker">
+              <span>${isStock ? '🏭' : '🎪'}</span>
+              <span class="pin-headcount-badge">${headCount}</span>
+            </div>
+            <div class="pin-label-pill">${escapeHtml(coords.shortName)}</div>
+          </div>
+        `;
+      }).join('');
+
+      // Wire Click & Enter events on pins
+      pinsContainer.querySelectorAll('.map-facility-pin').forEach((pinEl) => {
+        const cpType = pinEl.getAttribute('data-facility-type');
+        const cpId = Number(pinEl.getAttribute('data-facility-id'));
+
+        const handleSelect = (e) => {
+          e.stopPropagation();
+          selectMapFacility(cpType, cpId);
+        };
+
+        pinEl.addEventListener('click', handleSelect);
+        pinEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleSelect(e);
+          }
+        });
+      });
+    }
+
+    // 3. Render Inspector Card
+    renderMapFacilityInspector();
+  }
+
+  function selectMapFacility(type, id) {
+    state.selectedMapCheckpoint = { type, id: Number(id) };
+
+    // Update selected class on pins
+    const pinsContainer = document.getElementById('overview-map-pins');
+    if (pinsContainer) {
+      pinsContainer.querySelectorAll('.map-facility-pin').forEach((pin) => {
+        const pType = pin.getAttribute('data-facility-type');
+        const pId = Number(pin.getAttribute('data-facility-id'));
+        if (pType === type && pId === Number(id)) {
+          pin.classList.add('selected');
+        } else {
+          pin.classList.remove('selected');
+        }
+      });
+    }
+
+    renderMapFacilityInspector();
+  }
+
+  function renderMapFacilityInspector() {
+    const inspectorEl = document.getElementById('map-inspector-card');
+    if (!inspectorEl) return;
+
+    const allFacilities = getAllFacilitiesList();
+    const selCp = state.selectedMapCheckpoint || { type: 'event_venue', id: 1 };
+
+    let facility = allFacilities.find((f) => f.type === selCp.type && Number(f.id) === Number(selCp.id));
+    if (!facility && allFacilities.length > 0) {
+      facility = allFacilities[0];
+      state.selectedMapCheckpoint = { type: facility.type, id: Number(facility.id) };
+    }
+    if (!facility) return;
+
+    const isStock = facility.type === 'stock_warehouse';
+    const allCrew = state.crew || [];
+    const facilityCrew = allCrew.filter((c) => {
+      const directMatch = c.checkpoint_type === facility.type && Number(c.checkpoint_id) === Number(facility.id);
+      const assignedMatch = facility.type === 'event_venue' && Array.isArray(facility.assigned_technicians) && facility.assigned_technicians.includes(Number(c.id));
+      return directMatch || assignedMatch;
+    });
+    const onSiteCrew = facilityCrew.filter((c) => c.daily_state === 'checked_in');
+    const headCount = onSiteCrew.length > 0 ? onSiteCrew.length : Number(facility.on_site_now || 0);
+
+    const typePill = document.getElementById('inspector-type-pill');
+    const liveDot = document.getElementById('inspector-live-dot');
+    const nameEl = document.getElementById('inspector-name');
+    const metaEl = document.getElementById('inspector-meta');
+    const trayEl = document.getElementById('inspector-crew-tray');
+
+    if (typePill) {
+      typePill.textContent = isStock ? '🏭 Stock Warehouse' : '🎪 Event Venue';
+      typePill.className = `status-badge ${isStock ? 'status-badge-neutral-sm' : 'status-badge-purple-sm'}`;
+    }
+
+    if (liveDot) {
+      if (headCount > 0) {
+        liveDot.textContent = '● Active On-Site';
+        liveDot.className = 'inspector-status-dot-active';
+        liveDot.style.color = '#10b981';
+      } else {
+        liveDot.textContent = '○ Standby / Ready';
+        liveDot.className = 'inspector-status-dot-idle';
+        liveDot.style.color = 'var(--text-secondary, #94a3b8)';
+      }
+    }
+
+    if (nameEl) {
+      nameEl.textContent = facility.name || (isStock ? 'Central Warehouse' : 'Production Venue');
+    }
+
+    if (metaEl) {
+      const callTime = facility.call_time || '08:00 AM';
+      const leadName = facility.lead_name || facility.assigned_lead_name || (facility.lead_label ? facility.lead_label.replace(/^.*?:\s*/, '') : 'Assigned Supervisor');
+      metaEl.innerHTML = `
+        <span>Call Time: <strong>${escapeHtml(callTime)}</strong></span> ·
+        <span>Scheduled Lead: <strong>${escapeHtml(leadName)}</strong></span> ·
+        <span id="inspector-headcount-tag"><strong>${headCount}</strong> Crew On-Site</span>
+      `;
+    }
+
+    // Render horizontal crew tray
+    if (trayEl) {
+      if (facilityCrew.length === 0) {
+        trayEl.innerHTML = `
+          <div class="empty-tray-label" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <span>No personnel currently allocated to this location.</span>
+            <button type="button" class="btn btn-secondary-32-sm js-open-allocate-modal" data-target-type="${escapeHtml(facility.type)}" data-target-id="${escapeHtml(String(facility.id))}" style="height: 24px; padding: 0 8px; font-size: 11px;">
+              <span>+ Quick Dispatch</span>
+            </button>
+          </div>
+        `;
+      } else {
+        trayEl.innerHTML = facilityCrew.map((c) => {
+          const isOnSite = c.daily_state === 'checked_in';
+          const isCheckedOut = c.daily_state === 'checked_out';
+          const stateColor = isOnSite ? '#10b981' : (isCheckedOut ? '#94a3b8' : '#3b82f6');
+          const stateLabel = isOnSite ? 'On-Site' : (isCheckedOut ? 'Checked Out' : 'Ready');
+          const avatarHtml = c.profile_image_url || c.profile_image
+            ? `<img src="${escapeHtml(c.profile_image_url || c.profile_image)}" alt="" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover;">`
+            : `<span class="inspector-crew-chip-avatar">${escapeHtml(c.initials || 'CR')}</span>`;
+
+          return `
+            <div class="inspector-crew-chip" data-crew-id="${c.id}" title="${escapeHtml(c.full_name)} (${escapeHtml(c.role_display || c.role)}) — ${stateLabel}. Click to verify.">
+              ${avatarHtml}
+              <span style="font-weight: 600;">${escapeHtml(c.full_name)}</span>
+              <span style="font-size: 9.5px; opacity: 0.75;">(${escapeHtml(c.role_display || c.role || 'Tech')})</span>
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: ${stateColor}; display: inline-block;" title="${stateLabel}"></span>
+            </div>
+          `;
+        }).join('');
+
+        // Wire click to inspect / verify crew member
+        trayEl.querySelectorAll('.inspector-crew-chip').forEach((chip) => {
+          chip.addEventListener('click', () => {
+            const uid = Number(chip.getAttribute('data-crew-id'));
+            const member = allCrew.find((m) => Number(m.id) === uid);
+            if (member) {
+              state.selectedCrewId = uid;
+              openKioskModal(member);
+            }
+          });
+        });
+      }
+
+      // Wire any quick dispatch buttons inside empty tray
+      trayEl.querySelectorAll('.js-open-allocate-modal').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          openAllocatePersonnelModal({ type: facility.type, id: facility.id });
+        });
+      });
+    }
+  }
+
+  function setAllocationMapView(viewMode) {
+    state.mapViewMode = viewMode;
+    const mapView = document.getElementById('overview-map-view');
+    const chartView = document.getElementById('overview-traffic-chart-view');
+    const btnMap = document.getElementById('toggle-view-map');
+    const btnChart = document.getElementById('toggle-view-chart');
+
+    if (viewMode === 'map') {
+      if (mapView) mapView.style.display = 'block';
+      if (chartView) chartView.style.display = 'none';
+      if (btnMap) btnMap.classList.add('active');
+      if (btnChart) btnChart.classList.remove('active');
+      renderAllocationMap();
+    } else {
+      if (mapView) mapView.style.display = 'none';
+      if (chartView) chartView.style.display = 'block';
+      if (btnMap) btnMap.classList.remove('active');
+      if (btnChart) btnChart.classList.add('active');
+      renderHourlyTrafficChart();
+    }
+  }
+
+  // =========================================================================
+  // ALLOCATE & DISPATCH PERSONNEL MODAL
+  // =========================================================================
+
+  let allocSelectedUserIds = new Set();
+
+  function openAllocatePersonnelModal(targetCp = null) {
+    const modal = document.getElementById('allocate-personnel-modal');
+    if (!modal) return;
+
+    const allFacilities = getAllFacilitiesList();
+    const targetSelect = document.getElementById('alloc-target-facility');
+    const activeTarget = targetCp || state.selectedMapCheckpoint || { type: 'event_venue', id: 1 };
+
+    if (targetSelect) {
+      targetSelect.innerHTML = allFacilities.map((f) => {
+        const isStock = f.type === 'stock_warehouse';
+        const val = `${f.type}:${f.id}`;
+        const isSel = f.type === activeTarget.type && Number(f.id) === Number(activeTarget.id);
+        const icon = isStock ? '🏭' : '🎪';
+        return `<option value="${val}" ${isSel ? 'selected' : ''}>${icon} ${escapeHtml(f.name)} (${f.location || (isStock ? 'Warehouse' : 'Venue')})</option>`;
+      }).join('');
+    }
+
+    // Reset selection and render crew checklist
+    allocSelectedUserIds.clear();
+    const searchInp = document.getElementById('alloc-crew-search');
+    if (searchInp) searchInp.value = '';
+
+    renderAllocChecklist('');
+    updateAllocSelectedCount();
+
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeAllocatePersonnelModal() {
+    const modal = document.getElementById('allocate-personnel-modal');
+    if (modal) {
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+  }
+
+  function renderAllocChecklist(filterText = '') {
+    const checklistEl = document.getElementById('alloc-crew-checklist');
+    if (!checklistEl) return;
+
+    const q = (filterText || '').trim().toLowerCase();
+    const allCrew = state.crew || [];
+
+    const filtered = allCrew.filter((c) => {
+      if (!q) return true;
+      return (
+        (c.full_name || '').toLowerCase().includes(q) ||
+        (c.role_display || c.role || '').toLowerCase().includes(q) ||
+        (c.department || '').toLowerCase().includes(q) ||
+        (c.badge_code || '').toLowerCase().includes(q) ||
+        (c.staff_code || '').toLowerCase().includes(q)
+      );
+    });
+
+    if (filtered.length === 0) {
+      checklistEl.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 11px; color: var(--text-secondary);">No crew members match your search.</div>`;
+      return;
+    }
+
+    checklistEl.innerHTML = filtered.map((c) => {
+      const isChecked = allocSelectedUserIds.has(Number(c.id));
+      const isOnSite = c.daily_state === 'checked_in';
+      const isCheckedOut = c.daily_state === 'checked_out';
+      const statusBadge = isOnSite
+        ? `<span class="status-badge status-badge-green-sm">On-Site</span>`
+        : (isCheckedOut
+          ? `<span class="status-badge status-badge-neutral-sm">Checked Out</span>`
+          : `<span class="status-badge status-badge-purple-sm">Standby</span>`);
+
+      return `
+        <label class="alloc-crew-row" data-crew-id="${c.id}">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" value="${c.id}" class="js-alloc-crew-cb" ${isChecked ? 'checked' : ''} />
+            <div style="width: 24px; height: 24px; border-radius: 50%; background: ${c.clearance_color || '#3b82f6'}; color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              ${escapeHtml(c.initials || 'CR')}
+            </div>
+            <div>
+              <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); line-height: 1.2;">${escapeHtml(c.full_name)}</div>
+              <div style="font-size: 10.5px; color: var(--text-secondary);">${escapeHtml(c.role_display || c.role)} · ${escapeHtml(c.department || 'Technical')} · <strong style="color: ${c.clearance_color || '#3b82f6'};">${c.clearance_code || 'L2'}</strong></div>
+            </div>
+          </div>
+          <div>${statusBadge}</div>
+        </label>
+      `;
+    }).join('');
+
+    // Wire checkbox listeners
+    checklistEl.querySelectorAll('.js-alloc-crew-cb').forEach((cb) => {
+      cb.addEventListener('change', (e) => {
+        const uid = Number(e.target.value);
+        if (e.target.checked) {
+          allocSelectedUserIds.add(uid);
+        } else {
+          allocSelectedUserIds.delete(uid);
+        }
+        updateAllocSelectedCount();
+      });
+    });
+  }
+
+  function updateAllocSelectedCount() {
+    const countEl = document.getElementById('alloc-selected-count');
+    if (countEl) {
+      countEl.textContent = `${allocSelectedUserIds.size} Selected`;
+    }
   }
 
   function renderActivityTimeline() {
@@ -2690,6 +3184,222 @@
     if (backdrop) {
       backdrop.style.display = 'none';
       backdrop.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+  }
+
+  // =========================================================================
+  // DEDICATED TIMELINE ACTIVITY LOG & TRANSIT AUDIT MODAL
+  // =========================================================================
+
+  function openTimelineDetailModal(tlItem, member = null) {
+    const modal = document.getElementById('timeline-detail-modal');
+    if (!modal || !tlItem) return;
+
+    const resolvedMember = member || (state.crew || []).find((c) => Number(c.id) === Number(tlItem.user_id)) || {
+      id: tlItem.user_id,
+      full_name: tlItem.full_name,
+      staff_code: tlItem.staff_code,
+      badge_code: tlItem.badge_code,
+      role: 'technician',
+      role_display: tlItem.role_display,
+      department: tlItem.department,
+      clearance_code: tlItem.clearance_code,
+      clearance_title: tlItem.clearance_code === 'L4' ? 'Executive & Director' : (tlItem.clearance_code === 'L3' ? 'Stock & Logistics Manager' : (tlItem.clearance_code === 'L2' ? 'Technical & Stage' : 'Venue Basic')),
+      clearance_color: tlItem.clearance_color || '#2563eb',
+      phone: '+250 788 000 000',
+      initials: tlItem.initials || 'CR',
+      profile_image_url: tlItem.profile_image_url,
+      daily_state: tlItem.scan_action === 'check_out' ? 'checked_out' : 'checked_in',
+    };
+
+    // Header elements
+    const logIdEl = document.getElementById('tl-modal-log-id');
+    const tsEl = document.getElementById('tl-modal-timestamp');
+    const cpEl = document.getElementById('tl-modal-checkpoint');
+    const statusBadgeEl = document.getElementById('tl-modal-status-badge');
+    const statusTextEl = document.getElementById('tl-modal-status-text');
+
+    if (logIdEl) logIdEl.textContent = `#LOG-${String(tlItem.id || 1).padStart(4, '0')}`;
+    if (tsEl) tsEl.textContent = tlItem.formatted_time || tlItem.scanned_at || 'Today';
+    if (cpEl) cpEl.textContent = `${tlItem.checkpoint_name} (${tlItem.checkpoint_type === 'stock_warehouse' ? 'Stock Warehouse Gate' : 'Event Venue Entrance'})`;
+
+    const isDenied = tlItem.access_status === 'denied';
+    if (statusBadgeEl && statusTextEl) {
+      statusBadgeEl.className = `status-badge ${isDenied ? 'status-badge-red-md' : 'status-badge-green-md'}`;
+      statusTextEl.textContent = isDenied ? 'Access Denied' : 'Access Granted';
+    }
+
+    // Personnel Profile
+    const imgEl = document.getElementById('tl-modal-avatar-img');
+    const initialsEl = document.getElementById('tl-modal-avatar-initials');
+    const nameEl = document.getElementById('tl-modal-name');
+    const tierPillEl = document.getElementById('tl-modal-tier-pill');
+    const tierBadgeEl = document.getElementById('tl-modal-tier-badge');
+    const tierTitleEl = document.getElementById('tl-modal-tier-title');
+    const dailyStateEl = document.getElementById('tl-modal-daily-state');
+    const staffCodeEl = document.getElementById('tl-modal-staff-code');
+    const badgeCodeEl = document.getElementById('tl-modal-badge-code');
+    const roleEl = document.getElementById('tl-modal-role');
+    const contactEl = document.getElementById('tl-modal-contact');
+    const firstNameEl = document.getElementById('tl-modal-user-firstname');
+
+    const photoUrl = resolvedMember.profile_image_url || tlItem.profile_image_url;
+    if (photoUrl && imgEl && initialsEl) {
+      imgEl.src = photoUrl;
+      imgEl.style.display = 'block';
+      initialsEl.style.display = 'none';
+    } else if (initialsEl && imgEl) {
+      imgEl.style.display = 'none';
+      initialsEl.style.display = 'flex';
+      initialsEl.textContent = resolvedMember.initials || tlItem.initials || computeInitials(resolvedMember.full_name);
+    }
+
+    if (nameEl) nameEl.textContent = resolvedMember.full_name;
+    if (firstNameEl) firstNameEl.textContent = (resolvedMember.full_name || '').split(' ')[0] || 'Crew Member';
+    if (tierBadgeEl) tierBadgeEl.textContent = resolvedMember.clearance_code || 'L2';
+    if (tierTitleEl) tierTitleEl.textContent = resolvedMember.clearance_title || 'Technical & Stage';
+    if (tierPillEl) tierPillEl.className = `tier-pill-soft ${resolvedMember.clearance_code || 'L2'}`;
+
+    if (dailyStateEl) {
+      const ds = resolvedMember.daily_state || (tlItem.scan_action === 'check_out' ? 'checked_out' : 'checked_in');
+      dailyStateEl.textContent = ds === 'checked_in' ? 'Checked In (On-Site)' : (ds === 'checked_out' ? 'Checked Out' : 'Ready / Off-Site');
+      dailyStateEl.className = `status-badge ${ds === 'checked_in' ? 'status-badge-green-sm' : (ds === 'checked_out' ? 'status-badge-neutral-sm' : 'status-badge-purple-sm')}`;
+    }
+
+    if (staffCodeEl) staffCodeEl.textContent = resolvedMember.staff_code || formatStaffCode(resolvedMember.id);
+    if (badgeCodeEl) badgeCodeEl.textContent = resolvedMember.badge_code || `REW-BADGE-${String(resolvedMember.id).padStart(4, '0')}`;
+    if (roleEl) roleEl.textContent = `${resolvedMember.role_display || 'Staff'} · ${resolvedMember.department || 'General'}`;
+    if (contactEl) contactEl.textContent = resolvedMember.phone ? `${resolvedMember.phone}${resolvedMember.username ? ` · @${resolvedMember.username}` : ''}` : (resolvedMember.username ? `@${resolvedMember.username}` : 'No phone registered');
+
+    // Metrics Tiles
+    const actionValEl = document.getElementById('tl-modal-action-val');
+    const actionSubEl = document.getElementById('tl-modal-action-sub');
+    const facValEl = document.getElementById('tl-modal-facility-val');
+    const facSubEl = document.getElementById('tl-modal-facility-sub');
+    const puncValEl = document.getElementById('tl-modal-punctuality-val');
+    const puncSubEl = document.getElementById('tl-modal-punctuality-sub');
+    const dwellValEl = document.getElementById('tl-modal-dwell-val');
+    const dwellSubEl = document.getElementById('tl-modal-dwell-sub');
+
+    const isCheckOut = tlItem.scan_action === 'check_out';
+    if (actionValEl) actionValEl.textContent = isDenied ? 'Access Denied' : (isCheckOut ? 'Checked Out (Exit)' : 'Checked In (Admitted)');
+    if (actionSubEl) actionSubEl.textContent = isDenied ? 'Security Restriction Active' : (isCheckOut ? 'Outbound Gate Departure' : 'Inbound Terminal Scan');
+
+    if (facValEl) facValEl.textContent = tlItem.checkpoint_name;
+    if (facSubEl) facSubEl.textContent = tlItem.checkpoint_type === 'stock_warehouse' ? '🏭 Stock Warehouse Gate' : '🏟️ Event Venue Gate';
+
+    // Punctuality & Call Time
+    const callTimeStr = state.activeCheckpoint?.call_time || '08:00';
+    if (puncValEl) {
+      if (isDenied) {
+        puncValEl.textContent = 'Restricted / Denied';
+      } else if (tlItem.punctuality_status === 'late') {
+        puncValEl.textContent = 'Cutoff Exceeded (Late)';
+      } else if (tlItem.punctuality_status === 'early') {
+        puncValEl.textContent = 'Early Arrival';
+      } else {
+        puncValEl.textContent = 'On-Time (Within Grace)';
+      }
+    }
+    if (puncSubEl) {
+      const scanTimeOnly = tlItem.formatted_time?.split('•')[1]?.trim() || '';
+      puncSubEl.textContent = `Shift Call-Time: ${callTimeStr}${scanTimeOnly ? ` · Scan: ${scanTimeOnly}` : ''}`;
+    }
+
+    // Dwell Time calculation
+    const inTime = tlItem.in_pill || resolvedMember.check_in_time;
+    const outTime = tlItem.out_pill || resolvedMember.check_out_time;
+    if (dwellValEl) {
+      if (inTime && outTime) {
+        dwellValEl.textContent = `Session Recorded`;
+      } else if (inTime) {
+        dwellValEl.textContent = `Currently On-Site`;
+      } else {
+        dwellValEl.textContent = `Off-Site`;
+      }
+    }
+    if (dwellSubEl) {
+      dwellSubEl.textContent = `${inTime || 'In: --'} ➔ ${outTime || (inTime ? 'Active On-Site' : 'Out: --')}`;
+    }
+
+    // Policy Box
+    const policyBox = document.getElementById('tl-modal-policy-box');
+    const policyIcon = document.getElementById('tl-modal-policy-icon');
+    const policyHeading = document.getElementById('tl-modal-policy-heading');
+    const policyDesc = document.getElementById('tl-modal-policy-desc');
+
+    if (policyBox && policyIcon && policyHeading && policyDesc) {
+      if (isDenied) {
+        policyBox.className = 'audit-policy-box denied';
+        policyIcon.textContent = '✕';
+        policyHeading.textContent = 'Access Restricted by Clearance Policy';
+        policyDesc.textContent = tlItem.denial_reason || tlItem.notes || `Access to ${tlItem.checkpoint_name} denied. Tier ${resolvedMember.clearance_code} does not meet requirements.`;
+      } else {
+        policyBox.className = 'audit-policy-box granted';
+        policyIcon.textContent = '✓';
+        policyHeading.textContent = `Authorized by ${resolvedMember.clearance_code} Policy (${resolvedMember.clearance_title || 'Technical & Stage'})`;
+        policyDesc.textContent = tlItem.notes || `Personnel badge ${resolvedMember.badge_code} successfully verified for ${tlItem.checkpoint_name}. Entry permitted.`;
+      }
+    }
+
+    // Transit Section
+    const transitSec = document.getElementById('tl-modal-transit-section');
+    const transitRouteEl = document.getElementById('tl-modal-transit-route');
+    const isTransit = Boolean(tlItem.is_transit || (tlItem.notes && (tlItem.notes.includes('Transit') || tlItem.notes.includes('Transferred'))));
+    if (transitSec) {
+      transitSec.style.display = isTransit ? 'block' : 'none';
+      if (transitRouteEl && isTransit) {
+        transitRouteEl.textContent = `${tlItem.checkpoint_name} ➔ Kigali Convention Centre`;
+      }
+    }
+
+    // User's Gate History Today
+    const historyList = document.getElementById('tl-modal-history-list');
+    const historyCount = document.getElementById('tl-modal-history-count');
+    if (historyList) {
+      const userLogs = (state.activityTimeline || []).filter((t) => Number(t.user_id) === Number(resolvedMember.id));
+      if (historyCount) historyCount.textContent = `${userLogs.length} scan${userLogs.length === 1 ? '' : 's'} recorded today`;
+
+      if (userLogs.length === 0) {
+        historyList.innerHTML = `<div style="padding: 12px; font-size: 11px; color: var(--text-secondary); text-align: center;">No other gate scans recorded today for this personnel.</div>`;
+      } else {
+        historyList.innerHTML = userLogs.map((log) => {
+          const isLogDenied = log.access_status === 'denied';
+          const isThisLog = Number(log.id) === Number(tlItem.id);
+          const rawTime = log.formatted_time?.split('•')[1]?.trim() || log.formatted_time;
+          return `
+            <div class="audit-history-row ${isThisLog ? 'current-active-log' : ''}">
+              <div class="audit-history-time">
+                <strong>${escapeHtml(rawTime)}</strong>
+                <span>${escapeHtml(log.checkpoint_name)}</span>
+              </div>
+              <div class="audit-history-desc">
+                <span class="audit-history-action">${escapeHtml(log.action_title)}</span>
+                ${log.notes ? `<span class="audit-history-note">${escapeHtml(log.notes)}</span>` : ''}
+              </div>
+              <div class="audit-history-status">
+                <span class="status-badge ${isLogDenied ? 'status-badge-red-sm' : 'status-badge-green-sm'}">
+                  ${isLogDenied ? 'Denied' : (log.scan_action === 'check_out' ? 'Checked Out' : 'Checked In')}
+                </span>
+                ${isThisLog ? `<span class="current-log-tag">Inspecting</span>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeTimelineDetailModal() {
+    const modal = document.getElementById('timeline-detail-modal');
+    if (modal) {
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
       document.body.style.overflow = '';
     }
   }
@@ -5776,7 +6486,7 @@
         return;
       }
 
-      // 4. User Activity Timeline Card Click -> Load member verification in Centered Kiosk Modal
+      // 4. User Activity Timeline Card Click -> Open Dedicated Audit & Transit Log Modal
       const tlCard = e.target.closest('.timeline-event-card[data-timeline-uid]');
       if (tlCard) {
         const uid = Number(tlCard.getAttribute('data-timeline-uid'));
@@ -5784,82 +6494,29 @@
         const member = (state.crew || []).find((m) => Number(m.id) === uid);
         const tlItem = (state.activityTimeline || []).find((t) => Number(t.id) === tlId);
 
-        if (tlItem && member) {
-          const isDenied = tlItem.access_status === 'denied';
-          const rolePill = `${String(member.role_display || '').toUpperCase()} - ${String(member.department || '').toUpperCase()}`;
-          const verification = {
-            allowed: !isDenied,
-            reason: isDenied
-              ? (tlItem.denial_reason || tlItem.action_title || 'Access Denied at Checkpoint')
-              : (tlItem.notes || `Access Authorized at ${tlItem.checkpoint_name}`),
-            action: tlItem.scan_action || (isDenied ? 'denied' : 'check_in'),
-            punctuality: tlItem.punctuality_status || 'on_time',
-            punctuality_label: isDenied ? 'RESTRICTED' : (tlItem.punctuality_status === 'late' ? 'LATE' : 'ON TIME'),
-            checkpoint_name: tlItem.checkpoint_name,
-            check_in_time: tlItem.in_pill || member.check_in_time || null,
-            check_out_time: tlItem.out_pill || member.check_out_time || null,
-            scanned_at: tlItem.formatted_time || null,
-            is_transit_transfer: Boolean(tlItem.is_transit || (tlItem.notes && (tlItem.notes.includes('Transit') || tlItem.notes.includes('Transferred') || tlItem.notes.includes('from Ndera')))),
-            transit_from: 'Ndera Warehouse',
-            transit_to: 'Kigali Convention Centre',
-            badge: {
-              id: member.id,
-              user_id: member.id,
-              full_name: member.full_name,
-              badge_code: member.badge_code,
-              staff_code: member.staff_code,
-              role: member.role,
-              role_display: member.role_display,
-              role_pill: rolePill,
-              department: member.department,
-              clearance_code: member.clearance_code,
-              clearance_title: member.clearance_title,
-              clearance_color: member.clearance_color,
-              profile_image: member.profile_image_url || null,
-              initials: member.initials,
-              phone: member.phone,
-              username: member.username,
-              daily_state: isDenied ? 'denied' : (tlItem.scan_action === 'check_out' ? 'checked_out' : 'checked_in'),
-              badge_status: member.badge_status,
-            },
-          };
-          openKioskModal(verification);
+        if (tlItem) {
+          openTimelineDetailModal(tlItem, member);
         } else if (member) {
-          openKioskModal(member);
-        } else if (tlItem) {
-          const isDenied = tlItem.access_status === 'denied';
-          const verification = {
-            allowed: !isDenied,
-            reason: isDenied ? (tlItem.denial_reason || tlItem.action_title || 'Access Denied') : (tlItem.notes || `Access at ${tlItem.checkpoint_name}`),
-            action: tlItem.scan_action || 'check_in',
-            punctuality: tlItem.punctuality_status || 'on_time',
-            punctuality_label: isDenied ? 'RESTRICTED' : 'ON TIME',
-            checkpoint_name: tlItem.checkpoint_name,
-            check_in_time: tlItem.in_pill || null,
-            check_out_time: tlItem.out_pill || null,
-            scanned_at: tlItem.formatted_time || null,
-            badge: {
-              id: tlItem.user_id,
-              user_id: tlItem.user_id,
-              full_name: tlItem.full_name,
-              badge_code: tlItem.badge_code,
-              staff_code: tlItem.staff_code,
-              role: 'technician',
-              role_display: tlItem.role_display,
-              role_pill: `${String(tlItem.role_display || '').toUpperCase()} - ${String(tlItem.department || '').toUpperCase()}`,
-              department: tlItem.department,
-              clearance_code: tlItem.clearance_code,
-              clearance_title: `Level ${tlItem.clearance_code}`,
-              clearance_color: tlItem.clearance_color || '#2563eb',
-              profile_image: tlItem.profile_image_url || null,
-              initials: tlItem.initials,
-              phone: '+250 788 100 000',
-              username: 'user',
-              daily_state: isDenied ? 'denied' : 'checked_in',
-              badge_status: 'active',
-            },
+          const synthItem = {
+            id: uid,
+            user_id: uid,
+            full_name: member.full_name,
+            role_display: member.role_display,
+            department: member.department,
+            badge_code: member.badge_code,
+            staff_code: member.staff_code,
+            clearance_code: member.clearance_code,
+            clearance_color: member.clearance_color,
+            checkpoint_name: state.activeCheckpoint.name,
+            checkpoint_type: state.activeCheckpoint.type,
+            scan_action: member.daily_state === 'checked_out' ? 'check_out' : 'check_in',
+            access_status: 'granted',
+            formatted_time: new Date().toLocaleTimeString(),
+            notes: 'Current Gate Session',
+            in_pill: member.check_in_time ? `In: ${member.check_in_time}` : null,
+            out_pill: member.check_out_time ? `Out: ${member.check_out_time}` : null,
           };
-          openKioskModal(verification);
+          openTimelineDetailModal(synthItem, member);
         }
         return;
       }
@@ -6238,6 +6895,24 @@
 
     // Global Keyboard Shortcuts for Gate Terminal & Kiosk Decision Actions
     document.addEventListener('keydown', (e) => {
+      const allocModal = document.getElementById('allocate-personnel-modal');
+      if (allocModal && allocModal.classList.contains('open')) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeAllocatePersonnelModal();
+          return;
+        }
+      }
+
+      const tlModal = document.getElementById('timeline-detail-modal');
+      if (tlModal && tlModal.classList.contains('open')) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeTimelineDetailModal();
+          return;
+        }
+      }
+
       const cardEl = document.getElementById('kiosk-verification-card');
       const isCardVisible = cardEl && cardEl.style.display !== 'none';
       const backdrop = document.getElementById('kiosk-modal-backdrop');
@@ -6455,6 +7130,135 @@
             ? `Terminal LOCKED to ${state.activeCheckpoint.name}`
             : 'Terminal UNLOCKED — Multi-Checkpoint Mode enabled'
         );
+      });
+    }
+
+    // Modals: Dedicated Timeline Activity & Transit Log Modal
+    const tlDetailModal = document.getElementById('timeline-detail-modal');
+    const closeTlBtn1 = document.getElementById('close-timeline-detail-modal');
+    const closeTlBtn2 = document.getElementById('tl-modal-close-btn');
+    const printTlBtn = document.getElementById('tl-modal-print-btn');
+
+    [closeTlBtn1, closeTlBtn2].forEach((btn) => {
+      if (btn && tlDetailModal) {
+        btn.addEventListener('click', () => closeTimelineDetailModal());
+      }
+    });
+
+    if (tlDetailModal) {
+      tlDetailModal.addEventListener('click', (e) => {
+        if (e.target === tlDetailModal) {
+          closeTimelineDetailModal();
+        }
+      });
+    }
+
+    if (printTlBtn) {
+      printTlBtn.addEventListener('click', () => {
+        window.print();
+      });
+    }
+
+    // Real-Time Facility & Personnel Allocation Map: View Switcher & Filters
+    const btnToggleMap = document.getElementById('toggle-view-map');
+    const btnToggleChart = document.getElementById('toggle-view-chart');
+    if (btnToggleMap) {
+      btnToggleMap.addEventListener('click', () => setAllocationMapView('map'));
+    }
+    if (btnToggleChart) {
+      btnToggleChart.addEventListener('click', () => setAllocationMapView('chart'));
+    }
+
+    const mapFilterSelect = document.getElementById('overview-map-filter');
+    if (mapFilterSelect) {
+      mapFilterSelect.addEventListener('change', (e) => {
+        state.mapFilter = e.target.value;
+        renderAllocationMap();
+      });
+    }
+
+    // Real-Time Facility & Personnel Allocation Modal: Triggers & Submission
+    const mapAllocBtn = document.getElementById('map-allocate-crew-btn');
+    if (mapAllocBtn) {
+      mapAllocBtn.addEventListener('click', () => {
+        openAllocatePersonnelModal(state.selectedMapCheckpoint);
+      });
+    }
+
+    const allocModalEl = document.getElementById('allocate-personnel-modal');
+    const closeAllocBtn = document.getElementById('close-alloc-modal');
+    const cancelAllocBtn = document.getElementById('cancel-alloc-modal');
+    [closeAllocBtn, cancelAllocBtn].forEach((btn) => {
+      if (btn) btn.addEventListener('click', closeAllocatePersonnelModal);
+    });
+    if (allocModalEl) {
+      allocModalEl.addEventListener('click', (e) => {
+        if (e.target === allocModalEl) {
+          closeAllocatePersonnelModal();
+        }
+      });
+    }
+
+    const allocSearchInput = document.getElementById('alloc-crew-search');
+    if (allocSearchInput) {
+      allocSearchInput.addEventListener('input', (e) => {
+        renderAllocChecklist(e.target.value);
+      });
+    }
+
+    const allocForm = document.getElementById('allocate-personnel-form');
+    if (allocForm) {
+      allocForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userIds = Array.from(allocSelectedUserIds);
+        if (userIds.length === 0) {
+          showToast('Please select at least one crew member to allocate.');
+          return;
+        }
+
+        const targetVal = document.getElementById('alloc-target-facility')?.value || 'event_venue:1';
+        const [cpType, cpId] = targetVal.split(':');
+        const dispatchType = document.getElementById('alloc-dispatch-type')?.value || 'immediate_dispatch';
+        const notes = document.getElementById('alloc-notes')?.value || 'Live dispatch via Map Radar';
+        const submitBtn = document.getElementById('submit-alloc-btn');
+
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = `<span>Dispatching ${userIds.length} Crew...</span>`;
+        }
+
+        try {
+          const res = await fetch('api.php?action=allocate_personnel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              checkpoint_type: cpType,
+              checkpoint_id: cpId,
+              user_ids: userIds,
+              dispatch_type: dispatchType,
+              notes: notes,
+            }),
+          });
+          const data = await res.json();
+          if (!data.ok) {
+            showToast(data.error || 'Failed to allocate personnel.');
+            return;
+          }
+
+          applyBootstrapPayload(data);
+          state.selectedMapCheckpoint = { type: cpType, id: Number(cpId) };
+          closeAllocatePersonnelModal();
+          playKioskChime('approve');
+          showToast(`✓ Successfully allocated ${userIds.length} crew to destination.`);
+          renderAll();
+        } catch (err) {
+          showToast('Error communicating with allocation server.');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<span>Confirm Allocation &amp; Dispatch →</span>`;
+          }
+        }
       });
     }
 

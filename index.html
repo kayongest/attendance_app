@@ -523,16 +523,145 @@
             </div>
           </div>
 
-          <!-- 2nd: Hourly Venue & Stock Gate Traffic Chart -->
-          <div class="insights-card" data-node-id="2:3454">
-            <div class="chart-header" data-node-id="2:3455">
-              <div class="chart-heading" data-node-id="2:3456">
-                <h2 class="chart-title" data-node-id="2:3457">Hourly Venue &amp; Stock Gate Traffic</h2>
-                <p class="chart-subtitle" data-node-id="2:3458">
-                  Dual-series comparison of Event Venue Check-ins vs. Stock Warehouse Check-ins across call-time intervals.
+          <!-- 2nd: Real-Time Personnel & Facility Allocation Map (Next to User Activity Timeline) -->
+          <div class="insights-card map-insights-card" id="overview-allocation-card" data-node-id="2:3454">
+            <!-- Header with Title, Live Radar Badge, View Switcher [Map | Traffic], and Facility Filter -->
+            <div class="map-card-header">
+              <div class="map-card-heading">
+                <div class="map-title-row">
+                  <h2 class="chart-title">Real-Time Personnel &amp; Facility Allocation Map</h2>
+                  <span class="status-badge status-badge-green-sm map-radar-pulse">
+                    <span class="pulse-beacon"></span>
+                    <span>Live Radar · Kigali</span>
+                  </span>
+                </div>
+                <p class="chart-subtitle">
+                  Real-time geographic tracking &amp; instant crew dispatch across Kigali venues and stock hubs.
                 </p>
               </div>
-              <div class="chart-legend" data-node-id="2:3459" style="gap: 12px;">
+
+              <div class="map-header-controls">
+                <div class="map-view-switcher" id="overview-map-switcher">
+                  <button type="button" class="btn-toggle-view active" data-view="map" id="toggle-view-map" title="Switch to Real-Time Allocation Map">
+                    <span>🗺️ Live Map</span>
+                  </button>
+                  <button type="button" class="btn-toggle-view" data-view="chart" id="toggle-view-chart" title="Switch to Hourly Traffic Chart">
+                    <span>📊 Traffic</span>
+                  </button>
+                </div>
+                <select id="overview-map-filter" class="form-input map-filter-select" aria-label="Filter Map Checkpoints">
+                  <option value="all">All Facilities (8)</option>
+                  <option value="event_venue">Venues Only (4)</option>
+                  <option value="stock_warehouse">Warehouses Only (4)</option>
+                  <option value="active">Active On-Site Only</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- VIEW 1: REAL-TIME ALLOCATION MAP CONTAINER -->
+            <div class="map-view-body" id="overview-map-view">
+              <!-- Live Metrics Strip -->
+              <div class="map-quick-metrics">
+                <div class="map-metric-pill">
+                  <span class="map-metric-count js-stat-active-facilities" id="map-active-facilities-count">3</span>
+                  <span class="map-metric-label">Active Hubs</span>
+                </div>
+                <div class="map-metric-pill">
+                  <span class="map-metric-count js-stat-onsite" id="map-onsite-crew-count" style="color: #10b981;">4</span>
+                  <span class="map-metric-label">On-Site Crew</span>
+                </div>
+                <div class="map-metric-pill">
+                  <span class="map-metric-count" id="map-transit-crew-count" style="color: #8b5cf6;">1</span>
+                  <span class="map-metric-label">In Transit</span>
+                </div>
+                <div class="map-metric-pill">
+                  <span class="map-metric-count js-stat-ready-crew" id="map-ready-crew-count" style="color: #3b82f6;">24</span>
+                  <span class="map-metric-label">Available Crew</span>
+                </div>
+              </div>
+
+              <!-- Interactive Map Stage -->
+              <div class="interactive-map-stage" id="interactive-map-stage">
+                <!-- SVG Vector Schematic Map of Kigali (Roads, Transit, Districts) -->
+                <svg class="kigali-vector-map" viewBox="0 0 720 340" preserveAspectRatio="xMidYMid meet">
+                  <defs>
+                    <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#10b981" />
+                      <stop offset="60%" stop-color="#8b5cf6" />
+                      <stop offset="100%" stop-color="#2563eb" />
+                    </linearGradient>
+                    <radialGradient id="beaconGlow" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stop-color="rgba(16, 185, 129, 0.4)" />
+                      <stop offset="100%" stop-color="rgba(16, 185, 129, 0)" />
+                    </radialGradient>
+                  </defs>
+
+                  <!-- Kigali District Boundaries Schematics -->
+                  <path class="kigali-district gasabo" d="M 40,30 L 460,20 L 700,50 L 670,210 L 480,180 L 260,190 Z" />
+                  <path class="kigali-district nyarugenge" d="M 40,30 L 260,190 L 220,310 L 50,290 Z" />
+                  <path class="kigali-district kicukiro" d="M 260,190 L 480,180 L 670,210 L 610,320 L 220,310 Z" />
+
+                  <!-- Major Highway Arteries (RN3 / Airport Rd, KG 1 Ave, RN15) -->
+                  <path class="kigali-artery main" d="M 80,210 Q 220,180 360,135 T 540,115 T 680,75" />
+                  <path class="kigali-artery branch" d="M 360,135 Q 400,210 480,280" />
+                  <path class="kigali-artery branch" d="M 220,180 Q 260,250 320,300" />
+                  <path class="kigali-artery branch" d="M 540,115 Q 580,170 640,250" />
+
+                  <!-- Active Transit Flow Corridor (Ndera Warehouse -> KCC -> BK Arena) -->
+                  <path class="transit-active-line" id="map-transit-line" d="M 580,68 Q 440,85 345,130 Q 420,165 490,150" />
+
+                  <!-- Animated Moving Transit Truck / Courier Marker -->
+                  <g class="transit-courier-marker">
+                    <circle r="6" fill="#8b5cf6" stroke="#ffffff" stroke-width="2">
+                      <animateMotion dur="5s" repeatCount="indefinite" path="M 580,68 Q 440,85 345,130 Q 420,165 490,150" />
+                    </circle>
+                  </g>
+
+                  <!-- Kigali District Labels -->
+                  <text x="510" y="42" class="kigali-map-label">GASABO DISTRICT</text>
+                  <text x="90" y="260" class="kigali-map-label">NYARUGENGE</text>
+                  <text x="420" y="305" class="kigali-map-label">KICUKIRO DISTRICT</text>
+                  <text x="430" y="90" class="kigali-route-label">RN3 · AIRPORT RD CORRIDOR</text>
+                </svg>
+
+                <!-- Interactive Facility Pins Overlay (DOM Layer) -->
+                <div class="map-pins-container" id="overview-map-pins">
+                  <!-- Populated dynamically via renderAllocationMap() -->
+                </div>
+              </div>
+
+              <!-- Selected Facility Inspector & Allocation Tray -->
+              <div class="map-inspector-card" id="map-inspector-card">
+                <div class="map-inspector-top">
+                  <div class="map-inspector-info">
+                    <div class="inspector-badge-row">
+                      <span class="status-badge status-badge-purple-sm" id="inspector-type-pill">🏟️ Event Venue</span>
+                      <span class="inspector-status-dot-active" id="inspector-live-dot">● Active On-Site</span>
+                    </div>
+                    <h4 class="inspector-name" id="inspector-name">Kigali Convention Centre</h4>
+                    <div class="inspector-meta" id="inspector-meta">
+                      <span>Call Time: <strong>08:00 AM</strong></span> ·
+                      <span>Scheduled Lead: <strong>Jean Paul</strong></span> ·
+                      <span id="inspector-headcount-tag"><strong>0</strong> Crew On-Site</span>
+                    </div>
+                  </div>
+                  <div class="map-inspector-btn-wrap">
+                    <button type="button" class="btn btn-primary-32-sm js-open-allocate-modal" id="map-allocate-crew-btn">
+                      <span>+ Allocate Personnel</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Horizontal Tray of Crew Members Currently Allocated to this Location -->
+                <div class="inspector-crew-tray" id="inspector-crew-tray">
+                  <!-- Populated dynamically -->
+                </div>
+              </div>
+            </div>
+
+            <!-- VIEW 2: HOURLY TRAFFIC CHART (Preserved with quick toggle) -->
+            <div class="traffic-chart-view" id="overview-traffic-chart-view" style="display: none;">
+              <div class="chart-legend" data-node-id="2:3459" style="gap: 12px; margin-bottom: 12px; display: flex; justify-content: flex-end;">
                 <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px;">
                   <span style="width: 9px; height: 9px; border-radius: 2px; background: #2563eb; display: inline-block;"></span>
                   Venue Check-ins
@@ -542,46 +671,46 @@
                   Stock Warehouse
                 </span>
               </div>
-            </div>
 
-            <div class="attendance-summary-row" data-node-id="2:3463">
-              <div class="summary-stat-pair" data-node-id="2:3464">
-                <span class="summary-count-primary js-kpi-venue-checkins" style="color: #2563eb;" data-node-id="2:3465">3</span>
-                <span class="summary-stat-label" data-node-id="2:3466">venue check-ins</span>
-              </div>
-              <div class="summary-divider" data-node-id="2:3467"></div>
-              <div class="summary-stat-pair" data-node-id="2:3468">
-                <span class="summary-count-primary js-kpi-stock-checkins" style="color: #16a34a;" data-node-id="2:3469">2</span>
-                <span class="summary-stat-label" data-node-id="2:3470">stock gate check-ins</span>
-              </div>
-              <div class="peak-insight" data-node-id="2:3471">
-                <img src="assets/trending-up.svg" alt="" class="svg-icon" />
-                <span class="peak-insight-text" data-node-id="2:3473">Call-Time Window · 08:00 AM</span>
-              </div>
-            </div>
-
-            <div class="attendance-chart" data-node-id="2:3474">
-              <div class="chart-y-axis" data-node-id="2:3475">
-                <span>10</span>
-                <span>5</span>
-                <span>0</span>
-              </div>
-              <div class="chart-plot-wrap" data-node-id="2:3479">
-                <div class="chart-plot" data-node-id="2:3480">
-                  <div class="chart-bars-container" id="overview-chart-bars" data-node-id="2:3484"></div>
-                  <div class="chart-grid-line" style="top: 0px;"></div>
-                  <div class="chart-grid-line" style="top: 61px;"></div>
-                  <div class="chart-grid-line" style="top: 121px;"></div>
+              <div class="attendance-summary-row" data-node-id="2:3463">
+                <div class="summary-stat-pair" data-node-id="2:3464">
+                  <span class="summary-count-primary js-kpi-venue-checkins" style="color: #2563eb;" data-node-id="2:3465">3</span>
+                  <span class="summary-stat-label" data-node-id="2:3466">venue check-ins</span>
                 </div>
-                <div class="chart-x-axis" id="overview-chart-xaxis" data-node-id="2:3509">
-                  <span>07:00</span>
-                  <span>08:00</span>
-                  <span>09:00</span>
-                  <span>10:00</span>
-                  <span>11:00</span>
-                  <span>12:00</span>
-                  <span>14:00</span>
-                  <span>16:00</span>
+                <div class="summary-divider" data-node-id="2:3467"></div>
+                <div class="summary-stat-pair" data-node-id="2:3468">
+                  <span class="summary-count-primary js-kpi-stock-checkins" style="color: #16a34a;" data-node-id="2:3469">2</span>
+                  <span class="summary-stat-label" data-node-id="2:3470">stock gate check-ins</span>
+                </div>
+                <div class="peak-insight" data-node-id="2:3471">
+                  <img src="assets/trending-up.svg" alt="" class="svg-icon" />
+                  <span class="peak-insight-text" data-node-id="2:3473">Call-Time Window · 08:00 AM</span>
+                </div>
+              </div>
+
+              <div class="attendance-chart" data-node-id="2:3474">
+                <div class="chart-y-axis" data-node-id="2:3475">
+                  <span>10</span>
+                  <span>5</span>
+                  <span>0</span>
+                </div>
+                <div class="chart-plot-wrap" data-node-id="2:3479">
+                  <div class="chart-plot" data-node-id="2:3480">
+                    <div class="chart-bars-container" id="overview-chart-bars" data-node-id="2:3484"></div>
+                    <div class="chart-grid-line" style="top: 0px;"></div>
+                    <div class="chart-grid-line" style="top: 61px;"></div>
+                    <div class="chart-grid-line" style="top: 121px;"></div>
+                  </div>
+                  <div class="chart-x-axis" id="overview-chart-xaxis" data-node-id="2:3509">
+                    <span>07:00</span>
+                    <span>08:00</span>
+                    <span>09:00</span>
+                    <span>10:00</span>
+                    <span>11:00</span>
+                    <span>12:00</span>
+                    <span>14:00</span>
+                    <span>16:00</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2160,6 +2289,238 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL: GATE ACTIVITY LOG & TRANSIT AUDIT INSPECTION MODAL              -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="timeline-detail-modal" aria-hidden="true">
+    <div class="modal-card timeline-audit-modal-card" role="dialog" aria-labelledby="tl-modal-title">
+      <!-- Modal Header -->
+      <div class="timeline-audit-header">
+        <div class="timeline-audit-header-left">
+          <div class="timeline-audit-tag-row">
+            <span class="timeline-audit-category-pill">SECURITY &amp; ATTENDANCE AUDIT LOG</span>
+            <span class="timeline-audit-log-id" id="tl-modal-log-id">#LOG-0001</span>
+          </div>
+          <h3 class="modal-title timeline-audit-title" id="tl-modal-title">Gate Activity &amp; Transit Audit Record</h3>
+          <p class="timeline-audit-subtitle" id="tl-modal-sub">
+            Logged on <strong id="tl-modal-timestamp">Nov 13, 2026 • 08:15:55 PM</strong> at <strong id="tl-modal-checkpoint">Ndera Warehouse</strong>
+          </p>
+        </div>
+        <div class="timeline-audit-header-right">
+          <span class="status-badge status-badge-green-md" id="tl-modal-status-badge">
+            <span class="badge-dot"></span>
+            <span id="tl-modal-status-text">Access Granted</span>
+          </span>
+          <button type="button" class="modal-close-icon-btn" id="close-timeline-detail-modal" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+
+      <!-- Scrollable Audit Body -->
+      <div class="timeline-audit-body">
+        <!-- 1. Personnel Profile Strip -->
+        <div class="timeline-audit-personnel-card">
+          <div class="audit-personnel-avatar-wrap">
+            <img src="" alt="Profile" id="tl-modal-avatar-img" class="audit-personnel-img" style="display: none;" />
+            <div class="audit-personnel-initials" id="tl-modal-avatar-initials">BV</div>
+          </div>
+          <div class="audit-personnel-meta">
+            <div class="audit-personnel-name-row">
+              <h4 class="audit-personnel-name" id="tl-modal-name">Bembeleza Valentin</h4>
+              <span class="tier-pill-soft L2" id="tl-modal-tier-pill">
+                <span class="tier-code-badge" id="tl-modal-tier-badge">L2</span>
+                <span id="tl-modal-tier-title">Technical &amp; Stage</span>
+              </span>
+              <span class="status-badge status-badge-neutral-sm" id="tl-modal-daily-state">Checked Out</span>
+            </div>
+            <div class="audit-personnel-details-row">
+              <span class="audit-meta-item">
+                <span class="meta-label">Staff Code:</span>
+                <strong id="tl-modal-staff-code">ABL-008</strong>
+              </span>
+              <span class="meta-sep">·</span>
+              <span class="audit-meta-item">
+                <span class="meta-label">Badge ID:</span>
+                <strong class="font-mono" id="tl-modal-badge-code">REW-BADGE-0008</strong>
+              </span>
+              <span class="meta-sep">·</span>
+              <span class="audit-meta-item">
+                <span class="meta-label">Role:</span>
+                <strong id="tl-modal-role">Driver · Transport</strong>
+              </span>
+              <span class="meta-sep">·</span>
+              <span class="audit-meta-item">
+                <span class="meta-label">Contact:</span>
+                <span id="tl-modal-contact">+250 787 162 517</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Four Key Audit Metric Tiles -->
+        <div class="timeline-audit-metrics-grid">
+          <div class="audit-metric-tile">
+            <div class="audit-metric-label">Logged Action</div>
+            <div class="audit-metric-value" id="tl-modal-action-val">Checked In (Stock)</div>
+            <div class="audit-metric-sub" id="tl-modal-action-sub">Inbound Scan at Terminal Gate</div>
+          </div>
+
+          <div class="audit-metric-tile">
+            <div class="audit-metric-label">Checkpoint Facility</div>
+            <div class="audit-metric-value" id="tl-modal-facility-val">Ndera Warehouse</div>
+            <div class="audit-metric-sub" id="tl-modal-facility-sub">🏭 Stock Warehouse Gate</div>
+          </div>
+
+          <div class="audit-metric-tile">
+            <div class="audit-metric-label">Shift Timing &amp; Punctuality</div>
+            <div class="audit-metric-value" id="tl-modal-punctuality-val">Cutoff Exceeded</div>
+            <div class="audit-metric-sub" id="tl-modal-punctuality-sub">Shift Call-Time: 08:00 AM (+688m)</div>
+          </div>
+
+          <div class="audit-metric-tile">
+            <div class="audit-metric-label">Session Dwell Time</div>
+            <div class="audit-metric-value" id="tl-modal-dwell-val">11m 49s On-Site</div>
+            <div class="audit-metric-sub" id="tl-modal-dwell-sub">In: 08:15 PM ➔ Out: 08:27 PM</div>
+          </div>
+        </div>
+
+        <!-- 3. Policy Evaluation & Security Verification -->
+        <div class="timeline-audit-section">
+          <div class="audit-section-title">
+            <span>🛡️ Policy Verification &amp; Clearance Rule</span>
+          </div>
+          <div class="audit-policy-box" id="tl-modal-policy-box">
+            <div class="audit-policy-icon" id="tl-modal-policy-icon">✓</div>
+            <div class="audit-policy-text">
+              <strong id="tl-modal-policy-heading">Authorized Stock Warehouse Clearance</strong>
+              <p id="tl-modal-policy-desc">Personnel has Level 2 (Technical &amp; Stage) clearance granting valid access to Stock Warehouse facilities. Badge is Active.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Cross-Facility Transit & Production Dispatch Flow (Option B) -->
+        <div class="timeline-audit-section" id="tl-modal-transit-section" style="display: none;">
+          <div class="audit-section-title">
+            <span>🚚 Cross-Facility Transit &amp; Production Dispatch Flow (Option B)</span>
+            <span class="status-badge status-badge-purple-sm" id="tl-modal-transit-route">Ndera Warehouse ➔ Kigali Convention Centre</span>
+          </div>
+          <div class="audit-transit-stepper">
+            <div class="audit-transit-step completed">
+              <div class="transit-step-num">1</div>
+              <div class="transit-step-body">
+                <strong>Warehouse Check-In:</strong>
+                <span>Scanned at Ndera Warehouse. Assigned to gear loading and logistics dispatch.</span>
+              </div>
+            </div>
+            <div class="audit-transit-step in-progress">
+              <div class="transit-step-num">2</div>
+              <div class="transit-step-body">
+                <strong>Transit &amp; Transport:</strong>
+                <span>Departed Ndera Warehouse with designated production gear. Headcount released from warehouse.</span>
+              </div>
+            </div>
+            <div class="audit-transit-step">
+              <div class="transit-step-num">3</div>
+              <div class="transit-step-body">
+                <strong>Venue Gate Arrival:</strong>
+                <span>Arrival at Kigali Convention Centre gate automatically transfers live roll-call presence to venue.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Today's Full Activity Chronology for this Person -->
+        <div class="timeline-audit-section">
+          <div class="audit-section-title">
+            <span>📋 Today's Complete Gate History for <span id="tl-modal-user-firstname">Bembeleza</span></span>
+            <span class="audit-section-counter" id="tl-modal-history-count">2 scans recorded</span>
+          </div>
+          <div class="audit-history-list" id="tl-modal-history-list">
+            <!-- Dynamically populated with all logs for this crew member today -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-actions timeline-audit-footer">
+        <div class="timeline-audit-footer-meta">
+          <span class="audit-terminal-tag">Gate Station Terminal #1</span>
+          <span class="audit-security-mode">Verification: RFID Badge / Scan</span>
+        </div>
+        <div class="timeline-audit-footer-btns">
+          <button type="button" class="btn btn-secondary-38" id="tl-modal-print-btn">
+            <img src="assets/download.svg" alt="" class="svg-icon" />
+            <span>Print Audit Slip</span>
+          </button>
+          <button type="button" class="btn btn-primary-38" id="tl-modal-close-btn">
+            <span>Done</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL: ALLOCATE & DISPATCH PERSONNEL MODAL (MAP RADAR)                  -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="allocate-personnel-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 580px; max-width: 95vw; max-height: 88vh; overflow-y: auto;" role="dialog" aria-labelledby="alloc-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <div>
+          <h3 class="modal-title" id="alloc-modal-title">Allocate &amp; Dispatch Personnel</h3>
+          <p style="font-size: 11.5px; color: var(--text-secondary); margin-top: 3px;">
+            Deploy available technicians and drivers to facilities in real time.
+          </p>
+        </div>
+        <button type="button" class="modal-close-icon-btn" id="close-alloc-modal" title="Close (Esc)">✕</button>
+      </div>
+
+      <form id="allocate-personnel-form">
+        <!-- Target Facility Dropdown -->
+        <div class="form-field" style="margin-bottom: 14px;">
+          <label class="form-label" for="alloc-target-facility">Target Destination Facility</label>
+          <select id="alloc-target-facility" class="form-input" style="height: 40px; font-weight: 600;" required>
+            <!-- Populated dynamically with all 8 venues and warehouses -->
+          </select>
+        </div>
+
+        <!-- Allocation Dispatch Type -->
+        <div class="form-field" style="margin-bottom: 14px;">
+          <label class="form-label" for="alloc-dispatch-type">Allocation Mode</label>
+          <select id="alloc-dispatch-type" class="form-input" style="height: 38px;">
+            <option value="immediate_dispatch">🚚 Real-Time Dispatch (In-Transit / Live Deployment)</option>
+            <option value="shift_assignment">📅 Shift Roster Assignment (Call-Time Scheduled)</option>
+            <option value="stock_transfer">📦 Equipment Custody Transfer Crew</option>
+          </select>
+        </div>
+
+        <!-- Available Crew Selection List -->
+        <div class="form-field" style="margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <label class="form-label" style="margin: 0;">Select Personnel to Allocate</label>
+            <span style="font-size: 11px; color: var(--brand-primary); font-weight: 600;" id="alloc-selected-count">0 Selected</span>
+          </div>
+          <input type="text" id="alloc-crew-search" class="form-input" placeholder="Search technician by name, role, department..." style="height: 34px; margin-bottom: 8px; font-size: 12px;" />
+          <div class="alloc-crew-checklist" id="alloc-crew-checklist" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px;">
+            <!-- Populated dynamically with crew checkboxes -->
+          </div>
+        </div>
+
+        <!-- Dispatch Notes -->
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label class="form-label" for="alloc-notes">Dispatch Instructions / Notes</label>
+          <input type="text" id="alloc-notes" class="form-input" placeholder="e.g. Deploy for main stage audio setup & flight case offloading" value="Live dispatch via Map Radar" />
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn btn-secondary-38" id="cancel-alloc-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="submit-alloc-btn" style="background: #10b981; border-color: #059669;">
+            <span>Confirm Allocation &amp; Dispatch →</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

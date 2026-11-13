@@ -1772,6 +1772,64 @@ try {
                 ($prevCpId > 0 && $prevCpId !== $cpId)
             );
 
+            // Prevent duplicate/invalid explicit check-in or check-out scans
+            if ($scanMode === 'check_out' && !$isCurrentlyCheckedIn) {
+                echo json_encode([
+                    'ok' => false,
+                    'allowed' => false,
+                    'error' => "{$targetMember['full_name']} is already checked out (not currently checked in).",
+                ]);
+                exit;
+            }
+            if ($scanMode === 'check_in' && $isCurrentlyCheckedIn && !$isCrossFacilityTransfer) {
+                echo json_encode([
+                    'ok' => false,
+                    'allowed' => false,
+                    'error' => "{$targetMember['full_name']} is already checked in at {$cpName}.",
+                ]);
+                exit;
+            }
+
+            // Debounce rapid repeat scans (< 5s) at the same checkpoint so hardware scanner bounces don't create duplicate logs
+            if ($scanMode !== 'verify_only') {
+                $recentStmt = $pdo->prepare("
+                    SELECT `scan_action`, `punctuality_status`, `notes`, `scanned_at`
+                    FROM `attendance_logs`
+                    WHERE `user_id` = ? AND `checkpoint_type` = ? AND `checkpoint_id` = ?
+                      AND `access_status` = 'granted'
+                      AND `scan_action` IN ('check_in', 'check_out')
+                      AND TIMESTAMPDIFF(SECOND, `scanned_at`, NOW()) BETWEEN 0 AND 5
+                    ORDER BY `id` DESC
+                    LIMIT 1
+                ");
+                $recentStmt->execute([(int) $targetMember['id'], $cpType, $cpId]);
+                $recentScan = $recentStmt->fetch(PDO::FETCH_ASSOC);
+                if ($recentScan) {
+                    $recentAction = (string) $recentScan['scan_action'];
+                    $verification = buildVerificationCardPayload(
+                        $pdo,
+                        $targetMember,
+                        $cpType,
+                        $cpId,
+                        $cpName,
+                        [
+                            'allowed' => true,
+                            'reason' => ($recentAction === 'check_out' ? 'Already checked out' : 'Already checked in') . " at {$cpName} (recent scan preserved)",
+                            'action' => $recentAction,
+                            'punctuality' => (string) ($recentScan['punctuality_status'] ?? 'on_time'),
+                            'punctuality_label' => $recentAction === 'check_out' ? 'SHIFT CHECK-OUT' : ($targetMember['punctuality'] ?? 'ON TIME'),
+                            'scanned_at' => date('H:i:s', strtotime((string) $recentScan['scanned_at']) ?: time()),
+                            'check_in_time' => $targetMember['check_in_full'] ?? null,
+                            'check_out_time' => $targetMember['check_out_full'] ?? null,
+                        ]
+                    );
+                    $verification['duplicate_prevented'] = true;
+                    $verification['bootstrap'] = $currentPayload;
+                    echo json_encode($verification);
+                    exit;
+                }
+            }
+
             if ($isCrossFacilityTransfer) {
                 $prevFacilityName = $prevCpName ?: ($prevCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
                 $transitOutNotes = "Transit departure → Transferred to {$cpName}";
@@ -1957,6 +2015,10 @@ try {
                 } catch (Throwable $e) {}
             }
         } elseif ($decision === 'approve_out') {
+            if (($targetMember['daily_state'] ?? 'ready') !== 'checked_in') {
+                echo json_encode(['ok' => false, 'error' => "{$targetMember['full_name']} is already checked out."]);
+                exit;
+            }
             $accessStatus = 'granted';
             $resolvedAction = 'check_out';
             $denialReason = null;
@@ -2038,6 +2100,11 @@ try {
                 ($prevCpType !== '' && $prevCpType !== $cpType) ||
                 ($prevCpId > 0 && $prevCpId !== $cpId)
             );
+
+            if ($isCurrentlyCheckedIn && !$isCrossFacilityTransfer) {
+                echo json_encode(['ok' => false, 'error' => "{$targetMember['full_name']} is already checked in at {$cpName}."]);
+                exit;
+            }
 
             if ($isCrossFacilityTransfer) {
                 $prevFacilityName = $prevCpName ?: ($prevCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
@@ -2632,6 +2699,69 @@ try {
                 'call_time' => $formattedTime,
                 'assigned_technicians' => $assignedTechsInt,
                 'assigned_count' => count($assignedTechsInt),
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'allocate_personnel') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_event', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'event_venue'));
+        $cpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '1'));
+        $userIds = $_POST['user_ids'] ?? $jsonBody['user_ids'] ?? [];
+        if (!is_array($userIds)) {
+            $userIds = json_decode((string)$userIds, true) ?: [];
+        }
+        $userIds = array_values(array_unique(array_filter(array_map('intval', (array)$userIds))));
+        $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? 'Real-time allocation via Map Radar'));
+
+        if ($cpType === 'event_venue' && !empty($userIds)) {
+            try {
+                $st = $pdo->prepare("SELECT `assigned_technician` FROM `events` WHERE `id` = ?");
+                $st->execute([$cpId]);
+                $ev = $st->fetch(PDO::FETCH_ASSOC);
+                $existing = [];
+                if (!empty($ev['assigned_technician'])) {
+                    $existing = json_decode((string)$ev['assigned_technician'], true) ?: [];
+                }
+                $merged = array_values(array_unique(array_merge($existing, $userIds)));
+                $upd = $pdo->prepare("UPDATE `events` SET `assigned_technician` = ? WHERE `id` = ?");
+                $upd->execute([json_encode($merged), $cpId]);
+            } catch (Throwable $e) {}
+        }
+
+        // Record a dispatch entry in attendance_logs for audit traceability
+        foreach ($userIds as $uid) {
+            try {
+                $userStmt = $pdo->prepare("SELECT `badge_code` FROM `personnel` WHERE `id` = ?");
+                $userStmt->execute([$uid]);
+                $uRow = $userStmt->fetch(PDO::FETCH_ASSOC);
+                $bCode = $uRow['badge_code'] ?? 'REW-BADGE-' . str_pad((string)$uid, 4, '0', STR_PAD_LEFT);
+
+                $ins = $pdo->prepare("
+                    INSERT INTO `attendance_logs`
+                    (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `scan_action`, `access_status`, `punctuality_status`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, 'access_verify', 'granted', 'on_time', ?, NOW())
+                ");
+                $ins->execute([$uid, $bCode, $cpType, $cpId, $notes]);
+            } catch (Throwable $e) {}
+        }
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => 'Personnel allocated successfully in real time',
+                'allocated_count' => count($userIds),
+                'checkpoint_type' => $cpType,
+                'checkpoint_id' => $cpId,
             ]
         ));
         exit;
