@@ -7708,6 +7708,171 @@ html.theme-transitioning *::after {
   height: 15px;
 }
 
+/* ========================================================================= */
+/* OPTION A COLLAPSIBLE WRAPPER & OPTION B LIVE ALLOCATION MAP PANEL         */
+/* ========================================================================= */
+
+.option-a-collapsible-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  max-height: 1200px;
+  opacity: 1;
+}
+
+.option-a-collapsible-wrapper.collapsed {
+  max-height: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+}
+
+.btn-collapse-opt-a {
+  background: var(--bg-surface-elevated, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  color: var(--text-secondary, #94a3b8);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-collapse-opt-a:hover {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--brand-primary, #6366f1);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.btn-collapse-opt-a.is-collapsed {
+  background: rgba(99, 102, 241, 0.18);
+  color: #fff;
+  border-color: var(--brand-primary, #6366f1);
+}
+
+.live-map-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-1, #0e1012);
+  border: 1px solid var(--border-subtle, #1c2024);
+  border-radius: 12px;
+  padding: 14px;
+  min-height: 420px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.live-map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.live-map-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  color: var(--text-primary, #f8fafc);
+}
+
+.allocation-map {
+  flex: 1;
+  min-height: 260px;
+  border-radius: 10px;
+  background: #0a0c0e url('assets/map-grid.svg') center/cover;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #1c2024;
+}
+
+/* Pins */
+.map-pin {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #000;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.6), 0 0 12px currentColor;
+  border: none;
+  z-index: 4;
+}
+
+.map-pin:hover,
+.map-pin.is-focused {
+  transform: scale(1.25);
+  z-index: 10;
+}
+
+.map-pin.available {
+  background: #00e5ff;
+  color: #001014;
+}
+
+.map-pin.onsite {
+  background: #38d39f;
+  color: #00140e;
+}
+
+.map-pin.transit {
+  background: #f5c542;
+  color: #141000;
+}
+
+/* Focused pulse */
+.map-pin.is-focused::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  animation: pin-pulse 1.4s ease-out infinite;
+}
+
+@keyframes pin-pulse {
+  0% { opacity: .9; transform: scale(.8); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+
+.map-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--text-secondary, #9aa4ad);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.legend-available { background: #00e5ff; }
+.legend-onsite    { background: #38d39f; }
+.legend-transit   { background: #f5c542; }
+
+.map-allocation-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.map-allocation-bar select {
+  flex: 1;
+}
+
 /* Light Theme Support */
 [data-theme="light"] .map-insights-card,
 :root:not([data-theme="dark"]) .map-insights-card {
@@ -7774,6 +7939,30 @@ html.theme-transitioning *::after {
 [data-theme="light"] .map-metric-count,
 :root:not([data-theme="dark"]) .map-metric-count {
   color: #0f172a;
+}
+
+[data-theme="light"] .live-map-panel,
+:root:not([data-theme="dark"]) .live-map-panel {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .allocation-map,
+:root:not([data-theme="dark"]) .allocation-map {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .live-map-title,
+:root:not([data-theme="dark"]) .live-map-title {
+  color: #0f172a;
+}
+
+[data-theme="light"] .btn-collapse-opt-a,
+:root:not([data-theme="dark"]) .btn-collapse-opt-a {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
 }
 
 

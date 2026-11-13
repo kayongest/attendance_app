@@ -817,7 +817,11 @@
     renderCheckpointSelectors();
     renderVerificationDeck();
     renderHourlyTrafficChart();
-    renderAllocationMap();
+    if (state.mapViewMode === 'option-b') {
+      renderOptionBMap();
+    } else {
+      renderAllocationMap();
+    }
     renderActivityTimeline();
     renderCrewTables();
     renderCheckpointsDirectory();
@@ -2141,22 +2145,252 @@
   function setAllocationMapView(viewMode) {
     state.mapViewMode = viewMode;
     const mapView = document.getElementById('overview-map-view');
+    const liveMapPanel = document.getElementById('live-map-panel');
     const chartView = document.getElementById('overview-traffic-chart-view');
-    const btnMap = document.getElementById('toggle-view-map');
+    const btnOptA = document.getElementById('toggle-view-option-a') || document.getElementById('toggle-view-map');
+    const btnOptB = document.getElementById('toggle-view-option-b');
     const btnChart = document.getElementById('toggle-view-chart');
+    const collapseBtn = document.getElementById('toggle-option-a-collapse');
+    const filterSelect = document.getElementById('overview-map-filter');
 
-    if (viewMode === 'map') {
+    if (mapView) mapView.style.display = 'none';
+    if (liveMapPanel) liveMapPanel.style.display = 'none';
+    if (chartView) chartView.style.display = 'none';
+
+    if (btnOptA) btnOptA.classList.remove('active');
+    if (btnOptB) btnOptB.classList.remove('active');
+    if (btnChart) btnChart.classList.remove('active');
+
+    if (viewMode === 'option-a' || viewMode === 'map') {
+      state.mapViewMode = 'option-a';
       if (mapView) mapView.style.display = 'block';
-      if (chartView) chartView.style.display = 'none';
-      if (btnMap) btnMap.classList.add('active');
-      if (btnChart) btnChart.classList.remove('active');
+      if (btnOptA) btnOptA.classList.add('active');
+      if (collapseBtn) collapseBtn.style.display = 'inline-flex';
+      if (filterSelect) filterSelect.style.display = 'inline-block';
       renderAllocationMap();
+    } else if (viewMode === 'option-b') {
+      state.mapViewMode = 'option-b';
+      if (liveMapPanel) liveMapPanel.style.display = 'flex';
+      if (btnOptB) btnOptB.classList.add('active');
+      if (collapseBtn) collapseBtn.style.display = 'none';
+      if (filterSelect) filterSelect.style.display = 'none';
+      renderOptionBMap();
     } else {
-      if (mapView) mapView.style.display = 'none';
+      state.mapViewMode = 'chart';
       if (chartView) chartView.style.display = 'block';
-      if (btnMap) btnMap.classList.remove('active');
       if (btnChart) btnChart.classList.add('active');
+      if (collapseBtn) collapseBtn.style.display = 'none';
+      if (filterSelect) filterSelect.style.display = 'none';
       renderHourlyTrafficChart();
+    }
+  }
+
+  function toggleOptionACollapse() {
+    const wrapper = document.getElementById('option-a-collapsible-wrapper');
+    const btn = document.getElementById('toggle-option-a-collapse');
+    if (!wrapper) return;
+    const isCollapsed = wrapper.classList.toggle('collapsed');
+    if (btn) {
+      btn.classList.toggle('is-collapsed', isCollapsed);
+      const icon = btn.querySelector('.collapse-icon');
+      const label = btn.querySelector('.collapse-label');
+      if (icon) icon.textContent = isCollapsed ? '▼' : '▲';
+      if (label) label.textContent = isCollapsed ? 'Expand Active' : 'Collapse Active';
+    }
+  }
+
+  // =========================================================================
+  // OPTION B: LIVE ALLOCATION MAP (TIMELINE FEED SYNCED)
+  // =========================================================================
+
+  const OPTION_B_VENUES = {
+    'Ndera Warehouse': { x: 0.30, y: 0.40 },
+    'Kigali Arena':    { x: 0.62, y: 0.28 },
+    'BK Arena':        { x: 0.55, y: 0.72 },
+    'Kigali Convention Centre': { x: 0.48, y: 0.38 },
+    'Camp Kigali':     { x: 0.20, y: 0.56 },
+    'Intare Conference Arena': { x: 0.85, y: 0.48 },
+    'Gikondo Logistics Hub': { x: 0.38, y: 0.72 },
+    'Masaka Central Depot': { x: 0.78, y: 0.78 },
+    'Remera Technical Hub': { x: 0.58, y: 0.58 },
+  };
+
+  function readTimelineFeedForMap() {
+    const feed = document.getElementById('timeline-feed-list');
+    if (!feed) return new Map();
+    const users = new Map(); // uid -> {uid, name, initials, role, venue, status}
+
+    feed.querySelectorAll('.timeline-event-card').forEach((card) => {
+      const uid = card.dataset.timelineUid;
+      if (!uid || users.has(uid)) return; // keep newest card only (feed is newest-first)
+
+      const name = card.querySelector('.timeline-mini-name')?.textContent.trim() || '';
+      const initials = card.querySelector('.timeline-mini-avatar')?.textContent.trim() || 'CR';
+      const role = card.querySelector('.timeline-mini-role')?.textContent.trim() || '';
+      const title = card.querySelector('.timeline-action-title')?.textContent || '';
+
+      // Derive venue from action title — e.g. "… — Ndera Warehouse"
+      const venue = title.split('—').pop().trim() || 'Ndera Warehouse';
+      // Derive status: last action "out" => transit, "in" => onsite
+      const isOut = /signed out|checked out/i.test(title);
+      const status = isOut ? 'transit' : 'onsite';
+
+      users.set(uid, { uid, name, initials, role, venue, status });
+    });
+
+    // If feed is empty or sparse, supplement with on-site crew from state
+    if (users.size === 0 && Array.isArray(state.crew)) {
+      state.crew.slice(0, 6).forEach((c) => {
+        const cpName = c.checkpoint_type === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre';
+        users.set(String(c.id), {
+          uid: String(c.id),
+          name: c.full_name,
+          initials: c.initials || 'CR',
+          role: c.role_display || c.role || 'Tech',
+          venue: cpName,
+          status: c.daily_state === 'checked_in' ? 'onsite' : (c.daily_state === 'checked_out' ? 'transit' : 'available'),
+        });
+      });
+    }
+
+    return users;
+  }
+
+  function renderOptionBMap(users = null) {
+    const map = document.getElementById('allocation-map');
+    const statusEl = document.getElementById('live-map-status');
+    const userSelect = document.getElementById('allocate-user-select');
+    if (!map) return;
+
+    const activeUsers = users || readTimelineFeedForMap();
+    map.querySelectorAll('.map-pin').forEach((p) => p.remove());
+
+    activeUsers.forEach((u) => {
+      let coord = OPTION_B_VENUES[u.venue];
+      if (!coord) {
+        for (const vKey of Object.keys(OPTION_B_VENUES)) {
+          if (u.venue.toLowerCase().includes(vKey.toLowerCase()) || vKey.toLowerCase().includes(u.venue.toLowerCase())) {
+            coord = OPTION_B_VENUES[vKey];
+            break;
+          }
+        }
+      }
+      if (!coord) coord = { x: 0.5, y: 0.5 };
+
+      const pin = document.createElement('button');
+      pin.type = 'button';
+      pin.className = `map-pin ${u.status}`;
+      pin.dataset.uid = u.uid;
+      pin.textContent = u.initials;
+      pin.title = `${u.name} · ${u.role} · ${u.venue} (${u.status})`;
+      pin.style.left = `${coord.x * 100}%`;
+      pin.style.top  = `${coord.y * 100}%`;
+      pin.addEventListener('click', () => focusOptionBUser(u.uid));
+      map.appendChild(pin);
+    });
+
+    if (statusEl) statusEl.textContent = `${activeUsers.size} online`;
+    populateOptionBUserSelect(activeUsers, userSelect);
+  }
+
+  function populateOptionBUserSelect(users, selectEl) {
+    if (!selectEl) return;
+    const current = selectEl.value;
+    selectEl.innerHTML = '<option value="">Select user…</option>';
+    users.forEach((u) => {
+      const opt = document.createElement('option');
+      opt.value = u.uid;
+      opt.textContent = `${u.name} (${u.role})`;
+      selectEl.appendChild(opt);
+    });
+    selectEl.value = current;
+  }
+
+  function focusOptionBUser(uid) {
+    const map = document.getElementById('allocation-map');
+    const feed = document.getElementById('timeline-feed-list');
+    if (map) {
+      map.querySelectorAll('.map-pin').forEach((p) =>
+        p.classList.toggle('is-focused', p.dataset.uid === uid)
+      );
+    }
+    if (feed) {
+      feed.querySelectorAll('.timeline-event-card').forEach((c) => {
+        const hit = c.dataset.timelineUid === uid;
+        c.style.outline = hit ? '1px solid #00e5ff' : '';
+        c.style.background = hit ? 'rgba(0,229,255,.06)' : '';
+        if (hit) c.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+    }
+  }
+
+  function initOptionBAllocationEvents() {
+    const goBtn = document.getElementById('allocate-go-btn');
+    const userSelect = document.getElementById('allocate-user-select');
+    const venueSelect = document.getElementById('allocate-venue-select');
+    const feed = document.getElementById('timeline-feed-list');
+
+    if (feed) {
+      feed.addEventListener('click', (e) => {
+        const card = e.target.closest('.timeline-event-card');
+        if (card && card.dataset.timelineUid) {
+          focusOptionBUser(card.dataset.timelineUid);
+        }
+      });
+
+      // Observe timeline changes to refresh Option B live
+      new MutationObserver(() => {
+        if (state.mapViewMode === 'option-b') {
+          renderOptionBMap();
+        }
+      }).observe(feed, { childList: true, subtree: true });
+    }
+
+    if (goBtn) {
+      goBtn.addEventListener('click', async () => {
+        const uid = userSelect ? userSelect.value : '';
+        const venue = venueSelect ? venueSelect.value : '';
+        if (!uid) {
+          showToast('Please select a user to allocate.');
+          return;
+        }
+        const users = readTimelineFeedForMap();
+        const u = users.get(uid);
+        if (!u) return;
+
+        u.venue = venue;
+        u.status = 'transit';
+        renderOptionBMap(users);
+        focusOptionBUser(uid);
+
+        // Sync with backend API
+        try {
+          const cpType = venue.toLowerCase().includes('warehouse') || venue.toLowerCase().includes('stock') ? 'stock_warehouse' : 'event_venue';
+          const cpId = cpType === 'stock_warehouse' ? 1 : 1001;
+          const res = await fetch('api.php?action=allocate_personnel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              checkpoint_type: cpType,
+              checkpoint_id: cpId,
+              user_ids: [Number(uid)],
+              dispatch_type: 'immediate_dispatch',
+              notes: `Option B Quick Allocation to ${venue}`,
+            }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            applyBootstrapPayload(data);
+            playKioskChime('approve');
+            showToast(`✓ Dispatched ${u.name} to ${venue} (In Transit)`);
+            renderAll();
+            renderOptionBMap();
+            focusOptionBUser(uid);
+          }
+        } catch (err) {
+          showToast(`Allocated ${u.name} to ${venue}`);
+        }
+      });
     }
   }
 
@@ -7170,15 +7404,27 @@
       });
     }
 
-    // Real-Time Facility & Personnel Allocation Map: View Switcher & Filters
-    const btnToggleMap = document.getElementById('toggle-view-map');
+    // Real-Time Facility & Personnel Allocation Map: View Switcher (Option A, Option B, Chart)
+    const btnToggleOptA = document.getElementById('toggle-view-option-a') || document.getElementById('toggle-view-map');
+    const btnToggleOptB = document.getElementById('toggle-view-option-b');
     const btnToggleChart = document.getElementById('toggle-view-chart');
-    if (btnToggleMap) {
-      btnToggleMap.addEventListener('click', () => setAllocationMapView('map'));
+    const btnCollapseOptA = document.getElementById('toggle-option-a-collapse');
+
+    if (btnToggleOptA) {
+      btnToggleOptA.addEventListener('click', () => setAllocationMapView('option-a'));
+    }
+    if (btnToggleOptB) {
+      btnToggleOptB.addEventListener('click', () => setAllocationMapView('option-b'));
     }
     if (btnToggleChart) {
       btnToggleChart.addEventListener('click', () => setAllocationMapView('chart'));
     }
+    if (btnCollapseOptA) {
+      btnCollapseOptA.addEventListener('click', toggleOptionACollapse);
+    }
+
+    // Initialize Option B Timeline Feed Integration & Allocation Bar
+    initOptionBAllocationEvents();
 
     const mapFilterSelect = document.getElementById('overview-map-filter');
     if (mapFilterSelect) {
