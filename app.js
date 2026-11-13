@@ -3369,7 +3369,7 @@
           const isThisLog = Number(log.id) === Number(tlItem.id);
           const rawTime = log.formatted_time?.split('•')[1]?.trim() || log.formatted_time;
           return `
-            <div class="audit-history-row ${isThisLog ? 'current-active-log' : ''}">
+            <div class="audit-history-row ${isThisLog ? 'current-active-log' : ''}" data-log-id="${log.id}" style="cursor: pointer;" title="Click to view details for this ${escapeHtml(log.checkpoint_name)} record">
               <div class="audit-history-time">
                 <strong>${escapeHtml(rawTime)}</strong>
                 <span>${escapeHtml(log.checkpoint_name)}</span>
@@ -3382,11 +3382,22 @@
                 <span class="status-badge ${isLogDenied ? 'status-badge-red-sm' : 'status-badge-green-sm'}">
                   ${isLogDenied ? 'Denied' : (log.scan_action === 'check_out' ? 'Checked Out' : 'Checked In')}
                 </span>
-                ${isThisLog ? `<span class="current-log-tag">Inspecting</span>` : ''}
+                ${isThisLog ? `<span class="current-log-tag">Active Record</span>` : ''}
               </div>
             </div>
           `;
         }).join('');
+
+        // Wire click on any history row to switch the inspected record seamlessly
+        historyList.querySelectorAll('.audit-history-row').forEach((row) => {
+          row.addEventListener('click', () => {
+            const logId = Number(row.getAttribute('data-log-id'));
+            const targetLog = userLogs.find((l) => Number(l.id) === logId);
+            if (targetLog) {
+              openTimelineDetailModal(targetLog, resolvedMember);
+            }
+          });
+        });
       }
     }
 
