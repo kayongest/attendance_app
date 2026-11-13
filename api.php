@@ -734,6 +734,10 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     $stockWarehouses = [];
     foreach ($stockRows as $sr) {
         $sid = (int) $sr['id'];
+        $ctrl = trim((string)($sr['controller_name'] ?? ''));
+        if ($ctrl === '') {
+            $ctrl = ($sid === 1) ? 'Schadrack Niyikiza' : (($sid === 2) ? 'Niyonase Prince' : 'Irene Mudacumura');
+        }
         $stockWarehouses[] = [
             'id' => $sid,
             'type' => 'stock_warehouse',
@@ -743,7 +747,9 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'open_time' => substr((string) ($sr['open_time'] ?? '08:00:00'), 0, 5),
             'close_time' => substr((string) ($sr['close_time'] ?? '18:00:00'), 0, 5),
             'call_time' => substr((string) ($sr['open_time'] ?? '08:00:00'), 0, 5),
-            'lead_label' => 'Stock Controller: Mirene Uwase',
+            'controller_name' => $ctrl,
+            'lead_name' => $ctrl,
+            'lead_label' => 'Stock Controller: ' . $ctrl,
             'min_clearance' => 'L2 / L3 / L4 Required (L1 Blocked)',
         ];
     }
@@ -758,8 +764,10 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $title = (string) ($er['title'] ?? 'Production Event');
         $loc = (string) ($er['location'] ?? 'Kigali Convention Centre');
         $callTime = substr((string) ($er['call_time'] ?? '08:00'), 0, 5) ?: '08:00';
-        $pm = (string) ($er['project_manager'] ?? 'Operations PM');
-        $tl = (string) ($er['tech_lead'] ?? 'Tech Lead');
+        $pm = trim((string) ($er['project_manager'] ?? ''));
+        $tl = trim((string) ($er['tech_lead'] ?? ''));
+        $leadName = $tl ?: ($pm ?: 'Jean Paul Ndayisaba');
+        $leadLabel = ($tl ? 'Tech Lead: ' . $tl : ($pm ? 'Project Manager: ' . $pm : 'Tech Lead: ' . $leadName));
 
         $assignedRaw = $er['assigned_technician'] ?? '';
         $assignedIds = [];
@@ -781,7 +789,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'call_time' => $callTime,
             'project_manager' => $pm,
             'tech_lead' => $tl,
-            'lead_label' => 'Tech Lead: ' . ($tl ?: $pm ?: 'Jean Paul'),
+            'lead_name' => $leadName,
+            'lead_label' => $leadLabel,
             'min_clearance' => 'L1 / L2 / L3 / L4 Authorized',
             'assigned_technicians' => $assignedIds,
             'assigned_count' => count($assignedIds),
@@ -824,7 +833,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'name' => 'Ndera Warehouse',
             'location' => 'Ndera Central Logistics Hub',
             'call_time' => '08:00',
-            'lead_label' => 'Stock Controller: Mirene Uwase',
+            'lead_name' => 'Schadrack Niyikiza',
+            'lead_label' => 'Stock Controller: Schadrack Niyikiza',
             'min_clearance' => 'L2 / L3 / L4 Required',
         ];
     }
@@ -1077,6 +1087,9 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'check_out_full' => $uDaily['check_out_full'] ?? null,
             'punctuality_code' => $uDaily['punctuality_code'] ?? 'on_time',
             'punctuality' => $uDaily['punctuality_label'] ?? 'READY',
+            'checkpoint_type' => $uDaily['last_checkpoint_type'] ?? null,
+            'checkpoint_id' => $uDaily['last_checkpoint_id'] ?? null,
+            'checkpoint_name' => $uDaily['last_checkpoint_name'] ?? null,
             'last_checkpoint_type' => $uDaily['last_checkpoint_type'] ?? null,
             'last_checkpoint_id' => $uDaily['last_checkpoint_id'] ?? null,
             'last_checkpoint_name' => $uDaily['last_checkpoint_name'] ?? null,

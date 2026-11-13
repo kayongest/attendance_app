@@ -1878,14 +1878,14 @@
     ];
     if (merged.length > 0) return merged;
     return [
-      { id: 1, type: 'stock_warehouse', name: 'Ndera Warehouse', location: 'Ndera Central Logistics Hub', call_time: '08:00', lead_name: 'Mirene Uwase' },
-      { id: 1, type: 'event_venue', name: 'Kigali Convention Centre', location: 'Gasabo District', call_time: '08:00', lead_name: 'Jean Paul' },
-      { id: 2, type: 'event_venue', name: 'BK Arena', location: 'Remera', call_time: '08:00', lead_name: 'Eric Havugimana' },
+      { id: 1, type: 'stock_warehouse', name: 'Ndera Warehouse', location: 'Ndera Central Logistics Hub', call_time: '08:00', lead_name: 'Schadrack Niyikiza' },
+      { id: 2, type: 'stock_warehouse', name: 'KCC Stock', location: 'Kigali Convention Centre', call_time: '07:30', lead_name: 'Niyonase Prince' },
+      { id: 3, type: 'stock_warehouse', name: 'BK Arena Stock', location: 'BK Arena Remera', call_time: '08:00', lead_name: 'Irene Mudacumura' },
+      { id: 1, type: 'event_venue', name: 'Kigali Convention Centre', location: 'Gasabo District', call_time: '08:00', lead_name: 'Jean Paul Ndayisaba' },
+      { id: 2, type: 'event_venue', name: 'BK Arena', location: 'Remera', call_time: '08:00', lead_name: 'Musirikare Leonce' },
       { id: 3, type: 'event_venue', name: 'Camp Kigali', location: 'Nyarugenge', call_time: '08:30', lead_name: 'Patrick Nyirimbibi' },
-      { id: 4, type: 'event_venue', name: 'Intare Conference Arena', location: 'Rusororo', call_time: '09:00', lead_name: 'Bembeleza Valentin' },
-      { id: 2, type: 'stock_warehouse', name: 'Gikondo Logistics Hub', location: 'Gikondo Industrial Park', call_time: '07:30', lead_name: 'Mirene Uwase' },
-      { id: 3, type: 'stock_warehouse', name: 'Masaka Central Depot', location: 'Masaka Logistics Zone', call_time: '08:00', lead_name: 'Stock Controller' },
-      { id: 4, type: 'stock_warehouse', name: 'Remera Technical Hub', location: 'Remera Transit Station', call_time: '08:00', lead_name: 'Tech Lead' },
+      { id: 4, type: 'event_venue', name: 'Intare Conference Arena', location: 'Rusororo', call_time: '09:00', lead_name: 'Diane Iradukunda' },
+      { id: 4, type: 'stock_warehouse', name: 'Remera Technical Hub', location: 'Remera Transit Station', call_time: '08:00', lead_name: 'Solomon Gakiza' },
     ];
   }
 
@@ -1912,9 +1912,12 @@
     const facilityData = allFacilities.map((f, idx) => {
       const isStock = f.type === 'stock_warehouse';
       const facilityCrew = allCrew.filter((c) => {
-        const directMatch = c.checkpoint_type === f.type && Number(c.checkpoint_id) === Number(f.id);
+        const userCpType = c.checkpoint_type || c.last_checkpoint_type;
+        const userCpId = c.checkpoint_id || c.last_checkpoint_id;
+        const directMatch = userCpType === f.type && Number(userCpId) === Number(f.id);
         const assignedMatch = f.type === 'event_venue' && Array.isArray(f.assigned_technicians) && f.assigned_technicians.includes(Number(c.id));
-        return directMatch || assignedMatch;
+        const stockAssignedMatch = isStock && Array.isArray(f.assigned_technicians) && f.assigned_technicians.includes(Number(c.id));
+        return directMatch || assignedMatch || stockAssignedMatch;
       });
       const onSiteCrew = facilityCrew.filter((c) => c.daily_state === 'checked_in');
       const headCount = onSiteCrew.length > 0 ? onSiteCrew.length : Number(f.on_site_now || 0);
@@ -2045,9 +2048,12 @@
     const isStock = facility.type === 'stock_warehouse';
     const allCrew = state.crew || [];
     const facilityCrew = allCrew.filter((c) => {
-      const directMatch = c.checkpoint_type === facility.type && Number(c.checkpoint_id) === Number(facility.id);
+      const userCpType = c.checkpoint_type || c.last_checkpoint_type;
+      const userCpId = c.checkpoint_id || c.last_checkpoint_id;
+      const directMatch = userCpType === facility.type && Number(userCpId) === Number(facility.id);
       const assignedMatch = facility.type === 'event_venue' && Array.isArray(facility.assigned_technicians) && facility.assigned_technicians.includes(Number(c.id));
-      return directMatch || assignedMatch;
+      const stockAssignedMatch = isStock && Array.isArray(facility.assigned_technicians) && facility.assigned_technicians.includes(Number(c.id));
+      return directMatch || assignedMatch || stockAssignedMatch;
     });
     const onSiteCrew = facilityCrew.filter((c) => c.daily_state === 'checked_in');
     const headCount = onSiteCrew.length > 0 ? onSiteCrew.length : Number(facility.on_site_now || 0);
@@ -2204,15 +2210,16 @@
   // =========================================================================
 
   const OPTION_B_VENUES = {
-    'Ndera Warehouse': { x: 0.30, y: 0.40 },
-    'Kigali Arena':    { x: 0.62, y: 0.28 },
-    'BK Arena':        { x: 0.55, y: 0.72 },
-    'Kigali Convention Centre': { x: 0.48, y: 0.38 },
-    'Camp Kigali':     { x: 0.20, y: 0.56 },
-    'Intare Conference Arena': { x: 0.85, y: 0.48 },
-    'Gikondo Logistics Hub': { x: 0.38, y: 0.72 },
-    'Masaka Central Depot': { x: 0.78, y: 0.78 },
-    'Remera Technical Hub': { x: 0.58, y: 0.58 },
+    'Ndera Warehouse': { x: 0.30, y: 0.40, label: '🏭 Ndera Hub' },
+    'KCC Stock':       { x: 0.48, y: 0.38, label: '🏭 KCC Stock' },
+    'BK Arena Stock':  { x: 0.55, y: 0.72, label: '🏭 BK Arena Stock' },
+    'Kigali Convention Centre': { x: 0.48, y: 0.38, label: '🎪 KCC Dome' },
+    'BK Arena':        { x: 0.55, y: 0.72, label: '🏟️ BK Arena' },
+    'Camp Kigali':     { x: 0.20, y: 0.56, label: '🏛️ Camp Kigali' },
+    'Intare Conference Arena': { x: 0.85, y: 0.48, label: '🎪 Intare Arena' },
+    'Gikondo Logistics Hub': { x: 0.38, y: 0.72, label: '🏭 Gikondo Hub' },
+    'Masaka Central Depot': { x: 0.78, y: 0.78, label: '🏭 Masaka Depot' },
+    'Remera Technical Hub': { x: 0.58, y: 0.58, label: '🏭 Remera Hub' },
   };
 
   function readTimelineFeedForMap() {
@@ -2241,7 +2248,8 @@
     // If feed is empty or sparse, supplement with on-site crew from state
     if (users.size === 0 && Array.isArray(state.crew)) {
       state.crew.slice(0, 6).forEach((c) => {
-        const cpName = c.checkpoint_type === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre';
+        const userCpType = c.checkpoint_type || c.last_checkpoint_type;
+        const cpName = c.last_checkpoint_name || (userCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
         users.set(String(c.id), {
           uid: String(c.id),
           name: c.full_name,
@@ -2265,17 +2273,45 @@
     const activeUsers = users || readTimelineFeedForMap();
     map.querySelectorAll('.map-pin').forEach((p) => p.remove());
 
+    // Render geographical landmark anchors for Kigali hubs if not present
+    if (map.querySelectorAll('.map-landmark').length === 0) {
+      const primaryLandmarks = [
+        { label: '🏭 Ndera Hub', x: 0.30, y: 0.40 },
+        { label: '🎪 KCC Dome', x: 0.48, y: 0.38 },
+        { label: '🏟️ BK Arena', x: 0.55, y: 0.72 },
+        { label: '🏛️ Camp Kigali', x: 0.20, y: 0.56 },
+        { label: '🎪 Intare Arena', x: 0.85, y: 0.48 },
+      ];
+      primaryLandmarks.forEach((lm) => {
+        const lmEl = document.createElement('div');
+        lmEl.className = 'map-landmark';
+        lmEl.style.left = `${lm.x * 100}%`;
+        lmEl.style.top = `${lm.y * 100}%`;
+        lmEl.innerHTML = `<span>${lm.label}</span>`;
+        map.appendChild(lmEl);
+      });
+    }
+
+    const venueOccupants = {};
     activeUsers.forEach((u) => {
+      let vKeyMatched = u.venue;
       let coord = OPTION_B_VENUES[u.venue];
       if (!coord) {
         for (const vKey of Object.keys(OPTION_B_VENUES)) {
           if (u.venue.toLowerCase().includes(vKey.toLowerCase()) || vKey.toLowerCase().includes(u.venue.toLowerCase())) {
             coord = OPTION_B_VENUES[vKey];
+            vKeyMatched = vKey;
             break;
           }
         }
       }
       if (!coord) coord = { x: 0.5, y: 0.5 };
+
+      if (!venueOccupants[vKeyMatched]) venueOccupants[vKeyMatched] = 0;
+      const occIndex = venueOccupants[vKeyMatched]++;
+      // Subtle cluster offset so multiple crew at the same venue don't overlap
+      const offsetX = occIndex === 0 ? 0 : ((occIndex % 2 === 1 ? 1 : -1) * Math.ceil(occIndex / 2) * 16);
+      const offsetY = occIndex === 0 ? 0 : (Math.floor(occIndex / 2) * 14);
 
       const pin = document.createElement('button');
       pin.type = 'button';
@@ -2283,8 +2319,8 @@
       pin.dataset.uid = u.uid;
       pin.textContent = u.initials;
       pin.title = `${u.name} · ${u.role} · ${u.venue} (${u.status})`;
-      pin.style.left = `${coord.x * 100}%`;
-      pin.style.top  = `${coord.y * 100}%`;
+      pin.style.left = `calc(${coord.x * 100}% + ${offsetX}px)`;
+      pin.style.top  = `calc(${coord.y * 100}% + ${offsetY}px)`;
       pin.addEventListener('click', () => focusOptionBUser(u.uid));
       map.appendChild(pin);
     });
