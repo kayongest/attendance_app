@@ -78,7 +78,7 @@
 }
 
 html {
-  font-size: 16px;
+  font-size: 16.5px;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -87,7 +87,7 @@ body {
   background-color: var(--bg-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 15.5px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -120,29 +120,65 @@ button {
   align-items: stretch;
   min-height: 100vh;
   width: 100%;
-  max-width: 1600px;
+  max-width: 100%;
   margin: 0 auto;
   background-color: var(--bg-canvas);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Sidebar (224px) */
+/* Sidebar (240px expanded / 72px collapsed) */
 .sidebar {
-  width: 224px;
+  width: 240px;
   flex-shrink: 0;
   background-color: var(--bg-surface);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  padding: 28px 16px 20px 16px;
-  min-height: 1560px;
+  gap: 24px;
+  padding: 24px 16px 20px 16px;
+  min-height: 100vh;
+  position: relative;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s cubic-bezier(0.4, 0, 0.2, 1), gap 0.25s ease;
+}
+
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.sidebar-collapse-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-collapse-btn:hover {
+  background: var(--bg-hover, #f1f5f9);
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
+}
+
+.sidebar-collapse-btn .collapse-arrow-icon {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .brand-header {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding-left: 12px;
+  padding-left: 4px;
   cursor: pointer;
 }
 
@@ -156,12 +192,146 @@ button {
 }
 
 .brand-name {
-  font-size: 25px;
-  font-weight: 400;
-  letter-spacing: -1px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
   line-height: normal;
   color: var(--text-primary);
   white-space: nowrap;
+}
+
+/* Topbar Toggle Button */
+.topbar-sidebar-toggle-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.topbar-sidebar-toggle-btn:hover {
+  background: var(--bg-hover, #f1f5f9);
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
+}
+
+/* ========================================================================== */
+/* COLLAPSED SIDEBAR RAIL STATES                                             */
+/* ========================================================================== */
+.sidebar-collapsed .sidebar {
+  width: 72px;
+  padding: 20px 10px 18px 10px;
+  gap: 18px;
+}
+
+.sidebar-collapsed .sidebar-brand-row {
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sidebar-collapsed .brand-header {
+  padding-left: 0;
+  justify-content: center;
+}
+
+.sidebar-collapsed .brand-name {
+  display: none !important;
+}
+
+.sidebar-collapsed .sidebar-collapse-btn .collapse-arrow-icon {
+  transform: rotate(180deg);
+}
+
+.sidebar-collapsed .topbar-sidebar-toggle-btn {
+  color: var(--brand-primary);
+  background: rgba(113, 71, 235, 0.08);
+  border-color: rgba(113, 71, 235, 0.3);
+}
+
+.sidebar-collapsed .workspace-switcher {
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.sidebar-collapsed .workspace-info,
+.sidebar-collapsed .workspace-switcher > img {
+  display: none !important;
+}
+
+.sidebar-collapsed .workspace-monogram {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+
+.sidebar-collapsed .sidebar .nav-item {
+  position: relative;
+  justify-content: center !important;
+  padding: 11px 0 !important;
+  gap: 0 !important;
+  width: 100%;
+}
+
+.sidebar-collapsed .sidebar .nav-item .svg-icon {
+  width: 20px;
+  height: 20px;
+  margin: 0 auto;
+}
+
+.sidebar-collapsed .sidebar .nav-item-label {
+  display: none !important;
+}
+
+.sidebar-collapsed .sidebar .nav-item-count {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  font-size: 10px !important;
+  padding: 1px 5px !important;
+  min-width: 16px;
+  text-align: center;
+  border-radius: 10px;
+}
+
+.sidebar-collapsed .nav-section-label {
+  font-size: 0 !important;
+  height: 1px;
+  background: var(--border-color);
+  margin: 6px 2px;
+  padding: 0;
+  overflow: hidden;
+  display: block;
+}
+
+.sidebar-collapsed .support-card {
+  padding: 10px 4px;
+  align-items: center;
+  text-align: center;
+}
+
+.sidebar-collapsed .support-card-desc,
+.sidebar-collapsed .support-card-link,
+.sidebar-collapsed .support-card-title {
+  display: none !important;
+}
+
+.sidebar-collapsed .account-footer {
+  justify-content: center;
+  padding-top: 12px;
+}
+
+.sidebar-collapsed .account-details,
+.sidebar-collapsed .account-footer > img {
+  display: none !important;
 }
 
 /* Workspace Switcher */
@@ -8541,110 +8711,248 @@ html.theme-transitioning *::after {
 
 /* Sidebar Navigation */
 .nav-item-label {
-  font-size: 14.5px !important;
-  font-weight: 500;
+  font-size: 15.5px !important;
+  font-weight: 600;
 }
 .nav-item.active .nav-item-label {
-  font-weight: 700;
+  font-weight: 800;
 }
 .nav-item-count {
-  font-size: 11.5px !important;
-  padding: 2px 7px;
-}
-.nav-group-title {
   font-size: 12px !important;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  padding: 2px 7px;
+}
+.nav-section-label {
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 1.2px;
 }
 #sidebar-active-calltime-pill {
+  font-size: 13px !important;
+  font-weight: 700;
+}
+.workspace-name {
+  font-size: 14px !important;
+  font-weight: 700;
+}
+.workspace-plan {
   font-size: 12px !important;
+}
+.support-card-title {
+  font-size: 14px !important;
+  font-weight: 700;
+}
+.support-card-desc {
+  font-size: 12.5px !important;
+  line-height: 1.5;
+}
+.account-name {
+  font-size: 14.5px !important;
+  font-weight: 700;
+}
+.account-role {
+  font-size: 12.5px !important;
 }
 
 /* Topbar & Breadcrumb */
+.breadcrumb-root,
+.breadcrumb-current,
 .breadcrumb-part {
-  font-size: 14.5px !important;
+  font-size: 15.5px !important;
+  font-weight: 600;
 }
 .topbar-location-select {
-  font-size: 14px !important;
+  font-size: 14.5px !important;
 }
 .topbar-user-name,
 #topbar-user-name {
-  font-size: 15px !important;
-  font-weight: 700;
+  font-size: 16px !important;
+  font-weight: 800;
 }
 .topbar-user-role-badge,
 #topbar-user-role-badge {
-  font-size: 12px !important;
+  font-size: 13px !important;
   font-weight: 600;
 }
+.quick-search-input,
 .topbar-search-input {
+  font-size: 15px !important;
+}
+.quick-search-shortcut {
+  font-size: 12px !important;
+  font-weight: 700;
+}
+#topbar-db-text {
+  font-size: 13.5px !important;
+  font-weight: 600;
+}
+.user-menu-name {
+  font-size: 17px !important;
+  font-weight: 800;
+}
+.user-menu-role {
+  font-size: 13.5px !important;
+}
+.user-menu-badge {
+  font-size: 12.5px !important;
+  font-weight: 700;
+}
+.topbar-dropdown-title {
+  font-size: 16px !important;
+  font-weight: 700;
+}
+.item-title {
+  font-size: 15px !important;
+  font-weight: 600;
+}
+.item-sub {
+  font-size: 13px !important;
+}
+
+/* Page Intro & Headings */
+.page-title {
+  font-size: 26px !important;
+  font-weight: 800;
+}
+.page-subtitle {
+  font-size: 15.5px !important;
+  line-height: 1.5;
+}
+.directory-title-17,
+.directory-title-18,
+.chart-title,
+.terminal-card-title {
+  font-size: 21px !important;
+  font-weight: 800;
+}
+.directory-desc,
+.chart-subtitle {
   font-size: 14.5px !important;
+  line-height: 1.5;
+}
+
+/* Checkpoint Controls Bar */
+.cp-type-btn {
+  font-size: 14px !important;
+  font-weight: 600;
+}
+.cp-select-dropdown {
+  font-size: 14.5px !important;
+  font-weight: 600;
+}
+.station-lock-pill {
+  font-size: 13.5px !important;
+  font-weight: 700;
+}
+.updated-text,
+.js-active-cp-meta {
+  font-size: 13.5px !important;
+  font-weight: 500;
 }
 
 /* KPI & Metric Cards */
 .metric-label-md,
 .metric-label-reg {
-  font-size: 14px !important;
+  font-size: 15px !important;
   font-weight: 600;
 }
 .metric-context {
-  font-size: 13px !important;
+  font-size: 13.5px !important;
 }
 .metric-value-31,
 .metric-value-30 {
-  font-size: 34px !important;
+  font-size: 36px !important;
+  font-weight: 800;
+}
+.metric-change-up {
+  font-size: 13.5px !important;
+  font-weight: 600;
 }
 
 /* Tables, Roster, Directory & Terminals */
-.directory-title-18,
-.chart-title,
-.terminal-card-title {
-  font-size: 20px !important;
-  font-weight: 800;
+.status-tab-label {
+  font-size: 14.5px !important;
+  font-weight: 600;
 }
-.directory-desc,
-.chart-subtitle {
+.status-tab-count {
+  font-size: 12.5px !important;
+  font-weight: 700;
+}
+.filter-pill {
   font-size: 14px !important;
+  font-weight: 600;
 }
+.data-table-header,
 .directory-table th,
 .roster-table th,
 .terminal-table th,
-.users-table th {
-  font-size: 13px !important;
+.users-table th,
+.th-label {
+  font-size: 14px !important;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
+.data-table-row,
 .directory-table td,
 .roster-table td,
 .terminal-table td,
 .users-table td {
-  font-size: 14px !important;
+  font-size: 14.5px !important;
 }
+.attendee-name,
+.event-row-title,
 .person-name {
-  font-size: 15px !important;
+  font-size: 16.5px !important;
   font-weight: 700;
 }
-.person-role {
+.attendee-email,
+.event-row-type,
+.person-role,
+.user-contact-cell {
   font-size: 13px !important;
 }
+.company-name {
+  font-size: 14.5px !important;
+  font-weight: 600;
+}
+.company-role {
+  font-size: 13px !important;
+}
+.badge-code-primary,
 .badge-code-cell,
 .staff-code-cell {
+  font-size: 14.5px !important;
+  font-weight: 700;
+}
+.badge-code-sub {
+  font-size: 12.5px !important;
+}
+.gate-btn,
+.gate-btn-checkin,
+.gate-btn-checkout {
+  font-size: 13.5px !important;
+  font-weight: 700;
+}
+.results-count,
+.timeline-page-info {
   font-size: 13.5px !important;
 }
-.user-contact-cell {
-  font-size: 12.5px !important;
+.page-number-btn {
+  font-size: 13.5px !important;
+  font-weight: 600;
 }
 
 /* Status Badges & Pills */
 .status-badge {
-  font-size: 12.5px !important;
+  font-size: 13px !important;
 }
 .status-badge-green-sm,
 .status-badge-amber-sm,
 .status-badge-red-sm,
 .status-badge-purple-sm,
 .status-badge-neutral-sm {
-  font-size: 12px !important;
+  font-size: 12.5px !important;
+  font-weight: 600;
   padding: 3px 9px !important;
 }
 .status-badge-green-md,
@@ -8652,100 +8960,154 @@ html.theme-transitioning *::after {
 .status-badge-red-md,
 .status-badge-purple-md,
 .status-badge-neutral-md {
-  font-size: 13.5px !important;
+  font-size: 14px !important;
+  font-weight: 600;
   padding: 5px 12px !important;
 }
 .tier-code-badge {
-  font-size: 12px !important;
+  font-size: 12.5px !important;
+  font-weight: 800;
   padding: 2px 7px !important;
 }
+.tier-pill-soft {
+  font-size: 13.5px !important;
+  font-weight: 700;
+}
 .ts-mini-pill {
-  font-size: 12px !important;
+  font-size: 12.5px !important;
   padding: 3px 8px !important;
 }
 
 /* Timeline Feed */
 .upcoming-heading-title {
-  font-size: 15px !important;
+  font-size: 16px !important;
   font-weight: 800 !important;
 }
 .timeline-filter-bar input,
 .timeline-filter-bar select {
-  font-size: 13.5px !important;
+  font-size: 14px !important;
 }
 .timeline-action-title {
-  font-size: 15px !important;
+  font-size: 15.5px !important;
   font-weight: 700 !important;
 }
 .timeline-time-sub {
-  font-size: 12.5px !important;
+  font-size: 13px !important;
 }
 .timeline-mini-name {
-  font-size: 14px !important;
+  font-size: 14.5px !important;
   font-weight: 600;
 }
 .timeline-mini-role {
-  font-size: 12.5px !important;
+  font-size: 13px !important;
 }
 
 /* Form Controls & Buttons */
 .btn-primary-38,
 .btn-secondary-38 {
-  font-size: 14.5px !important;
+  font-size: 15px !important;
   font-weight: 600;
 }
+.btn-primary-32,
+.btn-secondary-32,
 .btn-primary-32-sm,
 .btn-secondary-32-sm {
-  font-size: 13px !important;
+  font-size: 13.5px !important;
   font-weight: 600;
 }
 .form-input,
 .form-select,
+.table-search-input,
 .kiosk-search-input,
 .search-input {
-  font-size: 14.5px !important;
+  font-size: 15px !important;
 }
 .form-label {
-  font-size: 13.5px !important;
+  font-size: 14px !important;
   font-weight: 600;
+}
+
+/* Map & Inspector */
+.inspector-name {
+  font-size: 19px !important;
+  font-weight: 800;
+}
+.inspector-meta {
+  font-size: 13.5px !important;
+}
+.map-metric-count {
+  font-size: 22px !important;
+  font-weight: 800;
+}
+.map-metric-label {
+  font-size: 12.5px !important;
 }
 
 /* Modals & Kiosk Verification */
 .modal-title {
-  font-size: 20px !important;
+  font-size: 22px !important;
   font-weight: 800;
 }
+.modal-subtitle,
+.timeline-audit-subtitle {
+  font-size: 14.5px !important;
+}
+#pane-kiosk h3 {
+  font-size: 21px !important;
+  font-weight: 800;
+}
+.kiosk-hero-input-field {
+  font-size: 16px !important;
+}
 .kiosk-staff-name {
-  font-size: 24px !important;
+  font-size: 26px !important;
+  font-weight: 800;
 }
 .kiosk-role-cyan-pill {
-  font-size: 13px !important;
+  font-size: 14px !important;
+  font-weight: 700;
 }
 .kiosk-status-headline {
-  font-size: 24px !important;
+  font-size: 26px !important;
+  font-weight: 800;
 }
 .kiosk-status-reason {
-  font-size: 15px !important;
+  font-size: 16px !important;
 }
 .kiosk-ts-label {
-  font-size: 12.5px !important;
+  font-size: 13px !important;
 }
 .kiosk-ts-value {
-  font-size: 15.5px !important;
+  font-size: 16.5px !important;
+  font-weight: 700;
+}
+.kiosk-clearance-title-pill {
+  font-size: 14px !important;
   font-weight: 700;
 }
 .kiosk-delta-val,
 .kiosk-delta-pill {
-  font-size: 13.5px !important;
-}
-.kiosk-transit-intro {
-  font-size: 14.5px !important;
-}
-.kiosk-transit-steps {
   font-size: 14px !important;
 }
-.decision-btn-label {
+.kiosk-transit-intro {
+  font-size: 15px !important;
+}
+.kiosk-transit-steps {
   font-size: 14.5px !important;
+}
+.decision-btn-label {
+  font-size: 15px !important;
+  font-weight: 700;
+}
+.terminal-lock-heading {
+  font-size: 24px !important;
+  font-weight: 800;
+}
+.terminal-lock-subtext {
+  font-size: 15px !important;
+}
+.terminal-unlock-pin-input {
+  font-size: 16px !important;
 }
 
 

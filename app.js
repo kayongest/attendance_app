@@ -1341,7 +1341,15 @@
       el.style.display = isVis ? 'flex' : 'none';
       if (isVis) {
         el.removeAttribute('data-restricted');
-        el.removeAttribute('title');
+        if (el.getAttribute('title') === 'Restricted') {
+          el.removeAttribute('title');
+        }
+        if (!el.hasAttribute('title')) {
+          const lbl = el.querySelector('.nav-item-label');
+          if (lbl && lbl.textContent.trim()) {
+            el.setAttribute('title', lbl.textContent.trim());
+          }
+        }
         el.style.opacity = '1';
         el.style.filter = 'none';
         el.style.cursor = 'pointer';
@@ -10868,6 +10876,50 @@
     driverObj.drive();
   }
 
+  function initSidebarCollapse() {
+    const shell = document.querySelector('.app-shell');
+    const collapseBtn = document.getElementById('sidebar-collapse-toggle-btn');
+    const topbarToggleBtn = document.getElementById('topbar-sidebar-toggle-btn');
+    if (!shell) return;
+
+    try {
+      if (localStorage.getItem('ability_sidebar_collapsed') === 'true') {
+        shell.classList.add('sidebar-collapsed');
+      }
+    } catch (_) {}
+
+    const toggle = () => {
+      const isCollapsed = shell.classList.toggle('sidebar-collapsed');
+      try {
+        localStorage.setItem('ability_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+      } catch (_) {}
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 260);
+    };
+
+    if (collapseBtn) collapseBtn.addEventListener('click', toggle);
+    if (topbarToggleBtn) topbarToggleBtn.addEventListener('click', toggle);
+
+    // Keyboard shortcut: Alt + S
+    window.addEventListener('keydown', (e) => {
+      if (e.altKey && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        toggle();
+      }
+    });
+
+    // Populate titles for tooltip display on collapsed rail
+    document.querySelectorAll('.sidebar .nav-item').forEach((item) => {
+      if (!item.hasAttribute('title')) {
+        const lbl = item.querySelector('.nav-item-label');
+        if (lbl && lbl.textContent.trim()) {
+          item.setAttribute('title', lbl.textContent.trim());
+        }
+      }
+    });
+  }
+
   function initTourControls() {
     const tourBtn = document.getElementById('topbar-menu-tour');
     if (tourBtn) {
@@ -10882,6 +10934,7 @@
   // Initialize
   document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
+    initSidebarCollapse();
     bindEvents();
     initShiftReliefControls();
     initPhase2Controls();
