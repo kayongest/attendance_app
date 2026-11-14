@@ -566,7 +566,7 @@
       matchTag.style.display = 'none';
       matchTag.textContent = '';
     }
-    if (inp && state.activeScreen === 'attendees') {
+    if (inp && state.activeScreen === 'terminals') {
       setTimeout(() => {
         inp.focus();
       }, 60);
@@ -726,7 +726,7 @@
 
       if (isStockCtrl) {
         showToast('Access Scoped: Stock Controllers are assigned to Gate Kiosk (#pane-kiosk) and Stock Batch Approvals.');
-        screenKey = 'attendees';
+        screenKey = 'terminals';
         scrollToId = 'pane-kiosk';
       } else if (isTech) {
         showToast('Access Restricted: Warehouse inventory management is reserved for Stock Managers.');
@@ -736,7 +736,7 @@
         screenKey = 'overview';
       } else {
         showToast('Access Restricted: Crew members are scoped to Personal Badge & Gate Kiosk view.');
-        screenKey = 'attendees';
+        screenKey = 'terminals';
         scrollToId = 'pane-kiosk';
       }
     }
@@ -746,6 +746,7 @@
       events: document.getElementById('screen-events'),
       users: document.getElementById('screen-users'),
       attendees: document.getElementById('screen-attendees'),
+      terminals: document.getElementById('screen-terminals'),
       analytics: document.getElementById('screen-analytics'),
       'stock-manager': document.getElementById('screen-stock-manager'),
     };
@@ -773,7 +774,8 @@
       overview: 'Gate Operations Dashboard',
       events: 'Venues & Stock Gates',
       users: 'Staff, Technicians & Role Management',
-      attendees: 'Staff ID Badges & Gate Terminal (#pane-kiosk)',
+      attendees: 'Staff ID Badges & Kiosk',
+      terminals: 'Terminals (#pane-kiosk)',
       analytics: 'Stock Batch Approvals & Clearance Matrix',
       'stock-manager': 'Stocks & Warehouses Inventory Manager',
     };
@@ -788,10 +790,14 @@
       switchUsersView(state.usersViewMode || 'personnel');
     }
 
-    if (scrollToId === 'pane-kiosk') {
+    if (scrollToId === 'pane-kiosk' || screenKey === 'terminals') {
       setTimeout(() => {
-        const el = document.getElementById('pane-kiosk');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (scrollToId === 'pane-kiosk') {
+          const el = document.getElementById('pane-kiosk');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
         const inp = document.getElementById('kiosk-badge-input');
         if (inp) {
           inp.focus();
@@ -899,16 +905,16 @@
     const isStockCtrl = rawRole === 'stock_controller';
 
     if (isStockCtrl) {
-      return screenKey === 'attendees' || screenKey === 'analytics';
+      return screenKey === 'terminals' || screenKey === 'attendees' || screenKey === 'analytics';
     }
     if (isTech) {
-      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees';
+      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'terminals';
     }
     if (isStockMgr) {
-      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'analytics' || screenKey === 'stock-manager';
+      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'analytics' || screenKey === 'stock-manager';
     }
     // Technician / Standard crew:
-    return screenKey === 'attendees';
+    return screenKey === 'attendees' || screenKey === 'terminals';
   }
 
   function canCurrentUserAddUser() {
@@ -998,6 +1004,7 @@
     const navEvents = document.querySelector('.sidebar .nav-item[data-nav-target="events"]');
     const navUsers = document.getElementById('nav-users-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="users"]');
     const navAttendees = document.querySelector('.sidebar .nav-item[data-nav-target="attendees"]');
+    const navTerminals = document.getElementById('nav-terminals-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="terminals"]');
     const navVenueSec = document.getElementById('nav-venue-security-btn');
     const navAnalytics = document.querySelector('.sidebar .nav-item[data-nav-target="analytics"]');
     const navStockMgr = document.getElementById('nav-stock-manager-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="stock-manager"]');
@@ -1014,6 +1021,9 @@
 
     // ID Badges & Kiosk: Visible to all personas
     setVis(navAttendees, true);
+
+    // Terminals: Visible to all personas
+    setVis(navTerminals, true);
 
     // Venue Security Portal: Admin and Tech Lead (Hidden for Stock Manager, Stock Controller, Technician)
     setVis(navVenueSec, isAdmin || isTech);
@@ -1119,15 +1129,14 @@
     }
 
     // 7. Kiosk Banner
-    const kioskBanner = document.getElementById('kiosk-stock-role-banner');
-    if (kioskBanner) {
-      kioskBanner.style.display = isStockCtrl ? 'flex' : 'none';
-    }
+    document.querySelectorAll('#kiosk-stock-role-banner, .js-kiosk-stock-role-banner').forEach((banner) => {
+      banner.style.display = isStockCtrl ? 'flex' : 'none';
+    });
 
     // 8. Auto-redirect if active screen is not permitted for new role
     if (!isScreenPermittedForCurrentUser(state.activeScreen)) {
       if (isStockCtrl || isTechCrew) {
-        switchScreen('attendees', 'pane-kiosk');
+        switchScreen('terminals', 'pane-kiosk');
       } else {
         switchScreen('overview');
       }
@@ -5874,7 +5883,7 @@
     if (brandHome) {
       brandHome.addEventListener('click', () => {
         if (isCurrentUserStockController() || isCurrentUserTechnician()) {
-          switchScreen('attendees', 'pane-kiosk');
+          switchScreen('terminals', 'pane-kiosk');
         } else {
           switchScreen('overview');
         }
@@ -5896,7 +5905,7 @@
         state.checkpointType = 'event_venue';
         const firstVenue = (state.checkpoints.event_venues || [])[0];
         if (firstVenue) state.checkpointId = Number(firstVenue.id);
-        switchScreen('attendees', 'pane-kiosk');
+        switchScreen('terminals', 'pane-kiosk');
         fetchBootstrap(false);
         showToast('Switched to Event Venue Security Portal (#pane-kiosk)');
       });
@@ -5919,8 +5928,10 @@
       const actionBtn = e.target.closest('[data-action]');
       if (actionBtn) {
         const act = actionBtn.getAttribute('data-action');
-        if (act === 'go-kiosk' || act === 'go-attendees') {
-          switchScreen('attendees', 'pane-kiosk');
+        if (act === 'go-kiosk') {
+          switchScreen('terminals', 'pane-kiosk');
+        } else if (act === 'go-attendees') {
+          switchScreen('attendees');
         } else if (act === 'go-events') {
           switchScreen('events');
         } else if (act === 'go-overview') {
@@ -5966,14 +5977,17 @@
       });
     });
 
-    // Scan Mode Select
-    const scanModeSel = document.getElementById('kiosk-scan-mode-select');
-    if (scanModeSel) {
-      scanModeSel.addEventListener('change', (e) => {
+    // Scan Mode Select (synced across Terminals and ID Badges & Kiosk)
+    const scanModeSelects = document.querySelectorAll('.js-scan-mode-select, #kiosk-scan-mode-select');
+    scanModeSelects.forEach((sel) => {
+      sel.addEventListener('change', (e) => {
         state.scanMode = e.target.value;
+        scanModeSelects.forEach((other) => {
+          if (other !== e.target) other.value = state.scanMode;
+        });
         showToast(`Scan Mode set to: ${e.target.options[e.target.selectedIndex].text}`);
       });
-    }
+    });
 
     // Focus Badge Scanner button
     const focusBtn = document.getElementById('focus-kiosk-scanner-btn');
@@ -6187,7 +6201,7 @@
           if (val) {
             searchDropdown.style.display = 'none';
             const matched = findCrewMember(val);
-            switchScreen('attendees', 'pane-kiosk');
+            switchScreen('terminals', 'pane-kiosk');
             triggerGateScan(matched ? matched.badge_code : val);
             topSearch.value = '';
           }
@@ -6211,7 +6225,7 @@
     if (menuKiosk) {
       menuKiosk.addEventListener('click', () => {
         closeAllTopbarDropdowns();
-        switchScreen('attendees', 'pane-kiosk');
+        switchScreen('terminals', 'pane-kiosk');
       });
     }
 
@@ -6274,7 +6288,7 @@
         closeAllTopbarDropdowns();
         const u = state.currentUser || state.crew[0];
         if (u) {
-          switchScreen('attendees', 'pane-kiosk');
+          switchScreen('terminals', 'pane-kiosk');
           state.selectedCrewId = u.id;
           state.currentVerification = buildClientVerificationFromMember(u);
           renderVerificationDeck();
@@ -6333,7 +6347,7 @@
         if (topSearch) topSearch.value = '';
         const member = state.crew.find((c) => Number(c.id) === Number(uid)) || findCrewMember(badge);
         if (member) {
-          switchScreen('attendees', 'pane-kiosk');
+          switchScreen('terminals', 'pane-kiosk');
           state.selectedCrewId = member.id;
           state.currentVerification = buildClientVerificationFromMember(member);
           renderVerificationDeck();
@@ -6398,7 +6412,7 @@
             closeAuthModal();
             renderTopbarAndKpis();
             if (isCurrentUserStockController()) {
-              switchScreen('attendees', 'pane-kiosk');
+              switchScreen('terminals', 'pane-kiosk');
               showToast(data.message || `Welcome back, ${data.user.full_name}! Redirected to Staff ID Badges & Gate Terminal.`);
             } else {
               showToast(data.message || `Welcome back, ${data.user.full_name}!`);
@@ -6572,7 +6586,7 @@
             state.currentUser = data.user;
             renderTopbarAndKpis();
             if (isCurrentUserStockController() || isCurrentUserTechnician()) {
-              switchScreen('attendees', 'pane-kiosk');
+              switchScreen('terminals', 'pane-kiosk');
             }
             showToast(data.message || `Switched active operator to ${data.user.full_name}`);
           } else {
@@ -6677,18 +6691,6 @@
         await confirmGateAction('decline_in', {
           decline_reason: reason,
         });
-        return;
-      }
-
-      // 0b. Quick Scan Demo Badges
-      const quickBadgeBtn = e.target.closest('.kiosk-quick-badge-btn');
-      if (quickBadgeBtn) {
-        const badge = quickBadgeBtn.getAttribute('data-badge');
-        if (badge) {
-          const inp = document.getElementById('kiosk-badge-input');
-          if (inp) inp.value = badge;
-          triggerGateScan(badge);
-        }
         return;
       }
 
@@ -6812,7 +6814,7 @@
         state.checkpointType = actCpBtn.getAttribute('data-cp-type');
         state.checkpointId = Number(actCpBtn.getAttribute('data-cp-id'));
         await fetchBootstrap(false);
-        switchScreen('attendees', 'pane-kiosk');
+        switchScreen('terminals', 'pane-kiosk');
         showToast(`Switched Active Gate Terminal to ${state.activeCheckpoint.name}`);
         return;
       }
@@ -6929,7 +6931,7 @@
         if (member) {
           state.selectedCrewId = cid;
           state.currentVerification = buildClientVerificationFromMember(member);
-          switchScreen('attendees', 'pane-kiosk');
+          switchScreen('terminals', 'pane-kiosk');
           renderAll();
         }
         return;
@@ -9060,7 +9062,7 @@
     if (supLink) {
       supLink.addEventListener('click', (e) => {
         e.preventDefault();
-        switchScreen('attendees', 'pane-kiosk');
+        switchScreen('terminals', 'pane-kiosk');
       });
     }
   }
@@ -9196,12 +9198,12 @@
     initTheme();
     bindEvents();
     if (window.location.hash === '#pane-kiosk') {
-      switchScreen('attendees', 'pane-kiosk');
+      switchScreen('terminals', 'pane-kiosk');
     }
     await fetchBootstrap(false);
     startLiveGateSync();
     if (isCurrentUserStockController()) {
-      switchScreen('attendees', 'pane-kiosk');
+      switchScreen('terminals', 'pane-kiosk');
       applyNavigationRestrictions();
     }
     loadStockManagerData();

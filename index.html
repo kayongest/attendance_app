@@ -58,6 +58,10 @@
           <img src="assets/nav-attendees-inactive.svg" alt="" class="svg-icon" id="nav-icon-attendees" />
           <span class="nav-item-label">ID Badges &amp; Kiosk</span>
         </button>
+        <button type="button" class="nav-item" data-nav-target="terminals" id="nav-terminals-btn">
+          <img src="assets/scan-line-13.svg" alt="" class="svg-icon" id="nav-icon-terminals" />
+          <span class="nav-item-label">Terminals</span>
+        </button>
         <button type="button" class="nav-item" id="nav-venue-security-btn" data-node-id="2:3295">
           <img src="assets/nav-campaigns.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Venue Security Portal</span>
@@ -1103,22 +1107,28 @@
       </main>
 
       <!-- ================================================================== -->
-      <!-- SCREEN 3: STAFF ID BADGES & GATE KIOSK (#pane-kiosk, Node 2:8468)  -->
+      <!-- SCREEN 3: STAFF ID BADGES & KIOSK (Node 2:8468)                    -->
       <!-- ================================================================== -->
       <main class="screen-view" id="screen-attendees" data-node-id="2:8554">
         <div class="overview-top-block" data-node-id="2:8555">
           <!-- Page Introduction -->
           <div class="page-intro" data-node-id="2:8556">
             <div class="page-intro-heading" data-node-id="2:8557">
-              <h1 class="page-title" data-node-id="2:8558">Staff ID Badges &amp; Gate Terminal (#pane-kiosk)</h1>
+              <h1 class="page-title" data-node-id="2:8558">Staff ID Badges &amp; Kiosk</h1>
               <p class="page-subtitle" data-node-id="2:8559">
                 Dynamic Access Matrix verification, paired Check-In (In) &amp; Check-Out (Out) timestamps, and Linked Equipment Batch custody.
               </p>
             </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary-38" data-action="go-kiosk">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1); width: 15px; height: 15px;" />
+                <span>Open Terminals (#pane-kiosk)</span>
+              </button>
+            </div>
           </div>
 
           <!-- Stock Controller Assigned Scope Banner -->
-          <div id="kiosk-stock-role-banner" style="display: none; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #ede9fe, #f5f3ff); border: 1px solid #c4b5fd; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px;">
+          <div class="js-kiosk-stock-role-banner" style="display: none; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #ede9fe, #f5f3ff); border: 1px solid #c4b5fd; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px;">
             <div style="display: flex; align-items: center; gap: 10px;">
               <span style="font-size: 18px;">📦</span>
               <div>
@@ -1147,8 +1157,8 @@
             </div>
 
             <div class="checkpoint-right-group" data-node-id="2:8577">
-              <label for="kiosk-scan-mode-select" style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Scan Mode:</label>
-              <select id="kiosk-scan-mode-select" class="scan-mode-select">
+              <label for="attendees-scan-mode-select" style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Scan Mode:</label>
+              <select id="attendees-scan-mode-select" class="scan-mode-select js-scan-mode-select">
                 <option value="auto">Auto (Smart Check-In / Check-Out)</option>
                 <option value="check_in">Force Check-In Only</option>
                 <option value="check_out">Force Check-Out Only</option>
@@ -1157,72 +1167,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Dedicated On-Page Gate Scanner Hero Deck (#pane-kiosk) -->
-        <section class="kiosk-scanner-hero-card" id="pane-kiosk">
-          <div class="kiosk-scanner-hero-header">
-            <div class="kiosk-scanner-hero-title">
-              <span class="station-live-dot"></span>
-              <h3>Gate Terminal Barcode &amp; Badge Scanner</h3>
-              <span class="kiosk-scanner-chip" id="kiosk-scanner-station-chip">Scanner Active</span>
-            </div>
-            <div class="kiosk-scanner-quick-tips">
-              <span class="kbd-hint-pill"><kbd>/</kbd> to focus</span>
-              <span class="kbd-hint-pill"><kbd>Enter</kbd> to verify</span>
-            </div>
-          </div>
-
-          <!-- Interactive Shift Call-Time Quickbar (Extension & Reset) -->
-          <div class="kiosk-calltime-quickbar" id="kiosk-calltime-quickbar">
-            <div class="kiosk-calltime-quickbar-left">
-              <span class="calltime-clock-icon">🕒</span>
-              <div class="calltime-info-stack">
-                <span class="calltime-quickbar-title">Active Shift Call-Time: <strong id="kiosk-quickbar-time">08:00 AM</strong></span>
-                <span class="calltime-quickbar-sub" id="kiosk-quickbar-sub">15m grace window · Live arrival punctuality active</span>
-              </div>
-            </div>
-            <div class="kiosk-calltime-quickbar-actions">
-              <span class="quick-extend-label">Extend:</span>
-              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="15" title="Extend call-time by +15 mins">+15m</button>
-              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="30" title="Extend call-time by +30 mins">+30m</button>
-              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="60" title="Extend call-time by +1 hour">+1h</button>
-              <button type="button" class="btn btn-secondary-32-sm js-quick-reset-btn" id="kiosk-quick-reset-calltime-btn" title="Reset call-time back to default baseline (08:00 AM)" style="color: #b45309; border-color: #fde68a;">↺ Reset</button>
-              <button type="button" class="btn btn-secondary-32-sm js-open-active-calltime-modal" title="Open Call-Time Settings Modal">⚙ Edit</button>
-            </div>
-          </div>
-
-          <form class="kiosk-hero-input-form" id="kiosk-scan-form" autocomplete="off">
-            <div class="kiosk-hero-input-wrap">
-              <div class="kiosk-hero-input-icon">
-                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
-              </div>
-              <input
-                type="text"
-                id="kiosk-badge-input"
-                class="kiosk-hero-input-field"
-                placeholder="Scan barcode or type badge (e.g. REW-BADGE-0006, ABL-006, or staff name)..."
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <span class="kiosk-search-match-tag" id="kiosk-search-match-tag" style="display: none;"></span>
-              <button type="button" class="kiosk-input-clear-btn" id="kiosk-input-clear-btn" style="display: none;" title="Clear search">✕</button>
-            </div>
-            <button type="submit" class="btn btn-primary-38 kiosk-hero-scan-btn">
-              <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1); width: 16px; height: 16px;" />
-              <span>Verify &amp; Record</span>
-            </button>
-          </form>
-
-          <div class="kiosk-scanner-hero-footer">
-            <div class="kiosk-quick-badges-label">Quick Scan Demo Badges:</div>
-            <div class="kiosk-quick-badge-pills">
-              <button type="button" class="kiosk-quick-badge-btn" data-badge="REW-BADGE-0006">Patrick NYIRIMBIBI (L2 · In/Out)</button>
-              <button type="button" class="kiosk-quick-badge-btn" data-badge="REW-BADGE-0001">Sarah UWASE (L4 · Master Key)</button>
-              <button type="button" class="kiosk-quick-badge-btn" data-badge="REW-BADGE-0003">Diane MUKESHIMANA (L3 · Stock)</button>
-              <button type="button" class="kiosk-quick-badge-btn" data-badge="REW-BADGE-0008">Eric HAVUGIMANA (L1 · Venue Only)</button>
-            </div>
-          </div>
-        </section>
 
         <!-- Split Row: Crew Roster & Paired Gate Controls Table (Left) + User Activity Timeline Widget (Right) Side-by-Side -->
         <div class="split-row attendees-kiosk-split-row">
@@ -1382,6 +1326,124 @@
             </div>
           </div>
         </div>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 3B: GATE TERMINALS (#pane-kiosk)                            -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-terminals">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Terminals</h1>
+              <p class="page-subtitle">
+                Live Gate Terminal Barcode &amp; Badge Scanner (#pane-kiosk), active shift call-time controls, and checkpoint verification.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" data-action="go-attendees">
+                <img src="assets/nav-attendees-inactive.svg" alt="" class="svg-icon" />
+                <span>View ID Badges &amp; Crew Roster</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Stock Controller Assigned Scope Banner -->
+          <div id="kiosk-stock-role-banner" class="js-kiosk-stock-role-banner" style="display: none; align-items: center; justify-content: space-between; background: linear-gradient(90deg, #ede9fe, #f5f3ff); border: 1px solid #c4b5fd; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 18px;">📦</span>
+              <div>
+                <strong style="color: #4c1d95; font-size: 13px;">Assigned Operator Scope: Tier L3 Stock Controller</strong>
+                <p style="color: #6b21a8; font-size: 11px; margin-top: 2px;">Your session is dedicated exclusively to Staff ID Badges, Gate Kiosk Verification, and Linked Equipment Batches (#pane-kiosk).</p>
+              </div>
+            </div>
+            <span style="background: #5c3dbb; color: #ffffff; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;">ACTIVE KIOSK MODE</span>
+          </div>
+
+          <!-- Checkpoint & Scan Mode Selector Bar -->
+          <div class="checkpoint-controls-bar">
+            <div class="checkpoint-left-group">
+              <div class="cp-type-toggle" role="group" aria-label="Checkpoint Type">
+                <button type="button" class="cp-type-btn js-cp-type-btn active-stock" data-cp-type="stock_warehouse">
+                  <span class="cp-dot"></span>
+                  <span>Stock Warehouse</span>
+                </button>
+                <button type="button" class="cp-type-btn js-cp-type-btn" data-cp-type="event_venue">
+                  <span class="cp-dot"></span>
+                  <span>Event Venue</span>
+                </button>
+              </div>
+
+              <select class="cp-select-dropdown js-checkpoint-select" aria-label="Target Checkpoint"></select>
+            </div>
+
+            <div class="checkpoint-right-group">
+              <label for="kiosk-scan-mode-select" style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">Scan Mode:</label>
+              <select id="kiosk-scan-mode-select" class="scan-mode-select js-scan-mode-select">
+                <option value="auto">Auto (Smart Check-In / Check-Out)</option>
+                <option value="check_in">Force Check-In Only</option>
+                <option value="check_out">Force Check-Out Only</option>
+                <option value="verify_only">Verify Access Only</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dedicated On-Page Gate Scanner Hero Deck (#pane-kiosk) -->
+        <section class="kiosk-scanner-hero-card" id="pane-kiosk">
+          <div class="kiosk-scanner-hero-header">
+            <div class="kiosk-scanner-hero-title">
+              <span class="station-live-dot"></span>
+              <h3>Gate Terminal Barcode &amp; Badge Scanner</h3>
+              <span class="kiosk-scanner-chip" id="kiosk-scanner-station-chip">Scanner Active</span>
+            </div>
+            <div class="kiosk-scanner-quick-tips">
+              <span class="kbd-hint-pill"><kbd>/</kbd> to focus</span>
+              <span class="kbd-hint-pill"><kbd>Enter</kbd> to verify</span>
+            </div>
+          </div>
+
+          <!-- Interactive Shift Call-Time Quickbar (Extension & Reset) -->
+          <div class="kiosk-calltime-quickbar" id="kiosk-calltime-quickbar">
+            <div class="kiosk-calltime-quickbar-left">
+              <span class="calltime-clock-icon">🕒</span>
+              <div class="calltime-info-stack">
+                <span class="calltime-quickbar-title">Active Shift Call-Time: <strong id="kiosk-quickbar-time">08:00 AM</strong></span>
+                <span class="calltime-quickbar-sub" id="kiosk-quickbar-sub">15m grace window · Live arrival punctuality active</span>
+              </div>
+            </div>
+            <div class="kiosk-calltime-quickbar-actions">
+              <span class="quick-extend-label">Extend:</span>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="15" title="Extend call-time by +15 mins">+15m</button>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="30" title="Extend call-time by +30 mins">+30m</button>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="60" title="Extend call-time by +1 hour">+1h</button>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-reset-btn" id="kiosk-quick-reset-calltime-btn" title="Reset call-time back to default baseline (08:00 AM)" style="color: #b45309; border-color: #fde68a;">↺ Reset</button>
+              <button type="button" class="btn btn-secondary-32-sm js-open-active-calltime-modal" title="Open Call-Time Settings Modal">⚙ Edit</button>
+            </div>
+          </div>
+
+          <form class="kiosk-hero-input-form" id="kiosk-scan-form" autocomplete="off">
+            <div class="kiosk-hero-input-wrap">
+              <div class="kiosk-hero-input-icon">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+              </div>
+              <input
+                type="text"
+                id="kiosk-badge-input"
+                class="kiosk-hero-input-field"
+                placeholder="Scan barcode or type badge (e.g. REW-BADGE-0006, ABL-006, or staff name)..."
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <span class="kiosk-search-match-tag" id="kiosk-search-match-tag" style="display: none;"></span>
+              <button type="button" class="kiosk-input-clear-btn" id="kiosk-input-clear-btn" style="display: none;" title="Clear search">✕</button>
+            </div>
+            <button type="submit" class="btn btn-primary-38 kiosk-hero-scan-btn">
+              <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1); width: 16px; height: 16px;" />
+              <span>Verify &amp; Record</span>
+            </button>
+          </form>
+        </section>
       </main>
 
       <!-- ================================================================== -->

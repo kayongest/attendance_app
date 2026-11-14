@@ -748,39 +748,6 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       background: var(--brand-purple-hover);
     }
 
-    .demo-pills {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: center;
-    }
-
-    .demo-pill-btn {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      padding: 6px 14px;
-      border-radius: 16px;
-      font-size: 11px;
-      color: var(--text-sub);
-      cursor: pointer;
-      transition: all 0.12s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-family: inherit;
-    }
-
-    .demo-pill-btn:hover {
-      background-color: var(--brand-purple-soft);
-      border-color: var(--brand-purple);
-      color: var(--text-main);
-      transform: translateY(-1px);
-    }
-
-    .demo-pill-btn strong {
-      color: var(--text-main);
-    }
-
     /* Form Fields Grid for Register */
     .grid-2col {
       display: grid;
@@ -1026,30 +993,6 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
     </div>
   </div>
 
-  <!-- Fast Demo Account Switcher for Instant Testing -->
-  <div style="margin-top: 20px; text-align: center; max-width: 780px; width: 100%;">
-    <div style="font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; font-weight: 600;">
-      ⚡ Quick Role Test (1-Click Sign In)
-    </div>
-    <div class="demo-pills">
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="didier@ability.rw" data-pass="admin123" data-name="Didier Kayonge" data-role="admin" data-is-admin="1" title="👑 Didier Kayonge (admin • Tier L4 All Access) — Unlocks Sign Up toggle + Full Access">
-        👑 <strong>Didier Kayonge</strong> (admin &bull; Tier L4 All Access)
-      </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="jp@ability.rw" data-pass="password123" data-name="Jean Paul Ndayisaba" data-role="tech_lead" data-is-admin="0" title="🎛️ Jean Paul Ndayisaba (tech_lead • Call times & Event Rosters)">
-        🎛️ <strong>Jean Paul Ndayisaba</strong> (tech_lead &bull; Call times &amp; Event Rosters)
-      </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="theogene@ability.rw" data-pass="password123" data-name="Theogene Nsengiyumva" data-role="stock_manager" data-is-admin="0" title="🏭 Theogene Nsengiyumva (stock_manager • Warehouses & Scoped Onboarding)">
-        🏭 <strong>Theogene Nsengiyumva</strong> (stock_manager &bull; Warehouses &amp; Scoped Onboarding)
-      </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="mirene@ability.rw" data-pass="password123" data-name="Mirene Uwase" data-role="stock_controller" data-is-admin="0" title="📦 Mirene Uwase (stock_controller • Restricted to Gate Kiosk & Custody)">
-        📦 <strong>Mirene Uwase</strong> (stock_controller &bull; Restricted to Gate Kiosk &amp; Custody)
-      </button>
-      <button type="button" class="demo-pill-btn js-demo-btn" data-user="eric@ability.rw" data-pass="password123" data-name="Eric Havugimana" data-role="technician" data-is-admin="0" title="🏗️ Eric Havugimana (technician • Rigging L2)">
-        🏗️ <strong>Eric Havugimana</strong> (technician &bull; Rigging L2)
-      </button>
-    </div>
-  </div>
-
   <!-- Administrator PIN Verification Modal (to unlock Sign Up toggle) -->
   <div class="admin-pin-modal-backdrop" id="admin-pin-modal" style="display: none;">
     <div class="admin-pin-modal-card">
@@ -1220,36 +1163,6 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
           showToast('Default terminal passwords: password123 (staff) or admin123 (executives).', 'info', 4000);
         });
       }
-
-      // Fast Demo Accounts 1-click login
-      document.querySelectorAll('.js-demo-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const u = btn.getAttribute('data-user');
-          const p = btn.getAttribute('data-pass');
-          const name = btn.getAttribute('data-name');
-          const isDemoAdmin = btn.getAttribute('data-is-admin') === '1';
-
-          document.getElementById('signin-username').value = u;
-          document.getElementById('signin-password').value = p;
-          container.classList.remove('right-panel-active');
-
-          const role = btn.getAttribute('data-role');
-          if (isDemoAdmin) {
-            enableAdminControls();
-          } else {
-            disableAdminControls();
-          }
-
-          if (role === 'stock_controller') {
-            showToast(`Loaded ${name} (Stock Controller). Redirecting to #pane-kiosk...`, 'info', 1200);
-          } else {
-            showToast(`Loaded ${name} credentials. Signing in...`, 'info', 1000);
-          }
-          setTimeout(() => {
-            document.getElementById('signin-form').requestSubmit();
-          }, 350);
-        });
-      });
 
       // Sign In Form Submission
       const signinForm = document.getElementById('signin-form');

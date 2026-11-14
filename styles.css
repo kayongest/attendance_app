@@ -4362,50 +4362,6 @@ button {
   box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
 }
 
-.kiosk-scanner-hero-footer {
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border-color);
-}
-
-.kiosk-quick-badges-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.kiosk-quick-badge-pills {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.kiosk-quick-badge-btn {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.kiosk-quick-badge-btn:hover {
-  background: var(--brand-soft);
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-  transform: translateY(-1px);
-}
-
 /* ========================================================================== */
 /* MODAL VERIFICATION CARD NAVIGATION & QUICK ACTION BUTTONS                  */
 /* ========================================================================== */
@@ -4508,7 +4464,8 @@ button {
 /* SCREEN 6: USER & ROLE MANAGEMENT STYLES                                    */
 /* ========================================================================== */
 
-.nav-item.active #nav-icon-users {
+.nav-item.active #nav-icon-users,
+.nav-item.active #nav-icon-terminals {
   filter: invert(41%) sepia(85%) saturate(1478%) hue-rotate(227deg) brightness(96%) contrast(97%);
 }
 
