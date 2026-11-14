@@ -1317,11 +1317,13 @@
 
   function applyNavigationRestrictions() {
     const rawRole = (state.currentUser?.role || '').toLowerCase();
+    const clearance = (state.currentUser?.clearance_code || '').toUpperCase();
     const isAdmin = isCurrentUserAdmin();
-    const isTech = rawRole === 'tech_lead' && !isAdmin;
-    const isStockMgr = rawRole === 'stock_manager' && !isAdmin;
-    const isStockCtrl = rawRole === 'stock_controller';
-    const isTechCrew = !isAdmin && !isTech && !isStockMgr && !isStockCtrl;
+    const isManager = (rawRole === 'manager' || rawRole === 'project_manager') && !isAdmin;
+    const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isAdmin;
+    const isStockMgr = (rawRole === 'stock_manager') && !isAdmin;
+    const isStockCtrl = (rawRole === 'stock_controller');
+    const isFieldCrew = !isAdmin && !isManager && !isTech && !isStockMgr && !isStockCtrl;
 
     const setVis = (el, isVis) => {
       if (!el) return;
@@ -1350,31 +1352,31 @@
     const navStockMgr = document.getElementById('nav-stock-manager-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="stock-manager"]');
     const navMatrix = document.getElementById('nav-access-matrix-btn');
 
-    // Gate Dashboard: Admin, Tech Lead, Stock Manager (Hidden for Stock Controller & Technician)
-    setVis(navOverview, isAdmin || isTech || isStockMgr);
+    // Gate Dashboard: Admin, Project Manager, Tech Lead, Stock Manager (Hidden for Stock Controller & Field Crew)
+    setVis(navOverview, isAdmin || isManager || isTech || isStockMgr);
 
-    // Venues & Stock Gates: Admin, Tech Lead, Stock Manager (Hidden for Stock Controller & Technician)
-    setVis(navEvents, isAdmin || isTech || isStockMgr);
+    // Venues & Facility Gates: Admin, Project Manager, Tech Lead, Stock Manager (Hidden for Stock Controller & Field Crew)
+    setVis(navEvents, isAdmin || isManager || isTech || isStockMgr);
 
-    // Users & Roles: Admin, Tech Lead, Stock Manager (Hidden for Stock Controller & Technician)
-    setVis(navUsers, isAdmin || isTech || isStockMgr);
+    // Users & Roles: Admin and Project Manager ONLY (Hidden for Tech Lead, Stock Manager, Stock Controller, Field Crew)
+    setVis(navUsers, isAdmin || isManager);
 
-    // ID Badges & Kiosk: Visible to all personas
+    // ID Badges & Kiosk: Visible to all personas (Gate scanning & personal badge inspection)
     setVis(navAttendees, true);
 
-    // Terminals: Visible to all personas
+    // Terminals: Visible to all personas (Kiosk station terminal)
     setVis(navTerminals, true);
 
-    // Venue Security Portal: Admin and Tech Lead (Hidden for Stock Manager, Stock Controller, Technician)
-    setVis(navVenueSec, isAdmin || isTech);
+    // Venue Security Portal: Admin, Project Manager, Tech Lead
+    setVis(navVenueSec, isAdmin || isManager || isTech);
 
-    // Stock Batch Approvals: Admin, Stock Manager, Stock Controller (Hidden for Tech Lead & Technician)
+    // Stock Batch Approvals / Analytics: Admin, Stock Manager, Stock Controller
     setVis(navAnalytics, isAdmin || isStockMgr || isStockCtrl);
 
-    // Facilities & Gates: Admin, Site Manager (Hidden for Tech Lead, Gate Controller, Technician)
-    setVis(navStockMgr, isAdmin || isStockMgr);
+    // Facilities & Gates (Stock Manager): Admin, Stock Manager, Stock Controller
+    setVis(navStockMgr, isAdmin || isStockMgr || isStockCtrl);
 
-    // Clearance Matrix: Admin ONLY (Hidden for all other roles)
+    // Clearance Matrix: Admin ONLY
     setVis(navMatrix, isAdmin);
 
     // 2. Checkpoint Controls Navigation Group
@@ -1386,17 +1388,17 @@
     const btnResetDemo = document.getElementById('sidebar-reset-demo-btn');
 
     if (cpNav) {
-      if (isTechCrew) {
-        // Entire section hidden for standard Technicians
+      if (isFieldCrew) {
+        // Entire checkpoint controls group hidden for standard Field Crew
         cpNav.style.display = 'none';
       } else {
         cpNav.style.display = 'flex';
-        // Shift Relief & Swaps: Gate Controllers, Tech Leads, Site Managers & Admins
-        setVis(btnShiftRelief, isAdmin || isTech || isStockMgr || isStockCtrl);
-        // Set Call Time: Admin, Tech Lead, Site Manager
-        setVis(btnCallTime, !state.currentUser || isAdmin || isTech || isStockMgr);
-        // On-Site Roll-Call: Admin, Tech Lead, Site Manager
-        setVis(btnRollCall, !state.currentUser || isAdmin || isTech || isStockMgr);
+        // Shift Relief & Swaps: Admin, Manager, Tech Lead, Stock Manager, Stock Controller
+        setVis(btnShiftRelief, isAdmin || isManager || isTech || isStockMgr || isStockCtrl);
+        // Set Call Time: Admin, Manager, Tech Lead, Stock Manager
+        setVis(btnCallTime, isAdmin || isManager || isTech || isStockMgr);
+        // On-Site Roll-Call: Admin, Manager, Tech Lead, Stock Manager
+        setVis(btnRollCall, isAdmin || isManager || isTech || isStockMgr);
         // Station Lock PIN: Admin ONLY
         setVis(btnStationLock, isAdmin);
         // Reset Today's Scans: Admin ONLY
@@ -1415,7 +1417,17 @@
     if (tabMatrix) tabMatrix.style.display = isAdmin ? 'inline-flex' : 'none';
     if (tabDepts) tabDepts.style.display = isAdmin ? 'inline-flex' : 'none';
 
-    // 4. Breadcrumb Workspace Title
+    // 4. User Dropdown Menu Administrative Controls (ONLY ADMIN)
+    const menuSwitch = document.getElementById('topbar-menu-switch-user');
+    const menuAuth = document.getElementById('topbar-menu-auth-modal');
+    if (menuSwitch) menuSwitch.style.display = isAdmin ? 'flex' : 'none';
+    if (menuAuth) menuAuth.style.display = isAdmin ? 'flex' : 'none';
+    const quickLogout = document.getElementById('topbar-logout-quick-btn');
+    if (quickLogout) {
+      quickLogout.style.display = isAdmin ? 'none' : 'inline-flex';
+    }
+
+    // 5. Breadcrumb Workspace Title
     const bcRoot = document.getElementById('breadcrumb-workspace');
     if (bcRoot) {
       if (isStockCtrl) {
@@ -1424,8 +1436,10 @@
         bcRoot.textContent = 'aBility Site Hub (Site Manager)';
       } else if (isTech) {
         bcRoot.textContent = 'aBility Production Deck (Tech Lead)';
-      } else if (isTechCrew) {
-        bcRoot.textContent = 'aBility Crew Station (Technician)';
+      } else if (isManager) {
+        bcRoot.textContent = 'aBility Operations Deck (Project Manager)';
+      } else if (isFieldCrew) {
+        bcRoot.textContent = 'aBility Crew Station (Field Crew)';
       } else {
         bcRoot.textContent = 'aBility Manager';
       }
@@ -6944,6 +6958,19 @@
     if (userTrigger && userDropdown) {
       userTrigger.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (!isCurrentUserAdmin()) {
+          // Non-Admin: Direct access to personal Digital ID Badge (User Dropdown is restricted to Admin)
+          closeAllTopbarDropdowns();
+          const u = state.currentUser || state.crew[0];
+          if (u) {
+            state.selectedCrewId = u.id;
+            state.currentVerification = buildClientVerificationFromMember(u);
+            renderVerificationDeck();
+            highlightSelectedCrewRow(u.id);
+            openKioskModal(u);
+          }
+          return;
+        }
         const isOpen = userDropdown.style.display === 'block';
         closeAllTopbarDropdowns();
         if (!isOpen) userDropdown.style.display = 'block';
