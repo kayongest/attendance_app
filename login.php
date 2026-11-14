@@ -126,11 +126,11 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       --text-main: #20212a;
       --text-sub: #718096;
       --text-muted: #a0aec0;
-      --brand-purple: #5c3dbb;
-      --brand-purple-hover: #4f2cb8;
+      --brand-purple: #134c80;
+      --brand-purple-hover: #032a48;
       --brand-purple-soft: #ede9fe;
-      --card-shadow: 0 14px 28px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
-      --overlay-gradient: linear-gradient(135deg, #6c42e2 0%, #4f2cb8 100%);
+      --card-shadow: 0 14px 28px rgba(187, 178, 178, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
+      --overlay-gradient: linear-gradient(135deg, #134c80 0%, #032a48 100%);
       --modal-card-bg: #ffffff;
       --modal-backdrop-bg: rgba(15, 17, 23, 0.65);
       --social-border: #e2e8f0;
@@ -154,7 +154,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       --brand-purple-hover: #6d28d9;
       --brand-purple-soft: rgba(124, 58, 237, 0.2);
       --card-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), 0 10px 15px rgba(0, 0, 0, 0.4);
-      --overlay-gradient: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+      --overlay-gradient: linear-gradient(135deg, #134c80 0%, #032a48 100%);
       --modal-card-bg: #121826;
       --modal-backdrop-bg: rgba(0, 0, 0, 0.78);
       --social-border: #263147;

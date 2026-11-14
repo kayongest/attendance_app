@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261114_v5" />
+  <link rel="stylesheet" href="styles.css?v=20261114_v6" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -705,7 +705,10 @@
                         <span id="inspector-headcount-tag"><strong>0</strong> Crew On-Site</span>
                       </div>
                     </div>
-                    <div class="map-inspector-btn-wrap">
+                    <div class="map-inspector-btn-wrap" style="display: flex; align-items: center; gap: 8px;">
+                      <button type="button" class="btn btn-secondary-32-sm" id="map-reset-roster-btn" title="Reset all assigned personnel for this location back to Standby" style="display: none; height: 32px; padding: 0 12px; font-size: 12px; border-color: rgba(239, 68, 68, 0.4); color: #f87171;">
+                        <span>↺ Reset Roster</span>
+                      </button>
                       <button type="button" class="btn btn-primary-32-sm js-open-allocate-modal" id="map-allocate-crew-btn">
                         <span>+ Allocate Personnel</span>
                       </button>
@@ -4003,6 +4006,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261114_v5"></script>
+  <script src="app.js?v=20261114_v6"></script>
 </body>
 </html>

@@ -3188,6 +3188,108 @@ try {
         exit;
     }
 
+    if ($action === 'reset_facility_crew') {
+        $caller = getCallerUser($pdo);
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'event_venue'));
+        $cpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '1'));
+        $authCheck = canCallerPerformAction('assign_event_crew', $caller, ['checkpoint_type' => $cpType]);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        if ($cpType === 'event_venue') {
+            try {
+                $upd = $pdo->prepare("UPDATE `events` SET `assigned_technician` = '[]' WHERE `id` = ?");
+                $upd->execute([$cpId]);
+
+                $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND `assigned_checkpoint_id` = ?");
+                $updUser->execute([$cpId]);
+            } catch (Throwable $e) {}
+        } elseif ($cpType === 'stock_warehouse') {
+            try {
+                $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'stock_warehouse' AND `assigned_checkpoint_id` = ?");
+                $updUser->execute([$cpId]);
+            } catch (Throwable $e) {}
+        }
+
+        // Record audit log
+        try {
+            $callerId = (int) ($caller['id'] ?? 0);
+            $ins = $pdo->prepare("
+                INSERT INTO `attendance_logs`
+                (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `scan_action`, `access_status`, `punctuality_status`, `notes`, `scanned_at`)
+                VALUES (?, 'SYSTEM', ?, ?, 'roster_reset', 'granted', 'on_time', 'Facility roster reset by supervisor', NOW())
+            ");
+            $ins->execute([$callerId, $cpType, $cpId]);
+        } catch (Throwable $e) {}
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => 'Facility roster reset successfully. All crew members returned to Standby.',
+                'checkpoint_type' => $cpType,
+                'checkpoint_id' => $cpId,
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'unassign_personnel') {
+        $caller = getCallerUser($pdo);
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'event_venue'));
+        $cpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '1'));
+        $targetUid = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
+
+        $authCheck = canCallerPerformAction('assign_event_crew', $caller, ['checkpoint_type' => $cpType]);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        if ($targetUid > 0) {
+            if ($cpType === 'event_venue') {
+                try {
+                    $st = $pdo->prepare("SELECT `assigned_technician` FROM `events` WHERE `id` = ?");
+                    $st->execute([$cpId]);
+                    $ev = $st->fetch(PDO::FETCH_ASSOC);
+                    if (!empty($ev['assigned_technician'])) {
+                        $dec = json_decode((string)$ev['assigned_technician'], true);
+                        if (is_array($dec)) {
+                            $filtered = array_values(array_filter($dec, function($id) use ($targetUid) {
+                                return (int)$id !== $targetUid;
+                            }));
+                            $upd = $pdo->prepare("UPDATE `events` SET `assigned_technician` = ? WHERE `id` = ?");
+                            $upd->execute([json_encode($filtered), $cpId]);
+                        }
+                    }
+                    $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `id` = ? AND `assigned_checkpoint_type` = 'event_venue' AND `assigned_checkpoint_id` = ?");
+                    $updUser->execute([$targetUid, $cpId]);
+                } catch (Throwable $e) {}
+            } elseif ($cpType === 'stock_warehouse') {
+                try {
+                    $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `id` = ? AND `assigned_checkpoint_type` = 'stock_warehouse' AND `assigned_checkpoint_id` = ?");
+                    $updUser->execute([$targetUid, $cpId]);
+                } catch (Throwable $e) {}
+            }
+        }
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => 'Personnel unassigned successfully',
+                'checkpoint_type' => $cpType,
+                'checkpoint_id' => $cpId,
+                'unassigned_user_id' => $targetUid,
+            ]
+        ));
+        exit;
+    }
+
     if ($action === 'list_stock_manager') {
         // 1. Fetch Warehouses
         $whRows = $pdo->query("SELECT * FROM `stock_locations` ORDER BY `id` ASC")->fetchAll();

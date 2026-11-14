@@ -2800,6 +2800,17 @@
       `;
     }
 
+    // Update Reset Roster button visibility in inspector header
+    const resetRosterBtn = document.getElementById('map-reset-roster-btn');
+    if (resetRosterBtn) {
+      if (facilityCrew.length > 0) {
+        resetRosterBtn.style.display = 'inline-flex';
+        resetRosterBtn.title = `Reset all ${facilityCrew.length} assigned personnel from ${facility.name}`;
+      } else {
+        resetRosterBtn.style.display = 'none';
+      }
+    }
+
     // Render horizontal crew tray
     if (trayEl) {
       if (facilityCrew.length === 0) {
@@ -2828,13 +2839,15 @@
               <span style="font-weight: 600;">${escapeHtml(c.full_name)}</span>
               <span style="font-size: 11px; opacity: 0.8;">(${escapeHtml(roleDisplay)})</span>
               <span style="width: 7px; height: 7px; border-radius: 50%; background: ${stateColor}; display: inline-block; flex-shrink: 0;" title="${stateLabel}"></span>
+              <button type="button" class="chip-unassign-btn js-chip-unassign" data-crew-id="${c.id}" data-crew-name="${escapeHtml(c.full_name)}" title="Unassign ${escapeHtml(c.full_name)} from this location" aria-label="Unassign ${escapeHtml(c.full_name)}">✕</button>
             </div>
           `;
         }).join('');
 
         // Wire click to inspect / verify crew member
         trayEl.querySelectorAll('.inspector-crew-chip').forEach((chip) => {
-          const handleOpen = () => {
+          const handleOpen = (e) => {
+            if (e.target && e.target.closest('.js-chip-unassign')) return;
             const uid = Number(chip.getAttribute('data-crew-id'));
             const member = allCrew.find((m) => Number(m.id) === uid);
             if (member) {
@@ -2845,8 +2858,51 @@
           chip.addEventListener('click', handleOpen);
           chip.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
+              if (e.target && e.target.closest('.js-chip-unassign')) return;
               e.preventDefault();
-              handleOpen();
+              handleOpen(e);
+            }
+          });
+        });
+
+        // Wire individual unassign button on each chip
+        trayEl.querySelectorAll('.js-chip-unassign').forEach((unassignBtn) => {
+          unassignBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const uid = Number(unassignBtn.getAttribute('data-crew-id'));
+            const uName = unassignBtn.getAttribute('data-crew-name') || 'Crew member';
+            const facName = facility.name || 'this location';
+
+            const { confirmed } = await showConfirmModal({
+              title: 'Unassign Personnel',
+              message: `Are you sure you want to remove ${uName} from ${facName}?\nThey will be returned to the unassigned Standby pool.`,
+              confirmText: 'Unassign',
+              tone: 'warning',
+            });
+            if (!confirmed) return;
+
+            try {
+              const res = await fetch('api.php?action=unassign_personnel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  checkpoint_type: facility.type,
+                  checkpoint_id: facility.id,
+                  user_id: uid,
+                }),
+              });
+              const data = await res.json();
+              if (!data.ok) {
+                showToast(data.error || 'Failed to unassign personnel.');
+                return;
+              }
+              applyBootstrapPayload(data);
+              playKioskChime('approve');
+              showToast(`✓ Removed ${uName} from ${facName}.`);
+              renderAll();
+            } catch (err) {
+              showToast('Error communicating with server: ' + err.message);
             }
           });
         });
@@ -8472,6 +8528,65 @@
     if (mapAllocBtn) {
       mapAllocBtn.addEventListener('click', () => {
         openAllocatePersonnelModal(state.selectedMapCheckpoint);
+      });
+    }
+
+    // Reset All Assigned Personnel for Current Facility
+    const mapResetBtn = document.getElementById('map-reset-roster-btn');
+    if (mapResetBtn) {
+      mapResetBtn.addEventListener('click', async () => {
+        const allFacilities = getAllFacilitiesList();
+        const selCp = state.selectedMapCheckpoint || (allFacilities.length > 0 ? { type: allFacilities[0].type, id: allFacilities[0].id } : null);
+        if (!selCp) return;
+
+        const facility = allFacilities.find((f) =>
+          f.type === selCp.type && (String(f.id) === String(selCp.id) || Number(f.id) === Number(selCp.id) || (f.raw_id && String(f.raw_id) === String(selCp.id)))
+        );
+        const facName = facility?.name || 'this location';
+        const allCrew = state.crew || [];
+        const facilityCrew = facility ? getFacilityCrewMembers(facility, allCrew) : [];
+
+        if (facilityCrew.length === 0) {
+          showToast(`No personnel currently assigned to ${facName}.`);
+          return;
+        }
+
+        const { confirmed } = await showConfirmModal({
+          title: 'Reset Location Roster',
+          message: `Are you sure you want to reset the roster for ${facName}?\nAll ${facilityCrew.length} assigned personnel will be unassigned and returned to Standby.`,
+          confirmText: 'Reset Roster',
+          tone: 'danger',
+        });
+        if (!confirmed) return;
+
+        mapResetBtn.disabled = true;
+        mapResetBtn.innerHTML = `<span>Resetting...</span>`;
+
+        try {
+          const res = await fetch('api.php?action=reset_facility_crew', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              checkpoint_type: selCp.type,
+              checkpoint_id: selCp.id,
+            }),
+          });
+          const data = await res.json();
+          if (!data.ok) {
+            showToast(data.error || 'Failed to reset roster.');
+            return;
+          }
+
+          applyBootstrapPayload(data);
+          playKioskChime('approve');
+          showToast(`✓ Roster reset for ${facName}. All personnel returned to Standby.`);
+          renderAll();
+        } catch (err) {
+          showToast('Error communicating with server: ' + err.message);
+        } finally {
+          mapResetBtn.disabled = false;
+          mapResetBtn.innerHTML = `<span>↺ Reset Roster</span>`;
+        }
       });
     }
 
