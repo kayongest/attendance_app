@@ -1240,36 +1240,46 @@
     if (isCurrentUserAdmin()) return true;
     const rawRole = (state.currentUser?.role || '').toLowerCase();
     const isAdmin = isCurrentUserAdmin();
-    const isTech = rawRole === 'tech_lead' && !isAdmin;
-    const isStockMgr = rawRole === 'stock_manager' && !isAdmin;
-    const isStockCtrl = rawRole === 'stock_controller';
+    const isManager = (rawRole === 'manager' || rawRole === 'project_manager') && !isAdmin;
+    const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isAdmin;
+    const isStockMgr = (rawRole === 'stock_manager') && !isAdmin;
+    const isStockCtrl = (rawRole === 'stock_controller');
 
+    if (isManager) {
+      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'venue-security';
+    }
     if (isStockCtrl) {
-      return screenKey === 'terminals' || screenKey === 'attendees';
+      return screenKey === 'terminals' || screenKey === 'attendees' || screenKey === 'analytics' || screenKey === 'stock-manager';
     }
     if (isTech) {
-      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'terminals';
+      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'venue-security';
     }
     if (isStockMgr) {
-      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'analytics' || screenKey === 'stock-manager';
+      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'analytics' || screenKey === 'stock-manager';
     }
-    // Technician / Standard crew:
+    // Field Crew / Technicians / Drivers / Decorators / Standard crew:
     return screenKey === 'attendees' || screenKey === 'terminals';
   }
 
   function canCurrentUserAddUser() {
     if (!state.currentUser) return false;
-    return isCurrentUserAdmin() || isCurrentUserTechLead() || isCurrentUserStockManager();
+    const rawRole = (state.currentUser.role || '').toLowerCase();
+    const isManager = rawRole === 'manager' || rawRole === 'project_manager';
+    return isCurrentUserAdmin() || isManager || isCurrentUserTechLead() || isCurrentUserStockManager();
   }
 
   function canCurrentUserAssignEvents() {
     if (!state.currentUser) return false;
-    return isCurrentUserAdmin() || isCurrentUserTechLead();
+    const rawRole = (state.currentUser.role || '').toLowerCase();
+    const isManager = rawRole === 'manager' || rawRole === 'project_manager';
+    return isCurrentUserAdmin() || isManager || isCurrentUserTechLead();
   }
 
   function canCurrentUserSetCallTime() {
     if (!state.currentUser) return true; // Permit in kiosk/demo testing
-    return isCurrentUserAdmin() || isCurrentUserTechLead() || isCurrentUserStockManager();
+    const rawRole = (state.currentUser.role || '').toLowerCase();
+    const isManager = rawRole === 'manager' || rawRole === 'project_manager';
+    return isCurrentUserAdmin() || isManager || isCurrentUserTechLead() || isCurrentUserStockManager();
   }
 
   function renderUsersDelegationBanner() {
@@ -1324,6 +1334,7 @@
     const isStockMgr = (rawRole === 'stock_manager') && !isAdmin;
     const isStockCtrl = (rawRole === 'stock_controller');
     const isFieldCrew = !isAdmin && !isManager && !isTech && !isStockMgr && !isStockCtrl;
+    const isTechCrew = isFieldCrew;
 
     const setVis = (el, isVis) => {
       if (!el) return;
