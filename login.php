@@ -54,10 +54,6 @@ if (!empty($_SESSION['auth_user_id'])) {
     } catch (Throwable $e) {}
 }
 
-if (isset($_GET['admin']) && ($_GET['admin'] === '1' || $_GET['admin'] === 'true')) {
-    $isAdmin = true;
-}
-
 $initialTheme = 'light';
 if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
     $initialTheme = $_COOKIE['ability_theme'];
@@ -1270,7 +1266,6 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
                 role,
                 department,
                 password,
-                admin_pin: '1234',
               }),
             });
             const data = await res.json();
@@ -1286,10 +1281,9 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
               submitBtn.textContent = 'SIGN UP';
             }
           } catch (err) {
-            showToast(`Account created! Welcome, ${fullName}!`, 'success', 3500);
-            setTimeout(() => {
-              window.location.href = 'index.php';
-            }, 700);
+            showToast('Unable to register account. Please verify your connection and Admin session.', 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'SIGN UP';
           }
         });
       }

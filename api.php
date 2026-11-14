@@ -639,14 +639,118 @@ function getCallerUser(PDO $pdo): ?array
     }
 }
 
+function formatRoleDisplay(string $role): string
+{
+    $r = strtolower(trim($role));
+    $map = [
+        'admin' => 'Administrator',
+        'administrator' => 'Administrator',
+        'manager' => 'Operations Manager',
+        'stock_controller' => 'Gate Controller',
+        'stock_manager' => 'Site Manager',
+        'tech_lead' => 'Technical Lead',
+        'project_manager' => 'Project Manager',
+    ];
+    if (isset($map[$r])) {
+        return $map[$r];
+    }
+    return ucwords(str_replace('_', ' ', $r));
+}
+
+function findCheckpointRecord(array $stockWarehouses, array $eventVenues, string $cpType, string $cpId): ?array
+{
+    $cpType = trim($cpType);
+    $cpId = trim($cpId);
+    if ($cpType === '' || $cpId === '') {
+        return null;
+    }
+    $list = ($cpType === 'event_venue') ? $eventVenues : $stockWarehouses;
+    foreach ($list as $cp) {
+        $idMatch = ((string) ($cp['id'] ?? '') === $cpId);
+        $rawMatch = isset($cp['raw_id']) && ((string) $cp['raw_id'] === $cpId);
+        if ($idMatch || $rawMatch) {
+            return $cp;
+        }
+    }
+    return null;
+}
+
+function loadCheckpointsLookup(PDO $pdo): array
+{
+    $warehouses = [];
+    try {
+        foreach ($pdo->query("SELECT `id`, `name`, `code`, `location_code` FROM `stock_locations` WHERE `is_active` = 1 ORDER BY `id` ASC")->fetchAll() as $sr) {
+            $warehouses[] = [
+                'id' => (int) $sr['id'],
+                'raw_id' => (string) $sr['id'],
+                'type' => 'stock_warehouse',
+                'name' => (string) ($sr['name'] ?? 'Facility Gate'),
+            ];
+        }
+    } catch (Throwable $e) {}
+
+    $venues = [];
+    try {
+        foreach ($pdo->query("SELECT `id`, `title`, `location` FROM `events` ORDER BY `date` DESC, `id` DESC LIMIT 20")->fetchAll() as $er) {
+            $rawId = (string) ($er['id'] ?? '');
+            $numId = is_numeric($rawId) ? (int) $rawId : crc32($rawId);
+            $title = (string) ($er['title'] ?? 'Event Venue');
+            $loc = (string) ($er['location'] ?? '');
+            $venues[] = [
+                'id' => $numId,
+                'raw_id' => $rawId,
+                'type' => 'event_venue',
+                'name' => $title . ($loc && stripos($title, $loc) === false ? ' — ' . $loc : ''),
+            ];
+        }
+    } catch (Throwable $e) {}
+
+    return ['stock_warehouses' => $warehouses, 'event_venues' => $venues];
+}
+
+function assertControllerCheckpointLock(PDO $pdo, string $targetType, string $targetId): array
+{
+    $caller = getCallerUser($pdo);
+    if (!$caller) {
+        return ['ok' => false, 'error' => 'Authentication required.'];
+    }
+    $role = strtolower(trim((string) ($caller['role'] ?? '')));
+    if ($role !== 'stock_controller') {
+        return ['ok' => true, 'caller' => $caller];
+    }
+
+    $assignedType = trim((string) ($caller['assigned_checkpoint_type'] ?? ''));
+    $assignedId = trim((string) ($caller['assigned_checkpoint_id'] ?? ''));
+    if ($assignedType === '' || $assignedId === '') {
+        return [
+            'ok' => false,
+            'error' => 'Terminal unassigned: Your Gate Controller account has no assigned checkpoint yet. Submit a Shift / Terminal Assignment request for Administrator or Site Manager approval.',
+        ];
+    }
+
+    $lookup = loadCheckpointsLookup($pdo);
+    $assignedCp = findCheckpointRecord($lookup['stock_warehouses'], $lookup['event_venues'], $assignedType, $assignedId);
+    $targetCp = findCheckpointRecord($lookup['stock_warehouses'], $lookup['event_venues'], $targetType, $targetId);
+
+    $sameType = ($assignedType === $targetType);
+    $sameDirect = ($assignedId === trim($targetId));
+    $sameResolved = ($assignedCp && $targetCp && $assignedCp['type'] === $targetCp['type'] && (string) $assignedCp['id'] === (string) $targetCp['id']);
+
+    if (!($sameType && ($sameDirect || $sameResolved))) {
+        $assignedName = $assignedCp ? $assignedCp['name'] : ($assignedType . ' #' . $assignedId);
+        return [
+            'ok' => false,
+            'error' => "Checkpoint locked: Your Gate Controller account is strictly assigned to {$assignedName}. Request an approved Shift Relief or Terminal Assignment from an Administrator or Site Manager to operate another gate.",
+        ];
+    }
+
+    return ['ok' => true, 'caller' => $caller, 'assigned' => $assignedCp];
+}
+
 function canCallerPerformAction(string $action, ?array $caller, array $context = []): array
 {
-    // If no session is active (e.g. testing or local kiosk demo), permit demo mutations except destructive tier/role wipe
     if ($caller === null) {
-        if (in_array($action, ['save_clearance_tier', 'delete_clearance_tier'], true)) {
-            return ['ok' => false, 'error' => 'Authentication required: Administrator session required to modify Access Matrix tiers.'];
-        }
-        return ['ok' => true];
+        return ['ok' => false, 'error' => 'Authentication required. Please sign in to continue.'];
     }
 
     $role = strtolower(trim((string)($caller['role'] ?? 'user')));
@@ -654,6 +758,8 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
     $isAdmin = in_array($role, ['admin', 'manager', 'administrator'], true);
 
     switch ($action) {
+        case 'switch_user':
+        case 'reset_logs':
         case 'save_clearance_tier':
         case 'delete_clearance_tier':
         case 'save_role':
@@ -666,18 +772,23 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             break;
 
         case 'save_user':
-            // 1. Stock Controller cannot add/edit users
+            // 1. Gate Controller cannot add/edit users
             if ($role === 'stock_controller') {
-                return ['ok' => false, 'error' => 'Permission denied: Stock Controllers are assigned exclusively to gate terminal scanning and batch custody and cannot create or modify personnel accounts.'];
+                return ['ok' => false, 'error' => 'Permission denied: Gate Controllers are assigned exclusively to gate terminal scanning and cannot create or modify personnel accounts.'];
             }
-            // 2. Stock Manager can onboard warehouse crew with L1 or L2 clearance only
+            // 2. Site Manager can onboard facility crew (L1/L2) and Gate Controllers (L3)
             if ($role === 'stock_manager') {
                 $targetTier = strtoupper(trim((string)($context['clearance_level'] ?? 'L1')));
                 $targetRole = strtolower(trim((string)($context['role'] ?? 'user')));
                 $allowedTiers = ['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L1', 'L2'];
+                if ($targetRole === 'stock_controller') {
+                    $allowedTiers[] = 'L3_STOCK_WAREHOUSE';
+                    $allowedTiers[] = 'L3_STOCK_CTRL';
+                    $allowedTiers[] = 'L3';
+                }
                 $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'tech_lead', 'stock_manager'];
                 if (!in_array($targetTier, $allowedTiers, true) || in_array($targetRole, $disallowedRoles, true)) {
-                    return ['ok' => false, 'error' => 'Permission denied: Stock Managers can only onboard warehouse & logistics crew with Level 1 or Level 2 clearance.'];
+                    return ['ok' => false, 'error' => 'Permission denied: Site Managers can only manage facility crew (L1/L2) or Gate Controllers (L3).'];
                 }
             }
             // 3. Technical Lead can onboard technical crew with L1/L2 clearance
@@ -717,8 +828,14 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
         case 'save_warehouse':
         case 'save_warehouse_pin':
         case 'delete_warehouse':
-            if (!in_array($role, ['admin', 'manager', 'stock_manager'], true)) {
-                return ['ok' => false, 'error' => 'Permission denied: Warehouse infrastructure management requires Stock Manager or Administrator privileges.'];
+            if (!in_array($role, ['admin', 'manager', 'administrator', 'stock_manager'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Facility checkpoint management requires Site Manager or Administrator privileges.'];
+            }
+            break;
+
+        case 'review_controller_shift':
+            if (!in_array($role, ['admin', 'manager', 'administrator', 'stock_manager'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Only Administrators and Site Managers can approve or reject Gate Controller assignments and shift relief requests.'];
             }
             break;
     }
@@ -749,6 +866,15 @@ function resolveWarehouseTerminalPin(array $row): string
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
 {
     $todayStr = date('Y-m-d');
+    $sessionRole = strtolower(trim((string) ($_SESSION['auth_user_role'] ?? '')));
+    if ($sessionRole === '' && !empty($_SESSION['auth_user_id'])) {
+        try {
+            $rSt = $pdo->prepare("SELECT `role` FROM `users` WHERE `id` = ? LIMIT 1");
+            $rSt->execute([(int) $_SESSION['auth_user_id']]);
+            $sessionRole = strtolower(trim((string) $rSt->fetchColumn()));
+        } catch (Throwable $e) {}
+    }
+    $canSeeTerminalPins = in_array($sessionRole, ['admin', 'manager', 'administrator', 'stock_manager'], true);
 
     // 1. Load Stock Warehouses
     $stockRows = $pdo->query("SELECT * FROM `stock_locations` WHERE `is_active` = 1 ORDER BY `id` ASC")->fetchAll();
@@ -759,7 +885,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         if ($ctrl === '') {
             $ctrl = ($sid === 1) ? 'Schadrack Niyikiza' : (($sid === 2) ? 'Niyonase Prince' : 'Irene Mudacumura');
         }
-        $stockWarehouses[] = [
+        $whRow = [
             'id' => $sid,
             'type' => 'stock_warehouse',
             'name' => (string) ($sr['name'] ?? 'Stock Warehouse'),
@@ -770,10 +896,13 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'call_time' => substr((string) ($sr['open_time'] ?? '08:00:00'), 0, 5),
             'controller_name' => $ctrl,
             'lead_name' => $ctrl,
-            'lead_label' => 'Stock Controller: ' . $ctrl,
+            'lead_label' => 'Gate Controller: ' . $ctrl,
             'min_clearance' => 'L2 / L3 / L4 Required (L1 Blocked)',
-            'terminal_pin' => resolveWarehouseTerminalPin($sr),
         ];
+        if ($canSeeTerminalPins) {
+            $whRow['terminal_pin'] = resolveWarehouseTerminalPin($sr);
+        }
+        $stockWarehouses[] = $whRow;
     }
 
     // 2. Load Event Venues
@@ -800,7 +929,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             }
         }
 
-        $eventVenues[] = [
+        $evItem = [
             'id' => $numId,
             'raw_id' => $rawId,
             'type' => 'event_venue',
@@ -817,16 +946,34 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'assigned_technicians' => $assignedIds,
             'assigned_count' => count($assignedIds),
         ];
+        if ($canSeeTerminalPins) {
+            $evItem['terminal_pin'] = trim((string) ($er['terminal_pin'] ?? '')) ?: '1234';
+        }
+        $eventVenues[] = $evItem;
         $fallbackIdx++;
     }
 
-    // Resolve Active Checkpoint
+    // Resolve Active Checkpoint (enforcing strict single-checkpoint lock for Gate Controllers)
+    $callerLockRow = getCallerUser($pdo);
+    $callerLockRole = strtolower(trim((string) ($callerLockRow['role'] ?? '')));
+    $lockedAssignedCp = null;
+    if ($callerLockRole === 'stock_controller') {
+        $lockedAssignedCp = findCheckpointRecord(
+            $stockWarehouses,
+            $eventVenues,
+            (string) ($callerLockRow['assigned_checkpoint_type'] ?? ''),
+            (string) ($callerLockRow['assigned_checkpoint_id'] ?? '')
+        );
+    }
+
     $checkpointType = in_array($reqCheckpointType, ['stock_warehouse', 'event_venue'], true)
         ? $reqCheckpointType
         : 'stock_warehouse';
 
     $activeCheckpoint = null;
-    if ($checkpointType === 'stock_warehouse') {
+    if ($lockedAssignedCp) {
+        $activeCheckpoint = $lockedAssignedCp;
+    } elseif ($checkpointType === 'stock_warehouse') {
         foreach ($stockWarehouses as $sw) {
             if ($sw['id'] === $reqCheckpointId) {
                 $activeCheckpoint = $sw;
@@ -856,7 +1003,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'location' => 'Ndera Central Logistics Hub',
             'call_time' => '08:00',
             'lead_name' => 'Schadrack Niyikiza',
-            'lead_label' => 'Stock Controller: Schadrack Niyikiza',
+            'lead_label' => 'Gate Controller: Schadrack Niyikiza',
             'min_clearance' => 'L2 / L3 / L4 Required',
         ];
     }
@@ -1015,6 +1162,9 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             u.`role`,
             u.`department`,
             u.`profile_image`,
+            u.`assigned_checkpoint_type`,
+            u.`assigned_checkpoint_id`,
+            u.`assignment_expires_at`,
             u.`is_active`,
             ub.`badge_code` AS `raw_badge_code`,
             ub.`rfid_uid`,
@@ -1076,6 +1226,13 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
 
         $linkedBatches = getLinkedBatchesForUser($pdo, $uid, $fullName, $username);
 
+        $assignedCpObj = findCheckpointRecord(
+            $stockWarehouses,
+            $eventVenues,
+            (string) ($ur['assigned_checkpoint_type'] ?? ''),
+            (string) ($ur['assigned_checkpoint_id'] ?? '')
+        );
+
         $member = [
             'id' => $uid,
             'username' => $username,
@@ -1083,9 +1240,13 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'email' => (string) ($ur['email'] ?? ($username . '@ability.rw')),
             'phone' => (string) ($ur['phone'] ?: '+250 788 100 ' . str_pad((string) $uid, 3, '0', STR_PAD_LEFT)),
             'role' => $role,
-            'role_display' => ucwords(str_replace('_', ' ', $role)),
+            'role_display' => formatRoleDisplay($role),
             'department' => $dept,
             'profile_image_url' => resolveProfileImageUrl($ur['profile_image'] ?? null),
+            'assigned_checkpoint_type' => $assignedCpObj ? $assignedCpObj['type'] : ($ur['assigned_checkpoint_type'] ?: null),
+            'assigned_checkpoint_id' => $assignedCpObj ? (string) $assignedCpObj['id'] : ($ur['assigned_checkpoint_id'] ?: null),
+            'assigned_checkpoint_name' => $assignedCpObj ? $assignedCpObj['name'] : null,
+            'assignment_expires_at' => $ur['assignment_expires_at'] ?: null,
             'initials' => computeInitials($fullName),
             'badge_code' => $rewBadge,
             'raw_badge_code' => (string) ($ur['raw_badge_code'] ?: $rewBadge),
@@ -1150,7 +1311,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $sw['checked_in_today'] = (int) $st['checked_in_today'];
         $sw['on_site_now'] = count($st['active_users']);
         $sw['denied_today'] = (int) $st['denied_today'];
-        $sw['station_mode'] = 'Stock Controller Gate';
+        $sw['station_mode'] = 'Gate Controller Terminal';
         $allCheckpointsDirectory[] = $sw;
     }
     unset($sw);
@@ -1161,7 +1322,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $ev['checked_in_today'] = (int) $st['checked_in_today'];
         $ev['on_site_now'] = count($st['active_users']);
         $ev['denied_today'] = (int) $st['denied_today'];
-        $ev['station_mode'] = 'Locked Entrance Station (PIN: 1234)';
+        $ev['station_mode'] = 'PIN-Locked Entrance Station';
         $allCheckpointsDirectory[] = $ev;
     }
     unset($ev);
@@ -1315,18 +1476,63 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'can_assign_event_crew' => $isTechLead || $isAdmin,
             'can_set_call_time' => $isTechLead || $isAdmin || $isStockMgr,
             'can_manage_warehouses' => $isStockMgr || $isAdmin,
-            'max_assignable_tier' => $isAdmin ? 'L4' : (($isStockMgr || $isTechLead) ? 'L2' : 'none'),
+            'can_approve_shift_requests' => $isAdmin || $isStockMgr,
+            'can_request_shift_relief' => $isAdmin || $isStockMgr || $isStockCtrl || $isTechLead,
+            'can_assign_controller_checkpoint' => $isAdmin || $isStockMgr,
+            'max_assignable_tier' => $isAdmin ? 'L4' : ($isStockMgr ? 'L3' : ($isTechLead ? 'L2' : 'none')),
             'delegation_summary' => $isAdmin
                 ? 'Full Administrator — All digital and physical systems unconstrained.'
                 : ($isTechLead
                     ? 'Technical Lead — Authorized to set Call Times, assign event crew, and onboard technical personnel (L1/L2).'
                     : ($isStockMgr
-                        ? 'Stock Manager — Authorized for warehouse infrastructure, stock dispatches, and warehouse crew onboarding (L1/L2).'
+                        ? 'Site Manager — Authorized for facility gates, controller relief approvals, and site crew/controller onboarding.'
                         : ($isStockCtrl
-                            ? 'Stock Controller — Strictly scoped to Gate Terminal (#pane-kiosk) and equipment custody verifications.'
+                            ? 'Gate Controller — Strictly locked to one assigned Gate Terminal; cross-gate relief requires Administrator or Site Manager approval.'
                             : 'Standard Personnel — View personal profile and attendance.')))
         ];
     }
+
+    // 10. Load Gate Controller Shift / Relief Requests
+    $shiftRequests = [];
+    $pendingShiftRequestCount = 0;
+    try {
+        $srRows = $pdo->query("SELECT * FROM `controller_shift_requests` ORDER BY CASE WHEN `status` = 'pending' THEN 0 ELSE 1 END, `id` DESC LIMIT 60")->fetchAll();
+        foreach ($srRows as $sr) {
+            $reqBy = $crewById[(int) ($sr['requested_by_id'] ?? 0)] ?? null;
+            $outCtrl = $crewById[(int) ($sr['outgoing_controller_id'] ?? 0)] ?? null;
+            $repCtrl = $crewById[(int) ($sr['replacement_controller_id'] ?? 0)] ?? null;
+            $revBy = $crewById[(int) ($sr['reviewed_by_id'] ?? 0)] ?? null;
+            $st = strtolower((string) ($sr['status'] ?? 'pending'));
+            if ($st === 'pending') {
+                $pendingShiftRequestCount++;
+            }
+            $shiftRequests[] = [
+                'id' => (int) $sr['id'],
+                'checkpoint_type' => (string) ($sr['checkpoint_type'] ?? 'stock_warehouse'),
+                'checkpoint_id' => (string) ($sr['checkpoint_id'] ?? ''),
+                'checkpoint_name' => (string) ($sr['checkpoint_name'] ?? 'Assigned Gate'),
+                'requested_by_id' => (int) ($sr['requested_by_id'] ?? 0),
+                'requested_by_name' => $reqBy ? $reqBy['full_name'] : 'Staff Member',
+                'requested_by_role' => $reqBy ? $reqBy['role_display'] : '',
+                'outgoing_controller_id' => $sr['outgoing_controller_id'] ? (int) $sr['outgoing_controller_id'] : null,
+                'outgoing_controller_name' => $outCtrl ? $outCtrl['full_name'] : null,
+                'replacement_controller_id' => (int) ($sr['replacement_controller_id'] ?? 0),
+                'replacement_controller_name' => $repCtrl ? $repCtrl['full_name'] : 'Unassigned',
+                'replacement_controller_badge' => $repCtrl ? $repCtrl['badge_code'] : '',
+                'reason_type' => (string) ($sr['reason_type'] ?? 'shift_swap'),
+                'notes' => (string) ($sr['notes'] ?? ''),
+                'shift_start' => $sr['shift_start'] ?? null,
+                'shift_end' => $sr['shift_end'] ?? null,
+                'status' => $st,
+                'reviewed_by_id' => $sr['reviewed_by_id'] ? (int) $sr['reviewed_by_id'] : null,
+                'reviewed_by_name' => $revBy ? $revBy['full_name'] : null,
+                'reviewed_by_role' => $revBy ? $revBy['role_display'] : null,
+                'reviewed_at' => $sr['reviewed_at'] ?? null,
+                'review_notes' => (string) ($sr['review_notes'] ?? ''),
+                'created_at' => (string) ($sr['created_at'] ?? ''),
+            ];
+        }
+    } catch (Throwable $e) {}
 
     return [
         'ok' => true,
@@ -1355,6 +1561,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'hourlyTraffic' => array_values($hourlyBuckets),
         'activityTimeline' => $activityTimeline,
         'batches' => $allBatches,
+        'shiftRequests' => $shiftRequests,
+        'pendingShiftRequestCount' => $pendingShiftRequestCount,
         'defaultVerification' => $defaultVerification,
         'roles' => getRolesList($pdo, $crew),
         'departments' => getDepartmentsList($pdo, $crew),
@@ -1416,16 +1624,6 @@ try {
     $activeDb = '';
     $pdo = getDbConnection($activeDb);
 
-    // One-time log reset hook if requested
-    if (file_exists(__DIR__ . '/.reset_logs_pending')) {
-        try {
-            $pdo->exec("TRUNCATE TABLE `attendance_logs`");
-        } catch (Throwable $e) {
-            $pdo->exec("DELETE FROM `attendance_logs`");
-        }
-        @unlink(__DIR__ . '/.reset_logs_pending');
-    }
-
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     $rawBody = file_get_contents('php://input');
     $jsonBody = ($rawBody !== false && $rawBody !== '') ? json_decode($rawBody, true) : [];
@@ -1437,16 +1635,37 @@ try {
     $reqCpType = (string) ($_GET['checkpoint_type'] ?? $_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse');
     $reqCpId = (int) ($_GET['checkpoint_id'] ?? $_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? 1);
 
+    // P0 Security Gate: Require active authenticated session for all protected endpoints
+    $publicActions = ['login', 'logout', 'auth_status', 'get_current_user'];
+    if (!in_array($action, $publicActions, true) && empty($_SESSION['auth_user_id'])) {
+        http_response_code(401);
+        echo json_encode([
+            'ok' => false,
+            'authenticated' => false,
+            'error' => 'Authentication required. Please sign in.',
+        ]);
+        exit;
+    }
+
     if ($action === 'bootstrap') {
         echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
         exit;
     }
 
     if ($action === 'auth_status' || $action === 'get_current_user') {
-        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $authId = (int) ($_SESSION['auth_user_id'] ?? 0);
+        if ($authId <= 0) {
+            echo json_encode([
+                'ok' => true,
+                'authenticated' => false,
+                'user' => null,
+                'dbSource' => $activeDb,
+            ]);
+            exit;
+        }
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $curr = null;
-        if ($authId > 0 && isset($full['crew'])) {
+        if (isset($full['crew'])) {
             foreach ($full['crew'] as $c) {
                 if ((int)$c['id'] === $authId) {
                     $curr = $c;
@@ -1500,21 +1719,17 @@ try {
         }
 
         $storedHash = (string) ($userRow['password_hash'] ?? '');
-        $passValid = false;
-
-        if ($storedHash !== '' && password_verify($password, $storedHash)) {
-            $passValid = true;
-        } elseif ($password === 'password123') {
-            $passValid = true;
-        } elseif ($password === 'admin123' && in_array(strtolower((string)$userRow['role']), ['admin', 'manager', 'tech_lead'], true)) {
-            $passValid = true;
-        }
+        $passValid = ($storedHash !== '' && password_verify($password, $storedHash));
 
         if (!$passValid) {
-            echo json_encode(['ok' => false, 'error' => 'Incorrect password. (Default demo password is: password123)']);
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Invalid username or password.']);
             exit;
         }
 
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_regenerate_id(true);
+        }
         $_SESSION['auth_user_id'] = (int) $userRow['id'];
         $_SESSION['auth_user_role'] = strtolower((string)$userRow['role']);
 
@@ -1539,26 +1754,16 @@ try {
     }
 
     if ($action === 'register') {
-        // Enforce Administrator-Only Registration Control
-        $sessionUserId = (int) ($_SESSION['auth_user_id'] ?? 0);
-        $isAdminAuthorized = false;
-        if ($sessionUserId > 0) {
-            $stmt = $pdo->prepare("SELECT role FROM `users` WHERE id = ?");
-            $stmt->execute([$sessionUserId]);
-            $callerRole = strtolower((string)$stmt->fetchColumn());
-            if (in_array($callerRole, ['admin', 'manager', 'tech_lead'], true)) {
-                $isAdminAuthorized = true;
-            }
-        }
-        $adminPin = trim((string) ($_POST['admin_pin'] ?? $jsonBody['admin_pin'] ?? ''));
-        if ($adminPin === '1234' || $adminPin === 'admin123' || (isset($_GET['admin']) && $_GET['admin'] === '1')) {
-            $isAdminAuthorized = true;
-        }
+        // Enforce strict Administrator-Only Registration Control
+        $caller = getCallerUser($pdo);
+        $callerRole = strtolower(trim((string)($caller['role'] ?? '')));
+        $isAdminAuthorized = ($caller !== null && in_array($callerRole, ['admin', 'manager', 'administrator'], true));
 
         if (!$isAdminAuthorized) {
+            http_response_code(403);
             echo json_encode([
                 'ok' => false,
-                'error' => 'Staff registration is restricted. Only system administrators can provision new accounts.',
+                'error' => 'Staff registration is restricted. Only authenticated System Administrators can provision new accounts.',
             ]);
             exit;
         }
@@ -1628,8 +1833,6 @@ try {
         ");
         $insBadge->execute([$newUserId, $badgeCode, $rfidUid, $tier['key'], $stockMode, $venueMode]);
 
-        $_SESSION['auth_user_id'] = $newUserId;
-
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $newUserMember = null;
         foreach ($full['crew'] as $c) {
@@ -1661,6 +1864,13 @@ try {
     }
 
     if ($action === 'switch_user') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('switch_user', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
         $targetId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
         $targetBadge = trim((string) ($_POST['badge_code'] ?? $jsonBody['badge_code'] ?? ''));
         $targetEmail = strtolower(trim((string) ($_POST['email'] ?? $jsonBody['email'] ?? '')));
@@ -1757,6 +1967,13 @@ try {
     if ($action === 'process_gate_scan') {
         $scanInput = trim((string) ($_POST['scan_input'] ?? $jsonBody['scan_input'] ?? ''));
         $scanMode = strtolower(trim((string) ($_POST['scan_mode'] ?? $jsonBody['scan_mode'] ?? 'auto')));
+
+        $lockCheck = assertControllerCheckpointLock($pdo, (string) $reqCpType, (string) $reqCpId);
+        if (!$lockCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'allowed' => false, 'error' => $lockCheck['error']]);
+            exit;
+        }
 
         $currentPayload = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $activeCp = $currentPayload['activeCheckpoint'];
@@ -2062,28 +2279,34 @@ try {
             $noteText = "Gate Check-Out approved at {$cpName}";
             $allowed = true;
         } elseif ($decision === 'supervisor_override') {
-            // Verify supervisor authentication
+            // Verify supervisor authentication strictly via supervisor password or authenticated supervisor session
             $authOk = false;
             $authSupervisorName = 'Supervisor';
+            $caller = getCallerUser($pdo);
+            $callerRole = strtolower(trim((string)($caller['role'] ?? '')));
+            $supervisorRoles = ['admin', 'manager', 'administrator', 'tech_lead', 'stock_manager'];
 
-            if ($supervisorPin === '1234' || $supervisorPin === 'admin123' || !empty($_SESSION['auth_user_id'])) {
-                $authOk = true;
-                $overrideById = $supervisorId ?: (!empty($_SESSION['auth_user_id']) ? (int)$_SESSION['auth_user_id'] : 1);
-            } else if ($supervisorId > 0 && $supervisorPin !== '') {
-                $chkSup = $pdo->prepare("SELECT `id`, `full_name`, `password_hash`, `role` FROM `users` WHERE `id` = ?");
+            if ($supervisorId > 0 && $supervisorPin !== '') {
+                $chkSup = $pdo->prepare("SELECT `id`, `full_name`, `password_hash`, `role` FROM `users` WHERE `id` = ? AND `is_active` = 1");
                 $chkSup->execute([$supervisorId]);
                 $supRow = $chkSup->fetch(PDO::FETCH_ASSOC);
-                if ($supRow) {
-                    if (password_verify($supervisorPin, $supRow['password_hash']) || $supervisorPin === '1234') {
+                if ($supRow && in_array(strtolower((string)$supRow['role']), $supervisorRoles, true)) {
+                    $supHash = (string) ($supRow['password_hash'] ?? '');
+                    if ($supHash !== '' && password_verify($supervisorPin, $supHash)) {
                         $authOk = true;
                         $overrideById = (int) $supRow['id'];
                         $authSupervisorName = $supRow['full_name'];
                     }
                 }
+            } elseif ($caller !== null && in_array($callerRole, $supervisorRoles, true)) {
+                $authOk = true;
+                $overrideById = (int) $caller['id'];
+                $authSupervisorName = (string) ($caller['full_name'] ?: 'Supervisor');
             }
 
             if (!$authOk) {
-                echo json_encode(['ok' => false, 'error' => 'Invalid Supervisor PIN or unauthorized account']);
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => 'Invalid Supervisor credentials or unauthorized role']);
                 exit;
             }
 
@@ -2690,7 +2913,13 @@ try {
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
         $projectManager = trim((string) ($_POST['project_manager'] ?? $jsonBody['project_manager'] ?? ''));
+        $eventPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
         $assignedTechs = $_POST['assigned_technicians'] ?? $jsonBody['assigned_technicians'] ?? [];
+
+        if ($eventPinRaw !== '' && !preg_match('/^[A-Za-z0-9]{4,12}$/', $eventPinRaw)) {
+            echo json_encode(['ok' => false, 'error' => 'Venue Terminal PIN must be 4–12 letters or digits']);
+            exit;
+        }
 
         if (!is_array($assignedTechs)) {
             $assignedTechs = json_decode((string)$assignedTechs, true) ?: [];
@@ -2712,6 +2941,7 @@ try {
                     SET `call_time` = ?,
                         `tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END,
                         `project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END,
+                        `terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END,
                         `assigned_technician` = ?
                     WHERE `id` = ?
                 ");
@@ -2719,6 +2949,7 @@ try {
                     $formattedTime,
                     $techLead, $techLead,
                     $projectManager, $projectManager,
+                    $eventPinRaw, $eventPinRaw,
                     json_encode($assignedTechsInt),
                     $eventId
                 ]);
@@ -3027,8 +3258,16 @@ try {
 
     if ($action === 'verify_terminal_pin') {
         $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse'));
-        $cpId = (int) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? 0);
+        $cpIdRaw = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '0'));
+        $cpId = (int) $cpIdRaw;
         $pin = trim((string) ($_POST['pin'] ?? $jsonBody['pin'] ?? ''));
+
+        $lockCheck = assertControllerCheckpointLock($pdo, $cpType, $cpIdRaw);
+        if (!$lockCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $lockCheck['error']]);
+            exit;
+        }
 
         if ($pin === '') {
             echo json_encode(['ok' => false, 'error' => 'Please enter a Terminal PIN']);
@@ -3040,11 +3279,11 @@ try {
             $stmt->execute([$cpId]);
             $row = $stmt->fetch();
             if (!$row) {
-                echo json_encode(['ok' => false, 'error' => 'Stock warehouse not found']);
+                echo json_encode(['ok' => false, 'error' => 'Facility checkpoint not found']);
                 exit;
             }
             $expectedPin = resolveWarehouseTerminalPin($row);
-            $cpName = (string) ($row['name'] ?? 'Stock Warehouse');
+            $cpName = (string) ($row['name'] ?? 'Facility Terminal');
             if ($pin !== $expectedPin) {
                 echo json_encode([
                     'ok' => false,
@@ -3062,15 +3301,41 @@ try {
             exit;
         }
 
-        if ($pin !== '1234') {
-            echo json_encode(['ok' => false, 'error' => 'Invalid Event Venue Station PIN (Default: 1234)']);
+        // Event Venue PIN validation against DB `events.terminal_pin` (supports numeric IDs and UUIDs)
+        $evRow = null;
+        try {
+            $evStmt = $pdo->query("SELECT `id`, `title`, `terminal_pin` FROM `events`");
+            while ($candidate = $evStmt->fetch()) {
+                $cidRaw = (string) ($candidate['id'] ?? '');
+                $cidNum = is_numeric($cidRaw) ? (int) $cidRaw : crc32($cidRaw);
+                if ($cidRaw === (string) $cpId || $cidNum === $cpId) {
+                    $evRow = $candidate;
+                    break;
+                }
+            }
+        } catch (Throwable $e) {}
+
+        if (!$evRow) {
+            echo json_encode(['ok' => false, 'error' => 'Event Venue checkpoint not found']);
+            exit;
+        }
+
+        $expectedEvPin = trim((string) ($evRow['terminal_pin'] ?? ''));
+        if ($expectedEvPin === '') {
+            $expectedEvPin = '1234';
+        }
+        $evName = (string) ($evRow['title'] ?? 'Event Venue');
+
+        if ($pin !== $expectedEvPin) {
+            echo json_encode(['ok' => false, 'error' => "Invalid PIN for {$evName}"]);
             exit;
         }
         echo json_encode([
             'ok' => true,
             'checkpoint_type' => 'event_venue',
             'checkpoint_id' => $cpId,
-            'message' => 'Event Venue Station PIN verified',
+            'checkpoint_name' => $evName,
+            'message' => "PIN verified for {$evName}",
         ]);
         exit;
     }
@@ -3326,6 +3591,12 @@ try {
         $badgeStatus = trim((string) ($_POST['badge_status'] ?? $jsonBody['badge_status'] ?? 'active'));
         $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (int) ($jsonBody['is_active'] ?? 1);
 
+        $assignedCpType = trim((string) ($_POST['assigned_checkpoint_type'] ?? $jsonBody['assigned_checkpoint_type'] ?? ''));
+        $assignedCpId = trim((string) ($_POST['assigned_checkpoint_id'] ?? $jsonBody['assigned_checkpoint_id'] ?? ''));
+        $hasAssignedCpField = array_key_exists('assigned_checkpoint_id', $_POST) || array_key_exists('assigned_checkpoint_id', $jsonBody);
+        $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+        $canAssignCp = in_array($callerRole, ['admin', 'manager', 'administrator', 'stock_manager'], true);
+
         if ($fullName === '') {
             echo json_encode(['ok' => false, 'error' => 'Full name is required']);
             exit;
@@ -3358,6 +3629,17 @@ try {
             }
         }
 
+        $userPass = trim((string) ($_POST['password'] ?? $jsonBody['password'] ?? ''));
+        $isNewRecord = ($id <= 0);
+        if ($isNewRecord && strlen($userPass) < 6) {
+            echo json_encode(['ok' => false, 'error' => 'Please set an initial password (minimum 6 characters) for new personnel accounts.']);
+            exit;
+        }
+        if ($userPass !== '' && strlen($userPass) < 6) {
+            echo json_encode(['ok' => false, 'error' => 'Password must be at least 6 characters.']);
+            exit;
+        }
+
         if ($id > 0) {
             if ($uploadedImagePath) {
                 $stmt = $pdo->prepare("
@@ -3374,24 +3656,31 @@ try {
                 ");
                 $stmt->execute([$username, $fullName, $email, $phone, $role, $department, $isActive, $id]);
             }
+            if ($userPass !== '') {
+                $pHash = password_hash($userPass, PASSWORD_BCRYPT);
+                $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `id` = ?")->execute([$pHash, $id]);
+            }
+            if ($canAssignCp && $hasAssignedCpField) {
+                if (strtolower($role) === 'stock_controller' && $assignedCpId !== '') {
+                    $cpTypeSafe = in_array($assignedCpType, ['stock_warehouse', 'event_venue'], true) ? $assignedCpType : 'stock_warehouse';
+                    $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = ?, `assigned_checkpoint_id` = ? WHERE `id` = ?")->execute([$cpTypeSafe, $assignedCpId, $id]);
+                } else {
+                    $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL, `assignment_expires_at` = NULL WHERE `id` = ?")->execute([$id]);
+                }
+            }
         } else {
+            $pHash = password_hash($userPass, PASSWORD_BCRYPT);
+            $insCpType = ($canAssignCp && strtolower($role) === 'stock_controller' && $assignedCpId !== '')
+                ? (in_array($assignedCpType, ['stock_warehouse', 'event_venue'], true) ? $assignedCpType : 'stock_warehouse')
+                : null;
+            $insCpId = $insCpType ? $assignedCpId : null;
             $stmt = $pdo->prepare("
                 INSERT INTO `users`
-                (`username`, `full_name`, `email`, `phone`, `role`, `department`, `profile_image`, `is_active`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (`username`, `full_name`, `email`, `password_hash`, `phone`, `role`, `department`, `profile_image`, `assigned_checkpoint_type`, `assigned_checkpoint_id`, `is_active`, `must_change_password`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
             ");
-            $stmt->execute([$username, $fullName, $email, $phone, $role, $department, $uploadedImagePath, $isActive]);
+            $stmt->execute([$username, $fullName, $email, $pHash, $phone, $role, $department, $uploadedImagePath, $insCpType, $insCpId, $isActive]);
             $id = (int) $pdo->lastInsertId();
-        }
-
-        $userPass = trim((string) ($_POST['password'] ?? $jsonBody['password'] ?? ''));
-        if ($userPass !== '') {
-            $pHash = password_hash($userPass, PASSWORD_BCRYPT);
-            $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `id` = ?")->execute([$pHash, $id]);
-        } elseif ($id > 0) {
-            // Set default password if none set
-            $defaultHash = password_hash('password123', PASSWORD_BCRYPT);
-            $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `id` = ? AND (`password_hash` IS NULL OR `password_hash` = '')")->execute([$defaultHash, $id]);
         }
 
         // Ensure badge values
@@ -3676,6 +3965,20 @@ try {
     }
 
     if ($action === 'reset_today_scans' || $action === 'reset_demo' || $action === 'reset_activity_logs' || $action === 'reset_timeline_logs') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('reset_logs', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $confirmPassword = (string) ($_POST['confirm_password'] ?? $jsonBody['confirm_password'] ?? '');
+        $callerHash = (string) ($caller['password_hash'] ?? '');
+        if ($confirmPassword === '' || $callerHash === '' || !password_verify($confirmPassword, $callerHash)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Administrator password confirmation required to reset attendance logs.']);
+            exit;
+        }
         try {
             $pdo->exec("TRUNCATE TABLE `attendance_logs`");
         } catch (Throwable $e) {
@@ -3693,6 +3996,13 @@ try {
     }
 
     if ($action === 'seed_demo_scans') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('reset_logs', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
         seedSampleAttendanceLogs($pdo);
         echo json_encode(array_merge(
             buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
@@ -3701,6 +4011,168 @@ try {
                 'message' => "Sample demo scans have been loaded.",
             ]
         ));
+        exit;
+    }
+
+    if ($action === 'request_controller_shift') {
+        $caller = getCallerUser($pdo);
+        if (!$caller) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Authentication required.']);
+            exit;
+        }
+        $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+        if (!in_array($callerRole, ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'], true)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Permission denied: Submitting gate controller relief requests requires Gate Controller, Technical Lead, Site Manager, or Administrator access.']);
+            exit;
+        }
+
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse'));
+        $cpIdRaw = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? ''));
+        $lookup = loadCheckpointsLookup($pdo);
+        $cpMeta = findCheckpointRecord($lookup['stock_warehouses'], $lookup['event_venues'], $cpType, $cpIdRaw);
+        if (!$cpMeta) {
+            echo json_encode(['ok' => false, 'error' => 'Please select a valid target terminal/checkpoint.']);
+            exit;
+        }
+
+        $repId = (int) ($_POST['replacement_controller_id'] ?? $jsonBody['replacement_controller_id'] ?? 0);
+        if ($repId <= 0 && $callerRole === 'stock_controller') {
+            $repId = (int) $caller['id'];
+        }
+        if ($repId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Please select a Gate Controller for this assignment/relief request.']);
+            exit;
+        }
+
+        $repStmt = $pdo->prepare("SELECT `id`, `full_name`, `role` FROM `users` WHERE `id` = ? LIMIT 1");
+        $repStmt->execute([$repId]);
+        $repUser = $repStmt->fetch();
+        if (!$repUser || strtolower(trim((string) ($repUser['role'] ?? ''))) !== 'stock_controller') {
+            echo json_encode(['ok' => false, 'error' => 'Selected personnel must have the Gate Controller role.']);
+            exit;
+        }
+
+        $outIdRaw = (int) ($_POST['outgoing_controller_id'] ?? $jsonBody['outgoing_controller_id'] ?? 0);
+        $outId = $outIdRaw > 0 ? $outIdRaw : null;
+        if ($outId === null) {
+            $curHolder = $pdo->prepare("SELECT `id` FROM `users` WHERE `role` = 'stock_controller' AND `assigned_checkpoint_type` = ? AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?) AND `id` != ? LIMIT 1");
+            $curHolder->execute([$cpMeta['type'], (string) $cpMeta['id'], (string) $cpMeta['raw_id'], $repId]);
+            $foundHolder = $curHolder->fetchColumn();
+            if ($foundHolder) {
+                $outId = (int) $foundHolder;
+            }
+        }
+
+        $reasonType = strtolower(trim((string) ($_POST['reason_type'] ?? $jsonBody['reason_type'] ?? 'shift_swap')));
+        $allowedReasons = ['sick_leave', 'shift_swap', 'high_volume', 'night_shift', 'new_assignment'];
+        if (!in_array($reasonType, $allowedReasons, true)) {
+            $reasonType = 'shift_swap';
+        }
+        $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
+        $shiftStartRaw = trim((string) ($_POST['shift_start'] ?? $jsonBody['shift_start'] ?? ''));
+        $shiftEndRaw = trim((string) ($_POST['shift_end'] ?? $jsonBody['shift_end'] ?? ''));
+        $shiftStart = $shiftStartRaw !== '' ? date('Y-m-d H:i:s', strtotime($shiftStartRaw)) : null;
+        $shiftEnd = $shiftEndRaw !== '' ? date('Y-m-d H:i:s', strtotime($shiftEndRaw)) : null;
+
+        $ins = $pdo->prepare("
+            INSERT INTO `controller_shift_requests`
+            (`checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `requested_by_id`, `outgoing_controller_id`, `replacement_controller_id`, `reason_type`, `notes`, `shift_start`, `shift_end`, `status`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        ");
+        $ins->execute([
+            $cpMeta['type'],
+            (string) $cpMeta['id'],
+            $cpMeta['name'],
+            (int) $caller['id'],
+            $outId,
+            $repId,
+            $reasonType,
+            $notes,
+            $shiftStart,
+            $shiftEnd,
+        ]);
+        $reqId = (int) $pdo->lastInsertId();
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode(array_merge($full, [
+            'ok' => true,
+            'request_id' => $reqId,
+            'message' => "Shift relief request #{$reqId} submitted for {$cpMeta['name']}. Pending Administrator or Site Manager approval.",
+        ]));
+        exit;
+    }
+
+    if ($action === 'review_controller_shift') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('review_controller_shift', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        $requestId = (int) ($_POST['request_id'] ?? $jsonBody['request_id'] ?? 0);
+        $decision = strtolower(trim((string) ($_POST['decision'] ?? $jsonBody['decision'] ?? '')));
+        if ($decision === 'approve') $decision = 'approved';
+        if ($decision === 'reject') $decision = 'rejected';
+        $reviewNotes = trim((string) ($_POST['review_notes'] ?? $jsonBody['review_notes'] ?? ''));
+
+        if ($requestId <= 0 || !in_array($decision, ['approved', 'rejected'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Invalid request ID or decision.']);
+            exit;
+        }
+
+        $reqStmt = $pdo->prepare("SELECT * FROM `controller_shift_requests` WHERE `id` = ? LIMIT 1");
+        $reqStmt->execute([$requestId]);
+        $sr = $reqStmt->fetch();
+        if (!$sr) {
+            echo json_encode(['ok' => false, 'error' => 'Shift relief request not found.']);
+            exit;
+        }
+        if (strtolower((string) ($sr['status'] ?? '')) !== 'pending') {
+            echo json_encode(['ok' => false, 'error' => 'This request has already been processed.']);
+            exit;
+        }
+
+        $upd = $pdo->prepare("
+            UPDATE `controller_shift_requests`
+            SET `status` = ?, `reviewed_by_id` = ?, `reviewed_at` = NOW(), `review_notes` = ?
+            WHERE `id` = ?
+        ");
+        $upd->execute([$decision, (int) $caller['id'], $reviewNotes, $requestId]);
+
+        if ($decision === 'approved') {
+            $repId = (int) ($sr['replacement_controller_id'] ?? 0);
+            $outId = (int) ($sr['outgoing_controller_id'] ?? 0);
+            $cpType = (string) ($sr['checkpoint_type'] ?? 'stock_warehouse');
+            $cpId = (string) ($sr['checkpoint_id'] ?? '');
+            $expiresAt = !empty($sr['shift_end']) ? $sr['shift_end'] : null;
+
+            if ($repId > 0) {
+                $pdo->prepare("
+                    UPDATE `users`
+                    SET `assigned_checkpoint_type` = ?, `assigned_checkpoint_id` = ?, `assignment_expires_at` = ?
+                    WHERE `id` = ?
+                ")->execute([$cpType, $cpId, $expiresAt, $repId]);
+            }
+
+            if ($outId > 0 && $outId !== $repId && in_array((string) ($sr['reason_type'] ?? ''), ['sick_leave', 'shift_swap'], true)) {
+                $pdo->prepare("
+                    UPDATE `users`
+                    SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL, `assignment_expires_at` = NULL
+                    WHERE `id` = ? AND `assigned_checkpoint_type` = ? AND `assigned_checkpoint_id` = ?
+                ")->execute([$outId, $cpType, $cpId]);
+            }
+        }
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        $verb = $decision === 'approved' ? 'Approved' : 'Rejected';
+        echo json_encode(array_merge($full, [
+            'ok' => true,
+            'message' => "{$verb} shift relief request #{$requestId} for {$sr['checkpoint_name']}.",
+        ]));
         exit;
     }
 

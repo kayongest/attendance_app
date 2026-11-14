@@ -85,8 +85,8 @@ function getFourTierMatrixSpec(): array
         'L3_STOCK_WAREHOUSE' => [
             'key' => 'L3_STOCK_WAREHOUSE',
             'code' => 'L3',
-            'title' => 'Level 3 — Stock & Logistics Controller',
-            'short' => 'Stock Controller',
+            'title' => 'Level 3 — Gate Controller & Operations',
+            'short' => 'Gate Controller',
             'color' => '#d97706',
             'badge_bg' => 'rgba(217, 119, 6, 0.16)',
             'default_roles' => ['stock_controller'],
@@ -98,8 +98,8 @@ function getFourTierMatrixSpec(): array
         'L3_STOCK_CTRL' => [
             'key' => 'L3_STOCK_CTRL',
             'code' => 'L3',
-            'title' => 'Level 3 — Stock & Logistics Controller',
-            'short' => 'Stock Controller',
+            'title' => 'Level 3 — Gate Controller & Operations',
+            'short' => 'Gate Controller',
             'color' => '#d97706',
             'badge_bg' => 'rgba(217, 119, 6, 0.16)',
             'default_roles' => ['stock_controller'],
@@ -151,6 +151,10 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `role` VARCHAR(50) NOT NULL DEFAULT 'technician',
             `department` VARCHAR(80) DEFAULT 'Audio',
             `profile_image` VARCHAR(255) DEFAULT NULL,
+            `assigned_checkpoint_type` VARCHAR(30) DEFAULT NULL,
+            `assigned_checkpoint_id` VARCHAR(64) DEFAULT NULL,
+            `assignment_expires_at` DATETIME DEFAULT NULL,
+            `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
             `is_active` TINYINT(1) NOT NULL DEFAULT 1,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -224,13 +228,54 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `call_time` VARCHAR(32) DEFAULT '08:00',
             `project_manager` VARCHAR(120) DEFAULT 'Operations PM',
             `tech_lead` VARCHAR(120) DEFAULT 'Tech Lead',
-            `assigned_technician` TEXT DEFAULT NULL
+            `assigned_technician` TEXT DEFAULT NULL,
+            `terminal_pin` VARCHAR(20) DEFAULT '1234'
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
     try {
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `assigned_technician` TEXT DEFAULT NULL");
     } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `terminal_pin` VARCHAR(20) DEFAULT '1234'");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("UPDATE `events` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `must_change_password` TINYINT(1) NOT NULL DEFAULT 0");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `assigned_checkpoint_type` VARCHAR(30) DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `assigned_checkpoint_id` VARCHAR(64) DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `assignment_expires_at` DATETIME DEFAULT NULL");
+    } catch (Throwable $e) {}
+
+    // 4b. Ensure `controller_shift_requests` table exists for on-demand relief & shift swap approvals
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `controller_shift_requests` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `checkpoint_type` VARCHAR(30) NOT NULL DEFAULT 'stock_warehouse',
+            `checkpoint_id` VARCHAR(64) NOT NULL,
+            `checkpoint_name` VARCHAR(160) NOT NULL,
+            `requested_by_id` INT NOT NULL,
+            `outgoing_controller_id` INT DEFAULT NULL,
+            `replacement_controller_id` INT NOT NULL,
+            `reason_type` VARCHAR(40) NOT NULL DEFAULT 'shift_swap',
+            `notes` TEXT DEFAULT NULL,
+            `shift_start` DATETIME DEFAULT NULL,
+            `shift_end` DATETIME DEFAULT NULL,
+            `status` VARCHAR(24) NOT NULL DEFAULT 'pending',
+            `reviewed_by_id` INT DEFAULT NULL,
+            `reviewed_at` DATETIME DEFAULT NULL,
+            `review_notes` TEXT DEFAULT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
 
     // 5. Ensure `attendance_logs` table exists
     $pdo->exec("
@@ -360,9 +405,9 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
               (`level_key`, `code`, `title`, `short_name`, `color`, `bg`, `border`, `badge_bg`, `icon`, `description`, `default_stock_access`, `default_venue_access`, `venue_rule`, `stock_rule`, `sort_order`, `is_system`, `is_active`)
             VALUES
               ('L1_VENUE_BASIC', 'L1', 'Level 1 — Event Venue Crew', 'Event Venue Crew', '#16a34a', '#f8fafc', '#e2e8f0', 'rgba(22, 163, 74, 0.14)', 'fa-location-dot', 'Standard crew access restricted strictly to assigned Event Venues during scheduled calltimes.', 'none', 'assigned_or_all', 'YES', 'NO', 1, 1, 1),
-              ('L2_TECH_STAGE', 'L2', 'Level 2 — Technical & Stage', 'Technical & Stage', '#2563eb', '#f8fafc', '#e2e8f0', 'rgba(37, 99, 235, 0.14)', 'fa-sliders', 'Access to Technical Stage areas, FOH/Backstage at assigned Event Venues, and designated Dispatch Stock Locations.', 'assigned_or_all', 'assigned_or_all', 'YES', 'YES', 2, 1, 1),
-              ('L3_STOCK_WAREHOUSE', 'L3', 'Level 3 — Stock & Logistics Controller', 'Stock Controller', '#d97706', '#f8fafc', '#e2e8f0', 'rgba(217, 119, 6, 0.16)', 'fa-warehouse', 'Full access to authorized Stock Warehouses, Loading Bays, and Assigned Event Venues.', 'all', 'all', 'YES', 'FULL', 3, 1, 1),
-              ('L4_ALL_ACCESS', 'L4', 'Level 4 — Executive & All-Access', 'Executive & All-Access', '#dc2626', '#fef2f2', '#fecaca', 'rgba(220, 38, 38, 0.15)', 'fa-shield-halved', 'Unrestricted 24/7 entry to all Stock Warehouses, Production Vaults, Backstage Technical Zones, and Event Venues.', 'all', 'all', 'ALL', 'ALL', 4, 1, 1)
+              ('L2_TECH_STAGE', 'L2', 'Level 2 — Technical & Stage', 'Technical & Stage', '#2563eb', '#f8fafc', '#e2e8f0', 'rgba(37, 99, 235, 0.14)', 'fa-sliders', 'Access to Technical Stage areas, FOH/Backstage at assigned Event Venues, and designated Facility Gates.', 'assigned_or_all', 'assigned_or_all', 'YES', 'YES', 2, 1, 1),
+              ('L3_STOCK_WAREHOUSE', 'L3', 'Level 3 — Gate Controller & Operations', 'Gate Controller', '#d97706', '#f8fafc', '#e2e8f0', 'rgba(217, 119, 6, 0.16)', 'fa-warehouse', 'Full access to authorized Facility Checkpoints, Gate Terminals, and Assigned Event Venues.', 'all', 'all', 'YES', 'FULL', 3, 1, 1),
+              ('L4_ALL_ACCESS', 'L4', 'Level 4 — Executive & All-Access', 'Executive & All-Access', '#dc2626', '#fef2f2', '#fecaca', 'rgba(220, 38, 38, 0.15)', 'fa-shield-halved', 'Unrestricted 24/7 entry to all Facilities, Production Sites, Backstage Technical Zones, and Event Venues.', 'all', 'all', 'ALL', 'ALL', 4, 1, 1)
         ");
     }
 
@@ -406,6 +451,12 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '67890' WHERE (`terminal_pin` IS NULL OR `terminal_pin` = '') AND (`code` = 'BKA-STK' OR `location_code` = 'BKA' OR `name` LIKE '%BK Arena%')");
         $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '12345' WHERE (`terminal_pin` IS NULL OR `terminal_pin` = '') AND (`code` = 'KCC-STK' OR `location_code` = 'KCC' OR `name` LIKE '%KCC%' OR `name` LIKE '%Kigali Convention%')");
         $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
+    } catch (Throwable $e) {}
+
+    // Backfill default single-checkpoint lock for unassigned Gate Controllers
+    try {
+        $pdo->exec("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = '1' WHERE `username` = 'mirene' AND `role` = 'stock_controller' AND (`assigned_checkpoint_id` IS NULL OR `assigned_checkpoint_id` = '')");
+        $pdo->exec("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = '3' WHERE `username` = 'prince_lorenzo' AND `role` = 'stock_controller' AND (`assigned_checkpoint_id` IS NULL OR `assigned_checkpoint_id` = '')");
     } catch (Throwable $e) {}
 
     // Seed events if empty

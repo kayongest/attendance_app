@@ -48,6 +48,8 @@
     hourlyTraffic: [],
     activityTimeline: [],
     batches: [],
+    shiftRequests: [],
+    pendingShiftRequestCount: 0,
     batchesSearch: '',
     batchesFilterStatus: 'all',
     batchesFilterMovement: 'all',
@@ -181,13 +183,15 @@
     state.hourlyTraffic = Array.isArray(data.hourlyTraffic) ? data.hourlyTraffic : [];
     state.activityTimeline = Array.isArray(data.activityTimeline) ? data.activityTimeline : [];
     state.batches = Array.isArray(data.batches) ? data.batches : [];
+    state.shiftRequests = Array.isArray(data.shiftRequests) ? data.shiftRequests : [];
+    state.pendingShiftRequestCount = Number(data.pendingShiftRequestCount ?? state.shiftRequests.filter((r) => r.status === 'pending').length);
     if (Array.isArray(data.roles) && data.roles.length > 0) {
       state.roles = data.roles;
     } else if (state.roles.length === 0) {
       // Default fallback roles
       state.roles = [
         { id: 1, role_key: 'admin', title: 'Administrator', clearance_level: 'L4_ALL_ACCESS', clearance_code: 'L4', clearance_title: 'Level 4 - All Access', clearance_color: '#10b981', department: 'Executive', description: 'Full operational control, security matrix management, user provision and badge issuance.', is_system: 1, is_active: 1, staff_count: 1 },
-        { id: 2, role_key: 'stock_controller', title: 'Stock Controller', clearance_level: 'L3_STOCK_WAREHOUSE', clearance_code: 'L3', clearance_title: 'Level 3 - Stock Warehouse', clearance_color: '#8b5cf6', department: 'Warehouse', description: 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', is_system: 1, is_active: 1, staff_count: 2 },
+        { id: 2, role_key: 'stock_controller', title: 'Gate Controller', clearance_level: 'L3_STOCK_WAREHOUSE', clearance_code: 'L3', clearance_title: 'Level 3 - Gate Controller', clearance_color: '#8b5cf6', department: 'Operations', description: 'Strictly assigned to one Gate Terminal (#pane-kiosk) for live attendance check-in/out scanning.', is_system: 1, is_active: 1, staff_count: 2 },
         { id: 3, role_key: 'tech_lead', title: 'Technical Lead', clearance_level: 'L4_ALL_ACCESS', clearance_code: 'L4', clearance_title: 'Level 4 - All Access', clearance_color: '#10b981', department: 'Production', description: 'Supervises audio, video, lighting and rigging operations across all checkpoints.', is_system: 1, is_active: 1, staff_count: 1 },
         { id: 4, role_key: 'technician', title: 'Stage & Audio Technician', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Audio', description: 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', is_system: 1, is_active: 1, staff_count: 8 },
         { id: 5, role_key: 'sound_engineer', title: 'Lead Sound Engineer', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Audio', description: 'Lead acoustic calibration and sound engineering for live events and concert tours.', is_system: 0, is_active: 1, staff_count: 2 },
@@ -732,11 +736,11 @@
       const isStockMgr = rawRole === 'stock_manager';
 
       if (isStockCtrl) {
-        showToast('Access Scoped: Stock Controllers are assigned to Gate Kiosk (#pane-kiosk) and Stock Batch Approvals.');
+        showToast('Access Scoped: Gate Controllers are scoped to Gate Kiosk (#pane-kiosk) at their assigned terminal.');
         screenKey = 'terminals';
         scrollToId = 'pane-kiosk';
       } else if (isTech) {
-        showToast('Access Restricted: Warehouse inventory management is reserved for Stock Managers.');
+        showToast('Access Restricted: Facility checkpoint management is reserved for Site Managers and Administrators.');
         screenKey = 'overview';
       } else if (isStockMgr) {
         showToast('Access Restricted: Venue Security Portal is reserved for Technical Leads and Administrators.');
@@ -930,7 +934,7 @@
     const isStockCtrl = rawRole === 'stock_controller';
 
     if (isStockCtrl) {
-      return screenKey === 'terminals' || screenKey === 'attendees' || screenKey === 'analytics';
+      return screenKey === 'terminals' || screenKey === 'attendees';
     }
     if (isTech) {
       return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'terminals';
@@ -974,11 +978,11 @@
       bannerEl.style.background = 'rgba(217, 119, 6, 0.08)';
       bannerEl.style.border = '1px solid rgba(217, 119, 6, 0.3)';
       bannerEl.style.color = '#92400e';
-      if (iconEl) iconEl.textContent = '🏭';
-      if (titleEl) titleEl.textContent = 'Stock Manager Scoped Delegation Active';
-      if (descEl) descEl.innerHTML = 'You are authorized to onboard and manage warehouse, logistics, and technical stage personnel with <strong>Level 1 (Venue/Logistics)</strong> or <strong>Level 2 (Technical)</strong> clearance. Higher clearance tiers (L3–L8) and management roles require Administrator clearance.';
+      if (iconEl) iconEl.textContent = '🏢';
+      if (titleEl) titleEl.textContent = 'Site Manager Delegation Active';
+      if (descEl) descEl.innerHTML = 'You are authorized to manage facility crew (<strong>L1/L2</strong>), assign Gate Controllers (<strong>L3</strong>), and approve shift relief requests.';
       if (pillEl) {
-        pillEl.textContent = 'Scoped L1 / L2';
+        pillEl.textContent = 'Site Manager · L1–L3';
         pillEl.style.background = 'rgba(217, 119, 6, 0.15)';
         pillEl.style.color = '#b45309';
       }
@@ -1056,7 +1060,7 @@
     // Stock Batch Approvals: Admin, Stock Manager, Stock Controller (Hidden for Tech Lead & Technician)
     setVis(navAnalytics, isAdmin || isStockMgr || isStockCtrl);
 
-    // Stocks & Warehouses: Admin, Stock Manager (Hidden for Tech Lead, Stock Controller, Technician)
+    // Facilities & Gates: Admin, Site Manager (Hidden for Tech Lead, Gate Controller, Technician)
     setVis(navStockMgr, isAdmin || isStockMgr);
 
     // Clearance Matrix: Admin ONLY (Hidden for all other roles)
@@ -1064,32 +1068,32 @@
 
     // 2. Checkpoint Controls Navigation Group
     const cpNav = document.getElementById('sidebar-checkpoint-controls') || document.querySelector('.nav-group-workspace');
+    const btnShiftRelief = document.getElementById('sidebar-shift-relief-btn');
     const btnCallTime = document.getElementById('sidebar-calltime-btn');
     const btnRollCall = document.getElementById('sidebar-rollcall-btn');
     const btnStationLock = document.getElementById('sidebar-station-lock-btn');
     const btnResetDemo = document.getElementById('sidebar-reset-demo-btn');
 
     if (cpNav) {
-      if (isStockCtrl || isTechCrew) {
-        // Entire section hidden for Stock Controllers & Technicians
+      if (isTechCrew) {
+        // Entire section hidden for standard Technicians
         cpNav.style.display = 'none';
       } else {
         cpNav.style.display = 'flex';
-        // Set Call Time: Admin, Tech Lead, Stock Manager, or default/demo
+        // Shift Relief & Swaps: Gate Controllers, Tech Leads, Site Managers & Admins
+        setVis(btnShiftRelief, isAdmin || isTech || isStockMgr || isStockCtrl);
+        // Set Call Time: Admin, Tech Lead, Site Manager
         setVis(btnCallTime, !state.currentUser || isAdmin || isTech || isStockMgr);
-        // On-Site Roll-Call: Admin, Tech Lead, Stock Manager
+        // On-Site Roll-Call: Admin, Tech Lead, Site Manager
         setVis(btnRollCall, !state.currentUser || isAdmin || isTech || isStockMgr);
         // Station Lock PIN: Admin ONLY
-        setVis(btnStationLock, !state.currentUser || isAdmin);
-        // Reset Today's Scans: ALWAYS visible for gate demo/operators
-        setVis(btnResetDemo, true);
+        setVis(btnStationLock, isAdmin);
+        // Reset Today's Scans: Admin ONLY
+        setVis(btnResetDemo, isAdmin);
       }
     }
-    if (btnResetDemo) {
-      btnResetDemo.style.display = 'flex';
-      btnResetDemo.style.opacity = '1';
-      btnResetDemo.style.filter = 'none';
-      btnResetDemo.style.cursor = 'pointer';
+    if (btnResetDemo && !isAdmin) {
+      btnResetDemo.style.display = 'none';
     }
 
     // 3. Subtabs on Users & Roles Screen
@@ -1104,9 +1108,9 @@
     const bcRoot = document.getElementById('breadcrumb-workspace');
     if (bcRoot) {
       if (isStockCtrl) {
-        bcRoot.textContent = 'aBility Gate Station (Stock Controller)';
+        bcRoot.textContent = 'aBility Gate Station (Gate Controller)';
       } else if (isStockMgr) {
-        bcRoot.textContent = 'aBility Logistics Hub (Stock Manager)';
+        bcRoot.textContent = 'aBility Site Hub (Site Manager)';
       } else if (isTech) {
         bcRoot.textContent = 'aBility Production Deck (Tech Lead)';
       } else if (isTechCrew) {
@@ -1136,8 +1140,10 @@
     const supportDesc = document.querySelector('.support-card .support-card-desc') || document.getElementById('sidebar-support-desc');
     if (supportTitle && supportDesc) {
       if (isStockCtrl) {
-        supportTitle.textContent = 'Stock Gate Kiosk Active';
-        supportDesc.textContent = 'Warehouse loading dock access & batch verification terminal.';
+        supportTitle.textContent = 'Gate Controller Terminal';
+        supportDesc.textContent = state.currentUser?.assigned_checkpoint_name
+          ? `Locked to ${state.currentUser.assigned_checkpoint_name} for attendance verification.`
+          : 'Terminal assignment pending Administrator / Site Manager approval.';
       } else if (isTechCrew) {
         supportTitle.textContent = 'Technician Terminal';
         supportDesc.textContent = 'Personal RFID credentials & event call time check-in.';
@@ -1145,8 +1151,8 @@
         supportTitle.textContent = 'Tech Lead Operations';
         supportDesc.textContent = 'Event rosters, call time scheduling & L1/L2 technical onboarding.';
       } else if (isStockMgr) {
-        supportTitle.textContent = 'Warehouse Logistics';
-        supportDesc.textContent = 'Inventory hubs, equipment dispatches & L1/L2 warehouse onboarding.';
+        supportTitle.textContent = 'Site Manager Hub';
+        supportDesc.textContent = 'Facility checkpoints, Gate Controller relief approvals & site attendance.';
       } else {
         supportTitle.textContent = 'Clearance Enforcement';
         supportDesc.textContent = `All ${state.clearanceMatrix?.length || 7} security tiers and physical perimeter checkpoints active.`;
@@ -1340,6 +1346,23 @@
       applyNavigationRestrictions();
     }
 
+    // Render Shift Relief Pending Badges
+    const pendingShiftCount = Number(state.pendingShiftRequestCount || 0);
+    const srTermBadge = document.getElementById('terminal-shift-relief-badge');
+    if (srTermBadge) {
+      srTermBadge.style.display = pendingShiftCount > 0 ? 'inline-flex' : 'none';
+      srTermBadge.textContent = String(pendingShiftCount);
+    }
+    const srSideBadge = document.getElementById('sidebar-shift-relief-badge');
+    if (srSideBadge) {
+      srSideBadge.style.display = pendingShiftCount > 0 ? 'inline-flex' : 'none';
+      srSideBadge.textContent = String(pendingShiftCount);
+    }
+    const srEventsKpi = document.getElementById('events-shift-pending-kpi');
+    if (srEventsKpi) {
+      srEventsKpi.textContent = String(pendingShiftCount);
+    }
+
     // Render Notifications Bubble
     const notifBubble = document.getElementById('topbar-notif-bubble');
     if (notifBubble) {
@@ -1412,7 +1435,8 @@
 
   function renderCheckpointSelectors() {
     const isStock = state.checkpointType === 'stock_warehouse';
-    const isLocked = Boolean(state.stationLocked);
+    const isCtrlLocked = isCurrentUserStockController() && Boolean(state.currentUser?.assigned_checkpoint_id);
+    const isLocked = Boolean(state.stationLocked) || isCtrlLocked;
     document.querySelectorAll('.js-cp-type-btn').forEach((btn) => {
       const btnType = btn.getAttribute('data-cp-type');
       btn.classList.remove('active-stock', 'active-venue');
@@ -1439,14 +1463,18 @@
     });
 
     document.querySelectorAll('.js-station-lock-btn').forEach((btn) => {
-      btn.classList.toggle('locked', state.stationLocked);
-      btn.classList.toggle('unlocked', !state.stationLocked);
+      btn.classList.toggle('locked', state.stationLocked || isCtrlLocked);
+      btn.classList.toggle('unlocked', !(state.stationLocked || isCtrlLocked));
     });
 
     document.querySelectorAll('.js-station-lock-label').forEach((lbl) => {
-      lbl.textContent = state.stationLocked
-        ? `ENTRANCE STATION LOCKED (${state.activeCheckpoint.name}) · Unlock`
-        : 'MULTI-CHECKPOINT MODE · Lock Station';
+      if (isCtrlLocked) {
+        lbl.textContent = `ASSIGNED TERMINAL LOCKED (${state.activeCheckpoint.name})`;
+      } else {
+        lbl.textContent = state.stationLocked
+          ? `ENTRANCE STATION LOCKED (${state.activeCheckpoint.name}) · Unlock`
+          : 'MULTI-CHECKPOINT MODE · Lock Station';
+      }
     });
 
     document.querySelectorAll('.js-active-cp-meta').forEach((el) => {
@@ -1551,11 +1579,7 @@
       const data = await res.json();
       return data;
     } catch (err) {
-      const expected = getActiveCheckpointPin();
-      if (cleanPin === expected) {
-        return { ok: true, checkpoint_name: state.activeCheckpoint?.name || 'Checkpoint' };
-      }
-      return { ok: false, error: `Invalid PIN for ${state.activeCheckpoint?.name || 'this checkpoint'}` };
+      return { ok: false, error: 'Unable to verify Terminal PIN with server. Check your connection.' };
     }
   }
 
@@ -1707,7 +1731,7 @@
     const facilityBadgeEl = document.getElementById('kiosk-facility-type-badge');
     if (facilityBadgeEl) {
       const isStockFacility = (v.checkpoint_type === 'stock_warehouse') || (state.activeCheckpoint && state.activeCheckpoint.type === 'stock_warehouse');
-      facilityBadgeEl.textContent = isStockFacility ? '🏭 Stock Warehouse' : '🏟️ Event Venue';
+      facilityBadgeEl.textContent = isStockFacility ? '🏢 Facility Gate' : '🏟️ Event Venue';
       facilityBadgeEl.className = `kiosk-facility-pill ${isStockFacility ? 'stock' : 'venue'}`;
     }
 
@@ -3541,9 +3565,9 @@
             </div>
             <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
               <select class="form-select js-clearance-select" data-user-id="${c.id}" style="height: 30px; font-size: 11px;">
-                <option value="L1_VENUE_BASIC" ${c.clearance_code === 'L1' ? 'selected' : ''}>L1 — Event Venue Crew (No Stock)</option>
-                <option value="L2_TECH_STAGE" ${c.clearance_code === 'L2' ? 'selected' : ''}>L2 — Technical & Stage (Stock + Venue)</option>
-                <option value="L3_STOCK_WAREHOUSE" ${c.clearance_code === 'L3' ? 'selected' : ''}>L3 — Stock Controller (Full Stock)</option>
+                <option value="L1_VENUE_BASIC" ${c.clearance_code === 'L1' ? 'selected' : ''}>L1 — Event Venue Crew (Venue Only)</option>
+                <option value="L2_TECH_STAGE" ${c.clearance_code === 'L2' ? 'selected' : ''}>L2 — Technical & Stage (Facility + Venue)</option>
+                <option value="L3_STOCK_WAREHOUSE" ${c.clearance_code === 'L3' ? 'selected' : ''}>L3 — Gate Controller (Assigned Gate)</option>
                 <option value="L4_ALL_ACCESS" ${c.clearance_code === 'L4' ? 'selected' : ''}>L4 — Executive & All-Access</option>
               </select>
               <button type="button" class="btn btn-secondary-32-sm js-test-in-kiosk" data-crew-id="${c.id}">
@@ -4443,8 +4467,7 @@
       const sideBadge = document.getElementById('sidebar-stock-count');
       if (sideBadge) {
         const whCount = String(state.stockManager.stats.total_warehouses || 0).padStart(2, '0');
-        const itCount = String(state.stockManager.stats.total_items || 0).padStart(2, '0');
-        sideBadge.textContent = `${whCount}/${itCount}`;
+        sideBadge.textContent = whCount;
       }
 
       // Update top KPI cards
@@ -4475,9 +4498,18 @@
     // Update active view badge & tab count numbers
     const activeBadge = document.getElementById('sm-active-view-badge');
     if (activeBadge) {
-      activeBadge.textContent = isWh ? 'Warehouses' : 'Stock Items';
-      activeBadge.className = `status-badge ${isWh ? 'status-badge-purple-sm' : 'status-badge-green-sm'}`;
+      activeBadge.textContent = 'Facility Gates';
+      activeBadge.className = 'status-badge status-badge-purple-sm';
     }
+
+    const whCountNum = state.stockManager.warehouses.length;
+    const evCountNum = (state.checkpoints?.event_venues || []).length;
+    const smTotalKpi = document.getElementById('sm-total-cp-kpi');
+    const smGatesKpi = document.getElementById('sm-gates-kpi');
+    const smVenuesKpi = document.getElementById('sm-venues-kpi');
+    if (smTotalKpi) smTotalKpi.textContent = String(whCountNum + evCountNum).padStart(2, '0');
+    if (smGatesKpi) smGatesKpi.textContent = String(whCountNum).padStart(2, '0');
+    if (smVenuesKpi) smVenuesKpi.textContent = String(evCountNum).padStart(2, '0');
 
     const whTabCount = document.getElementById('sm-tab-wh-count');
     const itemTabCount = document.getElementById('sm-tab-item-count');
@@ -4494,7 +4526,7 @@
         renderWarehousesGrid();
         const smPageControls = document.getElementById('sm-page-controls');
         if (smPageControls) {
-          smPageControls.innerHTML = `<span style="font-size: 11px; color: var(--text-secondary);">Supports drag-and-drop image uploads for warehouses &amp; equipment items</span>`;
+          smPageControls.innerHTML = `<span style="font-size: 11px; color: var(--text-secondary);">Supports drag-and-drop image uploads for facility gates</span>`;
         }
       } else {
         whSection.style.display = 'none';
@@ -4507,7 +4539,7 @@
     const footerEl = document.getElementById('sm-results-footer');
     if (footerEl) {
       if (isWh) {
-        footerEl.textContent = `Showing ${state.stockManager.warehouses.length} warehouse ${state.stockManager.warehouses.length === 1 ? 'facility' : 'facilities'}`;
+        footerEl.textContent = `Showing ${state.stockManager.warehouses.length} facility ${state.stockManager.warehouses.length === 1 ? 'gate' : 'gates'}`;
       }
     }
 
@@ -4973,14 +5005,45 @@
     modal.classList.add('open');
   }
 
+  function populateUserAssignedCpDropdown() {
+    const sel = document.getElementById('user-modal-assigned-cp');
+    if (!sel) return;
+    const whs = state.checkpoints.stock_warehouses || [];
+    const evs = state.checkpoints.event_venues || [];
+    const opts = ['<option value="">-- Unassigned (Requires Approval Request) --</option>'];
+    if (whs.length > 0) {
+      opts.push('<optgroup label="Facility Gates">');
+      whs.forEach((w) => {
+        opts.push(`<option value="stock_warehouse:${escapeHtml(String(w.id))}">${escapeHtml(w.name)}</option>`);
+      });
+      opts.push('</optgroup>');
+    }
+    if (evs.length > 0) {
+      opts.push('<optgroup label="Event Venues">');
+      evs.forEach((v) => {
+        opts.push(`<option value="event_venue:${escapeHtml(String(v.id))}">${escapeHtml(v.name)}</option>`);
+      });
+      opts.push('</optgroup>');
+    }
+    sel.innerHTML = opts.join('');
+  }
+
+  function syncUserAssignedCpVisibility() {
+    const roleVal = (document.getElementById('user-modal-role')?.value || '').toLowerCase();
+    const wrap = document.getElementById('user-modal-assigned-cp-wrap');
+    if (!wrap) return;
+    wrap.style.display = roleVal === 'stock_controller' ? 'block' : 'none';
+  }
+
   function openUserModal(userId = null) {
     const isStockCtrl = isCurrentUserStockController();
     if (isStockCtrl) {
-      showToast('Access Restricted: Stock Controllers are assigned exclusively to gate terminal scanning and batch custody and cannot create or modify personnel accounts.');
+      showToast('Access Restricted: Gate Controllers are assigned exclusively to gate terminal scanning and cannot create or modify personnel accounts.');
       return;
     }
 
     populateClearanceDropdowns();
+    populateUserAssignedCpDropdown();
     const modal = document.getElementById('user-crud-modal');
     if (!modal) return;
     const form = document.getElementById('user-crud-form');
@@ -5019,7 +5082,7 @@
         noticeEl.style.background = 'rgba(217, 119, 6, 0.08)';
         noticeEl.style.border = '1px solid rgba(217, 119, 6, 0.25)';
         noticeEl.style.color = '#92400e';
-        noticeEl.innerHTML = '<strong>🏭 Stock Manager Delegation Active:</strong> You are authorized to onboard warehouse crew & logistics staff with <strong>Level 1 (Venue/Logistics)</strong> or <strong>Level 2 (Technical)</strong> clearance. Higher security tiers (L3–L8) and administrative roles require Administrator clearance.';
+        noticeEl.innerHTML = '<strong>🏢 Site Manager Delegation Active:</strong> You are authorized to onboard facility crew (<strong>L1/L2</strong>) and manage Gate Controllers (<strong>L3</strong>). Higher executive tiers (L4+) require Administrator clearance.';
       } else if (isTech) {
         noticeEl.style.display = 'block';
         noticeEl.style.background = 'rgba(37, 99, 235, 0.08)';
@@ -5067,8 +5130,8 @@
     if (clearanceSelect) {
       Array.from(clearanceSelect.options).forEach((opt) => {
         const val = opt.value.toUpperCase();
-        // Permitted under delegation: only L1 and L2
-        const isPermitted = val.startsWith('L1') || val.startsWith('L2');
+        // Permitted under delegation: L1 and L2 (plus L3 for Site Managers onboarding Gate Controllers)
+        const isPermitted = val.startsWith('L1') || val.startsWith('L2') || (isStockMgr && val.startsWith('L3'));
         const baseText = opt.text.replace(/^\[🔒 Admin Only\]\s*/i, '');
         if (!isAdmin) {
           if (!isPermitted) {
@@ -5086,6 +5149,10 @@
     }
 
     resetDropzone('user');
+
+    const passInput = document.getElementById('user-modal-password');
+    const passLabel = document.getElementById('user-modal-password-label');
+    const assignedCpSelect = document.getElementById('user-modal-assigned-cp');
 
     if (userId) {
       const u = state.crew.find((c) => Number(c.id) === Number(userId));
@@ -5105,6 +5172,17 @@
         if (rfidInput) rfidInput.value = u.rfid_uid || '';
         if (badgeStatusSelect) badgeStatusSelect.value = u.badge_status || 'active';
         if (activeCheck) activeCheck.checked = Number(u.is_active ?? 1) === 1;
+        if (assignedCpSelect) {
+          assignedCpSelect.value = u.assigned_checkpoint_type && u.assigned_checkpoint_id
+            ? `${u.assigned_checkpoint_type}:${u.assigned_checkpoint_id}`
+            : '';
+        }
+        if (passInput) {
+          passInput.value = '';
+          passInput.required = false;
+          passInput.placeholder = 'Leave blank to keep existing password';
+        }
+        if (passLabel) passLabel.textContent = 'Reset Password (Optional)';
 
         if (u.profile_image_url) {
           setDropzonePreview('user', u.profile_image_url, u.profile_image_url.split('/').pop());
@@ -5113,6 +5191,13 @@
     } else {
       if (titleEl) titleEl.textContent = 'Add New Team Member';
       if (idInput) idInput.value = '0';
+      if (assignedCpSelect) assignedCpSelect.value = '';
+      if (passInput) {
+        passInput.value = '';
+        passInput.required = true;
+        passInput.placeholder = 'Set initial password (min 6 characters)';
+      }
+      if (passLabel) passLabel.textContent = 'Account Password *';
       if (roleSelect) {
         const firstValidRole = Array.from(roleSelect.options).find((o) => !o.disabled);
         roleSelect.value = firstValidRole ? firstValidRole.value : 'technician';
@@ -5133,6 +5218,7 @@
       if (rfidInput) rfidInput.value = `RFID-88${String(nextId).padStart(2, '0')}`;
     }
 
+    syncUserAssignedCpVisibility();
     modal.classList.add('open');
   }
 
@@ -6113,7 +6199,7 @@
           return;
         }
         if (state.stationLocked && state.checkpointType !== 'event_venue') {
-          showToast('Station is locked. Unlock with PIN 1234 first.');
+          showToast('Station is locked. Unlock with the checkpoint Terminal PIN first.');
           return;
         }
         state.checkpointType = 'event_venue';
@@ -6156,11 +6242,15 @@
       }
     });
 
-    // Checkpoint Type Toggle Buttons (`Stock Warehouse` vs `Event Venue`)
+    // Checkpoint Type Toggle Buttons (`Facility Gate` vs `Event Venue`)
     document.querySelectorAll('.js-cp-type-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
+        if (isCurrentUserStockController()) {
+          showToast('Checkpoint Locked: Gate Controllers are locked to their assigned terminal. Use Relief / Swap to request reassignment.');
+          return;
+        }
         if (state.stationLocked) {
-          showToast('Entrance Station is LOCKED. Unlock with PIN 1234 to switch checkpoints.');
+          showToast('Entrance Station is LOCKED. Unlock with the checkpoint Terminal PIN to switch checkpoints.');
           return;
         }
         const newType = btn.getAttribute('data-cp-type');
@@ -6176,7 +6266,7 @@
         fetchBootstrap(false);
         showToast(
           newType === 'stock_warehouse'
-            ? 'Checkpoint Mode: Stock Warehouse Gate (L2–L4 Required; L1 Blocked)'
+            ? 'Checkpoint Mode: Facility Gate (L2–L4 Required; L1 Blocked)'
             : 'Checkpoint Mode: Event Venue Main Entrance (L1–L4 Authorized)'
         );
       });
@@ -6185,6 +6275,11 @@
     // Target Checkpoint Dropdown
     document.querySelectorAll('.js-checkpoint-select').forEach((sel) => {
       sel.addEventListener('change', (e) => {
+        if (isCurrentUserStockController()) {
+          renderCheckpointSelectors();
+          showToast('Checkpoint Locked: Gate Controllers cannot switch terminals without Administrator or Site Manager relief approval.');
+          return;
+        }
         if (state.stationLocked) return;
         state.checkpointId = Number(e.target.value);
         fetchBootstrap(false);
@@ -6640,34 +6735,10 @@
               showToast(data.message || `Welcome back, ${data.user.full_name}!`);
             }
           } else {
-            // Local fallback if server check fails or offline
-            const localMatched = state.crew.find((c) =>
-              c.username.toLowerCase() === username.toLowerCase() ||
-              c.badge_code.toUpperCase() === username.toUpperCase() ||
-              (c.email && c.email.toLowerCase() === username.toLowerCase())
-            );
-            if (localMatched && (password === 'password123' || password === 'admin123')) {
-              state.currentUser = localMatched;
-              closeAuthModal();
-              renderTopbarAndKpis();
-              showToast(`Welcome back, ${localMatched.full_name}!`);
-            } else {
-              showToast(data.error || 'Invalid credentials.');
-            }
+            showToast(data?.error || 'Invalid credentials.');
           }
         } catch (err) {
-          const localMatched = state.crew.find((c) =>
-            c.username.toLowerCase() === username.toLowerCase() ||
-            c.badge_code.toUpperCase() === username.toUpperCase()
-          );
-          if (localMatched) {
-            state.currentUser = localMatched;
-            closeAuthModal();
-            renderTopbarAndKpis();
-            showToast(`Signed in as ${localMatched.full_name} (Offline Mode)`);
-          } else {
-            showToast('Unable to sign in. Please verify your credentials.');
-          }
+          showToast('Unable to reach authentication server. Please verify your connection.');
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;
@@ -6718,45 +6789,15 @@
           });
           const data = await res.json();
           if (data && data.ok) {
-            state.currentUser = data.user;
-            closeAuthModal();
             await fetchBootstrap(false);
             renderTopbarAndKpis();
             showToast(data.message || 'Account registered & digital badge issued!');
+            closeAuthModal();
           } else {
-            showToast(data.error || 'Registration failed.');
+            showToast(data?.error || 'Registration failed.');
           }
         } catch (err) {
-          // Local fallback creation
-          const newId = state.crew.length + 1;
-          const badgeCode = `REW-BADGE-${String(newId).padStart(4, '0')}`;
-          const newMember = {
-            id: newId,
-            username,
-            full_name: fullName,
-            email: email || `${username}@ability.rw`,
-            phone: phone || '+250 788 100 200',
-            role,
-            role_display: role.charAt(0).toUpperCase() + role.slice(1),
-            department,
-            badge_code: badgeCode,
-            raw_badge_code: badgeCode,
-            staff_code: `ABL-${String(newId).padStart(3, '0')}`,
-            rfid_uid: `RFID-88${String(newId).padStart(2, '0')}`,
-            clearance_code: role === 'admin' ? 'L4' : (role === 'stock_controller' ? 'L3' : 'L2'),
-            clearance_title: 'Level 2 — Technical & Stage',
-            clearance_short: 'Technical & Stage',
-            clearance_color: '#2563eb',
-            badge_status: 'active',
-            daily_state: 'ready',
-            initials: computeInitials(fullName),
-            profile_image_url: null,
-          };
-          state.crew.push(newMember);
-          state.currentUser = newMember;
-          closeAuthModal();
-          renderAll();
-          showToast(`Account created locally! Badge ${badgeCode} issued.`);
+          showToast('Unable to register user. Verify Admin session and server connection.');
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;
@@ -7030,7 +7071,7 @@
       const actCpBtn = e.target.closest('.js-activate-checkpoint-btn');
       if (actCpBtn) {
         if (state.stationLocked) {
-          showToast('Station is locked. Unlock with PIN 1234 first.');
+          showToast('Station is locked. Unlock with the checkpoint Terminal PIN first.');
           return;
         }
         state.checkpointType = actCpBtn.getAttribute('data-cp-type');
@@ -8857,7 +8898,16 @@
       });
     }
     const resetLogsHandler = async () => {
+      if (!isCurrentUserAdmin()) {
+        showToast('Permission Denied: Only System Administrators can reset attendance logs.');
+        return;
+      }
       if (!confirm("Are you sure you want to reset the User Activity Timeline and gate scans?\nAll activity logs will be cleared and crew set to Not Checked In (0 on-site).")) {
+        return;
+      }
+      const confirmPassword = window.prompt('Enter your Administrator password to confirm clearing attendance logs:');
+      if (!confirmPassword) {
+        showToast('Log reset cancelled.');
         return;
       }
       try {
@@ -8867,6 +8917,7 @@
           body: JSON.stringify({
             checkpoint_type: state.checkpointType,
             checkpoint_id: state.checkpointId,
+            confirm_password: confirmPassword,
           })
         });
         const data = await res.json();
@@ -9261,9 +9312,17 @@
         if (saveBtn) saveBtn.disabled = true;
 
         const fd = new FormData();
-        fd.append('id', document.getElementById('user-modal-id').value);
+        const uidVal = Number(document.getElementById('user-modal-id').value || 0);
+        const passVal = document.getElementById('user-modal-password')?.value.trim() || '';
+        if (uidVal <= 0 && passVal.length < 6) {
+          showToast('Please set an initial password (minimum 6 characters).');
+          if (saveBtn) saveBtn.disabled = false;
+          return;
+        }
+        fd.append('id', uidVal);
         fd.append('full_name', document.getElementById('user-modal-fullname').value);
         fd.append('username', document.getElementById('user-modal-username').value);
+        if (passVal !== '') fd.append('password', passVal);
         fd.append('role', document.getElementById('user-modal-role').value);
         fd.append('department', document.getElementById('user-modal-dept').value);
         fd.append('phone', document.getElementById('user-modal-phone').value);
@@ -9275,6 +9334,16 @@
         fd.append('rfid_uid', document.getElementById('user-modal-rfid-uid').value);
         fd.append('badge_status', document.getElementById('user-modal-badge-status').value);
         fd.append('is_active', document.getElementById('user-modal-active').checked ? 1 : 0);
+
+        const assignedCpVal = document.getElementById('user-modal-assigned-cp')?.value || '';
+        if (assignedCpVal && assignedCpVal.includes(':')) {
+          const [acpType, acpId] = assignedCpVal.split(':');
+          fd.append('assigned_checkpoint_type', acpType);
+          fd.append('assigned_checkpoint_id', acpId);
+        } else {
+          fd.append('assigned_checkpoint_type', '');
+          fd.append('assigned_checkpoint_id', '');
+        }
 
         const fileInput = document.getElementById('user-modal-image');
         if (fileInput && fileInput.files && fileInput.files[0]) {
@@ -9616,10 +9685,226 @@
     }
   }
 
+  function canCurrentUserApproveShiftRequests() {
+    if (!state.currentUser) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return ['admin', 'manager', 'administrator', 'stock_manager'].includes(role);
+  }
+
+  function formatShiftReasonLabel(reason) {
+    const map = {
+      sick_leave: 'Sick Leave Relief',
+      shift_swap: 'Shift Swap / Handover',
+      high_volume: 'High Venue Workload',
+      night_shift: 'Night Shift Coverage',
+      new_assignment: 'New Terminal Assignment',
+    };
+    return map[String(reason || '').toLowerCase()] || 'Shift Relief';
+  }
+
+  function renderShiftRequestModal() {
+    const cpSel = document.getElementById('sr-checkpoint-select');
+    const repSel = document.getElementById('sr-replacement-select');
+    const outSel = document.getElementById('sr-outgoing-select');
+    const listEl = document.getElementById('shift-request-list');
+    const pillEl = document.getElementById('sr-pending-summary-pill');
+
+    if (cpSel) {
+      const whs = state.checkpoints.stock_warehouses || [];
+      const evs = state.checkpoints.event_venues || [];
+      const curVal = `${state.checkpointType}:${state.checkpointId}`;
+      const opts = [];
+      if (whs.length > 0) {
+        opts.push('<optgroup label="Facility Gates">');
+        whs.forEach((w) => opts.push(`<option value="stock_warehouse:${escapeHtml(String(w.id))}">${escapeHtml(w.name)}</option>`));
+        opts.push('</optgroup>');
+      }
+      if (evs.length > 0) {
+        opts.push('<optgroup label="Event Venues">');
+        evs.forEach((v) => opts.push(`<option value="event_venue:${escapeHtml(String(v.id))}">${escapeHtml(v.name)}</option>`));
+        opts.push('</optgroup>');
+      }
+      cpSel.innerHTML = opts.join('');
+      if (cpSel.querySelector(`option[value="${curVal}"]`)) {
+        cpSel.value = curVal;
+      }
+    }
+
+    const controllers = (state.crew || []).filter((c) => (c.role || '').toLowerCase() === 'stock_controller');
+    if (repSel) {
+      repSel.innerHTML = controllers.length > 0
+        ? controllers.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)} (${escapeHtml(c.assigned_checkpoint_name || 'Unassigned')})</option>`).join('')
+        : '<option value="">No Gate Controllers found</option>';
+      if (isCurrentUserStockController() && state.currentUser?.id) {
+        repSel.value = String(state.currentUser.id);
+      }
+    }
+    if (outSel) {
+      const base = ['<option value="0">-- Auto-detect / Keep existing --</option>'];
+      controllers.forEach((c) => {
+        base.push(`<option value="${c.id}">${escapeHtml(c.full_name)} (${escapeHtml(c.assigned_checkpoint_name || 'Unassigned')})</option>`);
+      });
+      outSel.innerHTML = base.join('');
+    }
+
+    const canApprove = canCurrentUserApproveShiftRequests();
+    const reqs = state.shiftRequests || [];
+    const pendingCount = reqs.filter((r) => r.status === 'pending').length;
+    if (pillEl) {
+      pillEl.textContent = `${pendingCount} Pending`;
+    }
+
+    if (!listEl) return;
+    if (reqs.length === 0) {
+      listEl.innerHTML = '<div style="padding: 16px; text-align: center; font-size: 12px; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 8px;">No Gate Controller relief or assignment requests yet.</div>';
+      return;
+    }
+
+    listEl.innerHTML = reqs.map((r) => {
+      const st = String(r.status || 'pending').toLowerCase();
+      const badgeCls = st === 'approved' ? 'status-badge-green-sm' : (st === 'rejected' ? 'status-badge-red-sm' : 'status-badge-amber-sm');
+      const winText = (r.shift_start || r.shift_end)
+        ? `Window: ${escapeHtml(r.shift_start || 'Now')} -> ${escapeHtml(r.shift_end || 'Ongoing')}`
+        : 'Ongoing / Immediate';
+      const actionBtns = (st === 'pending' && canApprove)
+        ? `<div style="display: flex; gap: 6px; margin-top: 8px;">
+            <button type="button" class="btn btn-primary-32 js-review-shift-btn" data-req-id="${r.id}" data-decision="approved" style="background: #16a34a; border-color: #15803d;">Approve</button>
+            <button type="button" class="btn btn-secondary-32-sm js-review-shift-btn" data-req-id="${r.id}" data-decision="rejected" style="color: #dc2626; border-color: #fecaca;">Reject</button>
+          </div>`
+        : (st === 'pending'
+            ? '<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Requires Administrator or Site Manager approval</div>'
+            : `<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Reviewed by ${escapeHtml(r.reviewed_by_name || 'Supervisor')} ${r.reviewed_by_role ? '(' + escapeHtml(r.reviewed_by_role) + ')' : ''}</div>`);
+
+      return `
+        <div style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-white);">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <strong style="font-size: 12.5px; color: var(--text-primary);">${escapeHtml(r.checkpoint_name)} · ${escapeHtml(formatShiftReasonLabel(r.reason_type))}</strong>
+            <span class="status-badge ${badgeCls}">${escapeHtml(st.toUpperCase())}</span>
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px;">
+            Incoming Controller: <strong>${escapeHtml(r.replacement_controller_name)}</strong>${r.outgoing_controller_name ? ` (Relieving: ${escapeHtml(r.outgoing_controller_name)})` : ''}
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+            Requested by ${escapeHtml(r.requested_by_name)} · ${winText}${r.notes ? ' · ' + escapeHtml(r.notes) : ''}
+          </div>
+          ${actionBtns}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function openShiftRequestModal() {
+    const modal = document.getElementById('shift-request-modal');
+    if (!modal) return;
+    renderShiftRequestModal();
+    modal.classList.add('open');
+  }
+
+  function closeShiftRequestModal() {
+    const modal = document.getElementById('shift-request-modal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  function initShiftReliefControls() {
+    const termBtn = document.getElementById('terminal-shift-relief-btn');
+    if (termBtn) termBtn.addEventListener('click', openShiftRequestModal);
+
+    const sideBtn = document.getElementById('sidebar-shift-relief-btn');
+    if (sideBtn) sideBtn.addEventListener('click', openShiftRequestModal);
+
+    const closeBtn = document.getElementById('close-shift-request-modal');
+    if (closeBtn) closeBtn.addEventListener('click', closeShiftRequestModal);
+
+    const cancelBtn = document.getElementById('cancel-shift-request-modal');
+    if (cancelBtn) cancelBtn.addEventListener('click', closeShiftRequestModal);
+
+    const roleSelect = document.getElementById('user-modal-role');
+    if (roleSelect) roleSelect.addEventListener('change', syncUserAssignedCpVisibility);
+
+    const srForm = document.getElementById('shift-request-form');
+    if (srForm) {
+      srForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('sr-submit-btn');
+        if (btn) btn.disabled = true;
+        const cpVal = document.getElementById('sr-checkpoint-select')?.value || '';
+        const [cpType, cpId] = cpVal.includes(':') ? cpVal.split(':') : ['stock_warehouse', '1'];
+        try {
+          const res = await fetch('api.php?action=request_controller_shift', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'request_controller_shift',
+              checkpoint_type: cpType,
+              checkpoint_id: cpId,
+              replacement_controller_id: Number(document.getElementById('sr-replacement-select')?.value || 0),
+              outgoing_controller_id: Number(document.getElementById('sr-outgoing-select')?.value || 0),
+              reason_type: document.getElementById('sr-reason-select')?.value || 'shift_swap',
+              shift_start: document.getElementById('sr-shift-start')?.value || '',
+              shift_end: document.getElementById('sr-shift-end')?.value || '',
+              notes: document.getElementById('sr-notes')?.value || '',
+            }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            applyBootstrapPayload(data, true);
+            renderAll();
+            renderShiftRequestModal();
+            srForm.reset();
+            showToast(data.message || 'Shift relief request submitted.');
+          } else {
+            showToast(data.error || 'Failed to submit shift relief request.');
+          }
+        } catch (err) {
+          showToast('Error communicating with server.');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      });
+    }
+
+    const listEl = document.getElementById('shift-request-list');
+    if (listEl) {
+      listEl.addEventListener('click', async (e) => {
+        const revBtn = e.target.closest('.js-review-shift-btn');
+        if (!revBtn) return;
+        const reqId = Number(revBtn.getAttribute('data-req-id') || 0);
+        const decision = revBtn.getAttribute('data-decision') || '';
+        if (!reqId || !decision) return;
+        revBtn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=review_controller_shift', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'review_controller_shift',
+              request_id: reqId,
+              decision: decision,
+            }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            applyBootstrapPayload(data, true);
+            renderAll();
+            renderShiftRequestModal();
+            showToast(data.message || `Request #${reqId} ${decision}.`);
+          } else {
+            showToast(data.error || 'Permission denied or review failed.');
+          }
+        } catch (err) {
+          showToast('Error communicating with server.');
+        } finally {
+          revBtn.disabled = false;
+        }
+      });
+    }
+  }
+
   // Initialize
   document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     bindEvents();
+    initShiftReliefControls();
     if (window.location.hash === '#pane-kiosk') {
       switchScreen('terminals', 'pane-kiosk');
     }

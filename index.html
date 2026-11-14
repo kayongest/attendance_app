@@ -46,7 +46,7 @@
         </button>
         <button type="button" class="nav-item" data-nav-target="events" data-node-id="2:3288">
           <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" id="nav-icon-events" />
-          <span class="nav-item-label">Venues &amp; Stock Gates</span>
+          <span class="nav-item-label">Venues &amp; Facility Gates</span>
           <span class="nav-item-count" id="sidebar-events-count">07</span>
         </button>
         <button type="button" class="nav-item" data-nav-target="users" id="nav-users-btn">
@@ -66,18 +66,14 @@
           <img src="assets/nav-campaigns.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Venue Security Portal</span>
         </button>
-        <button type="button" class="nav-item" data-nav-target="analytics" data-node-id="2:3298">
-          <img src="assets/nav-analytics.svg" alt="" class="svg-icon" id="nav-icon-analytics" />
-          <span class="nav-item-label">Stock Batch Approvals</span>
-        </button>
         <button type="button" class="nav-item" data-nav-target="stock-manager" id="nav-stock-manager-btn">
           <svg class="svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
             <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
             <line x1="12" y1="22.08" x2="12" y2="12"></line>
           </svg>
-          <span class="nav-item-label">Stocks &amp; Warehouses</span>
-          <span class="nav-item-count" id="sidebar-stock-count">03/21</span>
+          <span class="nav-item-label">Facilities &amp; Gates</span>
+          <span class="nav-item-count" id="sidebar-stock-count">03</span>
         </button>
         <button type="button" class="nav-item" id="nav-access-matrix-btn" data-node-id="2:3301">
           <img src="assets/nav-payments.svg" alt="" class="svg-icon" />
@@ -88,7 +84,12 @@
       <!-- Workspace Navigation (Checkpoint Controls) -->
       <nav class="nav-group-workspace" id="sidebar-checkpoint-controls" aria-label="Workspace navigation" data-node-id="2:3304">
         <span class="nav-section-label" data-node-id="2:3306">CHECKPOINT CONTROLS</span>
-        <button type="button" class="nav-item" id="sidebar-calltime-btn" title="Configure Scheduled Call Times for Venues &amp; Warehouses">
+        <button type="button" class="nav-item" id="sidebar-shift-relief-btn" title="Controller Assignments &amp; Shift Relief Approvals">
+          <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Shift Relief &amp; Swaps</span>
+          <span class="nav-item-count" id="sidebar-shift-relief-badge" style="display: none; background: #fef3c7; color: #b45309;">0</span>
+        </button>
+        <button type="button" class="nav-item" id="sidebar-calltime-btn" title="Configure Scheduled Call Times for Venues &amp; Facilities">
           <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Set Call Time</span>
           <span class="nav-item-count" id="sidebar-active-calltime-pill">08:00</span>
@@ -102,7 +103,7 @@
           <img src="assets/nav-integrations.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Station Lock (PIN)</span>
         </button>
-        <button type="button" class="nav-item" id="sidebar-reset-demo-btn" data-node-id="2:3313" style="display: flex; opacity: 1; filter: none; cursor: pointer;" title="Reset all gate scans for today">
+        <button type="button" class="nav-item" id="sidebar-reset-demo-btn" data-node-id="2:3313" title="Reset all gate scans for today (Admin only)">
           <img src="assets/nav-settings.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Reset Today’s Scans</span>
         </button>
@@ -125,7 +126,7 @@
         <div class="avatar-circle avatar-jl" data-node-id="2:3323">MU</div>
         <div class="account-details" data-node-id="2:3325">
           <span class="account-name" data-node-id="2:3326">Mirene Uwase</span>
-          <span class="account-role" data-node-id="2:3327">Stock Controller · L3</span>
+          <span class="account-role" data-node-id="2:3327">Gate Controller · L3</span>
         </div>
         <img src="assets/chevrons-up-down.svg" alt="" class="svg-icon" />
       </div>
@@ -318,7 +319,7 @@
             <div class="page-intro-heading" data-node-id="2:3350">
               <h1 class="page-title" data-node-id="2:3351">Gate Operations &amp; Access Matrix</h1>
               <p class="page-subtitle" data-node-id="2:3352">
-                Live Venue &amp; Stock Warehouse check-in/check-out telemetry across Kigali production checkpoints.
+                Live Venue &amp; Facility Gate check-in/check-out attendance telemetry across Kigali production checkpoints.
               </p>
             </div>
             <div class="page-actions">
@@ -339,7 +340,7 @@
               <div class="cp-type-toggle" role="group" aria-label="Checkpoint Type">
                 <button type="button" class="cp-type-btn js-cp-type-btn active-stock" data-cp-type="stock_warehouse">
                   <span class="cp-dot"></span>
-                  <span>Stock Warehouse (L2–L4)</span>
+                  <span>Facility Gate (L2–L4)</span>
                 </button>
                 <button type="button" class="cp-type-btn js-cp-type-btn" data-cp-type="event_venue">
                   <span class="cp-dot"></span>
@@ -419,10 +420,10 @@
               </div>
             </div>
 
-            <!-- Card 3: Venue vs. Stock Check-Ins (Today) -->
+            <!-- Card 3: Venue vs. Facility Check-Ins (Today) -->
             <div class="metric-card metric-card-overview" data-node-id="2:3413">
               <div class="metric-heading" data-node-id="2:3414">
-                <span class="metric-label-md" data-node-id="2:3415">Venue vs. Stock Check-Ins</span>
+                <span class="metric-label-md" data-node-id="2:3415">Venue vs. Facility Check-Ins</span>
                 <img src="assets/info.svg" alt="" class="svg-icon" />
               </div>
               <div class="metric-value-trend" data-node-id="2:3417">
@@ -504,13 +505,13 @@
                 type="text"
                 id="timeline-search-input"
                 class="timeline-search-input"
-                placeholder="Search individual, venue, stock..."
+                placeholder="Search individual, venue, gate..."
                 autocomplete="off"
               />
               <select id="timeline-scope-select" class="timeline-scope-select" aria-label="Filter Activity Logs">
                 <option value="all">All Logs</option>
                 <option value="event_venue">Venues Only</option>
-                <option value="stock_warehouse">Stock Warehouses Only</option>
+                <option value="stock_warehouse">Facility Gates Only</option>
                 <option value="granted">Access Granted</option>
                 <option value="denied">Access Denied</option>
               </select>
@@ -540,7 +541,7 @@
                   </span>
                 </div>
                 <p class="chart-subtitle">
-                  Real-time geographic tracking &amp; instant crew dispatch across Kigali venues and stock hubs.
+                  Real-time geographic tracking &amp; instant crew attendance across Kigali venues and facility hubs.
                 </p>
               </div>
 
@@ -719,7 +720,7 @@
                 </span>
                 <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px;">
                   <span style="width: 9px; height: 9px; border-radius: 2px; background: #16a34a; display: inline-block;"></span>
-                  Stock Warehouse
+                  Facility Gate
                 </span>
               </div>
 
@@ -731,7 +732,7 @@
                 <div class="summary-divider" data-node-id="2:3467"></div>
                 <div class="summary-stat-pair" data-node-id="2:3468">
                   <span class="summary-count-primary js-kpi-stock-checkins" style="color: #16a34a;" data-node-id="2:3469">2</span>
-                  <span class="summary-stat-label" data-node-id="2:3470">stock gate check-ins</span>
+                  <span class="summary-stat-label" data-node-id="2:3470">facility gate check-ins</span>
                 </div>
                 <div class="peak-insight" data-node-id="2:3471">
                   <img src="assets/trending-up.svg" alt="" class="svg-icon" />
@@ -811,11 +812,11 @@
               <span class="status-tab-count js-tab-count-out">1</span>
             </button>
             <button type="button" class="status-tab" data-tab="stock_auth" data-node-id="2:3558">
-              <span class="status-tab-label">Stock Authorized (L2–L4)</span>
+              <span class="status-tab-label">Facility Authorized (L2–L4)</span>
               <span class="status-tab-count js-tab-count-stock">10</span>
             </button>
             <button type="button" class="status-tab" data-tab="restricted" data-node-id="2:3561">
-              <span class="status-tab-label">Stock Restricted (L1)</span>
+              <span class="status-tab-label">Venue-Only Clearance (L1)</span>
               <span class="status-tab-count js-tab-count-l1">4</span>
             </button>
           </div>
@@ -884,14 +885,14 @@
           <!-- Page Introduction -->
           <div class="page-intro" data-node-id="2:8117">
             <div class="page-intro-heading" data-node-id="2:8118">
-              <h1 class="page-title" data-node-id="2:8119">Venues &amp; Stock Checkpoints</h1>
+              <h1 class="page-title" data-node-id="2:8119">Venues &amp; Facility Checkpoints</h1>
               <p class="page-subtitle" data-node-id="2:8120">
-                Manage Event Venue Main Entrances (Locked Station Mode PIN: 1234) and Stock Warehouses (L2/L3/L4 + Linked Batches).
+                Manage PIN-protected Event Venue entrances and Facility Gate attendance terminals (L2–L4).
               </p>
             </div>
             <div class="page-actions">
               <button type="button" class="btn btn-secondary-38 js-station-lock-btn">
-                <span class="js-station-lock-label">Lock / Unlock Station (PIN: 1234)</span>
+                <span class="js-station-lock-label">Lock / Unlock Station</span>
               </button>
               <button type="button" class="btn btn-primary-38" data-action="go-kiosk" data-node-id="2:8121">
                 <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
@@ -908,16 +909,16 @@
                 <img src="assets/metric-calendar.svg" alt="" class="svg-icon" />
               </div>
               <span class="metric-value-30" id="events-total-kpi" data-node-id="2:8130">07</span>
-              <span class="metric-context" data-node-id="2:8131">3 Stock Warehouses · 4 Event Venues</span>
+              <span class="metric-context" data-node-id="2:8131">3 Facility Gates · 4 Event Venues</span>
             </div>
 
             <div class="metric-card" data-node-id="2:8132">
               <div class="metric-heading" data-node-id="2:8133">
-                <span class="metric-label-reg" data-node-id="2:8134">Stock Warehouses</span>
+                <span class="metric-label-reg" data-node-id="2:8134">Facility Gates</span>
                 <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
               </div>
               <span class="metric-value-30" id="events-stock-kpi" data-node-id="2:8136">03</span>
-              <span class="metric-context" data-node-id="2:8137">Ndera Warehouse · BK Arena · KCC Stock</span>
+              <span class="metric-context" data-node-id="2:8137">Ndera · BK Arena · KCC Sites</span>
             </div>
 
             <div class="metric-card" data-node-id="2:8138">
@@ -931,11 +932,12 @@
 
             <div class="metric-card" data-node-id="2:8144">
               <div class="metric-heading" data-node-id="2:8145">
-                <span class="metric-label-reg" data-node-id="2:8146">Equipment Batches</span>
+                <span class="metric-label-reg" data-node-id="2:8146">Pending Relief Requests</span>
                 <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
               </div>
-              <span class="metric-value-30" id="events-batches-kpi" data-node-id="2:8148">03</span>
-              <span class="metric-context" data-node-id="2:8149">Linked to L2–L4 Technicians</span>
+              <span class="metric-value-30" id="events-shift-pending-kpi">0</span>
+              <span class="metric-value-30" id="events-batches-kpi" data-node-id="2:8148" style="display: none;">03</span>
+              <span class="metric-context" data-node-id="2:8149">Awaiting Admin / Site Manager</span>
             </div>
           </div>
 
@@ -1040,7 +1042,7 @@
                 <span class="status-badge status-badge-purple-sm" id="events-directory-badge" data-node-id="2:8207">07</span>
               </div>
               <p class="directory-desc" data-node-id="2:8209">
-                Select any Stock Warehouse or Event Venue to switch the active gate terminal or copy a shareable tablet kiosk link.
+                Select any Facility Gate or Event Venue to switch the active terminal or copy a shareable kiosk link.
               </p>
             </div>
           </div>
@@ -1052,7 +1054,7 @@
               <span class="status-tab-count" id="events-tab-count-all">07</span>
             </button>
             <button type="button" class="status-tab" data-event-tab="stock_warehouse" data-node-id="2:8223">
-              <span class="status-tab-label">Stock Warehouses</span>
+              <span class="status-tab-label">Facility Gates</span>
               <span class="status-tab-count" id="events-tab-count-stock">03</span>
             </button>
             <button type="button" class="status-tab" data-event-tab="event_venue" data-node-id="2:8226">
@@ -1404,13 +1406,18 @@
                 <span class="terminal-lock-status-icon" id="terminal-lock-status-icon"><img src="assets/unlock.svg" alt="" class="svg-icon" /></span>
                 <span id="terminal-lock-status-text">Screen Unlocked</span>
               </span>
-              <button type="button" class="btn btn-secondary-32-sm terminal-lock-action-btn" id="terminal-lock-screen-btn" title="Lock this terminal screen (requires warehouse PIN to unlock)">
+              <button type="button" class="btn btn-secondary-32-sm terminal-lock-action-btn" id="terminal-lock-screen-btn" title="Lock this terminal screen (requires checkpoint PIN to unlock)">
                 <img src="assets/lock.svg" alt="" class="svg-icon" />
                 <span>Lock Screen</span>
               </button>
-              <button type="button" class="btn btn-secondary-32-sm terminal-pin-manage-btn" id="terminal-pin-manager-btn" title="View or configure dedicated Stock Warehouse PINs">
+              <button type="button" class="btn btn-secondary-32-sm terminal-pin-manage-btn" id="terminal-pin-manager-btn" title="View or configure dedicated Site Terminal PINs">
                 <img src="assets/key-round-13.svg" alt="" class="svg-icon" />
-                <span>Warehouse PINs</span>
+                <span>Site PINs</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32-sm terminal-shift-relief-btn" id="terminal-shift-relief-btn" title="Request Gate Controller relief, sick leave coverage, night shift, or approve pending swaps">
+                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                <span>Relief / Swap</span>
+                <span class="status-badge status-badge-amber-sm" id="terminal-shift-relief-badge" style="display: none; margin-left: 4px; font-size: 10px; padding: 1px 6px;">0</span>
               </button>
             </div>
 
@@ -1474,7 +1481,7 @@
                 <div class="terminal-lock-copy">
                   <h4 id="terminal-lock-heading">Terminal Screen Locked</h4>
                   <p id="terminal-lock-subtext">
-                    Barcode scanning &amp; checkpoint switching are locked for <strong id="terminal-lock-cp-name">Ndera Warehouse</strong>. Enter the dedicated warehouse PIN to unlock this terminal.
+                    Barcode scanning &amp; checkpoint switching are locked for <strong id="terminal-lock-cp-name">Ndera Warehouse</strong>. Enter the dedicated site PIN to unlock this terminal.
                   </p>
                 </div>
               </div>
@@ -1485,7 +1492,7 @@
                     type="password"
                     id="terminal-unlock-pin-input"
                     class="terminal-unlock-pin-input"
-                    placeholder="Enter dedicated warehouse PIN..."
+                    placeholder="Enter dedicated terminal PIN..."
                     inputmode="numeric"
                     autocomplete="off"
                     required
@@ -1503,15 +1510,15 @@
       </main>
 
       <!-- ================================================================== -->
-      <!-- SCREEN 4: STOCK BATCH APPROVALS & 4-TIER ACCESS MATRIX             -->
+      <!-- SCREEN 4: 4-TIER ACCESS CLEARANCE MATRIX                           -->
       <!-- ================================================================== -->
       <main class="screen-view" id="screen-analytics">
         <div class="overview-top-block">
           <div class="page-intro">
             <div class="page-intro-heading">
-              <h1 class="page-title">Stock Batch Approvals &amp; Clearance Matrix</h1>
+              <h1 class="page-title">Access Clearance Matrix</h1>
               <p class="page-subtitle">
-                Inspect linked equipment batches (<code>BATCH-YYYYMMDD-XXXXXX</code>) and configure clearance permissions.
+                Configure attendance gate clearance tiers (L1–L4) across event venues and facility checkpoints.
               </p>
             </div>
             <div class="page-actions">
@@ -1523,7 +1530,7 @@
                 <img src="assets/plus-white.svg" alt="" class="svg-icon" />
                 <span>+ Add Clearance Tier</span>
               </button>
-              <button type="button" class="btn btn-primary-38" id="open-create-batch-btn" style="background: #7c3aed;">
+              <button type="button" class="btn btn-primary-38" id="open-create-batch-btn" style="display: none; background: #7c3aed;">
                 <img src="assets/plus-white.svg" alt="" class="svg-icon" />
                 <span>+ Create Equipment Batch</span>
               </button>
@@ -1538,17 +1545,14 @@
           <div class="metrics-grid matrix-cards-grid-4col" id="matrix-tier-cards-grid" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; width: 100%;"></div>
         </div>
 
-        <!-- Equipment Batches Custody Table (`stock_movements`) -->
-        <section class="directory-card">
+        <!-- Hidden Legacy Equipment Batches Section (Omitted for Attendance-Only Deployment) -->
+        <section class="directory-card" id="legacy-batches-directory-card" style="display: none;">
           <div class="directory-header">
             <div class="directory-heading">
               <div class="directory-title-row">
-                <h2 class="directory-title-18">Linked Equipment Batches (Stock Custody)</h2>
+                <h2 class="directory-title-18">Linked Equipment Batches</h2>
                 <span class="status-badge status-badge-purple-sm" id="batches-count-badge">03</span>
               </div>
-              <p class="directory-desc">
-                Stock Controllers (e.g. Mirene) verify technician clearance (L2/L3/L4) and approve equipment batches before dispatch or return.
-              </p>
             </div>
           </div>
 
@@ -1616,23 +1620,23 @@
       </main>
 
       <!-- ================================================================== -->
-      <!-- SCREEN 5: STOCKS & WAREHOUSES INVENTORY MANAGER (CRUD)             -->
+      <!-- SCREEN 5: FACILITIES & CHECKPOINTS MANAGER (CRUD)                  -->
       <!-- ================================================================== -->
       <main class="screen-view" id="screen-stock-manager">
         <div class="overview-top-block">
           <div class="page-intro">
             <div class="page-intro-heading">
-              <h1 class="page-title">Stocks &amp; Warehouses Inventory Manager</h1>
+              <h1 class="page-title">Facilities &amp; Gate Checkpoints Manager</h1>
               <p class="page-subtitle">
-                Unified warehouse registry and equipment stock catalog with real-time MySQL persistence, image uploads, and clearance rules.
+                Manage operational attendance facility gates, operating hours, dedicated terminal PINs, and Gate Controller assignments.
               </p>
             </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-secondary-38" id="open-add-warehouse-btn">
-                <img src="assets/map-pin-12.svg" alt="" class="svg-icon" />
-                <span>+ New Warehouse</span>
+              <button type="button" class="btn btn-primary-38" id="open-add-warehouse-btn">
+                <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+                <span>+ New Facility Gate</span>
               </button>
-              <button type="button" class="btn btn-primary-38" id="open-add-stock-btn">
+              <button type="button" class="btn btn-primary-38" id="open-add-stock-btn" style="display: none;">
                 <img src="assets/plus-white.svg" alt="" class="svg-icon" />
                 <span>+ New Stock Item</span>
               </button>
@@ -1645,17 +1649,17 @@
                 <span class="metric-label-reg" data-node-id="2:8127">Active Checkpoints</span>
                 <img src="assets/metric-calendar.svg" alt="" class="svg-icon" />
               </div>
-              <span class="metric-value-30" id="events-total-kpi" data-node-id="2:8130">16</span>
-              <span class="metric-context" data-node-id="2:8131">3 Stock Warehouses · 4 Event Venues</span>
+              <span class="metric-value-30" id="sm-total-cp-kpi" data-node-id="2:8130">07</span>
+              <span class="metric-context" data-node-id="2:8131">3 Facility Gates · 4 Event Venues</span>
             </div>
 
             <div class="metric-card" data-node-id="2:8132">
               <div class="metric-heading" data-node-id="2:8133">
-                <span class="metric-label-reg" data-node-id="2:8134">Stock Warehouses</span>
+                <span class="metric-label-reg" data-node-id="2:8134">Facility Gates</span>
                 <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
               </div>
-              <span class="metric-value-30" id="events-stock-kpi" data-node-id="2:8136">04</span>
-              <span class="metric-context" data-node-id="2:8137">Ndera Warehouse · BK Arena · KCC Stock</span>
+              <span class="metric-value-30" id="sm-gates-kpi" data-node-id="2:8136">03</span>
+              <span class="metric-context" data-node-id="2:8137">Ndera · BK Arena · KCC Sites</span>
             </div>
 
             <div class="metric-card" data-node-id="2:8138">
@@ -1663,31 +1667,31 @@
                 <span class="metric-label-reg" data-node-id="2:8140">Event Venue Gates</span>
                 <img src="assets/metric-radio.svg" alt="" class="svg-icon" />
               </div>
-              <span class="metric-value-30" id="events-venue-kpi" data-node-id="2:8142">12</span>
+              <span class="metric-value-30" id="sm-venues-kpi" data-node-id="2:8142">04</span>
               <span class="metric-context" data-node-id="2:8143">KCC · BK Arena · Intare · Marriott</span>
             </div>
 
-            <div class="metric-card" data-node-id="2:8144">
+            <div class="metric-card" data-node-id="2:8144" style="display: none;">
               <div class="metric-heading" data-node-id="2:8145">
                 <span class="metric-label-reg" data-node-id="2:8146">Equipment Batches</span>
                 <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
               </div>
-              <span class="metric-value-30" id="events-batches-kpi" data-node-id="2:8148">05</span>
+              <span class="metric-value-30" id="sm-batches-kpi" data-node-id="2:8148">05</span>
               <span class="metric-context" data-node-id="2:8149">Linked to L2–L4 Technicians</span>
             </div>
           </div>
         </div>
 
-        <!-- Inventory Directory Card -->
+        <!-- Facility Registry Card -->
         <section class="directory-card">
           <div class="directory-header">
             <div class="directory-heading">
               <div class="directory-title-row">
-                <h2 class="directory-title-18">Inventory &amp; Facility Registry</h2>
-                <span class="status-badge status-badge-purple-sm" id="sm-active-view-badge">Warehouses</span>
+                <h2 class="directory-title-18">Facility Checkpoints &amp; Gate Registry</h2>
+                <span class="status-badge status-badge-purple-sm" id="sm-active-view-badge">Facility Gates</span>
               </div>
               <p class="directory-desc">
-                Toggle between managing physical warehouse locations and cataloging equipment stock items. Click any record to edit details or update photo attachments.
+                Manage operational facility checkpoints, call-time defaults, and gate terminal photo attachments.
               </p>
             </div>
           </div>
@@ -1695,16 +1699,16 @@
           <!-- Segmented View Toggle Bar -->
           <div class="status-tabs" id="sm-segmented-tabs" style="border-bottom: 1px solid var(--border-color); padding: 0 20px;">
             <button type="button" class="status-tab active js-sm-tab-btn" data-tab="warehouses" data-target-tab="warehouses">
-              <span class="status-tab-label">🏬 Warehouses &amp; Locations</span>
+              <span class="status-tab-label">🏬 Facility Gates &amp; Sites</span>
               <span class="status-tab-count" id="sm-tab-wh-count">03</span>
             </button>
-            <button type="button" class="status-tab js-sm-tab-btn" data-tab="items" data-target-tab="items">
+            <button type="button" class="status-tab js-sm-tab-btn" data-tab="items" data-target-tab="items" style="display: none;">
               <span class="status-tab-label">📦 Stock &amp; Equipment Inventory</span>
               <span class="status-tab-count" id="sm-tab-item-count">21</span>
             </button>
           </div>
 
-          <!-- TAB PANE 1: WAREHOUSES & LOCATIONS -->
+          <!-- TAB PANE 1: FACILITY GATES & SITES -->
           <div id="sm-pane-warehouses" class="sm-tab-pane">
             <div class="table-tools" style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
               <label class="table-search-box" style="flex: 1 1 320px; max-width: 440px;">
@@ -1713,13 +1717,13 @@
                   type="text"
                   id="sm-wh-search-input"
                   class="table-search-input"
-                  placeholder="Search warehouses by name, code, or location..."
+                  placeholder="Search facility gates by name, code, or location..."
                   autocomplete="off"
                 />
               </label>
               <button type="button" class="btn btn-primary-32 js-trigger-add-wh">
                 <img src="assets/plus-white.svg" alt="" class="svg-icon" />
-                <span>Add Warehouse</span>
+                <span>Add Facility Gate</span>
               </button>
             </div>
 
@@ -1835,11 +1839,11 @@
             <div style="display: flex; align-items: center; gap: 12px;">
               <span id="users-page-delegation-icon" style="font-size: 22px;">🏭</span>
               <div>
-                <strong id="users-page-delegation-title" style="display: block; font-size: 13px; font-weight: 700;">Stock Manager Delegation Active</strong>
-                <span id="users-page-delegation-desc" style="font-size: 11.5px; opacity: 0.95;">You are authorized to onboard warehouse &amp; logistics personnel with <strong>Level 1 (Venue/Logistics)</strong> or <strong>Level 2 (Technical)</strong> clearance. Higher clearance tiers (L3–L8) and management roles require Administrator clearance.</span>
+                <strong id="users-page-delegation-title" style="display: block; font-size: 13px; font-weight: 700;">Site Manager Delegation Active</strong>
+                <span id="users-page-delegation-desc" style="font-size: 11.5px; opacity: 0.95;">You are authorized to manage facility crew (L1/L2), Gate Controllers (L3), and approve shift relief requests.</span>
               </div>
             </div>
-            <span class="status-badge" id="users-page-delegation-pill" style="font-size: 11px; padding: 4px 10px; font-weight: 700; white-space: nowrap;">Scoped L1 / L2</span>
+            <span class="status-badge" id="users-page-delegation-pill" style="font-size: 11px; padding: 4px 10px; font-weight: 700; white-space: nowrap;">Site Manager · L1–L3</span>
           </div>
 
           <!-- View Mode Toggle: Personnel Directory vs Roles Management vs 4-Tier Access Matrix vs Departments -->
@@ -1887,11 +1891,11 @@
 
             <div class="metric-card">
               <div class="metric-heading">
-                <span class="metric-label-reg">Stock Authorized (L2–L4)</span>
+                <span class="metric-label-reg">Multi-Site Authorized (L2–L4)</span>
                 <img src="assets/metric-radio.svg" alt="" class="svg-icon" />
               </div>
               <span class="metric-value-30" id="users-kpi-stock">18</span>
-              <span class="metric-context">Warehouse &amp; Dispatch Access</span>
+              <span class="metric-context">Facility &amp; Venue Gate Access</span>
             </div>
 
             <div class="metric-card">
@@ -1929,7 +1933,7 @@
               <span class="status-tab-count" id="users-tab-count-tech">16</span>
             </button>
             <button type="button" class="status-tab" data-tab="stock_controllers">
-              <span class="status-tab-label">Stock Controllers</span>
+              <span class="status-tab-label">Gate Controllers</span>
               <span class="status-tab-count" id="users-tab-count-stock">2</span>
             </button>
             <button type="button" class="status-tab" data-tab="managers">
@@ -1958,7 +1962,7 @@
                 <option value="all">All Clearances</option>
                 <option value="L1">L1 - Event Venue Basic</option>
                 <option value="L2">L2 - Technical &amp; Stage</option>
-                <option value="L3">L3 - Stock Controller</option>
+                <option value="L3">L3 - Gate Controller</option>
                 <option value="L4">L4 - Executive All-Access</option>
               </select>
             </div>
@@ -2749,22 +2753,22 @@
   <div class="modal-backdrop" id="warehouse-pin-modal" aria-hidden="true">
     <div class="modal-card" style="width: 520px; max-width: 95vw;" role="dialog" aria-labelledby="warehouse-pin-modal-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-        <h3 class="modal-title" id="warehouse-pin-modal-title" style="margin: 0;">Dedicated Stock Warehouse PINs</h3>
+        <h3 class="modal-title" id="warehouse-pin-modal-title" style="margin: 0;">Dedicated Site Terminal PINs</h3>
         <button type="button" class="icon-btn" id="close-warehouse-pin-modal" aria-label="Close">✕</button>
       </div>
       <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px;">
-        Create or update dedicated lock-screen PINs for each Stock Warehouse terminal. Locking the terminal screen requires the active warehouse’s PIN to unlock.
+        Create or update dedicated lock-screen PINs for each Facility Gate terminal. Locking the terminal screen requires the active site’s PIN to unlock.
       </p>
 
       <div id="warehouse-pin-list" class="warehouse-pin-list"></div>
 
       <form id="warehouse-pin-form" style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
         <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px;">
-          Create / Update Warehouse PIN
+          Create / Update Terminal PIN
         </div>
         <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-bottom: 12px;">
           <div class="form-field">
-            <label class="form-label" for="wh-pin-select">Stock Warehouse</label>
+            <label class="form-label" for="wh-pin-select">Facility Terminal</label>
             <select id="wh-pin-select" class="form-input" required></select>
           </div>
           <div class="form-field">
@@ -2884,21 +2888,21 @@
   <div class="modal-backdrop" id="warehouse-crud-modal" aria-hidden="true">
     <div class="modal-card" style="width: 480px; max-width: 95vw;" role="dialog" aria-labelledby="wh-modal-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-        <h3 class="modal-title" id="wh-modal-title">Add New Warehouse</h3>
-        <span class="status-badge status-badge-purple-sm">Warehouse Hub</span>
+        <h3 class="modal-title" id="wh-modal-title">Add New Facility Gate</h3>
+        <span class="status-badge status-badge-purple-sm">Facility Checkpoint</span>
       </div>
 
       <form id="warehouse-crud-form">
         <input type="hidden" id="wh-modal-id" value="0" />
 
         <div class="form-field" style="margin-bottom: 12px;">
-          <label class="form-label" for="wh-modal-name">Warehouse / Location Name *</label>
-          <input type="text" id="wh-modal-name" class="form-input" placeholder="e.g. Ndera Central Warehouse" required />
+          <label class="form-label" for="wh-modal-name">Facility / Checkpoint Name *</label>
+          <input type="text" id="wh-modal-name" class="form-input" placeholder="e.g. Ndera Central Facility" required />
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
           <div class="form-field">
-            <label class="form-label" for="wh-modal-code">Warehouse Code</label>
+            <label class="form-label" for="wh-modal-code">Facility Code</label>
             <input type="text" id="wh-modal-code" class="form-input" placeholder="e.g. NDR-STK" />
           </div>
           <div class="form-field">
@@ -3128,7 +3132,8 @@
               <option value="video_director">Video Director</option>
               <option value="stage_manager">Stage Manager</option>
               <option value="rigging_lead">Rigging Specialist</option>
-              <option value="stock_controller">Stock Controller</option>
+              <option value="stock_controller">Gate Controller</option>
+              <option value="stock_manager">Site Manager</option>
               <option value="project_manager">Project Manager</option>
               <option value="security">Venue Security Guard</option>
               <option value="tech_lead">Technical Lead</option>
@@ -3172,23 +3177,23 @@
           <div class="form-field" style="margin-bottom: 10px;">
             <label class="form-label" for="user-modal-clearance">Security Clearance Level *</label>
             <select id="user-modal-clearance" class="form-input" required>
-              <option value="L1_VENUE_BASIC">Level 1 - Event Venue Basic (No Stock Access)</option>
-              <option value="L2_TECH_STAGE">Level 2 - Technical &amp; Stage (Assigned Stock Access)</option>
-              <option value="L3_STOCK_WAREHOUSE">Level 3 - Stock Controller (Full Warehouse Access)</option>
+              <option value="L1_VENUE_BASIC">Level 1 - Event Venue Basic (Venue Only)</option>
+              <option value="L2_TECH_STAGE">Level 2 - Technical &amp; Stage (Assigned Facility Gates)</option>
+              <option value="L3_STOCK_WAREHOUSE">Level 3 - Gate Controller (Assigned Terminal)</option>
               <option value="L4_ALL_ACCESS">Level 4 - Executive &amp; All-Access (Unrestricted)</option>
             </select>
             <div id="user-modal-clearance-hint" style="display: none; font-size: 11px; margin-top: 5px; color: #b45309; background: rgba(217, 119, 6, 0.08); border: 1px solid rgba(217, 119, 6, 0.2); border-radius: 4px; padding: 4px 8px; align-items: center; gap: 5px; font-weight: 500;">
-              <span>⚠️</span> <span>Clearance restricted strictly to Level 1 and Level 2 under delegated operations. Higher tiers require Administrator clearance.</span>
+              <span>⚠️</span> <span>Clearance restricted under delegated operations. Higher tiers require Administrator clearance.</span>
             </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
             <div class="form-field">
-              <label class="form-label" for="user-modal-stock-access">Stock Warehouse Access</label>
+              <label class="form-label" for="user-modal-stock-access">Facility Gate Access</label>
               <select id="user-modal-stock-access" class="form-input">
-                <option value="assigned_only">Assigned Equipment Batches Only</option>
-                <option value="all">Full Warehouse Access</option>
-                <option value="none">Restricted / No Access (L1 default)</option>
+                <option value="assigned_only">Assigned Facility Gates Only</option>
+                <option value="all">Full Facility Gate Access</option>
+                <option value="none">Restricted / Venue Only (L1 default)</option>
               </select>
             </div>
             <div class="form-field">
@@ -3199,6 +3204,16 @@
                 <option value="none">Restricted</option>
               </select>
             </div>
+          </div>
+
+          <div class="form-field" id="user-modal-assigned-cp-wrap" style="display: none; margin-bottom: 10px;">
+            <label class="form-label" for="user-modal-assigned-cp">Assigned Locked Gate Terminal (Gate Controller)</label>
+            <select id="user-modal-assigned-cp" class="form-input">
+              <option value="">-- Unassigned (Requires Approval Request) --</option>
+            </select>
+            <span style="display: block; font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+              Gate Controllers are strictly locked to this single checkpoint on login. Only Administrators &amp; Site Managers can reassign or approve shift relief.
+            </span>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -3228,6 +3243,11 @@
               <span>Operational Active Account</span>
             </label>
           </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="user-modal-password" id="user-modal-password-label">Account Password *</label>
+          <input type="password" id="user-modal-password" class="form-input" placeholder="Set initial password (min 6 characters)" minlength="6" autocomplete="new-password" />
         </div>
 
         <!-- Profile Photo Upload Dropzone -->
@@ -3710,7 +3730,8 @@
             <select id="reg-role" class="form-select" required>
               <option value="technician">Technician (Tier L2)</option>
               <option value="user">Venue Crew (Tier L1)</option>
-              <option value="stock_controller">Stock Controller (Tier L3)</option>
+              <option value="stock_controller">Gate Controller (Tier L3)</option>
+              <option value="stock_manager">Site Manager (Tier L4)</option>
               <option value="security">Security Officer (Tier L1)</option>
               <option value="driver">Logistics Driver (Tier L1)</option>
               <option value="tech_lead">Tech Lead (Tier L4)</option>
@@ -3774,6 +3795,91 @@
 
       <div class="modal-actions" style="margin-top: 10px;">
         <button type="button" class="btn btn-secondary-38 js-close-switch-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL 10: GATE CONTROLLER ASSIGNMENT & SHIFT RELIEF APPROVALS MODAL    -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="shift-request-modal" aria-hidden="true">
+    <div class="modal-card modal-card-wide" style="width: 680px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-labelledby="shift-request-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+        <div>
+          <h3 class="modal-title" id="shift-request-modal-title" style="margin: 0;">Gate Controller Assignments &amp; Shift Relief</h3>
+          <p style="font-size: 11.5px; color: var(--text-secondary); margin: 4px 0 0;">
+            Gate Controllers are strictly locked to one terminal. Sick leave, shift swaps, high-volume backup, and night-shift handovers require <strong>Administrator</strong> or <strong>Site Manager</strong> approval.
+          </p>
+        </div>
+        <button type="button" class="icon-btn" id="close-shift-request-modal" aria-label="Close">✕</button>
+      </div>
+
+      <form id="shift-request-form" style="margin-top: 12px; padding: 14px; background: var(--bg-canvas); border: 1px solid var(--border-color); border-radius: 8px;">
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 10px;">
+          Submit Assignment / Shift Relief Request
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+          <div class="form-field">
+            <label class="form-label" for="sr-checkpoint-select">Target Gate / Venue Checkpoint *</label>
+            <select id="sr-checkpoint-select" class="form-input" required></select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="sr-reason-select">Relief Reason / Shift Type *</label>
+            <select id="sr-reason-select" class="form-input" required>
+              <option value="sick_leave">Sick Leave Replacement</option>
+              <option value="shift_swap">Shift Swap / Handover</option>
+              <option value="high_volume">High Workload Venue Backup</option>
+              <option value="night_shift">Night Shift Coverage</option>
+              <option value="new_assignment">New Terminal Assignment</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+          <div class="form-field">
+            <label class="form-label" for="sr-replacement-select">Incoming / Assigned Gate Controller *</label>
+            <select id="sr-replacement-select" class="form-input" required></select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="sr-outgoing-select">Outgoing Controller (Optional)</label>
+            <select id="sr-outgoing-select" class="form-input">
+              <option value="0">-- Auto-detect / Keep existing --</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+          <div class="form-field">
+            <label class="form-label" for="sr-shift-start">Shift Start (Optional)</label>
+            <input type="datetime-local" id="sr-shift-start" class="form-input" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="sr-shift-end">Shift End / Auto-Expiry (Optional)</label>
+            <input type="datetime-local" id="sr-shift-end" class="form-input" />
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 10px;">
+          <label class="form-label" for="sr-notes">Operational Notes</label>
+          <input type="text" id="sr-notes" class="form-input" placeholder="e.g. Covering night load-out shift at KCC due to high volume or medical leave" />
+        </div>
+
+        <div style="display: flex; justify-content: flex-end;">
+          <button type="submit" class="btn btn-primary-38" id="sr-submit-btn">Submit Relief Request</button>
+        </div>
+      </form>
+
+      <div style="margin-top: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">Pending &amp; Recent Shift Relief Queue</span>
+          <span class="status-badge status-badge-amber-sm" id="sr-pending-summary-pill">0 Pending</span>
+        </div>
+        <div id="shift-request-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto;"></div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 14px;">
+        <button type="button" class="btn btn-secondary-38" id="cancel-shift-request-modal">Close</button>
       </div>
     </div>
   </div>

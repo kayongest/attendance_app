@@ -14,7 +14,30 @@ CREATE TABLE IF NOT EXISTS `users` (
     `role` VARCHAR(50) NOT NULL DEFAULT 'technician',
     `department` VARCHAR(80) DEFAULT 'Audio',
     `profile_image` VARCHAR(255) DEFAULT NULL,
+    `assigned_checkpoint_type` VARCHAR(30) DEFAULT NULL,
+    `assigned_checkpoint_id` VARCHAR(64) DEFAULT NULL,
+    `assignment_expires_at` DATETIME DEFAULT NULL,
+    `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
     `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `controller_shift_requests` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `checkpoint_type` VARCHAR(30) NOT NULL DEFAULT 'stock_warehouse',
+    `checkpoint_id` VARCHAR(64) NOT NULL,
+    `checkpoint_name` VARCHAR(160) NOT NULL,
+    `requested_by_id` INT NOT NULL,
+    `outgoing_controller_id` INT DEFAULT NULL,
+    `replacement_controller_id` INT NOT NULL,
+    `reason_type` VARCHAR(40) NOT NULL DEFAULT 'shift_swap',
+    `notes` TEXT DEFAULT NULL,
+    `shift_start` DATETIME DEFAULT NULL,
+    `shift_end` DATETIME DEFAULT NULL,
+    `status` VARCHAR(24) NOT NULL DEFAULT 'pending',
+    `reviewed_by_id` INT DEFAULT NULL,
+    `reviewed_at` DATETIME DEFAULT NULL,
+    `review_notes` TEXT DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -56,7 +79,8 @@ CREATE TABLE IF NOT EXISTS `events` (
     `call_time` VARCHAR(32) DEFAULT '08:00',
     `project_manager` VARCHAR(120) DEFAULT 'Operations PM',
     `tech_lead` VARCHAR(120) DEFAULT 'Tech Lead',
-    `assigned_technician` TEXT DEFAULT NULL
+    `assigned_technician` TEXT DEFAULT NULL,
+    `terminal_pin` VARCHAR(20) DEFAULT '1234'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `attendance_logs` (
