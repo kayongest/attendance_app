@@ -4129,15 +4129,17 @@ try {
         $repStmt = $pdo->prepare("SELECT `id`, `full_name`, `role` FROM `users` WHERE `id` = ? LIMIT 1");
         $repStmt->execute([$repId]);
         $repUser = $repStmt->fetch();
-        if (!$repUser || strtolower(trim((string) ($repUser['role'] ?? ''))) !== 'stock_controller') {
-            echo json_encode(['ok' => false, 'error' => 'Selected personnel must have the Gate Controller role.']);
+        $repRole = strtolower(trim((string) ($repUser['role'] ?? '')));
+        $eligibleShiftRoles = ['stock_controller', 'stock_manager', 'tech_lead', 'support_staff', 'admin', 'administrator', 'manager'];
+        if (!$repUser || !in_array($repRole, $eligibleShiftRoles, true)) {
+            echo json_encode(['ok' => false, 'error' => 'Selected personnel must be an eligible Gate Controller, Site Manager, Technical Lead, or Operations Support member.']);
             exit;
         }
 
         $outIdRaw = (int) ($_POST['outgoing_controller_id'] ?? $jsonBody['outgoing_controller_id'] ?? 0);
         $outId = $outIdRaw > 0 ? $outIdRaw : null;
         if ($outId === null) {
-            $curHolder = $pdo->prepare("SELECT `id` FROM `users` WHERE `role` = 'stock_controller' AND `assigned_checkpoint_type` = ? AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?) AND `id` != ? LIMIT 1");
+            $curHolder = $pdo->prepare("SELECT `id` FROM `users` WHERE `assigned_checkpoint_type` = ? AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?) AND `id` != ? ORDER BY (`role` = 'stock_controller') DESC, `id` ASC LIMIT 1");
             $curHolder->execute([$cpMeta['type'], (string) $cpMeta['id'], (string) $cpMeta['raw_id'], $repId]);
             $foundHolder = $curHolder->fetchColumn();
             if ($foundHolder) {
@@ -4236,6 +4238,18 @@ try {
                     SET `assigned_checkpoint_type` = ?, `assigned_checkpoint_id` = ?, `assignment_expires_at` = ?
                     WHERE `id` = ?
                 ")->execute([$cpType, $cpId, $expiresAt, $repId]);
+
+                if ($cpType === 'stock_warehouse' && ctype_digit($cpId)) {
+                    try {
+                        $repNameStmt = $pdo->prepare("SELECT `full_name` FROM `users` WHERE `id` = ? LIMIT 1");
+                        $repNameStmt->execute([$repId]);
+                        $repFullName = trim((string) ($repNameStmt->fetchColumn() ?: ''));
+                        if ($repFullName !== '') {
+                            $pdo->prepare("UPDATE `stock_locations` SET `controller_name` = ? WHERE `id` = ?")
+                                ->execute([$repFullName, (int) $cpId]);
+                        }
+                    } catch (Throwable $e) {}
+                }
             }
 
             if ($outId > 0 && $outId !== $repId && in_array((string) ($sr['reason_type'] ?? ''), ['sick_leave', 'shift_swap'], true)) {

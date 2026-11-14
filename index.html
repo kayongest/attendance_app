@@ -16,7 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261112_reset_logs_v3" />
+  <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
+  <link rel="stylesheet" href="styles.css?v=20261114_modal_tour_v1" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -197,6 +198,13 @@
                 <span class="topbar-dropdown-title">Terminal Controls &amp; Help</span>
               </div>
               <div class="topbar-dropdown-menu">
+                <button type="button" class="topbar-dropdown-item" id="topbar-menu-tour">
+                  <img src="assets/sparkles.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
+                  <div class="item-content">
+                    <span class="item-title">Interactive Guided Tour</span>
+                    <span class="item-sub">Spotlight walkthrough of key workflows</span>
+                  </div>
+                </button>
                 <button type="button" class="topbar-dropdown-item js-open-rollcall-modal" id="topbar-menu-rollcall">
                   <img src="assets/metric-list-ordered.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
                   <div class="item-content">
@@ -3943,9 +3951,34 @@
     </div>
   </div>
 
+  <!-- Reusable App Confirm Modal (Replaces native browser confirm/prompt) -->
+  <div class="modal-backdrop" id="app-confirm-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 420px; max-width: 94vw;" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title">
+      <div class="app-confirm-head">
+        <div class="app-confirm-icon tone-danger" id="app-confirm-icon">!</div>
+        <div style="flex: 1; min-width: 0;">
+          <h3 class="modal-title" id="app-confirm-title" style="margin: 0;">Confirm Action</h3>
+          <p id="app-confirm-desc" style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin: 6px 0 0; white-space: pre-line;"></p>
+        </div>
+      </div>
+
+      <div id="app-confirm-password-wrap" class="form-field" style="display: none; margin: 12px 0 4px;">
+        <label class="form-label" for="app-confirm-password-input" id="app-confirm-password-label">Administrator Password</label>
+        <input type="password" id="app-confirm-password-input" class="form-input" placeholder="Enter your password to authorize..." autocomplete="current-password" />
+      </div>
+      <div id="app-confirm-error" style="display: none; font-size: 11.5px; color: #dc2626; margin-top: 6px; font-weight: 600;"></div>
+
+      <div class="modal-actions" style="margin-top: 16px;">
+        <button type="button" class="btn btn-secondary-38" id="app-confirm-cancel-btn">Cancel</button>
+        <button type="button" class="btn btn-primary-38 btn-confirm-danger" id="app-confirm-ok-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=20261111_phase1_kiosk_actions_v1"></script>
+  <script src="assets/vendor/driver/driver.js.iife.js"></script>
+  <script src="app.js?v=20261114_modal_tour_v1"></script>
 </body>
 </html>

@@ -7503,7 +7503,12 @@
       if (delBatchBtn) {
         const bid = Number(delBatchBtn.getAttribute('data-batch-id'));
         const num = delBatchBtn.getAttribute('data-batch-num') || `Batch #${bid}`;
-        const doDel = confirm(`Are you sure you want to permanently delete equipment batch "${num}"? All linked items in the manifest will also be removed.`);
+        const { confirmed: doDel } = await showConfirmModal({
+          title: 'Delete Record',
+          message: `Are you sure you want to permanently delete "${num}"? All linked manifest items will also be removed.`,
+          confirmText: 'Delete Record',
+          tone: 'danger',
+        });
         if (!doDel) return;
 
         try {
@@ -8786,8 +8791,14 @@
     // Reset to Default (08:00 AM) in Kiosk Strip Quickbar
     const quickResetCallTimeBtn = document.getElementById('kiosk-quick-reset-calltime-btn');
     if (quickResetCallTimeBtn) {
-      quickResetCallTimeBtn.addEventListener('click', () => {
-        if (!confirm('Reset active shift call-time back to default baseline (08:00 AM)?')) return;
+      quickResetCallTimeBtn.addEventListener('click', async () => {
+        const { confirmed } = await showConfirmModal({
+          title: 'Reset Shift Call-Time',
+          message: 'Reset active shift call-time back to default baseline (08:00 AM)?',
+          confirmText: 'Reset to 08:00 AM',
+          tone: 'warning',
+        });
+        if (!confirmed) return;
         updateCheckpointCallTime({
           cpType: state.checkpointType,
           cpId: state.checkpointId,
@@ -8980,7 +8991,12 @@
           return;
         }
 
-        const confirmDelete = confirm(`Are you sure you want to permanently delete technical role "${title}"?`);
+        const { confirmed: confirmDelete } = await showConfirmModal({
+          title: 'Delete Technical Role',
+          message: `Are you sure you want to permanently delete technical role "${title}"?`,
+          confirmText: 'Delete Role',
+          tone: 'danger',
+        });
         if (!confirmDelete) return;
 
         try {
@@ -9043,7 +9059,12 @@
           return;
         }
 
-        const confirmDelete = confirm(`Are you sure you want to permanently delete department "${name}"?`);
+        const { confirmed: confirmDelete } = await showConfirmModal({
+          title: 'Delete Department',
+          message: `Are you sure you want to permanently delete department "${name}"?`,
+          confirmText: 'Delete Department',
+          tone: 'danger',
+        });
         if (!confirmDelete) return;
 
         try {
@@ -9253,12 +9274,16 @@
         showToast('Permission Denied: Only System Administrators can reset attendance logs.');
         return;
       }
-      if (!confirm("Are you sure you want to reset the User Activity Timeline and gate scans?\nAll activity logs will be cleared and crew set to Not Checked In (0 on-site).")) {
-        return;
-      }
-      const confirmPassword = window.prompt('Enter your Administrator password to confirm clearing attendance logs:');
-      if (!confirmPassword) {
-        showToast('Log reset cancelled.');
+      const { confirmed, password: confirmPassword } = await showConfirmModal({
+        title: 'Reset User Activity Timeline',
+        message: 'Are you sure you want to reset the User Activity Timeline and gate scans?\nAll activity logs will be cleared and crew set to Not Checked In (0 on-site).',
+        confirmText: 'Reset All Logs',
+        tone: 'danger',
+        requirePassword: true,
+        passwordLabel: 'Administrator Password',
+        passwordPlaceholder: 'Enter your Admin password to confirm...',
+      });
+      if (!confirmed) {
         return;
       }
       try {
@@ -10053,6 +10078,113 @@
     return map[String(reason || '').toLowerCase()] || 'Shift Relief';
   }
 
+  function getShiftPoolUsers() {
+    const allowedRoles = new Set(['stock_controller', 'stock_manager', 'tech_lead', 'support_staff', 'admin', 'administrator', 'manager']);
+    return (state.crew || []).filter((c) => {
+      const role = String(c.role || '').toLowerCase();
+      return allowedRoles.has(role) && Number(c.is_active ?? 1) !== 0;
+    });
+  }
+
+  function findCheckpointLeadMatch(cpType, cpId) {
+    const whs = state.checkpoints.stock_warehouses || [];
+    const evs = state.checkpoints.event_venues || [];
+    const list = cpType === 'stock_warehouse' ? whs : evs;
+    const cp = list.find((item) => String(item.id) === String(cpId));
+    return cp ? String(cp.controller_name || cp.lead_name || '').trim().toLowerCase() : '';
+  }
+
+  function syncShiftControllersForCheckpoint(cpVal) {
+    const repSel = document.getElementById('sr-replacement-select');
+    const outSel = document.getElementById('sr-outgoing-select');
+    if (!repSel || !outSel) return;
+
+    const [cpType, cpId] = (cpVal || `${state.checkpointType}:${state.checkpointId}`).split(':');
+    const pool = getShiftPoolUsers();
+    const gateControllers = pool.filter((c) => String(c.role || '').toLowerCase() === 'stock_controller');
+    const supervisors = pool.filter((c) => ['stock_manager', 'tech_lead', 'support_staff'].includes(String(c.role || '').toLowerCase()));
+    const cpLeadName = findCheckpointLeadMatch(cpType, cpId);
+
+    const isAssignedToTarget = (u) => {
+      const matchDirect = String(u.assigned_checkpoint_type || '') === String(cpType) && String(u.assigned_checkpoint_id || '') === String(cpId);
+      const matchLead = !u.assigned_checkpoint_id && cpLeadName !== '' && String(u.full_name || '').trim().toLowerCase() === cpLeadName;
+      return matchDirect || matchLead;
+    };
+
+    const targetAssigned = pool.filter(isAssignedToTarget);
+    const otherAssignedControllers = gateControllers.filter((c) => !isAssignedToTarget(c) && Boolean(c.assigned_checkpoint_id));
+    const unassignedControllers = gateControllers.filter((c) => !isAssignedToTarget(c) && !c.assigned_checkpoint_id);
+    const otherSupervisors = supervisors.filter((c) => !isAssignedToTarget(c));
+
+    const formatUserOpt = (u, extraTag = '') => {
+      const gateTag = u.assigned_checkpoint_name || (cpLeadName && isAssignedToTarget(u) ? (findCheckpointRecordName(cpType, cpId) || 'Assigned Gate') : 'Unassigned');
+      const roleTag = String(u.role || '').toLowerCase() === 'stock_controller' ? '' : ` · ${u.role_display || u.role}`;
+      const label = `${u.full_name} (${gateTag}${roleTag}${extraTag})`;
+      return `<option value="${u.id}">${escapeHtml(label)}</option>`;
+    };
+
+    // Populate Outgoing Controller Select grouped by selected gate vs other facility gates
+    const outParts = ['<option value="0">-- Auto-detect / Keep existing --</option>'];
+    if (targetAssigned.length > 0) {
+      outParts.push('<optgroup label="Assigned to Selected Gate / Venue">');
+      targetAssigned.forEach((u) => outParts.push(formatUserOpt(u)));
+      outParts.push('</optgroup>');
+    }
+    const otherOutPool = [...otherAssignedControllers, ...unassignedControllers, ...otherSupervisors];
+    if (otherOutPool.length > 0) {
+      outParts.push('<optgroup label="Controllers &amp; Leads at Other Facility Gates">');
+      otherOutPool.forEach((u) => outParts.push(formatUserOpt(u)));
+      outParts.push('</optgroup>');
+    }
+    outSel.innerHTML = outParts.join('');
+
+    // Auto-select the user currently assigned to the chosen facility gate / venue
+    const primaryOutgoing = targetAssigned.find((u) => String(u.role || '').toLowerCase() === 'stock_controller') || targetAssigned[0];
+    outSel.value = primaryOutgoing ? String(primaryOutgoing.id) : '0';
+
+    // Populate Incoming / Assigned Controller Select grouped by Facility Gate vs Relief Pool
+    const repParts = [];
+    const byGateMap = new Map();
+    const gateHolders = [...otherAssignedControllers, ...targetAssigned.filter((u) => String(u.role || '').toLowerCase() === 'stock_controller')];
+    gateHolders.forEach((u) => {
+      const gName = u.assigned_checkpoint_name || 'Assigned Gate';
+      if (!byGateMap.has(gName)) byGateMap.set(gName, []);
+      byGateMap.get(gName).push(u);
+    });
+    byGateMap.forEach((usersInGate, gName) => {
+      repParts.push(`<optgroup label="Facility Gate: ${escapeHtml(gName)}">`);
+      usersInGate.forEach((u) => repParts.push(formatUserOpt(u)));
+      repParts.push('</optgroup>');
+    });
+    if (unassignedControllers.length > 0) {
+      repParts.push('<optgroup label="Available / Unassigned Gate Controllers">');
+      unassignedControllers.forEach((u) => repParts.push(formatUserOpt(u)));
+      repParts.push('</optgroup>');
+    }
+    if (supervisors.length > 0) {
+      repParts.push('<optgroup label="Facility Managers, Technical Leads &amp; Support">');
+      supervisors.forEach((u) => repParts.push(formatUserOpt(u)));
+      repParts.push('</optgroup>');
+    }
+    repSel.innerHTML = repParts.length > 0 ? repParts.join('') : '<option value="">No eligible controllers or supervisors found</option>';
+
+    if (isCurrentUserStockController() && state.currentUser?.id) {
+      repSel.value = String(state.currentUser.id);
+    } else {
+      const outIdStr = outSel.value;
+      const suggestedIncoming = [...unassignedControllers, ...otherAssignedControllers, ...supervisors].find((u) => String(u.id) !== outIdStr);
+      if (suggestedIncoming) {
+        repSel.value = String(suggestedIncoming.id);
+      }
+    }
+  }
+
+  function findCheckpointRecordName(cpType, cpId) {
+    const list = cpType === 'stock_warehouse' ? (state.checkpoints.stock_warehouses || []) : (state.checkpoints.event_venues || []);
+    const cp = list.find((item) => String(item.id) === String(cpId));
+    return cp ? cp.name : '';
+  }
+
   function renderShiftRequestModal() {
     const cpSel = document.getElementById('sr-checkpoint-select');
     const repSel = document.getElementById('sr-replacement-select');
@@ -10081,22 +10213,7 @@
       }
     }
 
-    const controllers = (state.crew || []).filter((c) => (c.role || '').toLowerCase() === 'stock_controller');
-    if (repSel) {
-      repSel.innerHTML = controllers.length > 0
-        ? controllers.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)} (${escapeHtml(c.assigned_checkpoint_name || 'Unassigned')})</option>`).join('')
-        : '<option value="">No Gate Controllers found</option>';
-      if (isCurrentUserStockController() && state.currentUser?.id) {
-        repSel.value = String(state.currentUser.id);
-      }
-    }
-    if (outSel) {
-      const base = ['<option value="0">-- Auto-detect / Keep existing --</option>'];
-      controllers.forEach((c) => {
-        base.push(`<option value="${c.id}">${escapeHtml(c.full_name)} (${escapeHtml(c.assigned_checkpoint_name || 'Unassigned')})</option>`);
-      });
-      outSel.innerHTML = base.join('');
-    }
+    syncShiftControllersForCheckpoint(cpSel ? cpSel.value : `${state.checkpointType}:${state.checkpointId}`);
 
     const canApprove = canCurrentUserApproveShiftRequests();
     const reqs = state.shiftRequests || [];
@@ -10171,6 +10288,13 @@
 
     const roleSelect = document.getElementById('user-modal-role');
     if (roleSelect) roleSelect.addEventListener('change', syncUserAssignedCpVisibility);
+
+    const srCpSel = document.getElementById('sr-checkpoint-select');
+    if (srCpSel) {
+      srCpSel.addEventListener('change', () => {
+        syncShiftControllersForCheckpoint(srCpSel.value);
+      });
+    }
 
     const srForm = document.getElementById('shift-request-form');
     if (srForm) {
@@ -10408,12 +10532,322 @@
     renderOfflineQueueBar();
   }
 
+  function showConfirmModal({
+    title = 'Confirm Action',
+    message = 'Are you sure you want to proceed?',
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    tone = 'danger',
+    requirePassword = false,
+    passwordLabel = 'Password',
+    passwordPlaceholder = 'Enter your password...',
+  } = {}) {
+    const modal = document.getElementById('app-confirm-modal');
+    if (!modal) {
+      return Promise.resolve({ confirmed: false, password: '' });
+    }
+
+    const iconEl = document.getElementById('app-confirm-icon');
+    const titleEl = document.getElementById('app-confirm-title');
+    const descEl = document.getElementById('app-confirm-desc');
+    const pwWrap = document.getElementById('app-confirm-password-wrap');
+    const pwLbl = document.getElementById('app-confirm-password-label');
+    const pwInp = document.getElementById('app-confirm-password-input');
+    const errEl = document.getElementById('app-confirm-error');
+    const cancelBtn = document.getElementById('app-confirm-cancel-btn');
+    const okBtn = document.getElementById('app-confirm-ok-btn');
+
+    if (titleEl) titleEl.textContent = title;
+    if (descEl) descEl.textContent = message;
+    if (cancelBtn) cancelBtn.textContent = cancelText;
+    if (okBtn) {
+      okBtn.textContent = confirmText;
+      okBtn.classList.remove('btn-confirm-danger', 'btn-confirm-warning');
+      if (tone === 'danger') okBtn.classList.add('btn-confirm-danger');
+      else if (tone === 'warning') okBtn.classList.add('btn-confirm-warning');
+    }
+    if (iconEl) {
+      iconEl.classList.remove('tone-danger', 'tone-warning', 'tone-primary');
+      iconEl.classList.add(`tone-${tone === 'warning' ? 'warning' : (tone === 'primary' ? 'primary' : 'danger')}`);
+      iconEl.textContent = tone === 'primary' ? '?' : '!';
+    }
+    if (pwWrap) pwWrap.style.display = requirePassword ? 'block' : 'none';
+    if (pwLbl) pwLbl.textContent = passwordLabel;
+    if (pwInp) {
+      pwInp.value = '';
+      pwInp.placeholder = passwordPlaceholder;
+    }
+    if (errEl) {
+      errEl.style.display = 'none';
+      errEl.textContent = '';
+    }
+
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+
+    return new Promise((resolve) => {
+      let settled = false;
+
+      const cleanup = () => {
+        okBtn?.removeEventListener('click', onConfirm);
+        cancelBtn?.removeEventListener('click', onCancel);
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKeyDown);
+        pwInp?.removeEventListener('keydown', onPwKeyDown);
+        modal.classList.remove('open');
+        modal.setAttribute('aria-hidden', 'true');
+      };
+
+      const finish = (confirmed, password = '') => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({ confirmed, password });
+      };
+
+      const onConfirm = () => {
+        const pwVal = pwInp ? pwInp.value : '';
+        if (requirePassword && !pwVal) {
+          if (errEl) {
+            errEl.textContent = 'Please enter your password to confirm this action.';
+            errEl.style.display = 'block';
+          }
+          pwInp?.focus();
+          return;
+        }
+        finish(true, pwVal);
+      };
+
+      const onCancel = () => finish(false, '');
+      const onBackdrop = (e) => {
+        if (e.target === modal) onCancel();
+      };
+      const onKeyDown = (e) => {
+        if (e.key === 'Escape') onCancel();
+      };
+      const onPwKeyDown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          onConfirm();
+        }
+      };
+
+      okBtn?.addEventListener('click', onConfirm);
+      cancelBtn?.addEventListener('click', onCancel);
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKeyDown);
+      pwInp?.addEventListener('keydown', onPwKeyDown);
+
+      setTimeout(() => {
+        if (requirePassword && pwInp) pwInp.focus();
+        else okBtn?.focus();
+      }, 40);
+    });
+  }
+
+  function isElementVisibleForTour(selector) {
+    if (!selector) return true;
+    const el = document.querySelector(selector);
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && (rect.width > 0 || rect.height > 0);
+  }
+
+  function startInteractiveTour(forceScope = null) {
+    const driverFactory = window.driver && window.driver.js && window.driver.js.driver;
+    if (typeof driverFactory !== 'function') {
+      showToast('Guided tour library failed to load. Refresh the page and try again.');
+      return;
+    }
+
+    const isCtrl = isCurrentUserStockController();
+    const targetScope = forceScope || (isCtrl || state.activeScreen === 'terminals' ? 'kiosk' : 'overview');
+
+    if (targetScope === 'kiosk' && state.activeScreen !== 'terminals') {
+      switchScreen('terminals', 'pane-kiosk');
+    } else if (targetScope === 'overview' && !isCtrl && state.activeScreen !== 'overview') {
+      switchScreen('overview');
+    }
+
+    const kioskSteps = [
+      {
+        element: '#terminal-lock-status-pill',
+        popover: {
+          title: 'Assigned Gate & Terminal Lock',
+          description: 'Gate Controllers are locked to their assigned facility or venue. Enter your dedicated terminal PIN to unlock badge scanning.',
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
+        element: '#terminal-unlock-form',
+        popover: {
+          title: 'Unlock Terminal Scanning',
+          description: 'Enter the dedicated site PIN here to enable barcode, RFID, and tablet camera attendance scanning for this checkpoint.',
+          side: 'top',
+          align: 'center',
+        },
+      },
+      {
+        element: '#kiosk-badge-input',
+        popover: {
+          title: 'Fast Badge & Staff Lookup',
+          description: 'Scan a QR/barcode with a USB reader or type a badge code (e.g. REW-BADGE-0006) or staff name and press Enter.',
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
+        element: '#kiosk-camera-toggle-btn',
+        popover: {
+          title: 'Tablet & Phone Camera Scanner',
+          description: 'Use your tablet or mobile camera to scan staff QR badges directly without extra hardware. Flip between front and rear cameras anytime.',
+          side: 'bottom',
+          align: 'end',
+        },
+      },
+      {
+        element: '#kiosk-calltime-quickbar',
+        popover: {
+          title: 'Live Shift Call-Time',
+          description: 'Arrivals are compared against the checkpoint call-time (+15m grace window) to automatically flag Early, On-Time, or Late check-ins.',
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
+        element: '#terminal-shift-relief-btn',
+        popover: {
+          title: 'Shift Relief, Sick Leave & Night Swaps',
+          description: 'Request temporary gate coverage, emergency sick-leave replacement, or night-shift handover for Administrator / Site Manager approval.',
+          side: 'bottom',
+          align: 'end',
+        },
+      },
+      {
+        element: '#kiosk-offline-sync-bar',
+        popover: {
+          title: 'Offline Scan Queue',
+          description: 'If internet drops at the gate, scans save locally with exact timestamps and auto-sync to the server once connectivity returns.',
+          side: 'top',
+          align: 'start',
+        },
+      },
+    ];
+
+    const overviewSteps = [
+      {
+        element: '.checkpoint-selector-bar',
+        popover: {
+          title: 'Active Checkpoint Switcher',
+          description: 'Switch between Facility Gates and Event Venues, verify call-times, or lock this workstation to a single gate with a PIN.',
+          side: 'bottom',
+          align: 'start',
+        },
+      },
+      {
+        element: '.metrics-grid',
+        popover: {
+          title: 'Real-Time Attendance KPIs',
+          description: 'Track active badges, staff currently on-site (click Card 2 for Live Roll-Call), daily check-ins, and late or denied exceptions.',
+          side: 'bottom',
+          align: 'center',
+        },
+      },
+      {
+        element: '#shift-report-toolbar',
+        popover: {
+          title: 'Night-Shift & Multi-Day Reports',
+          description: 'Filter attendance by Today, Night Shift (18:00–09:00), Last 7 Days, or Custom Dates, then export CSV or print shift sheets.',
+          side: 'top',
+          align: 'start',
+        },
+      },
+      {
+        element: '#overview-allocation-card',
+        popover: {
+          title: 'Live Kigali Allocation Radar & Traffic',
+          description: 'Inspect where crew members are currently checked in or in transit across Kigali venues and logistics gates.',
+          side: 'left',
+          align: 'start',
+        },
+      },
+      {
+        element: '#sidebar-shift-relief-btn',
+        popover: {
+          title: 'Shift Relief & Coverage Queue',
+          description: 'Submit or approve Gate Controller replacements for sick leave, busy event days, and overnight shift coverage.',
+          side: 'right',
+          align: 'center',
+        },
+      },
+      {
+        element: '#nav-terminals-btn',
+        popover: {
+          title: 'Interactive Gate Kiosk & Camera Scanner',
+          description: 'Open the dedicated Gate Terminal view (#pane-kiosk) for live QR camera scanning, offline queueing, and PIN screen lock.',
+          side: 'right',
+          align: 'center',
+        },
+      },
+      {
+        element: '#topbar-help-btn',
+        popover: {
+          title: 'Replay Tour Anytime',
+          description: 'Click Help (?) anytime to relaunch this interactive tour, inspect Live Roll-Call, or view keyboard shortcuts.',
+          side: 'bottom',
+          align: 'end',
+        },
+      },
+    ];
+
+    const rawSteps = targetScope === 'kiosk' ? kioskSteps : overviewSteps;
+    const activeSteps = rawSteps.filter((step) => isElementVisibleForTour(step.element));
+    if (!activeSteps.length) {
+      showToast('No tour targets are visible on this screen right now.');
+      return;
+    }
+
+    const driverObj = driverFactory({
+      showProgress: true,
+      animate: true,
+      allowClose: true,
+      overlayOpacity: 0.58,
+      stagePadding: 6,
+      stageRadius: 10,
+      popoverClass: 'ability-tour-popover',
+      nextBtnText: 'Next →',
+      prevBtnText: '← Back',
+      doneBtnText: 'Done',
+      steps: activeSteps,
+      onDestroyed: () => {
+        try {
+          localStorage.setItem(`ability_tour_seen_v1_${targetScope}`, '1');
+        } catch (_) {}
+      },
+    });
+    driverObj.drive();
+  }
+
+  function initTourControls() {
+    const tourBtn = document.getElementById('topbar-menu-tour');
+    if (tourBtn) {
+      tourBtn.addEventListener('click', () => {
+        const drop = document.getElementById('topbar-help-dropdown');
+        if (drop) drop.style.display = 'none';
+        startInteractiveTour();
+      });
+    }
+  }
+
   // Initialize
   document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     bindEvents();
     initShiftReliefControls();
     initPhase2Controls();
+    initTourControls();
     if (window.location.hash === '#pane-kiosk') {
       switchScreen('terminals', 'pane-kiosk');
     }
@@ -10425,5 +10859,14 @@
       applyNavigationRestrictions();
     }
     loadStockManagerData();
+    try {
+      const tourScope = isCurrentUserStockController() || state.activeScreen === 'terminals' ? 'kiosk' : 'overview';
+      if (!localStorage.getItem(`ability_tour_seen_v1_${tourScope}`)) {
+        localStorage.setItem(`ability_tour_seen_v1_${tourScope}`, 'hinted');
+        setTimeout(() => {
+          showToast('Tip: Open Help (?) → Interactive Guided Tour for a quick walkthrough.');
+        }, 1200);
+      }
+    } catch (_) {}
   });
 })();
