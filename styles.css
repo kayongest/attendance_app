@@ -4315,17 +4315,127 @@ button {
   color: var(--text-secondary);
 }
 
+/* Responsive Crew Roster & Paired Gate Controls Table (ZERO Horizontal Scroll) */
 .attendees-table-wrap {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
   border-top: 1px solid var(--border-color);
-  background: #ffffff;
-  scrollbar-width: thin;
+  background: var(--bg-surface);
+  box-sizing: border-box;
 }
 
 .attendees-table-wrap .data-table-header,
 .attendees-table-wrap .data-table-row {
-  min-width: 900px;
+  min-width: 0 !important;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  box-sizing: border-box;
+}
+
+.attendees-table-wrap .data-table-header {
+  height: 40px;
+  background-color: var(--bg-canvas);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.attendees-table-wrap .col-checkbox {
+  width: 20px;
+  min-width: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attendees-table-wrap .col-sort-header,
+.attendees-table-wrap .col-attendee {
+  flex: 1.5 1 140px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.attendees-table-wrap .col-company {
+  flex: 1 1 110px;
+  min-width: 0;
+  width: auto;
+}
+
+.attendees-table-wrap .col-ticket {
+  flex: 0.85 1 95px;
+  min-width: 0;
+  width: auto;
+}
+
+.attendees-table-wrap .col-reg-date {
+  flex: 1 1 115px;
+  min-width: 0;
+  width: auto;
+}
+
+.attendees-table-wrap .col-reg-status {
+  flex: 1 1 115px;
+  min-width: 0;
+  width: auto;
+}
+
+.attendees-table-wrap .col-checkin {
+  flex: 0 0 138px;
+  width: 138px;
+  min-width: 138px;
+  flex-shrink: 0;
+}
+
+.attendees-table-wrap .col-actions {
+  width: 28px;
+  min-width: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attendees-table-wrap .attendee-name,
+.attendees-table-wrap .attendee-email,
+.attendees-table-wrap .company-name,
+.attendees-table-wrap .company-role,
+.attendees-table-wrap .badge-code-primary,
+.attendees-table-wrap .badge-code-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attendees-table-wrap .tier-pill-soft {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.attendees-table-wrap .badge-code-mono-pill {
+  max-width: 100%;
+}
+
+.attendees-table-wrap .paired-gate-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.attendees-table-wrap .paired-gate-actions .gate-btn {
+  flex: 1;
+  padding: 5px 6px;
+  font-size: 13px !important;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  border-radius: 6px;
 }
 
 /* ========================================================================== */
@@ -6833,25 +6943,102 @@ html.theme-transitioning *::after {
   gap: 20px;
   width: 100%;
   margin-top: 18px;
+  transition: all 0.25s ease;
 }
 
 .attendees-kiosk-split-row .directory-card {
   flex: 1 1 0;
   min-width: 0;
   width: auto;
+  transition: all 0.25s ease;
 }
 
 .attendees-kiosk-split-row .timeline-card-overview {
   width: 440px;
   flex-shrink: 0;
+  transition: all 0.25s ease;
 }
 
-@media (max-width: 1280px) {
+.btn-toggle-roster-layout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* When user toggles Full Width or on screens <= 1400px */
+.attendees-kiosk-split-row.is-fullwidth {
+  flex-direction: column;
+  gap: 24px;
+}
+
+.attendees-kiosk-split-row.is-fullwidth .directory-card,
+.attendees-kiosk-split-row.is-fullwidth .timeline-card-overview {
+  width: 100%;
+}
+
+@media (max-width: 1400px) {
   .attendees-kiosk-split-row {
     flex-direction: column;
+    gap: 24px;
   }
+  .attendees-kiosk-split-row .directory-card,
   .attendees-kiosk-split-row .timeline-card-overview {
     width: 100%;
+  }
+}
+
+/* Responsive Table Card Layout on Tablets & Mobile (<= 850px) */
+@media (max-width: 850px) {
+  .attendees-table-wrap .data-table-header {
+    display: none !important;
+  }
+
+  .attendees-table-wrap .attendee-table-row {
+    display: grid !important;
+    grid-template-columns: 24px 1fr auto !important;
+    grid-template-areas:
+      "check attendee actions"
+      "check company ticket"
+      "check regdate status"
+      "check checkin checkin" !important;
+    gap: 8px 12px !important;
+    padding: 14px 16px !important;
+    height: auto !important;
+    min-height: auto !important;
+    border-bottom: 1px solid var(--border-color) !important;
+  }
+
+  .attendees-table-wrap .col-checkbox {
+    grid-area: check;
+    align-self: center;
+  }
+  .attendees-table-wrap .col-attendee {
+    grid-area: attendee;
+  }
+  .attendees-table-wrap .col-actions {
+    grid-area: actions;
+    justify-self: end;
+  }
+  .attendees-table-wrap .col-company {
+    grid-area: company;
+  }
+  .attendees-table-wrap .col-ticket {
+    grid-area: ticket;
+    justify-self: start;
+  }
+  .attendees-table-wrap .col-reg-date {
+    grid-area: regdate;
+  }
+  .attendees-table-wrap .col-reg-status {
+    grid-area: status;
+  }
+  .attendees-table-wrap .col-checkin {
+    grid-area: checkin;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .attendees-table-wrap .paired-gate-actions {
+    width: 100% !important;
   }
 }
 

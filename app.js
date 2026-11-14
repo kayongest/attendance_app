@@ -10920,6 +10920,34 @@
     });
   }
 
+  function initRosterLayoutToggle() {
+    const btn = document.getElementById('toggle-roster-layout-btn');
+    const splitRow = document.querySelector('.attendees-kiosk-split-row');
+    const label = document.getElementById('roster-layout-toggle-text');
+    if (!btn || !splitRow) return;
+
+    try {
+      const isFull = localStorage.getItem('ability_roster_fullwidth') === 'true';
+      if (isFull) {
+        splitRow.classList.add('is-fullwidth');
+        if (label) label.textContent = 'Split View';
+      }
+    } catch (_) {}
+
+    btn.addEventListener('click', () => {
+      const isFull = splitRow.classList.toggle('is-fullwidth');
+      if (label) {
+        label.textContent = isFull ? 'Split View' : 'Full Width';
+      }
+      try {
+        localStorage.setItem('ability_roster_fullwidth', isFull ? 'true' : 'false');
+      } catch (_) {}
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 260);
+    });
+  }
+
   function initTourControls() {
     const tourBtn = document.getElementById('topbar-menu-tour');
     if (tourBtn) {
@@ -10935,6 +10963,7 @@
   document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     initSidebarCollapse();
+    initRosterLayoutToggle();
     bindEvents();
     initShiftReliefControls();
     initPhase2Controls();

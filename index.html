@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261114_v3" />
+  <link rel="stylesheet" href="styles.css?v=20261114_v4" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -1231,6 +1231,15 @@
                 </p>
               </div>
               <div class="directory-actions" data-node-id="2:8622">
+                <button type="button" class="btn btn-secondary-38 btn-toggle-roster-layout" id="toggle-roster-layout-btn" title="Toggle Full Width / Split View">
+                  <svg class="svg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <polyline points="9 21 3 21 3 15"></polyline>
+                    <line x1="21" y1="3" x2="14" y2="10"></line>
+                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                  </svg>
+                  <span id="roster-layout-toggle-text">Full Width</span>
+                </button>
                 <button type="button" class="btn btn-secondary-38 js-export-attendees" data-node-id="2:8627" title="Export Daily Attendance Summary CSV">
                   <img src="assets/download.svg" alt="" class="svg-icon" />
                   <span>Export Roster</span>
@@ -3994,6 +4003,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261114_v3"></script>
+  <script src="app.js?v=20261114_v4"></script>
 </body>
 </html>
