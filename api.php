@@ -876,6 +876,21 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     }
     $canSeeTerminalPins = in_array($sessionRole, ['admin', 'manager', 'administrator', 'stock_manager'], true);
 
+    // 0. Preload Users Lookup for Name/ID resolution across warehouses and events
+    $usersLookup = [];
+    $userNameToId = [];
+    try {
+        $uLkStmt = $pdo->query("SELECT `id`, `username`, `full_name`, `role`, `assigned_checkpoint_type`, `assigned_checkpoint_id` FROM `users`");
+        while ($uLk = $uLkStmt->fetch(PDO::FETCH_ASSOC)) {
+            $uIdLk = (int) $uLk['id'];
+            $fnLk = strtolower(trim((string) ($uLk['full_name'] ?: $uLk['username'])));
+            $unLk = strtolower(trim((string) $uLk['username']));
+            if ($fnLk !== '') $userNameToId[$fnLk] = $uIdLk;
+            if ($unLk !== '') $userNameToId[$unLk] = $uIdLk;
+            $usersLookup[] = $uLk;
+        }
+    } catch (Throwable $e) {}
+
     // 1. Load Stock Warehouses
     $stockRows = $pdo->query("SELECT * FROM `stock_locations` WHERE `is_active` = 1 ORDER BY `id` ASC")->fetchAll();
     $stockWarehouses = [];
@@ -885,8 +900,22 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         if ($ctrl === '') {
             $ctrl = ($sid === 1) ? 'Schadrack Niyikiza' : (($sid === 2) ? 'Niyonase Prince' : 'Irene Mudacumura');
         }
+
+        $whAssignedIds = [];
+        $ctrlLower = strtolower($ctrl);
+        if (isset($userNameToId[$ctrlLower])) {
+            $whAssignedIds[] = $userNameToId[$ctrlLower];
+        }
+        foreach ($usersLookup as $uLk) {
+            if (($uLk['assigned_checkpoint_type'] ?? '') === 'stock_warehouse' && (int) ($uLk['assigned_checkpoint_id'] ?? 0) === $sid) {
+                $whAssignedIds[] = (int) $uLk['id'];
+            }
+        }
+        $whAssignedIds = array_values(array_unique($whAssignedIds));
+
         $whRow = [
             'id' => $sid,
+            'raw_id' => (string) $sid,
             'type' => 'stock_warehouse',
             'name' => (string) ($sr['name'] ?? 'Stock Warehouse'),
             'code' => (string) ($sr['code'] ?? $sr['location_code'] ?? 'STK-0' . $sid),
@@ -898,6 +927,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'lead_name' => $ctrl,
             'lead_label' => 'Gate Controller: ' . $ctrl,
             'min_clearance' => 'L2 / L3 / L4 Required (L1 Blocked)',
+            'assigned_technicians' => $whAssignedIds,
+            'assigned_count' => count($whAssignedIds),
         ];
         if ($canSeeTerminalPins) {
             $whRow['terminal_pin'] = resolveWarehouseTerminalPin($sr);
@@ -920,14 +951,40 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $leadName = $tl ?: ($pm ?: 'Jean Paul Ndayisaba');
         $leadLabel = ($tl ? 'Tech Lead: ' . $tl : ($pm ? 'Project Manager: ' . $pm : 'Tech Lead: ' . $leadName));
 
-        $assignedRaw = $er['assigned_technician'] ?? '';
+        $assignedRaw = trim((string) ($er['assigned_technician'] ?? ''));
         $assignedIds = [];
+        $assignedNames = [];
         if (!empty($assignedRaw)) {
-            $dec = json_decode((string)$assignedRaw, true);
+            $dec = json_decode($assignedRaw, true);
             if (is_array($dec)) {
                 $assignedIds = array_values(array_unique(array_filter(array_map('intval', $dec))));
+            } else {
+                $parts = explode(',', $assignedRaw);
+                foreach ($parts as $p) {
+                    $pTrim = trim($p);
+                    if ($pTrim === '') continue;
+                    $assignedNames[] = $pTrim;
+                    $pLower = strtolower($pTrim);
+                    if (isset($userNameToId[$pLower])) {
+                        $assignedIds[] = $userNameToId[$pLower];
+                    } else {
+                        foreach ($userNameToId as $nameKey => $uidVal) {
+                            if (stripos($nameKey, $pLower) !== false || stripos($pLower, $nameKey) !== false) {
+                                $assignedIds[] = $uidVal;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
+        if ($pm !== '' && isset($userNameToId[strtolower($pm)])) {
+            $assignedIds[] = $userNameToId[strtolower($pm)];
+        }
+        if ($tl !== '' && isset($userNameToId[strtolower($tl)])) {
+            $assignedIds[] = $userNameToId[strtolower($tl)];
+        }
+        $assignedIds = array_values(array_unique($assignedIds));
 
         $evItem = [
             'id' => $numId,
@@ -944,6 +1001,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'lead_label' => $leadLabel,
             'min_clearance' => 'L1 / L2 / L3 / L4 Authorized',
             'assigned_technicians' => $assignedIds,
+            'assigned_technician_names' => $assignedNames,
             'assigned_count' => count($assignedIds),
         ];
         if ($canSeeTerminalPins) {
@@ -1339,6 +1397,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'last_checkpoint_id' => $uDaily['last_checkpoint_id'] ?? null,
             'last_checkpoint_name' => $uDaily['last_checkpoint_name'] ?? null,
             'is_active' => (int) ($ur['is_active'] ?? 1),
+            'allowed_stock_ids' => json_decode((string) ($ur['allowed_stock_ids'] ?? '[]'), true) ?: [],
+            'allowed_event_ids' => json_decode((string) ($ur['allowed_event_ids'] ?? '[]'), true) ?: [],
             'linked_batches' => $linkedBatches,
         ];
 
@@ -3075,11 +3135,26 @@ try {
                 $ev = $st->fetch(PDO::FETCH_ASSOC);
                 $existing = [];
                 if (!empty($ev['assigned_technician'])) {
-                    $existing = json_decode((string)$ev['assigned_technician'], true) ?: [];
+                    $dec = json_decode((string)$ev['assigned_technician'], true);
+                    if (is_array($dec)) {
+                        $existing = $dec;
+                    }
                 }
                 $merged = array_values(array_unique(array_merge($existing, $userIds)));
                 $upd = $pdo->prepare("UPDATE `events` SET `assigned_technician` = ? WHERE `id` = ?");
                 $upd->execute([json_encode($merged), $cpId]);
+
+                $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'event_venue', `assigned_checkpoint_id` = ? WHERE `id` = ?");
+                foreach ($userIds as $uid) {
+                    $updUser->execute([$cpId, $uid]);
+                }
+            } catch (Throwable $e) {}
+        } elseif ($cpType === 'stock_warehouse' && !empty($userIds)) {
+            try {
+                $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = ? WHERE `id` = ?");
+                foreach ($userIds as $uid) {
+                    $updUser->execute([$cpId, $uid]);
+                }
             } catch (Throwable $e) {}
         }
 

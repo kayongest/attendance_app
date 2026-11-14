@@ -8169,6 +8169,11 @@ html.theme-transitioning *::after {
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
 }
 
+.map-facility-pin.has-assigned:not(.has-onsite) .pin-marker {
+  border-color: #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.45);
+}
+
 .map-facility-pin.selected .pin-marker {
   border-color: #f59e0b;
   box-shadow: 0 0 14px rgba(245, 158, 11, 0.7);
@@ -8180,16 +8185,20 @@ html.theme-transitioning *::after {
   right: -8px;
   background: #10b981;
   color: #fff;
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 800;
   font-family: 'Share Tech', monospace;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 10px;
   border: 1.5px solid #0f172a;
   line-height: 1.2;
 }
 
-.map-facility-pin:not(.has-onsite) .pin-headcount-badge {
+.map-facility-pin.has-assigned:not(.has-onsite) .pin-headcount-badge {
+  background: #3b82f6;
+}
+
+.map-facility-pin:not(.has-onsite):not(.has-assigned) .pin-headcount-badge {
   background: #475569;
 }
 
@@ -8252,15 +8261,19 @@ html.theme-transitioning *::after {
 }
 
 .inspector-name {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary, #f8fafc);
   margin: 0;
 }
 
 .inspector-meta {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-secondary, #94a3b8);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .inspector-meta strong {
@@ -8270,49 +8283,68 @@ html.theme-transitioning *::after {
 .inspector-crew-tray {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   overflow-x: auto;
-  padding: 4px 0 2px 0;
+  padding: 6px 0 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.inspector-crew-tray::-webkit-scrollbar {
+  height: 5px;
+}
+
+.inspector-crew-tray::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
 }
 
 .inspector-crew-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
+  gap: 7px;
+  padding: 4px 10px;
   border-radius: 20px;
   background: var(--bg-surface, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  font-size: 11px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  font-size: 12.5px;
   color: var(--text-primary, #f8fafc);
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  user-select: none;
 }
 
 .inspector-crew-chip:hover {
   border-color: var(--brand-primary, #6366f1);
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(99, 102, 241, 0.16);
+  transform: translateY(-1px);
+}
+
+.inspector-crew-chip:focus-visible {
+  outline: 2px solid var(--brand-primary, #6366f1);
+  outline-offset: 1px;
 }
 
 .inspector-crew-chip-avatar {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: #3b82f6;
   color: #fff;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .empty-tray-label {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-secondary, #94a3b8);
   font-style: italic;
-  padding: 2px 0;
+  padding: 4px 0;
 }
 
 /* Allocation Checklist in Modal */

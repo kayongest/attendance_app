@@ -2416,15 +2416,27 @@
     { match: /gikondo/i, left: '38%', top: '72%', shortName: 'Gikondo Hub' },
     { match: /masaka/i, left: '78%', top: '78%', shortName: 'Masaka Depot' },
     { match: /remera/i, left: '58%', top: '58%', shortName: 'Remera Hub' },
+    { match: /marrio?tt/i, left: '32%', top: '52%', shortName: 'Marriott' },
+    { match: /four\s*points?/i, left: '28%', top: '42%', shortName: 'FourPoints' },
+    { match: /m[oö]venpick/i, left: '22%', top: '34%', shortName: 'Mövenpick' },
+    { match: /(f1|asili)/i, left: '54%', top: '30%', shortName: 'F1 Asili' },
+    { match: /(universe|mcf)/i, left: '64%', top: '26%', shortName: 'MCF Universe' },
+    { match: /world\s*bank/i, left: '44%', top: '46%', shortName: 'World Bank' },
+    { match: /mscard/i, left: '46%', top: '54%', shortName: 'MScard' },
+    { match: /demo/i, left: '40%', top: '48%', shortName: 'Demo Station' },
   ];
 
   function getFacilityMapCoords(facility, index = 0) {
     const haystack = `${facility.name || ''} ${facility.location || ''} ${facility.title || ''}`;
     for (const kc of KIGALI_KNOWN_COORDS) {
       if (kc.match.test(haystack)) {
+        const jitterLeft = ((index % 3) - 1) * 2;
+        const jitterTop = (((index + 1) % 3) - 1) * 2;
+        const baseLeft = parseFloat(kc.left);
+        const baseTop = parseFloat(kc.top);
         return {
-          left: kc.left,
-          top: kc.top,
+          left: `${Math.max(10, Math.min(90, baseLeft + jitterLeft))}%`,
+          top: `${Math.max(12, Math.min(88, baseTop + jitterTop))}%`,
           shortName: kc.shortName,
         };
       }
@@ -2472,6 +2484,119 @@
     ];
   }
 
+  function getFacilityCrewMembers(facility, allCrew) {
+    if (!facility || !Array.isArray(allCrew)) return [];
+
+    const fId = facility.id != null ? String(facility.id) : '';
+    const fRawId = facility.raw_id != null ? String(facility.raw_id) : '';
+    const fType = facility.type || 'stock_warehouse';
+    const isStock = fType === 'stock_warehouse';
+    const fNameLower = (facility.name || '').trim().toLowerCase();
+    const fCodeLower = (facility.code || '').trim().toLowerCase();
+
+    // Assigned technician IDs from event or warehouse
+    const assignedTechIds = new Set();
+    if (Array.isArray(facility.assigned_technicians)) {
+      facility.assigned_technicians.forEach((tid) => {
+        if (tid != null) assignedTechIds.add(String(tid));
+      });
+    }
+
+    // Assigned technician names (for comma-separated or raw lists)
+    const assignedNames = new Set();
+    if (Array.isArray(facility.assigned_technician_names)) {
+      facility.assigned_technician_names.forEach((n) => {
+        if (n) assignedNames.add(String(n).trim().toLowerCase());
+      });
+    }
+
+    // Facility leads / controllers / PMs / tech leads
+    const supervisorNames = [
+      facility.controller_name,
+      facility.lead_name,
+      facility.tech_lead,
+      facility.project_manager,
+    ].filter(Boolean).map((n) => String(n).trim().toLowerCase());
+
+    const matched = allCrew.filter((c) => {
+      const uId = String(c.id);
+      const uNameLower = (c.full_name || '').trim().toLowerCase();
+      const uUsernameLower = (c.username || '').trim().toLowerCase();
+
+      // 1. Direct assigned checkpoint fields on user profile
+      const cAssignedType = c.assigned_checkpoint_type;
+      const cAssignedId = c.assigned_checkpoint_id != null ? String(c.assigned_checkpoint_id) : '';
+      const cAssignedName = (c.assigned_checkpoint_name || '').trim().toLowerCase();
+
+      if (cAssignedType === fType) {
+        if (cAssignedId && (cAssignedId === fId || (fRawId && cAssignedId === fRawId))) {
+          return true;
+        }
+        if (cAssignedName && (cAssignedName === fNameLower || (fCodeLower && cAssignedName.includes(fCodeLower)))) {
+          return true;
+        }
+      }
+
+      // 2. Explicit assignment list in facility (assigned_technicians)
+      if (assignedTechIds.has(uId)) {
+        return true;
+      }
+
+      // 3. Name-based match from facility's assigned names
+      if (assignedNames.size > 0) {
+        if (assignedNames.has(uNameLower) || assignedNames.has(uUsernameLower)) {
+          return true;
+        }
+        for (const an of assignedNames) {
+          if (an && (uNameLower.includes(an) || an.includes(uNameLower))) {
+            return true;
+          }
+        }
+      }
+
+      // 4. Facility leadership / controller / supervisor assignment
+      if (supervisorNames.some((sn) => sn === uNameLower || sn === uUsernameLower || (sn.length > 4 && uNameLower.includes(sn)))) {
+        return true;
+      }
+
+      // 5. Stock warehouse controllers specifically assigned
+      if (isStock && (c.role === 'stock_controller' || c.role === 'stock_manager')) {
+        if (cAssignedId === fId || (fRawId && cAssignedId === fRawId)) {
+          return true;
+        }
+      }
+
+      // 6. Active live check-in at this location right now
+      if (c.daily_state === 'checked_in') {
+        const liveType = c.checkpoint_type || c.last_checkpoint_type;
+        const liveId = c.checkpoint_id != null ? String(c.checkpoint_id) : (c.last_checkpoint_id != null ? String(c.last_checkpoint_id) : '');
+        const liveName = (c.checkpoint_name || c.last_checkpoint_name || '').trim().toLowerCase();
+
+        if (liveType === fType && (liveId === fId || (fRawId && liveId === fRawId) || (liveName && liveName === fNameLower))) {
+          return true;
+        }
+      }
+
+      // 7. Last recorded checkpoint match (if not checked in elsewhere)
+      const lastType = c.last_checkpoint_type;
+      const lastId = c.last_checkpoint_id != null ? String(c.last_checkpoint_id) : '';
+      if (lastType === fType && (lastId === fId || (fRawId && lastId === fRawId))) {
+        return true;
+      }
+
+      return false;
+    });
+
+    // Deduplicate by user ID
+    const seen = new Set();
+    return matched.filter((c) => {
+      const uid = String(c.id);
+      if (seen.has(uid)) return false;
+      seen.add(uid);
+      return true;
+    });
+  }
+
   function renderAllocationMap() {
     const cardEl = document.getElementById('overview-allocation-card');
     if (!cardEl) return;
@@ -2494,28 +2619,23 @@
 
     const facilityData = allFacilities.map((f, idx) => {
       const isStock = f.type === 'stock_warehouse';
-      const facilityCrew = allCrew.filter((c) => {
-        const userCpType = c.checkpoint_type || c.last_checkpoint_type;
-        const userCpId = c.checkpoint_id || c.last_checkpoint_id;
-        const directMatch = userCpType === f.type && Number(userCpId) === Number(f.id);
-        const assignedMatch = f.type === 'event_venue' && Array.isArray(f.assigned_technicians) && f.assigned_technicians.includes(Number(c.id));
-        const stockAssignedMatch = isStock && Array.isArray(f.assigned_technicians) && f.assigned_technicians.includes(Number(c.id));
-        return directMatch || assignedMatch || stockAssignedMatch;
-      });
+      const facilityCrew = getFacilityCrewMembers(f, allCrew);
       const onSiteCrew = facilityCrew.filter((c) => c.daily_state === 'checked_in');
       const headCount = onSiteCrew.length > 0 ? onSiteCrew.length : Number(f.on_site_now || 0);
+      const assignedCount = facilityCrew.length;
 
-      if (headCount > 0) activeHubsCount++;
+      if (headCount > 0 || assignedCount > 0) activeHubsCount++;
 
       const coords = getFacilityMapCoords(f, idx);
       const isSelected = state.selectedMapCheckpoint &&
         state.selectedMapCheckpoint.type === f.type &&
-        Number(state.selectedMapCheckpoint.id) === Number(f.id);
+        (String(state.selectedMapCheckpoint.id) === String(f.id) || (f.raw_id && String(state.selectedMapCheckpoint.id) === String(f.raw_id)));
 
       return {
         facility: f,
         coords,
         headCount,
+        assignedCount,
         isSelected,
         facilityCrew,
         onSiteCrew,
@@ -2539,18 +2659,20 @@
       const filteredData = facilityData.filter((item) => {
         if (filter === 'event_venue' && item.facility.type !== 'event_venue') return false;
         if (filter === 'stock_warehouse' && item.facility.type !== 'stock_warehouse') return false;
-        if (filter === 'active' && item.headCount === 0) return false;
+        if (filter === 'active' && item.headCount === 0 && item.assignedCount === 0) return false;
         return true;
       });
 
       pinsContainer.innerHTML = filteredData.map((item) => {
-        const { facility, coords, headCount, isSelected, isStock } = item;
+        const { facility, coords, headCount, assignedCount, isSelected, isStock } = item;
         const pinClasses = [
           'map-facility-pin',
           isStock ? 'type-stock' : 'type-venue',
-          headCount > 0 ? 'has-onsite' : '',
+          headCount > 0 ? 'has-onsite' : (assignedCount > 0 ? 'has-assigned' : ''),
           isSelected ? 'selected' : '',
         ].filter(Boolean).join(' ');
+
+        const displayCount = headCount > 0 ? headCount : (assignedCount > 0 ? assignedCount : 0);
 
         return `
           <div class="${pinClasses}"
@@ -2559,11 +2681,11 @@
                data-facility-id="${escapeHtml(String(facility.id))}"
                tabindex="0"
                role="button"
-               aria-label="${escapeHtml(facility.name)}: ${headCount} on-site"
-               title="${escapeHtml(facility.name)} (${headCount} On-Site — Click to inspect)">
+               aria-label="${escapeHtml(facility.name)}: ${headCount} on-site, ${assignedCount} assigned"
+               title="${escapeHtml(facility.name)} (${headCount} On-Site · ${assignedCount} Assigned Crew — Click to inspect)">
             <div class="pin-marker">
               <span>${isStock ? '🏭' : '🎪'}</span>
-              <span class="pin-headcount-badge">${headCount}</span>
+              <span class="pin-headcount-badge">${displayCount}</span>
             </div>
             <div class="pin-label-pill">${escapeHtml(coords.shortName)}</div>
           </div>
@@ -2573,7 +2695,7 @@
       // Wire Click & Enter events on pins
       pinsContainer.querySelectorAll('.map-facility-pin').forEach((pinEl) => {
         const cpType = pinEl.getAttribute('data-facility-type');
-        const cpId = Number(pinEl.getAttribute('data-facility-id'));
+        const cpId = pinEl.getAttribute('data-facility-id');
 
         const handleSelect = (e) => {
           e.stopPropagation();
@@ -2595,15 +2717,15 @@
   }
 
   function selectMapFacility(type, id) {
-    state.selectedMapCheckpoint = { type, id: Number(id) };
+    state.selectedMapCheckpoint = { type, id: String(id) };
 
     // Update selected class on pins
     const pinsContainer = document.getElementById('overview-map-pins');
     if (pinsContainer) {
       pinsContainer.querySelectorAll('.map-facility-pin').forEach((pin) => {
         const pType = pin.getAttribute('data-facility-type');
-        const pId = Number(pin.getAttribute('data-facility-id'));
-        if (pType === type && pId === Number(id)) {
+        const pId = pin.getAttribute('data-facility-id');
+        if (pType === type && (pId === String(id) || Number(pId) === Number(id))) {
           pin.classList.add('selected');
         } else {
           pin.classList.remove('selected');
@@ -2619,27 +2741,23 @@
     if (!inspectorEl) return;
 
     const allFacilities = getAllFacilitiesList();
-    const selCp = state.selectedMapCheckpoint || { type: 'event_venue', id: 1 };
+    const selCp = state.selectedMapCheckpoint || (allFacilities.length > 0 ? { type: allFacilities[0].type, id: allFacilities[0].id } : { type: 'event_venue', id: 1 });
 
-    let facility = allFacilities.find((f) => f.type === selCp.type && Number(f.id) === Number(selCp.id));
+    let facility = allFacilities.find((f) =>
+      f.type === selCp.type && (String(f.id) === String(selCp.id) || Number(f.id) === Number(selCp.id) || (f.raw_id && String(f.raw_id) === String(selCp.id)))
+    );
     if (!facility && allFacilities.length > 0) {
       facility = allFacilities[0];
-      state.selectedMapCheckpoint = { type: facility.type, id: Number(facility.id) };
+      state.selectedMapCheckpoint = { type: facility.type, id: facility.id };
     }
     if (!facility) return;
 
     const isStock = facility.type === 'stock_warehouse';
     const allCrew = state.crew || [];
-    const facilityCrew = allCrew.filter((c) => {
-      const userCpType = c.checkpoint_type || c.last_checkpoint_type;
-      const userCpId = c.checkpoint_id || c.last_checkpoint_id;
-      const directMatch = userCpType === facility.type && Number(userCpId) === Number(facility.id);
-      const assignedMatch = facility.type === 'event_venue' && Array.isArray(facility.assigned_technicians) && facility.assigned_technicians.includes(Number(c.id));
-      const stockAssignedMatch = isStock && Array.isArray(facility.assigned_technicians) && facility.assigned_technicians.includes(Number(c.id));
-      return directMatch || assignedMatch || stockAssignedMatch;
-    });
+    const facilityCrew = getFacilityCrewMembers(facility, allCrew);
     const onSiteCrew = facilityCrew.filter((c) => c.daily_state === 'checked_in');
     const headCount = onSiteCrew.length > 0 ? onSiteCrew.length : Number(facility.on_site_now || 0);
+    const assignedCount = facilityCrew.length;
 
     const typePill = document.getElementById('inspector-type-pill');
     const liveDot = document.getElementById('inspector-live-dot');
@@ -2654,9 +2772,13 @@
 
     if (liveDot) {
       if (headCount > 0) {
-        liveDot.textContent = '● Active On-Site';
+        liveDot.textContent = `● ${headCount} Active On-Site`;
         liveDot.className = 'inspector-status-dot-active';
         liveDot.style.color = '#10b981';
+      } else if (assignedCount > 0) {
+        liveDot.textContent = `● ${assignedCount} Assigned · Ready`;
+        liveDot.className = 'inspector-status-dot-ready';
+        liveDot.style.color = '#3b82f6';
       } else {
         liveDot.textContent = '○ Standby / Ready';
         liveDot.className = 'inspector-status-dot-idle';
@@ -2674,7 +2796,7 @@
       metaEl.innerHTML = `
         <span>Call Time: <strong>${escapeHtml(callTime)}</strong></span> ·
         <span>Scheduled Lead: <strong>${escapeHtml(leadName)}</strong></span> ·
-        <span id="inspector-headcount-tag"><strong>${headCount}</strong> Crew On-Site</span>
+        <span id="inspector-headcount-tag"><strong>${assignedCount}</strong> Assigned Personnel (<strong>${headCount}</strong> On-Site)</span>
       `;
     }
 
@@ -2682,9 +2804,9 @@
     if (trayEl) {
       if (facilityCrew.length === 0) {
         trayEl.innerHTML = `
-          <div class="empty-tray-label" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div class="empty-tray-label" style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 4px 0;">
             <span>No personnel currently allocated to this location.</span>
-            <button type="button" class="btn btn-secondary-32-sm js-open-allocate-modal" data-target-type="${escapeHtml(facility.type)}" data-target-id="${escapeHtml(String(facility.id))}" style="height: 24px; padding: 0 8px; font-size: 11px;">
+            <button type="button" class="btn btn-secondary-32-sm js-open-allocate-modal" data-target-type="${escapeHtml(facility.type)}" data-target-id="${escapeHtml(String(facility.id))}" style="height: 26px; padding: 0 10px; font-size: 11.5px;">
               <span>+ Quick Dispatch</span>
             </button>
           </div>
@@ -2694,29 +2816,37 @@
           const isOnSite = c.daily_state === 'checked_in';
           const isCheckedOut = c.daily_state === 'checked_out';
           const stateColor = isOnSite ? '#10b981' : (isCheckedOut ? '#94a3b8' : '#3b82f6');
-          const stateLabel = isOnSite ? 'On-Site' : (isCheckedOut ? 'Checked Out' : 'Ready');
+          const stateLabel = isOnSite ? 'On-Site' : (isCheckedOut ? 'Checked Out' : 'Ready / Assigned');
+          const roleDisplay = c.role_display || c.role || 'Crew';
           const avatarHtml = c.profile_image_url || c.profile_image
-            ? `<img src="${escapeHtml(c.profile_image_url || c.profile_image)}" alt="" style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover;">`
+            ? `<img src="${escapeHtml(c.profile_image_url || c.profile_image)}" alt="" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">`
             : `<span class="inspector-crew-chip-avatar">${escapeHtml(c.initials || 'CR')}</span>`;
 
           return `
-            <div class="inspector-crew-chip" data-crew-id="${c.id}" title="${escapeHtml(c.full_name)} (${escapeHtml(c.role_display || c.role)}) — ${stateLabel}. Click to verify.">
+            <div class="inspector-crew-chip" data-crew-id="${c.id}" tabindex="0" role="button" title="${escapeHtml(c.full_name)} (${escapeHtml(roleDisplay)}) — Status: ${stateLabel}. Click to verify.">
               ${avatarHtml}
               <span style="font-weight: 600;">${escapeHtml(c.full_name)}</span>
-              <span style="font-size: 9.5px; opacity: 0.75;">(${escapeHtml(c.role_display || c.role || 'Tech')})</span>
-              <span style="width: 6px; height: 6px; border-radius: 50%; background: ${stateColor}; display: inline-block;" title="${stateLabel}"></span>
+              <span style="font-size: 11px; opacity: 0.8;">(${escapeHtml(roleDisplay)})</span>
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: ${stateColor}; display: inline-block; flex-shrink: 0;" title="${stateLabel}"></span>
             </div>
           `;
         }).join('');
 
         // Wire click to inspect / verify crew member
         trayEl.querySelectorAll('.inspector-crew-chip').forEach((chip) => {
-          chip.addEventListener('click', () => {
+          const handleOpen = () => {
             const uid = Number(chip.getAttribute('data-crew-id'));
             const member = allCrew.find((m) => Number(m.id) === uid);
             if (member) {
               state.selectedCrewId = uid;
               openKioskModal(member);
+            }
+          };
+          chip.addEventListener('click', handleOpen);
+          chip.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleOpen();
             }
           });
         });
@@ -2831,8 +2961,8 @@
     // If feed is empty or sparse, supplement with on-site crew from state
     if (users.size === 0 && Array.isArray(state.crew)) {
       state.crew.slice(0, 6).forEach((c) => {
-        const userCpType = c.checkpoint_type || c.last_checkpoint_type;
-        const cpName = c.last_checkpoint_name || (userCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
+        const userCpType = c.assigned_checkpoint_type || c.checkpoint_type || c.last_checkpoint_type;
+        const cpName = c.assigned_checkpoint_name || c.last_checkpoint_name || (userCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
         users.set(String(c.id), {
           uid: String(c.id),
           name: c.full_name,
