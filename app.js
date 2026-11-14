@@ -1043,7 +1043,7 @@
     if (!isScreenPermittedForCurrentUser(screenKey)) {
       const rawRole = (state.currentUser?.role || '').toLowerCase();
       const isStockCtrl = rawRole === 'stock_controller';
-      const isTech = rawRole === 'tech_lead';
+      const isTech = rawRole === 'tech_lead' || rawRole === 'technical_lead';
       const isStockMgr = rawRole === 'stock_manager';
 
       if (isStockCtrl) {
@@ -1051,7 +1051,7 @@
         screenKey = 'terminals';
         scrollToId = 'pane-kiosk';
       } else if (isTech) {
-        showToast('Access Restricted: Facility checkpoint management is reserved for Site Managers and Administrators.');
+        showToast('Access Scoped: Tech Leads are scoped to Gate Dashboard & Terminal only.');
         screenKey = 'overview';
       } else if (isStockMgr) {
         showToast('Access Restricted: Venue Security Portal is reserved for Technical Leads and Administrators.');
@@ -1177,6 +1177,7 @@
     if (state.activeScreen === 'users') {
       switchUsersView(state.usersViewMode || 'personnel');
     }
+    applyNavigationRestrictions();
   }
 
   function closeAllTopbarDropdowns() {
@@ -1215,7 +1216,7 @@
   function isCurrentUserTechLead() {
     if (!state.currentUser) return false;
     const role = (state.currentUser.role || '').toLowerCase();
-    return role === 'tech_lead' || isCurrentUserAdmin();
+    return role === 'tech_lead' || role === 'technical_lead' || isCurrentUserAdmin();
   }
 
   function isCurrentUserStockManager() {
@@ -1252,7 +1253,8 @@
       return screenKey === 'terminals' || screenKey === 'attendees' || screenKey === 'analytics' || screenKey === 'stock-manager';
     }
     if (isTech) {
-      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'venue-security';
+      // Tech Lead is strictly scoped to Gate Dashboard (overview) & Terminal (terminals)
+      return screenKey === 'overview' || screenKey === 'terminals';
     }
     if (isStockMgr) {
       return screenKey === 'overview' || screenKey === 'events' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'analytics' || screenKey === 'stock-manager';
@@ -1336,6 +1338,8 @@
     const isFieldCrew = !isAdmin && !isManager && !isTech && !isStockMgr && !isStockCtrl;
     const isTechCrew = isFieldCrew;
 
+    document.body.setAttribute('data-user-role', rawRole);
+
     const setVis = (el, isVis) => {
       if (!el) return;
       el.style.display = isVis ? 'flex' : 'none';
@@ -1374,20 +1378,20 @@
     // Gate Dashboard: Admin, Project Manager, Tech Lead, Stock Manager (Hidden for Stock Controller & Field Crew)
     setVis(navOverview, isAdmin || isManager || isTech || isStockMgr);
 
-    // Venues & Facility Gates: Admin, Project Manager, Tech Lead, Stock Manager (Hidden for Stock Controller & Field Crew)
-    setVis(navEvents, isAdmin || isManager || isTech || isStockMgr);
+    // Venues & Facility Gates: Admin, Project Manager, Stock Manager (Hidden for Tech Lead, Stock Controller & Field Crew)
+    setVis(navEvents, isAdmin || isManager || isStockMgr);
 
     // Users & Roles: Admin and Project Manager ONLY (Hidden for Tech Lead, Stock Manager, Stock Controller, Field Crew)
     setVis(navUsers, isAdmin || isManager);
 
-    // ID Badges & Kiosk: Visible to all personas (Gate scanning & personal badge inspection)
-    setVis(navAttendees, true);
+    // ID Badges & Kiosk: Hidden for Tech Lead (Visible to Admin, Manager, Stock Mgr, Stock Ctrl, Field Crew)
+    setVis(navAttendees, !isTech);
 
-    // Terminals: Visible to all personas (Kiosk station terminal)
+    // Terminals: Visible to all personas (including Tech Lead)
     setVis(navTerminals, true);
 
-    // Venue Security Portal: Admin, Project Manager, Tech Lead
-    setVis(navVenueSec, isAdmin || isManager || isTech);
+    // Venue Security Portal: Admin, Project Manager (Hidden for Tech Lead, Stock Manager, Stock Controller, Field Crew)
+    setVis(navVenueSec, isAdmin || isManager);
 
     // Stock Batch Approvals / Analytics: Admin, Stock Manager, Stock Controller
     setVis(navAnalytics, isAdmin || isStockMgr || isStockCtrl);
@@ -1407,17 +1411,17 @@
     const btnResetDemo = document.getElementById('sidebar-reset-demo-btn');
 
     if (cpNav) {
-      if (isFieldCrew) {
-        // Entire checkpoint controls group hidden for standard Field Crew
+      if (isFieldCrew || isTech) {
+        // Entire checkpoint controls group hidden for Field Crew & Tech Lead
         cpNav.style.display = 'none';
       } else {
         cpNav.style.display = 'flex';
-        // Shift Relief & Swaps: Admin, Manager, Tech Lead, Stock Manager, Stock Controller
-        setVis(btnShiftRelief, isAdmin || isManager || isTech || isStockMgr || isStockCtrl);
-        // Set Call Time: Admin, Manager, Tech Lead, Stock Manager
-        setVis(btnCallTime, isAdmin || isManager || isTech || isStockMgr);
-        // On-Site Roll-Call: Admin, Manager, Tech Lead, Stock Manager
-        setVis(btnRollCall, isAdmin || isManager || isTech || isStockMgr);
+        // Shift Relief & Swaps: Admin, Manager, Stock Manager, Stock Controller
+        setVis(btnShiftRelief, isAdmin || isManager || isStockMgr || isStockCtrl);
+        // Set Call Time: Admin, Manager, Stock Manager
+        setVis(btnCallTime, isAdmin || isManager || isStockMgr);
+        // On-Site Roll-Call: Admin, Manager, Stock Manager
+        setVis(btnRollCall, isAdmin || isManager || isStockMgr);
         // Station Lock PIN: Admin ONLY
         setVis(btnStationLock, isAdmin);
         // Reset Today's Scans: Admin ONLY
@@ -1516,6 +1520,33 @@
         switchScreen('overview');
       }
     }
+
+    // 9. Gate Dashboard Scoping for Tech Lead:
+    // Tech Lead views ONLY overview-top-block and timeline-card-overview!
+    const overviewMapCard = document.getElementById('overview-allocation-card');
+    const overviewRosterCard = document.querySelector('#screen-overview .directory-card');
+    const overviewTimelineCard = document.querySelector('#screen-overview .timeline-card-overview');
+
+    if (overviewMapCard) {
+      overviewMapCard.style.display = isTech ? 'none' : '';
+    }
+    if (overviewRosterCard) {
+      overviewRosterCard.style.display = isTech ? 'none' : '';
+    }
+    if (overviewTimelineCard) {
+      if (isTech) {
+        overviewTimelineCard.style.width = '100%';
+        overviewTimelineCard.style.flex = '1 1 100%';
+      } else {
+        overviewTimelineCard.style.width = '';
+        overviewTimelineCard.style.flex = '';
+      }
+    }
+
+    // Hide any "go-attendees" buttons for Tech Lead
+    document.querySelectorAll('[data-action="go-attendees"]').forEach((btn) => {
+      btn.style.display = isTech ? 'none' : '';
+    });
   }
 
   function openAuthModal(defaultTab = 'login') {

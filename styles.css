@@ -1199,6 +1199,21 @@ button {
   box-sizing: border-box;
 }
 
+/* Tech Lead Scoped View on Gate Dashboard (Overview Screen):
+   Only overview-top-block and timeline-card-overview are visible */
+body[data-user-role="tech_lead"] #overview-allocation-card,
+body[data-user-role="technical_lead"] #overview-allocation-card,
+body[data-user-role="tech_lead"] #screen-overview .directory-card,
+body[data-user-role="technical_lead"] #screen-overview .directory-card {
+  display: none !important;
+}
+
+body[data-user-role="tech_lead"] #screen-overview .timeline-card-overview,
+body[data-user-role="technical_lead"] #screen-overview .timeline-card-overview {
+  width: 100% !important;
+  flex: 1 1 100% !important;
+}
+
 /* Attendance Insights Card (Overview Screen) */
 .insights-card {
   flex: 1 0 0;
