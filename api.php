@@ -1012,7 +1012,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     $activeCpId = (int) $activeCheckpoint['id'];
     $activeCpName = (string) $activeCheckpoint['name'];
 
-    // 3. Load Today's Attendance Logs
+    // 3. Load Today's Attendance Logs + Prior-Evening Overnight Open Check-Ins
     $todayLogsStmt = $pdo->prepare("
         SELECT * FROM `attendance_logs`
         WHERE DATE(`scanned_at`) = ?
@@ -1020,6 +1020,19 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     ");
     $todayLogsStmt->execute([$todayStr]);
     $todayLogs = $todayLogsStmt->fetchAll();
+
+    // Look back 18 hours before midnight so active night-shift check-ins stay checked_in past 00:00
+    $overnightCutoff = date('Y-m-d H:i:s', strtotime($todayStr . ' 00:00:00') - 18 * 3600);
+    $todayMidnight = $todayStr . ' 00:00:00';
+    $overnightStmt = $pdo->prepare("
+        SELECT * FROM `attendance_logs`
+        WHERE `scanned_at` >= ? AND `scanned_at` < ?
+          AND `access_status` = 'granted'
+          AND `scan_action` IN ('check_in', 'check_out')
+        ORDER BY `scanned_at` ASC, `id` ASC
+    ");
+    $overnightStmt->execute([$overnightCutoff, $todayMidnight]);
+    $overnightLogs = $overnightStmt->fetchAll();
 
     // Compute per-user daily state and timestamps
     $userDailyMap = [];
@@ -1034,6 +1047,52 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         '14:00' => ['hour' => '14:00', 'label' => '02:00 PM', 'venueCount' => 0, 'stockCount' => 0],
         '16:00' => ['hour' => '16:00', 'label' => '04:00 PM', 'venueCount' => 0, 'stockCount' => 0],
     ];
+
+    $overnightOpenMap = [];
+    foreach ($overnightLogs as $olog) {
+        $ouid = (int) $olog['user_id'];
+        $oAction = (string) ($olog['scan_action'] ?? '');
+        if ($oAction === 'check_in') {
+            $overnightOpenMap[$ouid] = $olog;
+        } elseif ($oAction === 'check_out') {
+            unset($overnightOpenMap[$ouid]);
+        }
+    }
+
+    foreach ($overnightOpenMap as $ouid => $olog) {
+        $oTs = strtotime((string) $olog['scanned_at']) ?: time();
+        $oCpType = (string) ($olog['checkpoint_type'] ?? 'event_venue');
+        $oCpId = (int) ($olog['checkpoint_id'] ?? 1);
+        $oCpKey = $oCpType . ':' . $oCpId;
+        $oPunct = strtolower((string) ($olog['punctuality_status'] ?? 'on_time'));
+
+        if (!isset($checkpointStats[$oCpKey])) {
+            $checkpointStats[$oCpKey] = [
+                'checked_in_today' => 0,
+                'checked_out_today' => 0,
+                'denied_today' => 0,
+                'active_users' => [],
+            ];
+        }
+        $checkpointStats[$oCpKey]['active_users'][$ouid] = true;
+
+        $userDailyMap[$ouid] = [
+            'state' => 'checked_in',
+            'overnight_shift' => true,
+            'check_in_short' => 'Prev ' . date('h:i A', $oTs),
+            'check_in_full' => date('M j, h:i:s A', $oTs),
+            'check_out_short' => null,
+            'check_out_full' => null,
+            'punctuality_code' => $oPunct,
+            'punctuality_label' => 'NIGHT SHIFT ACTIVE',
+            'last_checkpoint_type' => $oCpType,
+            'last_checkpoint_id' => $oCpId,
+            'last_checkpoint_name' => (string) ($olog['checkpoint_name'] ?? ''),
+            'last_scanned_at' => (string) ($olog['scanned_at'] ?? ''),
+            'denied_count' => 0,
+            'last_denial_reason' => null,
+        ];
+    }
 
     $venueCheckinsToday = 0;
     $stockCheckinsToday = 0;
@@ -1108,6 +1167,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         if (!isset($userDailyMap[$uid])) {
             $userDailyMap[$uid] = [
                 'state' => 'ready',
+                'overnight_shift' => false,
                 'check_in_short' => null,
                 'check_in_full' => null,
                 'check_out_short' => null,
@@ -1128,6 +1188,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             $userDailyMap[$uid]['last_denial_reason'] = (string) ($log['denial_reason'] ?? 'Access Denied');
         } elseif ($action === 'check_in') {
             $userDailyMap[$uid]['state'] = 'checked_in';
+            $userDailyMap[$uid]['overnight_shift'] = false;
             $userDailyMap[$uid]['check_in_short'] = date('h:i A', $ts);
             $userDailyMap[$uid]['check_in_full'] = date('h:i:s A', $ts);
             $userDailyMap[$uid]['check_out_short'] = null;
@@ -1264,6 +1325,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'checkpoint_authorized' => (bool) $cpEval['allowed'],
             'checkpoint_auth_reason' => (string) $cpEval['reason'],
             'daily_state' => $dailyState,
+            'overnight_shift' => (bool) ($uDaily['overnight_shift'] ?? false),
             'check_in_time' => $uDaily['check_in_short'] ?? null,
             'check_in_full' => $uDaily['check_in_full'] ?? null,
             'check_out_time' => $uDaily['check_out_short'] ?? null,
@@ -1967,6 +2029,20 @@ try {
     if ($action === 'process_gate_scan') {
         $scanInput = trim((string) ($_POST['scan_input'] ?? $jsonBody['scan_input'] ?? ''));
         $scanMode = strtolower(trim((string) ($_POST['scan_mode'] ?? $jsonBody['scan_mode'] ?? 'auto')));
+        $rawOfflineAt = trim((string) ($_POST['offline_scanned_at'] ?? $jsonBody['offline_scanned_at'] ?? ''));
+
+        $nowServerTs = time();
+        $effectiveTs = $nowServerTs;
+        $isOfflineSync = false;
+        if ($rawOfflineAt !== '') {
+            $parsedOfflineTs = strtotime($rawOfflineAt);
+            if ($parsedOfflineTs !== false && $parsedOfflineTs >= ($nowServerTs - 72 * 3600) && $parsedOfflineTs <= ($nowServerTs + 300)) {
+                $effectiveTs = min($parsedOfflineTs, $nowServerTs);
+                $isOfflineSync = true;
+            }
+        }
+        $effectiveScannedAtSql = date('Y-m-d H:i:s', $effectiveTs);
+        $effectiveDateStr = date('Y-m-d', $effectiveTs);
 
         $lockCheck = assertControllerCheckpointLock($pdo, (string) $reqCpType, (string) $reqCpId);
         if (!$lockCheck['ok']) {
@@ -2042,7 +2118,7 @@ try {
                 exit;
             }
 
-            // Debounce rapid repeat scans (< 5s) at the same checkpoint so hardware scanner bounces don't create duplicate logs
+            // Debounce rapid repeat scans (< 5s) at the same checkpoint so hardware scanner bounces and offline sync retries don't create duplicate logs
             if ($scanMode !== 'verify_only') {
                 $recentStmt = $pdo->prepare("
                     SELECT `scan_action`, `punctuality_status`, `notes`, `scanned_at`
@@ -2050,11 +2126,11 @@ try {
                     WHERE `user_id` = ? AND `checkpoint_type` = ? AND `checkpoint_id` = ?
                       AND `access_status` = 'granted'
                       AND `scan_action` IN ('check_in', 'check_out')
-                      AND TIMESTAMPDIFF(SECOND, `scanned_at`, NOW()) BETWEEN 0 AND 5
+                      AND ABS(TIMESTAMPDIFF(SECOND, `scanned_at`, ?)) <= 5
                     ORDER BY `id` DESC
                     LIMIT 1
                 ");
-                $recentStmt->execute([(int) $targetMember['id'], $cpType, $cpId]);
+                $recentStmt->execute([(int) $targetMember['id'], $cpType, $cpId, $effectiveScannedAtSql]);
                 $recentScan = $recentStmt->fetch(PDO::FETCH_ASSOC);
                 if ($recentScan) {
                     $recentAction = (string) $recentScan['scan_action'];
@@ -2070,7 +2146,7 @@ try {
                             'action' => $recentAction,
                             'punctuality' => (string) ($recentScan['punctuality_status'] ?? 'on_time'),
                             'punctuality_label' => $recentAction === 'check_out' ? 'SHIFT CHECK-OUT' : ($targetMember['punctuality'] ?? 'ON TIME'),
-                            'scanned_at' => date('H:i:s', strtotime((string) $recentScan['scanned_at']) ?: time()),
+                            'scanned_at' => date('H:i:s', strtotime((string) $recentScan['scanned_at']) ?: $effectiveTs),
                             'check_in_time' => $targetMember['check_in_full'] ?? null,
                             'check_out_time' => $targetMember['check_out_full'] ?? null,
                         ]
@@ -2090,7 +2166,7 @@ try {
                 $transitOutStmt = $pdo->prepare("
                     INSERT INTO `attendance_logs`
                       (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'on_time', ?, ?, NOW())
+                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'on_time', ?, ?, ?)
                 ");
                 $transitOutStmt->execute([
                     (int) $targetMember['id'],
@@ -2100,6 +2176,7 @@ try {
                     $prevFacilityName,
                     $scannedBy,
                     $transitOutNotes,
+                    $effectiveScannedAtSql,
                 ]);
 
                 // 2. Resolve current scan as check_in at the new facility
@@ -2117,9 +2194,8 @@ try {
             }
         }
 
-        // Calculate call-time punctuality
-        $nowTs = time();
-        $scheduledTs = strtotime(date('Y-m-d') . ' ' . $callTime . ':00') ?: strtotime(date('Y-m-d 08:00:00'));
+        // Calculate call-time punctuality against scan date
+        $scheduledTs = strtotime($effectiveDateStr . ' ' . $callTime . ':00') ?: strtotime($effectiveDateStr . ' 08:00:00');
         if (!$allowed) {
             $punctuality = 'n/a';
             $punctualityLabel = 'ACCESS RESTRICTED';
@@ -2127,7 +2203,7 @@ try {
             $punctuality = 'on_time';
             $punctualityLabel = 'SHIFT CHECK-OUT';
         } else {
-            $diffMinutes = ($nowTs - $scheduledTs) / 60;
+            $diffMinutes = ($effectiveTs - $scheduledTs) / 60;
             if ($diffMinutes < -10) {
                 $punctuality = 'early';
                 $punctualityLabel = 'EARLY ARRIVAL';
@@ -2149,6 +2225,9 @@ try {
                         ? "Clearance verified at {$cpName}"
                         : "Gate Check-In recorded at {$cpName}")))
             : "Denied at {$cpName}: {$reason}";
+        if ($isOfflineSync) {
+            $noteText .= ' [Synced Offline]';
+        }
 
         $isAssignedToEvent = false;
         $eventAssignedCount = 0;
@@ -2164,7 +2243,7 @@ try {
         $insStmt = $pdo->prepare("
             INSERT INTO `attendance_logs`
               (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $insStmt->execute([
             (int) $targetMember['id'],
@@ -2178,6 +2257,7 @@ try {
             $punctuality,
             $scannedBy,
             $noteText,
+            $effectiveScannedAtSql,
         ]);
 
         // Rebuild full payload so all KPIs, crew states, and timeline reflect the new scan
@@ -2196,12 +2276,12 @@ try {
                 'action' => $resolvedAction,
                 'punctuality' => $punctuality,
                 'punctuality_label' => $punctualityLabel,
-                'scanned_at' => date('H:i:s'),
+                'scanned_at' => date('H:i:s', $effectiveTs),
                 'is_transit_transfer' => $isCrossFacilityTransfer,
                 'transit_from' => $isCrossFacilityTransfer ? $prevFacilityName : null,
                 'transit_to' => $isCrossFacilityTransfer ? $cpName : null,
-                'check_in_time' => $updatedMember['check_in_full'] ?? ($resolvedAction === 'check_in' ? date('h:i:s A') : null),
-                'check_out_time' => $updatedMember['check_out_full'] ?? ($resolvedAction === 'check_out' ? date('h:i:s A') : null),
+                'check_in_time' => $updatedMember['check_in_full'] ?? ($resolvedAction === 'check_in' ? date('h:i:s A', $effectiveTs) : null),
+                'check_out_time' => $updatedMember['check_out_full'] ?? ($resolvedAction === 'check_out' ? date('h:i:s A', $effectiveTs) : null),
             ]
         );
 
@@ -4173,6 +4253,235 @@ try {
             'ok' => true,
             'message' => "{$verb} shift relief request #{$requestId} for {$sr['checkpoint_name']}.",
         ]));
+        exit;
+    }
+
+    if ($action === 'attendance_report') {
+        $range = strtolower(trim((string) ($_GET['range'] ?? $_POST['range'] ?? $jsonBody['range'] ?? 'today')));
+        $dateFromIn = trim((string) ($_GET['date_from'] ?? $_POST['date_from'] ?? $jsonBody['date_from'] ?? ''));
+        $dateToIn = trim((string) ($_GET['date_to'] ?? $_POST['date_to'] ?? $jsonBody['date_to'] ?? ''));
+        $filterCpType = trim((string) ($_GET['checkpoint_type'] ?? $_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'all'));
+        $filterCpIdRaw = trim((string) ($_GET['checkpoint_id'] ?? $_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? ''));
+
+        $caller = getCallerUser($pdo);
+        $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+        $lookup = loadCheckpointsLookup($pdo);
+
+        $scopedCpType = ($filterCpType !== '' && $filterCpType !== 'all') ? $filterCpType : 'all';
+        $scopedCpId = ($filterCpIdRaw !== '' && $filterCpIdRaw !== '0' && $filterCpIdRaw !== 'all') ? (int) $filterCpIdRaw : 0;
+
+        if ($callerRole === 'stock_controller') {
+            $assignedType = trim((string) ($caller['assigned_checkpoint_type'] ?? ''));
+            $assignedId = trim((string) ($caller['assigned_checkpoint_id'] ?? ''));
+            if ($assignedType === '' || $assignedId === '') {
+                http_response_code(403);
+                echo json_encode([
+                    'ok' => false,
+                    'error' => 'Terminal unassigned: Gate Controller must be assigned to a checkpoint to view attendance reports.',
+                ]);
+                exit;
+            }
+            $assignedCp = findCheckpointRecord($lookup['stock_warehouses'], $lookup['event_venues'], $assignedType, $assignedId);
+            $resolvedAssignedId = $assignedCp ? (int) $assignedCp['id'] : (int) $assignedId;
+            if ($scopedCpType !== 'all' || $scopedCpId > 0) {
+                $targetCheckType = $scopedCpType !== 'all' ? $scopedCpType : $assignedType;
+                $targetCheckId = $scopedCpId > 0 ? (string) $scopedCpId : (string) $resolvedAssignedId;
+                $lockCheck = assertControllerCheckpointLock($pdo, $targetCheckType, $targetCheckId);
+                if (!$lockCheck['ok']) {
+                    http_response_code(403);
+                    echo json_encode(['ok' => false, 'error' => $lockCheck['error']]);
+                    exit;
+                }
+            }
+            $scopedCpType = $assignedType;
+            $scopedCpId = $resolvedAssignedId;
+        }
+
+        $todayStr = date('Y-m-d');
+        $nowHour = (int) date('G');
+        $isNightFilter = false;
+
+        if ($range === 'night_shift') {
+            $isNightFilter = true;
+            if ($dateFromIn !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFromIn)) {
+                $startDate = $dateFromIn;
+                $endDate = date('Y-m-d', strtotime($startDate . ' +1 day'));
+            } elseif ($nowHour < 14) {
+                $startDate = date('Y-m-d', strtotime('-1 day'));
+                $endDate = $todayStr;
+            } else {
+                $startDate = $todayStr;
+                $endDate = date('Y-m-d', strtotime('+1 day'));
+            }
+            $fromDt = $startDate . ' 18:00:00';
+            $toDt = $endDate . ' 09:00:00';
+            $windowLabel = 'Night Shift (' . date('M j', strtotime($startDate)) . ' 18:00 → ' . date('M j', strtotime($endDate)) . ' 09:00)';
+        } elseif ($range === '7d') {
+            $startDate = date('Y-m-d', strtotime('-6 days'));
+            $endDate = $todayStr;
+            $fromDt = $startDate . ' 00:00:00';
+            $toDt = $endDate . ' 23:59:59';
+            $windowLabel = 'Last 7 Days (' . date('M j', strtotime($startDate)) . ' – ' . date('M j, Y', strtotime($endDate)) . ')';
+        } elseif ($range === 'custom' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFromIn)) {
+            $startDate = $dateFromIn;
+            $endDate = (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateToIn) && $dateToIn >= $startDate) ? $dateToIn : $startDate;
+            $fromDt = $startDate . ' 00:00:00';
+            $toDt = $endDate . ' 23:59:59';
+            $windowLabel = $startDate === $endDate
+                ? date('M j, Y', strtotime($startDate))
+                : (date('M j', strtotime($startDate)) . ' – ' . date('M j, Y', strtotime($endDate)));
+        } else {
+            $range = 'today';
+            $startDate = $todayStr;
+            $endDate = $todayStr;
+            $fromDt = $todayStr . ' 00:00:00';
+            $toDt = $todayStr . ' 23:59:59';
+            $windowLabel = 'Today (' . date('M j, Y') . ')';
+        }
+
+        $where = ["al.`scanned_at` >= ?", "al.`scanned_at` <= ?"];
+        $params = [$fromDt, $toDt];
+        if ($scopedCpType !== 'all') {
+            $where[] = "al.`checkpoint_type` = ?";
+            $params[] = $scopedCpType;
+        }
+        if ($scopedCpId > 0) {
+            $where[] = "al.`checkpoint_id` = ?";
+            $params[] = $scopedCpId;
+        }
+
+        $rptSql = "
+            SELECT
+                al.`id`,
+                al.`user_id`,
+                al.`badge_code`,
+                al.`checkpoint_type`,
+                al.`checkpoint_id`,
+                al.`checkpoint_name`,
+                al.`scan_action`,
+                al.`access_status`,
+                al.`denial_reason`,
+                al.`punctuality_status`,
+                al.`notes`,
+                al.`scanned_at`,
+                u.`full_name`,
+                u.`username`,
+                u.`role`,
+                u.`department`
+            FROM `attendance_logs` al
+            LEFT JOIN `users` u ON u.`id` = al.`user_id`
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY al.`scanned_at` ASC, al.`id` ASC
+            LIMIT 1000
+        ";
+        $rptStmt = $pdo->prepare($rptSql);
+        $rptStmt->execute($params);
+        $rawLogs = $rptStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Pair check_in -> check_out durations chronologically per staff member
+        $openCheckins = [];
+        $uniqueStaff = [];
+        $totalCheckIns = 0;
+        $totalCheckOuts = 0;
+        $lateCount = 0;
+        $deniedCount = 0;
+        $totalClosedMinutes = 0;
+        $enrichedRows = [];
+
+        foreach ($rawLogs as $r) {
+            $uid = (int) ($r['user_id'] ?? 0);
+            $actionType = (string) ($r['scan_action'] ?? 'check_in');
+            $accessSt = (string) ($r['access_status'] ?? 'granted');
+            $punctSt = strtolower((string) ($r['punctuality_status'] ?? 'on_time'));
+            $scanTs = strtotime((string) $r['scanned_at']) ?: time();
+            $scanHour = (int) date('G', $scanTs);
+            $cpNameRow = (string) ($r['checkpoint_name'] ?? 'Gate Checkpoint');
+            $durationMinutes = null;
+            $durationLabel = '—';
+            $isOvernightLog = ($scanHour >= 18 || $scanHour < 8);
+
+            if ($uid > 0) {
+                $uniqueStaff[$uid] = true;
+            }
+
+            if ($accessSt === 'denied') {
+                $deniedCount++;
+            } elseif ($actionType === 'check_in') {
+                $totalCheckIns++;
+                if ($punctSt === 'late') {
+                    $lateCount++;
+                }
+                $openCheckins[$uid] = [
+                    'ts' => $scanTs,
+                    'hour' => $scanHour,
+                    'date' => date('Y-m-d', $scanTs),
+                    'checkpoint' => $cpNameRow,
+                ];
+            } elseif ($actionType === 'check_out') {
+                $totalCheckOuts++;
+                if (isset($openCheckins[$uid])) {
+                    $inInfo = $openCheckins[$uid];
+                    $mins = max(1, (int) round(($scanTs - $inInfo['ts']) / 60));
+                    $durationMinutes = $mins;
+                    $hrs = intdiv($mins, 60);
+                    $rem = $mins % 60;
+                    $durationLabel = $hrs > 0 ? "{$hrs}h {$rem}m" : "{$rem}m";
+                    $totalClosedMinutes += $mins;
+                    if ($inInfo['hour'] >= 18 || $inInfo['hour'] < 6 || $inInfo['date'] !== date('Y-m-d', $scanTs)) {
+                        $isOvernightLog = true;
+                    }
+                    unset($openCheckins[$uid]);
+                }
+            }
+
+            $enrichedRows[] = [
+                'id' => (int) $r['id'],
+                'user_id' => $uid,
+                'full_name' => trim((string) ($r['full_name'] ?: $r['username'] ?: 'Staff #' . $uid)),
+                'role' => formatRoleDisplay((string) ($r['role'] ?? 'technician')),
+                'department' => (string) ($r['department'] ?? 'Operations'),
+                'badge_code' => formatRewBadgeCode($uid, $r['badge_code'] ?? null),
+                'checkpoint_type' => (string) ($r['checkpoint_type'] ?? 'event_venue'),
+                'checkpoint_id' => (int) ($r['checkpoint_id'] ?? 1),
+                'checkpoint_name' => $cpNameRow,
+                'scan_action' => $actionType,
+                'access_status' => $accessSt,
+                'denial_reason' => $r['denial_reason'] ?? null,
+                'punctuality_status' => $punctSt,
+                'notes' => (string) ($r['notes'] ?? ''),
+                'scanned_at' => (string) $r['scanned_at'],
+                'scanned_date' => date('Y-m-d', $scanTs),
+                'scanned_time' => date('h:i:s A', $scanTs),
+                'duration_minutes' => $durationMinutes,
+                'duration_label' => $durationLabel,
+                'is_night_shift' => $isOvernightLog,
+            ];
+        }
+
+        // Reverse for newest-first display in timeline/report views
+        $enrichedRows = array_reverse($enrichedRows);
+
+        echo json_encode([
+            'ok' => true,
+            'range' => $range,
+            'is_night_shift_filter' => $isNightFilter,
+            'window_label' => $windowLabel,
+            'date_from' => $startDate,
+            'date_to' => $endDate,
+            'checkpoint_type' => $scopedCpType,
+            'checkpoint_id' => $scopedCpId,
+            'summary' => [
+                'total_scans' => count($enrichedRows),
+                'total_check_ins' => $totalCheckIns,
+                'total_check_outs' => $totalCheckOuts,
+                'active_open_shifts' => count($openCheckins),
+                'late_count' => $lateCount,
+                'denied_count' => $deniedCount,
+                'unique_staff_count' => count($uniqueStaff),
+                'total_hours_worked' => round($totalClosedMinutes / 60, 1),
+            ],
+            'rows' => $enrichedRows,
+        ]);
         exit;
     }
 

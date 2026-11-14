@@ -47,6 +47,13 @@
     crew: [],
     hourlyTraffic: [],
     activityTimeline: [],
+    timelineRange: 'today',
+    timelineDateFrom: '',
+    timelineDateTo: '',
+    timelineReportRows: [],
+    timelineReportSummary: null,
+    timelineReportLabel: '',
+    timelineReportLoading: false,
     batches: [],
     shiftRequests: [],
     pendingShiftRequestCount: 0,
@@ -635,6 +642,290 @@
   }
 
   let gateScanInFlight = false;
+  const OFFLINE_QUEUE_KEY = 'ability_offline_scan_queue_v1';
+  let offlineSyncInFlight = false;
+  let cameraStream = null;
+  let cameraScanTimer = null;
+  let cameraFacingMode = 'environment';
+  let cameraBarcodeDetector = null;
+  let cameraOffscreenCanvas = null;
+  let lastCameraCode = '';
+  let lastCameraCodeAt = 0;
+
+  function formatLocalSqlNow(dateObj = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+  }
+
+  function loadOfflineQueue() {
+    try {
+      const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveOfflineQueue(list) {
+    try {
+      localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(list));
+    } catch (_) {}
+    renderOfflineQueueBar();
+  }
+
+  function enqueueOfflineScan(scanInput, modeToUse) {
+    const queue = loadOfflineQueue();
+    queue.push({
+      client_scan_id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      scan_input: String(scanInput || '').trim(),
+      checkpoint_type: state.checkpointType,
+      checkpoint_id: state.checkpointId,
+      scan_mode: modeToUse || 'auto',
+      offline_scanned_at: formatLocalSqlNow(),
+    });
+    saveOfflineQueue(queue);
+    return queue.length;
+  }
+
+  function renderOfflineQueueBar() {
+    const bar = document.getElementById('kiosk-offline-sync-bar');
+    const netPill = document.getElementById('kiosk-network-status-pill');
+    const countEl = document.getElementById('kiosk-offline-count-pill');
+    const syncBtn = document.getElementById('kiosk-offline-sync-btn');
+    if (!bar) return;
+
+    const queue = loadOfflineQueue();
+    const isOnline = navigator.onLine !== false;
+    const locked = Boolean(state.terminalScreenLocked);
+
+    bar.style.display = (!locked && (queue.length > 0 || !isOnline)) ? 'flex' : 'none';
+    bar.classList.toggle('is-offline', !isOnline);
+
+    if (netPill) {
+      netPill.textContent = isOnline ? 'Online' : 'Offline Mode';
+      netPill.className = `status-badge ${isOnline ? 'status-badge-green-sm' : 'status-badge-amber-sm'}`;
+    }
+    if (countEl) {
+      const noun = queue.length === 1 ? 'scan' : 'scans';
+      countEl.innerHTML = queue.length > 0
+        ? `<strong>${queue.length}</strong> offline ${noun} pending sync`
+        : 'Device is offline — new scans will queue safely on this terminal';
+    }
+    if (syncBtn) {
+      syncBtn.style.display = queue.length > 0 ? 'inline-flex' : 'none';
+      syncBtn.disabled = offlineSyncInFlight || !isOnline;
+      syncBtn.textContent = offlineSyncInFlight ? 'Syncing...' : 'Sync Now';
+    }
+  }
+
+  async function syncOfflineScans(showFeedback = true) {
+    const queue = loadOfflineQueue();
+    if (queue.length === 0 || offlineSyncInFlight || navigator.onLine === false) {
+      renderOfflineQueueBar();
+      return;
+    }
+
+    offlineSyncInFlight = true;
+    renderOfflineQueueBar();
+    let syncedCount = 0;
+    const remaining = [];
+    let latestBootstrap = null;
+    let networkAborted = false;
+
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
+      if (networkAborted) {
+        remaining.push(item);
+        continue;
+      }
+      try {
+        const res = await fetch('api.php?action=process_gate_scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'process_gate_scan',
+            scan_input: item.scan_input,
+            checkpoint_type: item.checkpoint_type,
+            checkpoint_id: item.checkpoint_id,
+            scan_mode: item.scan_mode || 'auto',
+            offline_scanned_at: item.offline_scanned_at,
+          }),
+        });
+        if (res.status === 401 || res.status === 403) {
+          // Preserve item until user re-authenticates or switches back to locked checkpoint
+          remaining.push(item);
+          continue;
+        }
+        const data = await res.json();
+        if (data && (data.ok !== false || data.duplicate_prevented)) {
+          syncedCount++;
+          if (data.bootstrap) latestBootstrap = data.bootstrap;
+        } else {
+          // Drop unrecognized/impossible conflict scans so queue doesn't block forever
+          if (showFeedback && data && data.error) {
+            showToast(`Offline sync skipped "${item.scan_input}": ${data.error}`);
+          }
+        }
+      } catch (_) {
+        networkAborted = true;
+        remaining.push(item);
+      }
+    }
+
+    offlineSyncInFlight = false;
+    saveOfflineQueue(remaining);
+
+    if (latestBootstrap) {
+      applyBootstrapPayload(latestBootstrap, true);
+      renderAll();
+    } else if (syncedCount > 0) {
+      await fetchBootstrap(true);
+    }
+
+    if (showFeedback && syncedCount > 0) {
+      showToast(`Synced ${syncedCount} offline scan${syncedCount === 1 ? '' : 's'} to server.`);
+    }
+  }
+
+  function setCameraStatus(msg, isError = false) {
+    const statusEl = document.getElementById('kiosk-camera-status');
+    if (!statusEl) return;
+    statusEl.textContent = msg;
+    statusEl.classList.toggle('is-error', Boolean(isError));
+  }
+
+  function stopCameraScanner() {
+    if (cameraScanTimer) {
+      clearTimeout(cameraScanTimer);
+      cameraScanTimer = null;
+    }
+    if (cameraStream) {
+      try {
+        cameraStream.getTracks().forEach((t) => t.stop());
+      } catch (_) {}
+      cameraStream = null;
+    }
+    const videoEl = document.getElementById('kiosk-camera-video');
+    if (videoEl) videoEl.srcObject = null;
+    const panel = document.getElementById('kiosk-camera-panel');
+    if (panel) panel.style.display = 'none';
+    const btn = document.getElementById('kiosk-camera-toggle-btn');
+    const lbl = document.getElementById('kiosk-camera-toggle-label');
+    if (btn) btn.classList.remove('is-active');
+    if (lbl) lbl.textContent = 'Camera Scan';
+  }
+
+  async function scanCameraFrameLoop() {
+    if (!cameraStream) return;
+    const videoEl = document.getElementById('kiosk-camera-video');
+    const backdrop = document.getElementById('kiosk-modal-backdrop');
+    const modalOpen = backdrop && backdrop.style.display === 'flex';
+
+    if (videoEl && videoEl.readyState >= 2 && !gateScanInFlight && !modalOpen && !state.terminalScreenLocked) {
+      try {
+        let decodedValue = '';
+        if (cameraBarcodeDetector) {
+          const codes = await cameraBarcodeDetector.detect(videoEl);
+          if (codes && codes.length > 0 && codes[0].rawValue) {
+            decodedValue = String(codes[0].rawValue).trim();
+          }
+        } else if (typeof window.jsQR === 'function' && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+          if (!cameraOffscreenCanvas) cameraOffscreenCanvas = document.createElement('canvas');
+          cameraOffscreenCanvas.width = videoEl.videoWidth;
+          cameraOffscreenCanvas.height = videoEl.videoHeight;
+          const ctx = cameraOffscreenCanvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(videoEl, 0, 0, cameraOffscreenCanvas.width, cameraOffscreenCanvas.height);
+            const imgData = ctx.getImageData(0, 0, cameraOffscreenCanvas.width, cameraOffscreenCanvas.height);
+            const qr = window.jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+            if (qr && qr.data) decodedValue = String(qr.data).trim();
+          }
+        }
+
+        if (decodedValue) {
+          const nowMs = Date.now();
+          if (decodedValue !== lastCameraCode || (nowMs - lastCameraCodeAt) > 2200) {
+            lastCameraCode = decodedValue;
+            lastCameraCodeAt = nowMs;
+            setCameraStatus(`Detected badge: ${decodedValue} — verifying...`, false);
+            triggerGateScan(decodedValue);
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (cameraStream) {
+      cameraScanTimer = setTimeout(scanCameraFrameLoop, 250);
+    }
+  }
+
+  async function startCameraScanner() {
+    if (state.terminalScreenLocked) {
+      showToast('Unlock terminal screen first before starting camera scanner.');
+      return;
+    }
+    const panel = document.getElementById('kiosk-camera-panel');
+    const videoEl = document.getElementById('kiosk-camera-video');
+    const btn = document.getElementById('kiosk-camera-toggle-btn');
+    const lbl = document.getElementById('kiosk-camera-toggle-label');
+    if (panel) panel.style.display = 'block';
+    if (btn) btn.classList.add('is-active');
+    if (lbl) lbl.textContent = 'Camera On';
+
+    if (!window.isSecureContext && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+      setCameraStatus('Camera access requires HTTPS (or localhost). Open this app over HTTPS on tablets/phones, or type/use a USB scanner.', true);
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraStatus('Camera API unavailable in this browser. Type badge code or use a USB barcode scanner.', true);
+      return;
+    }
+
+    try {
+      if ('BarcodeDetector' in window && !cameraBarcodeDetector) {
+        try {
+          const supported = await window.BarcodeDetector.getSupportedFormats();
+          const desired = ['qr_code', 'code_128', 'code_39', 'ean_13'].filter((f) => supported.includes(f));
+          cameraBarcodeDetector = new window.BarcodeDetector(desired.length ? { formats: desired } : undefined);
+        } catch (_) {
+          cameraBarcodeDetector = new window.BarcodeDetector();
+        }
+      }
+
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+        cameraStream = null;
+      }
+
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: cameraFacingMode } },
+        audio: false,
+      });
+
+      if (videoEl) {
+        videoEl.srcObject = cameraStream;
+        await videoEl.play().catch(() => {});
+      }
+
+      if (!cameraBarcodeDetector && typeof window.jsQR !== 'function') {
+        setCameraStatus('Camera stream active, but this browser lacks BarcodeDetector (supported in Chrome/Edge/Android). Use Chrome on tablet/phone or USB scanner.', true);
+      } else {
+        setCameraStatus(`Live ${cameraFacingMode === 'environment' ? 'rear' : 'front'} camera active — align QR code or badge inside the green frame.`, false);
+      }
+
+      scanCameraFrameLoop();
+    } catch (err) {
+      setCameraStatus(`Camera access failed (${err && err.message ? err.message : 'permission denied'}). Check browser camera permission or use badge input.`, true);
+    }
+  }
+
+  async function flipCameraFacing() {
+    cameraFacingMode = cameraFacingMode === 'environment' ? 'user' : 'environment';
+    if (cameraStream) {
+      await startCameraScanner();
+    }
+  }
 
   async function triggerGateScan(scanInput, forcedMode = null) {
     if (state.terminalScreenLocked) {
@@ -646,6 +937,17 @@
     if (gateScanInFlight) return;
     gateScanInFlight = true;
     const modeToUse = forcedMode || state.scanMode || 'auto';
+
+    if (navigator.onLine === false) {
+      const qCount = enqueueOfflineScan(scanInput, modeToUse);
+      playKioskChime('approve');
+      showToast(`Offline: Saved scan for "${scanInput}" (${qCount} queued to sync).`);
+      const kioskInp = document.getElementById('kiosk-badge-input');
+      if (kioskInp) kioskInp.value = '';
+      gateScanInFlight = false;
+      return;
+    }
+
     try {
       const res = await fetch('api.php?action=process_gate_scan', {
         method: 'POST',
@@ -722,13 +1024,22 @@
           : `ACCESS DENIED — ${data.reason}`);
       showToast(`${data.badge ? data.badge.full_name : scanInput}: ${statusTxt}`);
     } catch (err) {
-      showToast('Error communicating with Gate Terminal API');
+      if (navigator.onLine === false || (err && err.name === 'TypeError')) {
+        const qCount = enqueueOfflineScan(scanInput, modeToUse);
+        playKioskChime('approve');
+        showToast(`Network unreachable: Queued "${scanInput}" offline (${qCount} pending sync).`);
+      } else {
+        showToast('Error communicating with Gate Terminal API');
+      }
     } finally {
       gateScanInFlight = false;
     }
   }
 
   function switchScreen(screenKey, scrollToId = null) {
+    if (screenKey !== 'terminals') {
+      stopCameraScanner();
+    }
     if (!isScreenPermittedForCurrentUser(screenKey)) {
       const rawRole = (state.currentUser?.role || '').toLowerCase();
       const isStockCtrl = rawRole === 'stock_controller';
@@ -1637,6 +1948,10 @@
     if (quickbar) quickbar.style.display = locked ? 'none' : 'flex';
     if (scanForm) scanForm.style.display = locked ? 'none' : 'flex';
     if (lockPanel) lockPanel.style.display = locked ? 'block' : 'none';
+    if (locked) {
+      stopCameraScanner();
+    }
+    renderOfflineQueueBar();
     if (facChip) {
       facChip.innerHTML = `<img src="assets/${isStock ? 'warehouse-13.svg' : 'map-pin-13.svg'}" alt="" class="svg-icon" /><span>${escapeHtml(cpName.toUpperCase() + cpCode.toUpperCase())}</span>`;
     }
@@ -2806,15 +3121,39 @@
 
     const q = state.timelineSearch.trim().toLowerCase();
     const scope = state.timelineScope;
+    const isReportMode = state.timelineRange && state.timelineRange !== 'today';
+    const sourceRows = isReportMode ? (state.timelineReportRows || []) : (state.activityTimeline || []);
 
-    const filtered = state.activityTimeline.filter((item) => {
+    const summaryEl = document.getElementById('timeline-report-summary');
+    if (summaryEl) {
+      if (state.timelineReportLoading) {
+        summaryEl.style.display = 'flex';
+        summaryEl.innerHTML = '<span>Loading attendance report...</span>';
+      } else if (isReportMode && state.timelineReportSummary) {
+        const s = state.timelineReportSummary;
+        summaryEl.style.display = 'flex';
+        summaryEl.innerHTML = `
+          <span><strong>${escapeHtml(state.timelineReportLabel || 'Report')}</strong></span>
+          <span>Scans: <strong>${s.total_scans || 0}</strong></span>
+          <span>Check-Ins: <strong>${s.total_check_ins || 0}</strong></span>
+          <span>Check-Outs: <strong>${s.total_check_outs || 0}</strong></span>
+          <span>Open Night Shifts: <strong>${s.active_open_shifts || 0}</strong></span>
+          <span>Hours Logged: <strong>${s.total_hours_worked || 0}h</strong></span>
+        `;
+      } else {
+        summaryEl.style.display = 'none';
+        summaryEl.innerHTML = '';
+      }
+    }
+
+    const filtered = sourceRows.filter((item) => {
       if (scope === 'event_venue' && item.checkpoint_type !== 'event_venue') return false;
       if (scope === 'stock_warehouse' && item.checkpoint_type !== 'stock_warehouse') return false;
       if (scope === 'granted' && item.access_status !== 'granted') return false;
       if (scope === 'denied' && item.access_status !== 'denied') return false;
 
       if (q) {
-        const hay = `${item.full_name} ${item.badge_code} ${item.checkpoint_name} ${item.action_title} ${item.department} ${item.role_display}`.toLowerCase();
+        const hay = `${item.full_name} ${item.badge_code} ${item.checkpoint_name} ${item.action_title || item.scan_action || ''} ${item.department || ''} ${item.role_display || item.role || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -2836,16 +3175,26 @@
           const isDenied = item.access_status === 'denied';
           const isStock = item.checkpoint_type === 'stock_warehouse';
           const isTransit = Boolean(item.is_transit) || (item.notes && (item.notes.includes('Transit') || item.notes.includes('Transferred') || item.notes.includes('from Ndera') || item.notes.includes('to Kigali')));
+          const actionTitle = item.action_title || `${item.scan_action === 'check_out' ? 'Checked out from' : (isDenied ? 'Denied at' : 'Checked in at')} ${item.checkpoint_name}`;
+          const formattedTime = item.formatted_time || `${item.scanned_date || ''} ${item.scanned_time || ''}`.trim();
+          const initials = item.initials || String(item.full_name || 'ST').split(/\s+/).map((w) => w[0] || '').join('').slice(0, 2).toUpperCase();
+          const roleDisp = item.role_display || item.role || '';
+          const durationChip = item.duration_label && item.duration_label !== '—'
+            ? `<span class="ts-mini-pill in" title="Paired shift duration">⏱ ${escapeHtml(item.duration_label)}</span>`
+            : '';
+          const nightChip = item.is_night_shift
+            ? `<span class="status-badge status-badge-purple-sm">Night Shift</span>`
+            : '';
           return `
-            <div class="timeline-event-card" data-timeline-uid="${item.user_id}" data-timeline-id="${item.id}" style="cursor: pointer;" title="Click to view ${escapeHtml(item.full_name)} transit flow &amp; verification">
+            <div class="timeline-event-card" data-timeline-uid="${item.user_id}" data-timeline-id="${item.id}" style="cursor: pointer;" title="Click to view ${escapeHtml(item.full_name)} verification &amp; scan record">
               <div class="timeline-event-left">
-                <div class="timeline-action-title">${escapeHtml(item.action_title)}</div>
-                <div class="timeline-time-sub">${escapeHtml(item.formatted_time)} · ${escapeHtml(item.badge_code)}</div>
+                <div class="timeline-action-title">${escapeHtml(actionTitle)}</div>
+                <div class="timeline-time-sub">${escapeHtml(formattedTime)} · ${escapeHtml(item.badge_code)}</div>
                 <div class="timeline-staff-mini">
-                  <div class="timeline-mini-avatar">${escapeHtml(item.initials)}</div>
+                  <div class="timeline-mini-avatar">${escapeHtml(initials)}</div>
                   <span class="timeline-mini-name">${escapeHtml(item.full_name)}</span>
-                  <span class="tier-code-badge tier-code-${escapeHtml(item.clearance_code)}">${escapeHtml(item.clearance_code)}</span>
-                  <span class="timeline-mini-role">${escapeHtml(item.role_display)} · ${escapeHtml(item.department)}</span>
+                  ${item.clearance_code ? `<span class="tier-code-badge tier-code-${escapeHtml(item.clearance_code)}">${escapeHtml(item.clearance_code)}</span>` : ''}
+                  <span class="timeline-mini-role">${escapeHtml(roleDisp)}${item.department ? ' · ' + escapeHtml(item.department) : ''}</span>
                 </div>
               </div>
               <div class="timeline-event-right">
@@ -2859,16 +3208,18 @@
                     ? `<span class="ts-mini-pill out">${escapeHtml(item.out_pill)}</span>`
                     : ''
                 }
+                ${durationChip}
+                ${nightChip}
                 ${
                   isTransit
-                    ? `<span class="status-badge status-badge-purple-sm" title="Option B Transit: Ndera Warehouse ➔ Kigali Convention Centre">🚚 Transit Flow</span>`
+                    ? `<span class="status-badge status-badge-purple-sm" title="Cross-Facility Transit">Transit Flow</span>`
                     : ''
                 }
                 <span class="status-badge ${isDenied ? 'status-badge-red-sm' : 'status-badge-green-sm'}">
                   ${isDenied ? 'Denied' : 'Granted'}
                 </span>
                 <span class="status-badge status-badge-neutral-sm">
-                  ${isStock ? 'Stock Gate' : 'Event Venue'}
+                  ${isStock ? 'Facility Gate' : 'Event Venue'}
                 </span>
               </div>
             </div>
@@ -9900,15 +10251,174 @@
     }
   }
 
+  async function fetchAttendanceReport(range = state.timelineRange || 'today') {
+    state.timelineRange = range;
+    if (range === 'today') {
+      state.timelineReportRows = [];
+      state.timelineReportSummary = null;
+      state.timelineReportLabel = '';
+      state.timelineReportLoading = false;
+      state.timelinePage = 1;
+      renderActivityTimeline();
+      return;
+    }
+
+    state.timelineReportLoading = true;
+    state.timelinePage = 1;
+    renderActivityTimeline();
+
+    try {
+      const params = new URLSearchParams({ action: 'attendance_report', range });
+      if (state.timelineDateFrom) params.set('date_from', state.timelineDateFrom);
+      if (state.timelineDateTo) params.set('date_to', state.timelineDateTo);
+      if (isCurrentUserStockController() && state.checkpointType && state.checkpointId) {
+        params.set('checkpoint_type', state.checkpointType);
+        params.set('checkpoint_id', String(state.checkpointId));
+      }
+      const res = await fetch(`api.php?${params.toString()}`);
+      const data = await res.json();
+      if (data && data.ok) {
+        state.timelineReportRows = Array.isArray(data.rows) ? data.rows : [];
+        state.timelineReportSummary = data.summary || null;
+        state.timelineReportLabel = data.window_label || '';
+      } else {
+        showToast((data && data.error) || 'Failed to load attendance report.');
+      }
+    } catch (_) {
+      showToast('Network error loading attendance report.');
+    } finally {
+      state.timelineReportLoading = false;
+      renderActivityTimeline();
+    }
+  }
+
+  async function exportShiftReportCsv() {
+    let rows = [];
+    const range = state.timelineRange || 'today';
+    try {
+      const params = new URLSearchParams({ action: 'attendance_report', range });
+      if (state.timelineDateFrom) params.set('date_from', state.timelineDateFrom);
+      if (state.timelineDateTo) params.set('date_to', state.timelineDateTo);
+      if (isCurrentUserStockController() && state.checkpointType && state.checkpointId) {
+        params.set('checkpoint_type', state.checkpointType);
+        params.set('checkpoint_id', String(state.checkpointId));
+      }
+      const res = await fetch(`api.php?${params.toString()}`);
+      const data = await res.json();
+      rows = (data && data.ok && Array.isArray(data.rows)) ? data.rows : [];
+    } catch (_) {
+      rows = state.timelineRange === 'today' ? (state.activityTimeline || []) : (state.timelineReportRows || []);
+    }
+
+    if (!rows.length) {
+      showToast('No attendance logs in the selected shift window to export.');
+      return;
+    }
+
+    const csvEsc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const headers = ['Scanned At', 'Staff Name', 'Badge Code', 'Role', 'Department', 'Checkpoint', 'Action', 'Access', 'Punctuality', 'Shift Duration', 'Night Shift', 'Notes'];
+    const lines = [headers.map(csvEsc).join(',')];
+    rows.forEach((r) => {
+      lines.push([
+        r.scanned_at || r.formatted_time || '',
+        r.full_name || '',
+        r.badge_code || '',
+        r.role || r.role_display || '',
+        r.department || '',
+        r.checkpoint_name || '',
+        r.scan_action || r.action_title || '',
+        r.access_status || '',
+        r.punctuality_status || '',
+        r.duration_label || '—',
+        r.is_night_shift ? 'Yes' : 'No',
+        r.notes || '',
+      ].map(csvEsc).join(','));
+    });
+
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `aBility_attendance_${range}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${rows.length} attendance record${rows.length === 1 ? '' : 's'} to CSV.`);
+  }
+
+  function initPhase2Controls() {
+    const camToggleBtn = document.getElementById('kiosk-camera-toggle-btn');
+    const camFlipBtn = document.getElementById('kiosk-camera-flip-btn');
+    const camCloseBtn = document.getElementById('kiosk-camera-close-btn');
+    const syncBtn = document.getElementById('kiosk-offline-sync-btn');
+    const rangeSelect = document.getElementById('timeline-range-select');
+    const customDatesEl = document.getElementById('timeline-custom-dates');
+    const dateFromEl = document.getElementById('timeline-date-from');
+    const dateToEl = document.getElementById('timeline-date-to');
+    const applyRangeBtn = document.getElementById('timeline-apply-range-btn');
+    const exportCsvBtn = document.getElementById('timeline-export-csv-btn');
+    const printBtn = document.getElementById('timeline-print-btn');
+
+    if (camToggleBtn) {
+      camToggleBtn.addEventListener('click', () => {
+        if (cameraStream) {
+          stopCameraScanner();
+        } else {
+          startCameraScanner();
+        }
+      });
+    }
+    if (camFlipBtn) camFlipBtn.addEventListener('click', flipCameraFacing);
+    if (camCloseBtn) camCloseBtn.addEventListener('click', stopCameraScanner);
+    if (syncBtn) syncBtn.addEventListener('click', () => syncOfflineScans(true));
+
+    if (rangeSelect) {
+      rangeSelect.addEventListener('change', (e) => {
+        const val = e.target.value || 'today';
+        if (customDatesEl) customDatesEl.style.display = val === 'custom' ? 'flex' : 'none';
+        if (val !== 'custom') {
+          fetchAttendanceReport(val);
+        }
+      });
+    }
+    if (applyRangeBtn) {
+      applyRangeBtn.addEventListener('click', () => {
+        state.timelineDateFrom = dateFromEl ? dateFromEl.value : '';
+        state.timelineDateTo = dateToEl ? dateToEl.value : '';
+        if (!state.timelineDateFrom) {
+          showToast('Select a start date first.');
+          return;
+        }
+        fetchAttendanceReport('custom');
+      });
+    }
+    if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportShiftReportCsv);
+    if (printBtn) printBtn.addEventListener('click', () => window.print());
+
+    window.addEventListener('online', () => {
+      renderOfflineQueueBar();
+      syncOfflineScans(true);
+    });
+    window.addEventListener('offline', () => {
+      renderOfflineQueueBar();
+      showToast('Connection lost — gate scans will queue locally until back online.');
+    });
+
+    renderOfflineQueueBar();
+  }
+
   // Initialize
   document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     bindEvents();
     initShiftReliefControls();
+    initPhase2Controls();
     if (window.location.hash === '#pane-kiosk') {
       switchScreen('terminals', 'pane-kiosk');
     }
     await fetchBootstrap(false);
+    syncOfflineScans(false);
     startLiveGateSync();
     if (isCurrentUserStockController()) {
       switchScreen('terminals', 'pane-kiosk');

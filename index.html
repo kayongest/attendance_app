@@ -517,6 +517,29 @@
               </select>
             </div>
 
+            <!-- Shift & Multi-Day Attendance Report Controls (P2) -->
+            <div class="shift-report-toolbar" id="shift-report-toolbar">
+              <div class="shift-report-controls-row">
+                <select id="timeline-range-select" class="timeline-range-select" aria-label="Attendance Report Window">
+                  <option value="today">Today (Live)</option>
+                  <option value="night_shift">Night Shift (18:00–09:00)</option>
+                  <option value="7d">Last 7 Days</option>
+                  <option value="custom">Custom Dates</option>
+                </select>
+                <div class="shift-report-actions">
+                  <button type="button" class="btn btn-secondary-32-sm" id="timeline-export-csv-btn" title="Download Shift Attendance CSV">Export CSV</button>
+                  <button type="button" class="btn btn-secondary-32-sm" id="timeline-print-btn" title="Print Shift Attendance Sheet">Print</button>
+                </div>
+              </div>
+              <div class="shift-report-custom-dates" id="timeline-custom-dates" style="display: none;">
+                <input type="date" id="timeline-date-from" class="timeline-date-input" aria-label="From date" />
+                <span style="font-size: 11px; color: var(--text-muted);">to</span>
+                <input type="date" id="timeline-date-to" class="timeline-date-input" aria-label="To date" />
+                <button type="button" class="btn btn-primary-32" id="timeline-apply-range-btn" style="height: 28px; padding: 0 10px; font-size: 11px;">Apply</button>
+              </div>
+              <div class="shift-report-summary-bar" id="timeline-report-summary" style="display: none;"></div>
+            </div>
+
             <!-- Paginated 5-item Feed -->
             <div class="timeline-feed-list" id="timeline-feed-list"></div>
 
@@ -1466,7 +1489,43 @@
               <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1); width: 16px; height: 16px;" />
               <span>Verify &amp; Record</span>
             </button>
+            <button type="button" class="btn btn-secondary-32 kiosk-camera-toggle-btn" id="kiosk-camera-toggle-btn" title="Use tablet or phone camera to scan QR / Barcode">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path>
+                <circle cx="12" cy="13" r="3"></circle>
+              </svg>
+              <span id="kiosk-camera-toggle-label">Camera Scan</span>
+            </button>
           </form>
+
+          <!-- Offline Scan Queue & Sync Indicator Bar (P2) -->
+          <div class="kiosk-offline-sync-bar" id="kiosk-offline-sync-bar" style="display: none;">
+            <div class="kiosk-offline-sync-left">
+              <span class="status-badge status-badge-amber-sm" id="kiosk-network-status-pill">Online</span>
+              <span id="kiosk-offline-count-pill"><strong>0</strong> scans waiting to sync</span>
+            </div>
+            <button type="button" class="btn btn-primary-32" id="kiosk-offline-sync-btn" style="height: 28px; padding: 0 12px; font-size: 11px;">
+              Sync Now
+            </button>
+          </div>
+
+          <!-- Tablet / Phone Live Camera QR Scanner Panel (P2) -->
+          <div class="kiosk-camera-panel" id="kiosk-camera-panel" style="display: none;">
+            <div class="kiosk-camera-header">
+              <span>Live Camera QR &amp; Barcode Scanner</span>
+              <div class="kiosk-camera-controls">
+                <button type="button" class="btn btn-secondary-32-sm" id="kiosk-camera-flip-btn" title="Switch Front / Rear Camera">Flip Camera</button>
+                <button type="button" class="btn btn-secondary-32-sm" id="kiosk-camera-close-btn" title="Close Camera">Close</button>
+              </div>
+            </div>
+            <div class="kiosk-camera-viewport">
+              <video id="kiosk-camera-video" playsinline muted autoplay></video>
+              <div class="kiosk-camera-reticle"></div>
+            </div>
+            <div class="kiosk-camera-status" id="kiosk-camera-status">
+              Point tablet or phone camera at a staff QR code or badge barcode...
+            </div>
+          </div>
 
           <!-- Terminal Lock Screen Display (Shown when Terminal Screen is Locked) -->
           <div class="terminal-lock-screen-panel" id="terminal-lock-screen-panel" style="display: none;">

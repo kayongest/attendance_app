@@ -3653,7 +3653,8 @@ button {
   color: var(--text-primary);
 }
 
-.timeline-scope-select {
+.timeline-scope-select,
+.timeline-range-select {
   height: 32px;
   padding: 0 8px;
   border-radius: 7px;
@@ -8273,6 +8274,167 @@ html.theme-transitioning *::after {
   background: #f1f5f9;
   border-color: #cbd5e1;
   color: #475569;
+}
+
+/* ===== P2: Camera QR Scanner, Offline Queue & Shift Report Bar ===== */
+.kiosk-camera-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+.kiosk-camera-toggle-btn.is-active {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.55);
+  color: #059669;
+}
+.kiosk-offline-sync-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(148, 163, 184, 0.08);
+  font-size: 12px;
+}
+.kiosk-offline-sync-bar.is-offline {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.1);
+}
+.kiosk-offline-sync-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.kiosk-camera-panel {
+  margin-top: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: #0b1120;
+  color: #f8fafc;
+  overflow: hidden;
+}
+.kiosk-camera-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.9);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  font-size: 12px;
+  font-weight: 600;
+}
+.kiosk-camera-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kiosk-camera-viewport {
+  position: relative;
+  width: 100%;
+  max-height: 290px;
+  aspect-ratio: 16 / 9;
+  background: #020617;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+#kiosk-camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.kiosk-camera-reticle {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border: 2px dashed rgba(52, 211, 153, 0.85);
+  border-radius: 16px;
+  box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.35);
+  pointer-events: none;
+}
+.kiosk-camera-status {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+.kiosk-camera-status.is-error {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.35);
+}
+.shift-report-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+.shift-report-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shift-report-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.shift-report-custom-dates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.timeline-date-input {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  background: var(--card-bg, #ffffff);
+  color: var(--text-primary, #0f172a);
+  font-size: 11px;
+}
+.shift-report-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-secondary, #475569);
+  padding-top: 4px;
+  border-top: 1px dashed rgba(148, 163, 184, 0.25);
+}
+.shift-report-summary-bar strong {
+  color: var(--text-primary, #0f172a);
+}
+@media print {
+  .sidebar, .top-bar, .kiosk-terminal-card, .map-insights-card, .timeline-filter-bar, .shift-report-controls-row, .shift-report-custom-dates, .timeline-pagination-bar, .js-reset-activity-logs {
+    display: none !important;
+  }
+  .split-row {
+    display: block !important;
+  }
+  .timeline-card-overview {
+    width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
 }
 
 
