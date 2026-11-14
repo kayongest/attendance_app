@@ -209,7 +209,8 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `location` VARCHAR(160) DEFAULT 'Kigali, Rwanda',
             `open_time` VARCHAR(16) DEFAULT '08:00:00',
             `close_time` VARCHAR(16) DEFAULT '18:00:00',
-            `is_active` TINYINT(1) NOT NULL DEFAULT 1
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+            `terminal_pin` VARCHAR(20) DEFAULT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
@@ -370,6 +371,11 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `image` VARCHAR(500) DEFAULT NULL");
     } catch (Throwable $e) {}
 
+    // Ensure `terminal_pin` column exists on stock_locations for dedicated warehouse lock screens
+    try {
+        $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `terminal_pin` VARCHAR(20) DEFAULT NULL");
+    } catch (Throwable $e) {}
+
     // Seed items if empty
     $itemCount = (int) $pdo->query("SELECT COUNT(*) FROM `items`")->fetchColumn();
     if ($itemCount === 0) {
@@ -387,12 +393,20 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     $stockCount = (int) $pdo->query("SELECT COUNT(*) FROM `stock_locations`")->fetchColumn();
     if ($stockCount === 0) {
         $pdo->exec("
-            INSERT INTO `stock_locations` (`id`, `name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `is_active`) VALUES
-            (1, 'Ndera Warehouse', 'NDR-STK', 'NDR', 'Ndera Central Logistics Hub', '08:00:00', '18:00:00', 1),
-            (2, 'BK Arena Stock', 'BKA-STK', 'BKA', 'BK Arena Technical Vault', '08:00:00', '18:00:00', 1),
-            (3, 'KCC Stock', 'KCC-STK', 'KCC', 'Kigali Convention Centre Stock', '08:00:00', '18:00:00', 1)
+            INSERT INTO `stock_locations` (`id`, `name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `is_active`, `terminal_pin`) VALUES
+            (1, 'Ndera Warehouse', 'NDR-STK', 'NDR', 'Ndera Central Logistics Hub', '08:00:00', '18:00:00', 1, '247365'),
+            (2, 'BK Arena Stock', 'BKA-STK', 'BKA', 'BK Arena Technical Vault', '08:00:00', '18:00:00', 1, '67890'),
+            (3, 'KCC Stock', 'KCC-STK', 'KCC', 'Kigali Convention Centre Stock', '08:00:00', '18:00:00', 1, '12345')
         ");
     }
+
+    // Backfill dedicated warehouse PINs when terminal_pin is unset
+    try {
+        $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '247365' WHERE (`terminal_pin` IS NULL OR `terminal_pin` = '') AND (`code` = 'NDR-STK' OR `location_code` = 'NDR' OR `name` LIKE '%Ndera%')");
+        $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '67890' WHERE (`terminal_pin` IS NULL OR `terminal_pin` = '') AND (`code` = 'BKA-STK' OR `location_code` = 'BKA' OR `name` LIKE '%BK Arena%')");
+        $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '12345' WHERE (`terminal_pin` IS NULL OR `terminal_pin` = '') AND (`code` = 'KCC-STK' OR `location_code` = 'KCC' OR `name` LIKE '%KCC%' OR `name` LIKE '%Kigali Convention%')");
+        $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
+    } catch (Throwable $e) {}
 
     // Seed events if empty
     $eventCount = (int) $pdo->query("SELECT COUNT(*) FROM `events`")->fetchColumn();

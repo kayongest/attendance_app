@@ -715,6 +715,7 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             break;
 
         case 'save_warehouse':
+        case 'save_warehouse_pin':
         case 'delete_warehouse':
             if (!in_array($role, ['admin', 'manager', 'stock_manager'], true)) {
                 return ['ok' => false, 'error' => 'Permission denied: Warehouse infrastructure management requires Stock Manager or Administrator privileges.'];
@@ -723,6 +724,26 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
     }
 
     return ['ok' => true];
+}
+
+function resolveWarehouseTerminalPin(array $row): string
+{
+    $pin = trim((string) ($row['terminal_pin'] ?? ''));
+    if ($pin !== '') {
+        return $pin;
+    }
+    $code = strtoupper(trim((string) ($row['code'] ?? $row['location_code'] ?? '')));
+    $name = strtolower(trim((string) ($row['name'] ?? '')));
+    if (strpos($code, 'KCC') !== false || strpos($name, 'kcc') !== false || strpos($name, 'kigali convention') !== false) {
+        return '12345';
+    }
+    if (strpos($code, 'BKA') !== false || strpos($name, 'bk arena') !== false) {
+        return '67890';
+    }
+    if (strpos($code, 'NDR') !== false || strpos($name, 'ndera') !== false) {
+        return '247365';
+    }
+    return '1234';
 }
 
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
@@ -751,6 +772,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'lead_name' => $ctrl,
             'lead_label' => 'Stock Controller: ' . $ctrl,
             'min_clearance' => 'L2 / L3 / L4 Required (L1 Blocked)',
+            'terminal_pin' => resolveWarehouseTerminalPin($sr),
         ];
     }
 
@@ -2810,6 +2832,7 @@ try {
                 'is_active' => (int) ($wr['is_active'] ?? 1),
                 'image' => resolveProfileImageUrl($wr['image'] ?? null),
                 'item_count' => $itemCount,
+                'terminal_pin' => resolveWarehouseTerminalPin($wr),
             ];
         }
 
@@ -2881,9 +2904,15 @@ try {
         $controllerName = trim((string) ($_POST['controller_name'] ?? $jsonBody['controller_name'] ?? 'Mirene Uwase'));
         $controllerPhone = trim((string) ($_POST['controller_phone'] ?? $jsonBody['controller_phone'] ?? ''));
         $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (int) ($jsonBody['is_active'] ?? 1);
+        $terminalPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
 
         if ($name === '') {
             echo json_encode(['ok' => false, 'error' => 'Warehouse name is required']);
+            exit;
+        }
+
+        if ($terminalPinRaw !== '' && !preg_match('/^[A-Za-z0-9]{4,12}$/', $terminalPinRaw)) {
+            echo json_encode(['ok' => false, 'error' => 'Terminal PIN must be 4–12 alphanumeric characters or digits']);
             exit;
         }
 
@@ -2906,7 +2935,15 @@ try {
         }
 
         if ($id > 0) {
-            if ($uploadedImagePath) {
+            if ($uploadedImagePath && $terminalPinRaw !== '') {
+                $stmt = $pdo->prepare("
+                    UPDATE `stock_locations`
+                    SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
+                        `controller_name` = ?, `controller_phone` = ?, `is_active` = ?, `image` = ?, `terminal_pin` = ?
+                    WHERE `id` = ?
+                ");
+                $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath, $terminalPinRaw, $id]);
+            } elseif ($uploadedImagePath) {
                 $stmt = $pdo->prepare("
                     UPDATE `stock_locations`
                     SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
@@ -2914,6 +2951,14 @@ try {
                     WHERE `id` = ?
                 ");
                 $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath, $id]);
+            } elseif ($terminalPinRaw !== '') {
+                $stmt = $pdo->prepare("
+                    UPDATE `stock_locations`
+                    SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
+                        `controller_name` = ?, `controller_phone` = ?, `is_active` = ?, `terminal_pin` = ?
+                    WHERE `id` = ?
+                ");
+                $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $terminalPinRaw, $id]);
             } else {
                 $stmt = $pdo->prepare("
                     UPDATE `stock_locations`
@@ -2924,12 +2969,13 @@ try {
                 $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $id]);
             }
         } else {
+            $pinToInsert = $terminalPinRaw !== '' ? $terminalPinRaw : resolveWarehouseTerminalPin(['name' => $name, 'code' => $code]);
             $stmt = $pdo->prepare("
                 INSERT INTO `stock_locations`
-                (`name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `controller_name`, `controller_phone`, `is_active`, `image`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (`name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `controller_name`, `controller_phone`, `is_active`, `image`, `terminal_pin`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath]);
+            $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath, $pinToInsert]);
             $id = (int) $pdo->lastInsertId();
         }
 
@@ -2937,6 +2983,94 @@ try {
             'ok' => true,
             'message' => 'Warehouse saved successfully',
             'warehouse_id' => $id,
+        ]);
+        exit;
+    }
+
+    if ($action === 'save_warehouse_pin') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_warehouse_pin', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        $warehouseId = (int) ($_POST['warehouse_id'] ?? $jsonBody['warehouse_id'] ?? 0);
+        $pin = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
+
+        if ($warehouseId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Valid stock warehouse ID is required']);
+            exit;
+        }
+        if (!preg_match('/^[A-Za-z0-9]{4,12}$/', $pin)) {
+            echo json_encode(['ok' => false, 'error' => 'PIN must be 4–12 digits or alphanumeric characters']);
+            exit;
+        }
+
+        $upd = $pdo->prepare("UPDATE `stock_locations` SET `terminal_pin` = ? WHERE `id` = ?");
+        $upd->execute([$pin, $warehouseId]);
+
+        $whStmt = $pdo->prepare("SELECT `name` FROM `stock_locations` WHERE `id` = ?");
+        $whStmt->execute([$warehouseId]);
+        $whName = (string) ($whStmt->fetchColumn() ?: 'Stock Warehouse');
+
+        echo json_encode([
+            'ok' => true,
+            'warehouse_id' => $warehouseId,
+            'warehouse_name' => $whName,
+            'terminal_pin' => $pin,
+            'message' => "Dedicated Terminal PIN updated for {$whName}",
+        ]);
+        exit;
+    }
+
+    if ($action === 'verify_terminal_pin') {
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse'));
+        $cpId = (int) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? 0);
+        $pin = trim((string) ($_POST['pin'] ?? $jsonBody['pin'] ?? ''));
+
+        if ($pin === '') {
+            echo json_encode(['ok' => false, 'error' => 'Please enter a Terminal PIN']);
+            exit;
+        }
+
+        if ($cpType === 'stock_warehouse') {
+            $stmt = $pdo->prepare("SELECT * FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+            $stmt->execute([$cpId]);
+            $row = $stmt->fetch();
+            if (!$row) {
+                echo json_encode(['ok' => false, 'error' => 'Stock warehouse not found']);
+                exit;
+            }
+            $expectedPin = resolveWarehouseTerminalPin($row);
+            $cpName = (string) ($row['name'] ?? 'Stock Warehouse');
+            if ($pin !== $expectedPin) {
+                echo json_encode([
+                    'ok' => false,
+                    'error' => "Invalid PIN for {$cpName}",
+                ]);
+                exit;
+            }
+            echo json_encode([
+                'ok' => true,
+                'checkpoint_type' => 'stock_warehouse',
+                'checkpoint_id' => $cpId,
+                'checkpoint_name' => $cpName,
+                'message' => "PIN verified for {$cpName}",
+            ]);
+            exit;
+        }
+
+        if ($pin !== '1234') {
+            echo json_encode(['ok' => false, 'error' => 'Invalid Event Venue Station PIN (Default: 1234)']);
+            exit;
+        }
+        echo json_encode([
+            'ok' => true,
+            'checkpoint_type' => 'event_venue',
+            'checkpoint_id' => $cpId,
+            'message' => 'Event Venue Station PIN verified',
         ]);
         exit;
     }

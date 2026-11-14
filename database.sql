@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS `stock_locations` (
     `location` VARCHAR(160) DEFAULT 'Kigali, Rwanda',
     `open_time` VARCHAR(16) DEFAULT '08:00:00',
     `close_time` VARCHAR(16) DEFAULT '18:00:00',
-    `is_active` TINYINT(1) NOT NULL DEFAULT 1
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `terminal_pin` VARCHAR(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `events` (

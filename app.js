@@ -9,6 +9,7 @@
     checkpointType: 'stock_warehouse',
     checkpointId: 1,
     stationLocked: localStorage.getItem('ability_station_locked') === '1',
+    terminalScreenLocked: true,
     scanMode: 'auto',
     dbSource: 'ability_db',
     clearanceMatrix: [
@@ -566,7 +567,7 @@
       matchTag.style.display = 'none';
       matchTag.textContent = '';
     }
-    if (inp && state.activeScreen === 'terminals') {
+    if (inp && state.activeScreen === 'terminals' && !state.terminalScreenLocked) {
       setTimeout(() => {
         inp.focus();
       }, 60);
@@ -632,6 +633,12 @@
   let gateScanInFlight = false;
 
   async function triggerGateScan(scanInput, forcedMode = null) {
+    if (state.terminalScreenLocked) {
+      showToast('Terminal screen is LOCKED. Enter the warehouse PIN to unlock scanning.');
+      const pinInp = document.getElementById('terminal-unlock-pin-input');
+      if (pinInp) pinInp.focus();
+      return;
+    }
     if (gateScanInFlight) return;
     gateScanInFlight = true;
     const modeToUse = forcedMode || state.scanMode || 'auto';
@@ -740,7 +747,17 @@
         scrollToId = 'pane-kiosk';
       }
     }
+    const wasScreen = state.activeScreen;
     state.activeScreen = screenKey;
+    if (screenKey === 'terminals' && wasScreen !== 'terminals') {
+      state.terminalScreenLocked = true;
+      localStorage.setItem('ability_terminal_screen_locked', '1');
+      const errEl = document.getElementById('terminal-unlock-error');
+      const pinInp = document.getElementById('terminal-unlock-pin-input');
+      if (errEl) errEl.textContent = '';
+      if (pinInp) pinInp.value = '';
+      renderTerminalLockScreen();
+    }
     const screens = {
       overview: document.getElementById('screen-overview'),
       events: document.getElementById('screen-events'),
@@ -798,10 +815,18 @@
         } else {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
-        const inp = document.getElementById('kiosk-badge-input');
-        if (inp) {
-          inp.focus();
-          inp.select();
+        if (state.terminalScreenLocked) {
+          const pinInp = document.getElementById('terminal-unlock-pin-input');
+          if (pinInp) {
+            pinInp.focus();
+            pinInp.select();
+          }
+        } else {
+          const inp = document.getElementById('kiosk-badge-input');
+          if (inp) {
+            inp.focus();
+            inp.select();
+          }
         }
       }, 70);
     } else if (scrollToId) {
@@ -1387,13 +1412,14 @@
 
   function renderCheckpointSelectors() {
     const isStock = state.checkpointType === 'stock_warehouse';
+    const isLocked = Boolean(state.stationLocked);
     document.querySelectorAll('.js-cp-type-btn').forEach((btn) => {
       const btnType = btn.getAttribute('data-cp-type');
       btn.classList.remove('active-stock', 'active-venue');
       if (btnType === state.checkpointType) {
         btn.classList.add(isStock ? 'active-stock' : 'active-venue');
       }
-      btn.disabled = state.stationLocked;
+      btn.disabled = isLocked;
     });
 
     const optionsList = isStock
@@ -1409,7 +1435,7 @@
             )} (Call: ${escapeHtml(cp.call_time || '08:00')})</option>`
         )
         .join('');
-      sel.disabled = state.stationLocked;
+      sel.disabled = isLocked;
     });
 
     document.querySelectorAll('.js-station-lock-btn').forEach((btn) => {
@@ -1419,8 +1445,8 @@
 
     document.querySelectorAll('.js-station-lock-label').forEach((lbl) => {
       lbl.textContent = state.stationLocked
-        ? `ENTRANCE STATION LOCKED (${state.activeCheckpoint.name}) · Unlock (PIN: 1234)`
-        : 'MULTI-CHECKPOINT MODE · Lock Station (PIN: 1234)';
+        ? `ENTRANCE STATION LOCKED (${state.activeCheckpoint.name}) · Unlock`
+        : 'MULTI-CHECKPOINT MODE · Lock Station';
     });
 
     document.querySelectorAll('.js-active-cp-meta').forEach((el) => {
@@ -1434,6 +1460,7 @@
       sbCallPill.textContent = state.activeCheckpoint.call_time || '08:00';
     }
     updateKioskQuickbar();
+    renderTerminalLockScreen();
 
     // Update Screen 2 Spotlight
     const spType = document.querySelector('.js-spotlight-cp-type');
@@ -1482,6 +1509,181 @@
     if (qbSubEl) {
       qbSubEl.textContent = `${state.activeCheckpoint.name} · 15m grace window · Live arrival punctuality active`;
     }
+  }
+
+  let terminalLockClockTimer = null;
+
+  function resolveWarehousePinClient(wh) {
+    if (wh && wh.terminal_pin && String(wh.terminal_pin).trim() !== '') {
+      return String(wh.terminal_pin).trim();
+    }
+    const code = String(wh?.code || wh?.location_code || '').toUpperCase();
+    const name = String(wh?.name || '').toLowerCase();
+    if (code.includes('KCC') || name.includes('kcc') || name.includes('kigali convention')) return '12345';
+    if (code.includes('BKA') || name.includes('bk arena')) return '67890';
+    if (code.includes('NDR') || name.includes('ndera')) return '247365';
+    return '1234';
+  }
+
+  function getActiveCheckpointPin() {
+    if (state.checkpointType === 'stock_warehouse') {
+      const list = state.checkpoints.stock_warehouses || [];
+      const wh = list.find((w) => Number(w.id) === Number(state.checkpointId)) || state.activeCheckpoint;
+      return resolveWarehousePinClient(wh);
+    }
+    return '1234';
+  }
+
+  async function verifyCheckpointPin(pin) {
+    const cleanPin = String(pin || '').trim();
+    if (!cleanPin) return { ok: false, error: 'Please enter a Terminal PIN.' };
+    try {
+      const res = await fetch('api.php?action=verify_terminal_pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify_terminal_pin',
+          checkpoint_type: state.checkpointType,
+          checkpoint_id: state.checkpointId,
+          pin: cleanPin,
+        }),
+      });
+      const data = await res.json();
+      return data;
+    } catch (err) {
+      const expected = getActiveCheckpointPin();
+      if (cleanPin === expected) {
+        return { ok: true, checkpoint_name: state.activeCheckpoint?.name || 'Checkpoint' };
+      }
+      return { ok: false, error: `Invalid PIN for ${state.activeCheckpoint?.name || 'this checkpoint'}` };
+    }
+  }
+
+  function updateTerminalLockClock() {
+    const clockEl = document.getElementById('terminal-lock-clock');
+    if (!clockEl) return;
+    const now = new Date();
+    clockEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function renderTerminalLockScreen() {
+    const locked = Boolean(state.terminalScreenLocked);
+    const heroCard = document.getElementById('pane-kiosk');
+    const chip = document.getElementById('kiosk-scanner-station-chip');
+    const statusPill = document.getElementById('terminal-lock-status-pill');
+    const statusIcon = document.getElementById('terminal-lock-status-icon');
+    const statusText = document.getElementById('terminal-lock-status-text');
+    const lockBtn = document.getElementById('terminal-lock-screen-btn');
+    const pinMgrBtn = document.getElementById('terminal-pin-manager-btn');
+    const quickbar = document.getElementById('kiosk-calltime-quickbar');
+    const scanForm = document.getElementById('kiosk-scan-form');
+    const lockPanel = document.getElementById('terminal-lock-screen-panel');
+    const facChip = document.getElementById('terminal-lock-facility-chip');
+    const cpNameEl = document.getElementById('terminal-lock-cp-name');
+    const cpName = state.activeCheckpoint?.name || 'Ndera Warehouse';
+    const cpCode = state.activeCheckpoint?.code ? ` (${state.activeCheckpoint.code})` : '';
+    const isStock = state.checkpointType === 'stock_warehouse';
+
+    if (heroCard) heroCard.classList.toggle('is-terminal-locked', locked);
+    if (chip) {
+      chip.textContent = locked ? 'Screen Locked' : 'Scanner Active';
+      chip.classList.toggle('is-locked', locked);
+    }
+    if (statusPill) {
+      statusPill.classList.toggle('locked', locked);
+      statusPill.classList.toggle('unlocked', !locked);
+    }
+    if (statusIcon) {
+      statusIcon.innerHTML = `<img src="assets/${locked ? 'lock.svg' : 'unlock.svg'}" alt="" class="svg-icon" />`;
+    }
+    if (statusText) statusText.textContent = locked ? `Locked · ${cpName}` : 'Screen Unlocked';
+    const quickTips = document.getElementById('kiosk-scanner-quick-tips');
+    if (lockBtn) {
+      lockBtn.innerHTML = `<img src="assets/${locked ? 'unlock.svg' : 'lock.svg'}" alt="" class="svg-icon" /><span>${locked ? 'Unlock Screen' : 'Lock Screen'}</span>`;
+      lockBtn.title = locked ? 'Enter PIN to unlock terminal screen' : 'Lock this terminal screen';
+      lockBtn.style.display = locked ? 'none' : 'inline-flex';
+    }
+    if (quickTips) {
+      quickTips.style.display = locked ? 'none' : 'flex';
+    }
+    if (pinMgrBtn) {
+      const canManagePins = isCurrentUserAdmin() || isCurrentUserStockManager();
+      pinMgrBtn.style.display = canManagePins ? 'inline-flex' : 'none';
+    }
+    if (quickbar) quickbar.style.display = locked ? 'none' : 'flex';
+    if (scanForm) scanForm.style.display = locked ? 'none' : 'flex';
+    if (lockPanel) lockPanel.style.display = locked ? 'block' : 'none';
+    if (facChip) {
+      facChip.innerHTML = `<img src="assets/${isStock ? 'warehouse-13.svg' : 'map-pin-13.svg'}" alt="" class="svg-icon" /><span>${escapeHtml(cpName.toUpperCase() + cpCode.toUpperCase())}</span>`;
+    }
+    if (cpNameEl) cpNameEl.textContent = cpName;
+
+    if (locked) {
+      updateTerminalLockClock();
+      if (!terminalLockClockTimer) {
+        terminalLockClockTimer = setInterval(updateTerminalLockClock, 1000);
+      }
+    } else if (terminalLockClockTimer) {
+      clearInterval(terminalLockClockTimer);
+      terminalLockClockTimer = null;
+    }
+  }
+
+  function renderWarehousePinList() {
+    const listEl = document.getElementById('warehouse-pin-list');
+    const selEl = document.getElementById('wh-pin-select');
+    const warehouses =
+      (state.checkpoints.stock_warehouses && state.checkpoints.stock_warehouses.length > 0
+        ? state.checkpoints.stock_warehouses
+        : state.stockManager.warehouses) || [];
+
+    if (listEl) {
+      if (warehouses.length === 0) {
+        listEl.innerHTML = `<div style="font-size: 12px; color: var(--text-muted); padding: 12px;">No stock warehouses found.</div>`;
+      } else {
+        listEl.innerHTML = warehouses
+          .map((w) => {
+            const pin = resolveWarehousePinClient(w);
+            return `
+              <div class="warehouse-pin-row">
+                <div class="warehouse-pin-row-info">
+                  <span class="warehouse-pin-row-name">${escapeHtml(w.name || 'Warehouse')}</span>
+                  <span class="warehouse-pin-row-sub">${escapeHtml(w.code || 'STK')} · ${escapeHtml(w.location || '')}</span>
+                </div>
+                <div class="warehouse-pin-row-actions">
+                  <span class="warehouse-pin-code-pill">PIN: ${escapeHtml(pin)}</span>
+                  <button type="button" class="btn btn-secondary-32-sm js-edit-wh-pin-btn" data-wh-id="${Number(w.id)}" data-pin="${escapeHtml(pin)}">Edit</button>
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+      }
+    }
+
+    if (selEl) {
+      const prevVal = selEl.value;
+      selEl.innerHTML = warehouses
+        .map((w) => `<option value="${Number(w.id)}">${escapeHtml(w.name)} (${escapeHtml(w.code || 'STK')})</option>`)
+        .join('');
+      if (prevVal && warehouses.some((w) => String(w.id) === String(prevVal))) {
+        selEl.value = prevVal;
+      } else if (state.checkpointType === 'stock_warehouse' && warehouses.some((w) => Number(w.id) === Number(state.checkpointId))) {
+        selEl.value = String(state.checkpointId);
+      }
+      const selectedWh = warehouses.find((w) => String(w.id) === String(selEl.value));
+      const pinValInput = document.getElementById('wh-pin-value');
+      if (pinValInput && selectedWh && !pinValInput.matches(':focus')) {
+        pinValInput.value = resolveWarehousePinClient(selectedWh);
+      }
+    }
+  }
+
+  function openWarehousePinModal() {
+    const modal = document.getElementById('warehouse-pin-modal');
+    if (!modal) return;
+    renderWarehousePinList();
+    modal.classList.add('open');
   }
 
   function renderVerificationDeck() {
@@ -4622,6 +4824,7 @@
     const closeTimeInput = document.getElementById('wh-modal-closetime');
     const ctrlInput = document.getElementById('wh-modal-controller');
     const phoneInput = document.getElementById('wh-modal-phone');
+    const pinInput = document.getElementById('wh-modal-pin');
 
     // Reset dropzone
     resetDropzone('wh');
@@ -4639,6 +4842,7 @@
         if (closeTimeInput) closeTimeInput.value = (wh.close_time || '18:00').slice(0, 5);
         if (ctrlInput) ctrlInput.value = wh.controller_name || '';
         if (phoneInput) phoneInput.value = wh.controller_phone || '';
+        if (pinInput) pinInput.value = resolveWarehousePinClient(wh);
 
         if (wh.image) {
           setDropzonePreview('wh', wh.image, wh.image.split('/').pop());
@@ -4650,6 +4854,7 @@
       if (openTimeInput) openTimeInput.value = '08:00';
       if (closeTimeInput) closeTimeInput.value = '18:00';
       if (ctrlInput) ctrlInput.value = 'Mirene Uwase';
+      if (pinInput) pinInput.value = '';
     }
 
     modal.classList.add('open');
@@ -5875,6 +6080,15 @@
     document.querySelectorAll('.sidebar .nav-item[data-nav-target]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const target = btn.getAttribute('data-nav-target');
+        if (target === 'terminals') {
+          state.terminalScreenLocked = true;
+          localStorage.setItem('ability_terminal_screen_locked', '1');
+          const errEl = document.getElementById('terminal-unlock-error');
+          const pinInp = document.getElementById('terminal-unlock-pin-input');
+          if (errEl) errEl.textContent = '';
+          if (pinInp) pinInp.value = '';
+          renderTerminalLockScreen();
+        }
         switchScreen(target);
       });
     });
@@ -5993,10 +6207,18 @@
     const focusBtn = document.getElementById('focus-kiosk-scanner-btn');
     if (focusBtn) {
       focusBtn.addEventListener('click', () => {
-        const inp = document.getElementById('kiosk-badge-input');
-        if (inp) {
-          inp.focus();
-          inp.select();
+        if (state.terminalScreenLocked) {
+          const pinInp = document.getElementById('terminal-unlock-pin-input');
+          if (pinInp) {
+            pinInp.focus();
+            pinInp.select();
+          }
+        } else {
+          const inp = document.getElementById('kiosk-badge-input');
+          if (inp) {
+            inp.focus();
+            inp.select();
+          }
         }
       });
     }
@@ -7268,10 +7490,18 @@
       // Quick '/' key to focus barcode scanner anytime
       if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement || {}).tagName)) {
         e.preventDefault();
-        const inp = document.getElementById('kiosk-badge-input');
-        if (inp) {
-          inp.focus();
-          inp.select();
+        if (state.terminalScreenLocked) {
+          const pinInp = document.getElementById('terminal-unlock-pin-input');
+          if (pinInp) {
+            pinInp.focus();
+            pinInp.select();
+          }
+        } else {
+          const inp = document.getElementById('kiosk-badge-input');
+          if (inp) {
+            inp.focus();
+            inp.select();
+          }
         }
       }
     });
@@ -7379,13 +7609,20 @@
       closeRc.addEventListener('click', () => rollcallModal.classList.remove('open'));
     }
 
-    // Modals: Station Lock PIN Modal (`PIN: 1234`)
+    // Modals: Station Lock PIN Modal (Uses Dedicated Warehouse PIN or Venue PIN)
     const lockModal = document.getElementById('station-lock-modal');
     document.querySelectorAll('.js-station-lock-btn, #sidebar-station-lock-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        if (!isCurrentUserAdmin()) {
-          showToast('Access Restricted: Station PIN Locking requires Administrator privileges.');
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager()) {
+          showToast('Access Restricted: Station PIN Locking requires Supervisor or Administrator privileges.');
           return;
+        }
+        const cpNameEl = document.getElementById('station-lock-cp-name');
+        const pinInput = document.getElementById('station-pin-input');
+        if (cpNameEl) cpNameEl.textContent = state.activeCheckpoint?.name || 'Active Checkpoint';
+        if (pinInput) {
+          pinInput.value = '';
+          setTimeout(() => pinInput.focus(), 50);
         }
         if (lockModal) lockModal.classList.add('open');
       });
@@ -7396,23 +7633,208 @@
     }
     const lockForm = document.getElementById('station-lock-form');
     if (lockForm && lockModal) {
-      lockForm.addEventListener('submit', (e) => {
+      lockForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const pinInput = document.getElementById('station-pin-input');
         const pin = pinInput ? pinInput.value.trim() : '';
-        if (pin !== '1234') {
-          showToast('Invalid Station PIN. Use default supervisor PIN: 1234');
+        const check = await verifyCheckpointPin(pin);
+        if (!check || !check.ok) {
+          showToast(check?.error || `Invalid PIN for ${state.activeCheckpoint?.name || 'this checkpoint'}`);
+          if (pinInput) {
+            pinInput.focus();
+            pinInput.select();
+          }
           return;
         }
         state.stationLocked = !state.stationLocked;
         localStorage.setItem('ability_station_locked', state.stationLocked ? '1' : '0');
         lockModal.classList.remove('open');
+        if (pinInput) pinInput.value = '';
         renderCheckpointSelectors();
         showToast(
           state.stationLocked
             ? `Terminal LOCKED to ${state.activeCheckpoint.name}`
             : 'Terminal UNLOCKED — Multi-Checkpoint Mode enabled'
         );
+      });
+    }
+
+    // Terminals Page: Lock Screen Header Button + Inline Lock Screen Unlock Form
+    const terminalLockBtn = document.getElementById('terminal-lock-screen-btn');
+    if (terminalLockBtn) {
+      terminalLockBtn.addEventListener('click', () => {
+        if (!state.terminalScreenLocked) {
+          state.terminalScreenLocked = true;
+          localStorage.setItem('ability_terminal_screen_locked', '1');
+          const errEl = document.getElementById('terminal-unlock-error');
+          if (errEl) {
+            errEl.style.display = 'none';
+            errEl.textContent = '';
+          }
+          renderCheckpointSelectors();
+          const pinInp = document.getElementById('terminal-unlock-pin-input');
+          if (pinInp) {
+            pinInp.value = '';
+            setTimeout(() => pinInp.focus(), 40);
+          }
+          showToast(`🔒 Terminal Screen LOCKED (${state.activeCheckpoint?.name || 'Checkpoint'})`);
+        } else {
+          const pinInp = document.getElementById('terminal-unlock-pin-input');
+          if (pinInp) {
+            pinInp.focus();
+            pinInp.select();
+          }
+        }
+      });
+    }
+
+    const terminalUnlockForm = document.getElementById('terminal-unlock-form');
+    if (terminalUnlockForm) {
+      terminalUnlockForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const pinInp = document.getElementById('terminal-unlock-pin-input');
+        const errEl = document.getElementById('terminal-unlock-error');
+        const submitBtn = document.getElementById('terminal-unlock-submit-btn');
+        const pin = pinInp ? pinInp.value.trim() : '';
+
+        if (submitBtn) submitBtn.disabled = true;
+        const result = await verifyCheckpointPin(pin);
+        if (submitBtn) submitBtn.disabled = false;
+
+        if (!result || !result.ok) {
+          const msg = result?.error || `Invalid PIN for ${state.activeCheckpoint?.name || 'this warehouse'}`;
+          if (errEl) {
+            errEl.textContent = msg;
+            errEl.style.display = 'block';
+          }
+          playKioskChime('decline');
+          if (pinInp) {
+            pinInp.focus();
+            pinInp.select();
+          }
+          return;
+        }
+
+        state.terminalScreenLocked = false;
+        localStorage.setItem('ability_terminal_screen_locked', '0');
+        if (errEl) {
+          errEl.style.display = 'none';
+          errEl.textContent = '';
+        }
+        if (pinInp) pinInp.value = '';
+        renderCheckpointSelectors();
+        playKioskChime('approve');
+        showToast(`🔓 Terminal Unlocked — ${state.activeCheckpoint?.name || 'Ready to scan'}`);
+        const badgeInp = document.getElementById('kiosk-badge-input');
+        if (badgeInp) {
+          setTimeout(() => badgeInp.focus(), 60);
+        }
+      });
+    }
+
+    // Terminals Page: Dedicated Stock Warehouse PIN Manager Modal
+    const whPinModal = document.getElementById('warehouse-pin-modal');
+    const openWhPinMgrBtn = document.getElementById('terminal-pin-manager-btn');
+    if (openWhPinMgrBtn) {
+      openWhPinMgrBtn.addEventListener('click', () => {
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager()) {
+          showToast('Access Restricted: Warehouse PIN configuration requires Stock Manager or Administrator privileges.');
+          return;
+        }
+        openWarehousePinModal();
+      });
+    }
+    ['close-warehouse-pin-modal', 'cancel-warehouse-pin-modal'].forEach((cid) => {
+      const b = document.getElementById(cid);
+      if (b && whPinModal) {
+        b.addEventListener('click', () => whPinModal.classList.remove('open'));
+      }
+    });
+    if (whPinModal) {
+      whPinModal.addEventListener('click', (e) => {
+        if (e.target === whPinModal) whPinModal.classList.remove('open');
+      });
+    }
+
+    const whPinListEl = document.getElementById('warehouse-pin-list');
+    if (whPinListEl) {
+      whPinListEl.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.js-edit-wh-pin-btn');
+        if (!editBtn) return;
+        const wid = editBtn.getAttribute('data-wh-id');
+        const pin = editBtn.getAttribute('data-pin') || '';
+        const selEl = document.getElementById('wh-pin-select');
+        const valEl = document.getElementById('wh-pin-value');
+        if (selEl && wid) selEl.value = wid;
+        if (valEl) {
+          valEl.value = pin;
+          valEl.focus();
+          valEl.select();
+        }
+      });
+    }
+
+    const whPinSelectEl = document.getElementById('wh-pin-select');
+    if (whPinSelectEl) {
+      whPinSelectEl.addEventListener('change', () => {
+        const warehouses =
+          (state.checkpoints.stock_warehouses && state.checkpoints.stock_warehouses.length > 0
+            ? state.checkpoints.stock_warehouses
+            : state.stockManager.warehouses) || [];
+        const selected = warehouses.find((w) => String(w.id) === String(whPinSelectEl.value));
+        const valEl = document.getElementById('wh-pin-value');
+        if (valEl && selected) {
+          valEl.value = resolveWarehousePinClient(selected);
+        }
+      });
+    }
+
+    const whPinForm = document.getElementById('warehouse-pin-form');
+    if (whPinForm) {
+      whPinForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const wid = Number(document.getElementById('wh-pin-select')?.value || 0);
+        const pin = (document.getElementById('wh-pin-value')?.value || '').trim();
+        const saveBtn = document.getElementById('save-warehouse-pin-btn');
+        if (!wid) {
+          showToast('Please select a stock warehouse.');
+          return;
+        }
+        if (!/^[A-Za-z0-9]{4,12}$/.test(pin)) {
+          showToast('PIN must be 4–12 digits or alphanumeric characters.');
+          return;
+        }
+        if (saveBtn) saveBtn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=save_warehouse_pin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'save_warehouse_pin',
+              warehouse_id: wid,
+              terminal_pin: pin,
+            }),
+          });
+          const data = await res.json();
+          if (data && data.ok) {
+            (state.checkpoints.stock_warehouses || []).forEach((w) => {
+              if (Number(w.id) === wid) w.terminal_pin = pin;
+            });
+            (state.stockManager.warehouses || []).forEach((w) => {
+              if (Number(w.id) === wid) w.terminal_pin = pin;
+            });
+            renderWarehousePinList();
+            showToast(data.message || 'Dedicated warehouse PIN saved');
+            await fetchBootstrap(false);
+            loadStockManagerData();
+          } else {
+            showToast(data?.error || 'Failed to save warehouse PIN');
+          }
+        } catch (err) {
+          showToast('Error saving warehouse PIN');
+        } finally {
+          if (saveBtn) saveBtn.disabled = false;
+        }
       });
     }
 
@@ -8899,6 +9321,7 @@
         fd.append('close_time', document.getElementById('wh-modal-closetime').value);
         fd.append('controller_name', document.getElementById('wh-modal-controller').value);
         fd.append('controller_phone', document.getElementById('wh-modal-phone').value);
+        fd.append('terminal_pin', (document.getElementById('wh-modal-pin')?.value || '').trim());
 
         const fileInput = document.getElementById('wh-modal-image');
         if (fileInput && fileInput.files && fileInput.files[0]) {

@@ -1393,11 +1393,28 @@
         <section class="kiosk-scanner-hero-card" id="pane-kiosk">
           <div class="kiosk-scanner-hero-header">
             <div class="kiosk-scanner-hero-title">
-              <span class="station-live-dot"></span>
+              <span class="station-live-dot" id="terminal-hero-live-dot"></span>
               <h3>Gate Terminal Barcode &amp; Badge Scanner</h3>
               <span class="kiosk-scanner-chip" id="kiosk-scanner-station-chip">Scanner Active</span>
             </div>
-            <div class="kiosk-scanner-quick-tips">
+
+            <!-- Inline Terminal Lock Screen Display & PIN Controls -->
+            <div class="terminal-lock-header-bar" id="terminal-lock-header-bar">
+              <span class="terminal-lock-status-pill unlocked" id="terminal-lock-status-pill">
+                <span class="terminal-lock-status-icon" id="terminal-lock-status-icon"><img src="assets/unlock.svg" alt="" class="svg-icon" /></span>
+                <span id="terminal-lock-status-text">Screen Unlocked</span>
+              </span>
+              <button type="button" class="btn btn-secondary-32-sm terminal-lock-action-btn" id="terminal-lock-screen-btn" title="Lock this terminal screen (requires warehouse PIN to unlock)">
+                <img src="assets/lock.svg" alt="" class="svg-icon" />
+                <span>Lock Screen</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32-sm terminal-pin-manage-btn" id="terminal-pin-manager-btn" title="View or configure dedicated Stock Warehouse PINs">
+                <img src="assets/key-round-13.svg" alt="" class="svg-icon" />
+                <span>Warehouse PINs</span>
+              </button>
+            </div>
+
+            <div class="kiosk-scanner-quick-tips" id="kiosk-scanner-quick-tips">
               <span class="kbd-hint-pill"><kbd>/</kbd> to focus</span>
               <span class="kbd-hint-pill"><kbd>Enter</kbd> to verify</span>
             </div>
@@ -1406,7 +1423,7 @@
           <!-- Interactive Shift Call-Time Quickbar (Extension & Reset) -->
           <div class="kiosk-calltime-quickbar" id="kiosk-calltime-quickbar">
             <div class="kiosk-calltime-quickbar-left">
-              <span class="calltime-clock-icon">🕒</span>
+              <span class="calltime-clock-icon"><img src="assets/metric-clock-3.svg" alt="" class="svg-icon" /></span>
               <div class="calltime-info-stack">
                 <span class="calltime-quickbar-title">Active Shift Call-Time: <strong id="kiosk-quickbar-time">08:00 AM</strong></span>
                 <span class="calltime-quickbar-sub" id="kiosk-quickbar-sub">15m grace window · Live arrival punctuality active</span>
@@ -1417,8 +1434,8 @@
               <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="15" title="Extend call-time by +15 mins">+15m</button>
               <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="30" title="Extend call-time by +30 mins">+30m</button>
               <button type="button" class="btn btn-secondary-32-sm js-quick-extend-btn" data-mins="60" title="Extend call-time by +1 hour">+1h</button>
-              <button type="button" class="btn btn-secondary-32-sm js-quick-reset-btn" id="kiosk-quick-reset-calltime-btn" title="Reset call-time back to default baseline (08:00 AM)" style="color: #b45309; border-color: #fde68a;">↺ Reset</button>
-              <button type="button" class="btn btn-secondary-32-sm js-open-active-calltime-modal" title="Open Call-Time Settings Modal">⚙ Edit</button>
+              <button type="button" class="btn btn-secondary-32-sm js-quick-reset-btn" id="kiosk-quick-reset-calltime-btn" title="Reset call-time back to default baseline (08:00 AM)" style="color: #b45309; border-color: #fde68a;"><img src="assets/refresh-cw.svg" alt="" class="svg-icon" /><span>Reset</span></button>
+              <button type="button" class="btn btn-secondary-32-sm js-open-active-calltime-modal" title="Open Call-Time Settings Modal"><img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" /><span>Edit</span></button>
             </div>
           </div>
 
@@ -1443,6 +1460,45 @@
               <span>Verify &amp; Record</span>
             </button>
           </form>
+
+          <!-- Terminal Lock Screen Display (Shown when Terminal Screen is Locked) -->
+          <div class="terminal-lock-screen-panel" id="terminal-lock-screen-panel" style="display: none;">
+            <div class="terminal-lock-screen-inner">
+              <div class="terminal-lock-screen-top">
+                <span class="terminal-lock-facility-chip" id="terminal-lock-facility-chip"><img src="assets/warehouse-13.svg" alt="" class="svg-icon" /><span>NDERA WAREHOUSE</span></span>
+                <span class="terminal-lock-clock" id="terminal-lock-clock">08:00:00</span>
+              </div>
+
+              <div class="terminal-lock-emblem">
+                <div class="terminal-lock-shield"><img src="assets/shield-lock.svg" alt="" class="svg-icon" /></div>
+                <div class="terminal-lock-copy">
+                  <h4 id="terminal-lock-heading">Terminal Screen Locked</h4>
+                  <p id="terminal-lock-subtext">
+                    Barcode scanning &amp; checkpoint switching are locked for <strong id="terminal-lock-cp-name">Ndera Warehouse</strong>. Enter the dedicated warehouse PIN to unlock this terminal.
+                  </p>
+                </div>
+              </div>
+
+              <form class="terminal-unlock-form" id="terminal-unlock-form" autocomplete="off">
+                <div class="terminal-unlock-input-group">
+                  <input
+                    type="password"
+                    id="terminal-unlock-pin-input"
+                    class="terminal-unlock-pin-input"
+                    placeholder="Enter dedicated warehouse PIN..."
+                    inputmode="numeric"
+                    autocomplete="off"
+                    required
+                  />
+                  <button type="submit" class="btn btn-primary-38 terminal-unlock-submit-btn" id="terminal-unlock-submit-btn">
+                    <img src="assets/unlock.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1); width: 15px; height: 15px;" />
+                    <span>Unlock Terminal</span>
+                  </button>
+                </div>
+                <div class="terminal-unlock-error" id="terminal-unlock-error" style="display: none;"></div>
+              </form>
+            </div>
+          </div>
         </section>
       </main>
 
@@ -2659,29 +2715,66 @@
   </div>
 
   <!-- ====================================================================== -->
-  <!-- MODAL 2: STATION LOCK PIN MODAL (PIN: 1234)                            -->
+  <!-- MODAL 2: STATION LOCK PIN MODAL (WAREHOUSE & VENUE PIN)                -->
   <!-- ====================================================================== -->
   <div class="modal-backdrop" id="station-lock-modal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-labelledby="station-lock-title">
-      <h3 class="modal-title" id="station-lock-title">Venue Entrance Station Lock</h3>
+      <h3 class="modal-title" id="station-lock-title">Station Lock &amp; Dedicated PIN</h3>
       <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;" id="station-lock-desc">
-        Lock this terminal to the current checkpoint so security officers only scan inbound/outbound badges for this gate. Unlock requires supervisor PIN <strong>1234</strong>.
+        Lock or unlock this terminal for <strong id="station-lock-cp-name">Active Checkpoint</strong> using its dedicated checkpoint PIN.
       </p>
       <form id="station-lock-form">
         <div class="form-field" style="margin-bottom: 14px;">
-          <label class="form-label" for="station-pin-input">Supervisor Station PIN (Default: 1234)</label>
+          <label class="form-label" for="station-pin-input">Checkpoint / Warehouse PIN</label>
           <input
             type="password"
             id="station-pin-input"
             class="form-input"
-            placeholder="Enter PIN 1234"
-            value="1234"
+            placeholder="Enter dedicated warehouse or station PIN..."
+            autocomplete="off"
             required
           />
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary-38" id="cancel-station-lock">Cancel</button>
           <button type="submit" class="btn btn-primary-38" id="confirm-station-lock-btn">Toggle Station Lock</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL 2B: DEDICATED STOCK WAREHOUSE PIN MANAGER MODAL                  -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="warehouse-pin-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 520px; max-width: 95vw;" role="dialog" aria-labelledby="warehouse-pin-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <h3 class="modal-title" id="warehouse-pin-modal-title" style="margin: 0;">Dedicated Stock Warehouse PINs</h3>
+        <button type="button" class="icon-btn" id="close-warehouse-pin-modal" aria-label="Close">✕</button>
+      </div>
+      <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px;">
+        Create or update dedicated lock-screen PINs for each Stock Warehouse terminal. Locking the terminal screen requires the active warehouse’s PIN to unlock.
+      </p>
+
+      <div id="warehouse-pin-list" class="warehouse-pin-list"></div>
+
+      <form id="warehouse-pin-form" style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px;">
+          Create / Update Warehouse PIN
+        </div>
+        <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="wh-pin-select">Stock Warehouse</label>
+            <select id="wh-pin-select" class="form-input" required></select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="wh-pin-value">Dedicated PIN (4–12 chars)</label>
+            <input type="text" id="wh-pin-value" class="form-input" placeholder="e.g. 247365" minlength="4" maxlength="12" autocomplete="off" required />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary-38" id="cancel-warehouse-pin-modal">Close</button>
+          <button type="submit" class="btn btn-primary-38" id="save-warehouse-pin-btn">Save Dedicated PIN</button>
         </div>
       </form>
     </div>
@@ -2842,6 +2935,11 @@
             <label class="form-label" for="wh-modal-phone">Controller Phone</label>
             <input type="text" id="wh-modal-phone" class="form-input" placeholder="e.g. +250 788 100 002" />
           </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="wh-modal-pin">Dedicated Terminal Lock PIN</label>
+          <input type="text" id="wh-modal-pin" class="form-input" placeholder="e.g. 247365 (4–12 characters)" minlength="4" maxlength="12" autocomplete="off" />
         </div>
 
         <!-- Image Upload Dropzone -->
