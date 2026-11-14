@@ -2521,7 +2521,6 @@
     const fId = facility.id != null ? String(facility.id) : '';
     const fRawId = facility.raw_id != null ? String(facility.raw_id) : '';
     const fType = facility.type || 'stock_warehouse';
-    const isStock = fType === 'stock_warehouse';
     const fNameLower = (facility.name || '').trim().toLowerCase();
     const fCodeLower = (facility.code || '').trim().toLowerCase();
 
@@ -2540,14 +2539,6 @@
         if (n) assignedNames.add(String(n).trim().toLowerCase());
       });
     }
-
-    // Facility leads / controllers / PMs / tech leads
-    const supervisorNames = [
-      facility.controller_name,
-      facility.lead_name,
-      facility.tech_lead,
-      facility.project_manager,
-    ].filter(Boolean).map((n) => String(n).trim().toLowerCase());
 
     const matched = allCrew.filter((c) => {
       const uId = String(c.id);
@@ -2573,46 +2564,27 @@
         return true;
       }
 
-      // 3. Name-based match from facility's assigned names
+      // 3. Name-based match from facility's assigned technician names
       if (assignedNames.size > 0) {
         if (assignedNames.has(uNameLower) || assignedNames.has(uUsernameLower)) {
           return true;
         }
         for (const an of assignedNames) {
-          if (an && (uNameLower.includes(an) || an.includes(uNameLower))) {
+          if (an && (uNameLower === an || uUsernameLower === an)) {
             return true;
           }
         }
       }
 
-      // 4. Facility leadership / controller / supervisor assignment
-      if (supervisorNames.some((sn) => sn === uNameLower || sn === uUsernameLower || (sn.length > 4 && uNameLower.includes(sn)))) {
-        return true;
-      }
-
-      // 5. Stock warehouse controllers specifically assigned
-      if (isStock && (c.role === 'stock_controller' || c.role === 'stock_manager')) {
-        if (cAssignedId === fId || (fRawId && cAssignedId === fRawId)) {
-          return true;
-        }
-      }
-
-      // 6. Active live check-in at this location right now
+      // 4. Active live check-in at this location right now (checked_in only, NOT checked_out or historical)
       if (c.daily_state === 'checked_in') {
-        const liveType = c.checkpoint_type || c.last_checkpoint_type;
-        const liveId = c.checkpoint_id != null ? String(c.checkpoint_id) : (c.last_checkpoint_id != null ? String(c.last_checkpoint_id) : '');
-        const liveName = (c.checkpoint_name || c.last_checkpoint_name || '').trim().toLowerCase();
+        const liveType = c.checkpoint_type;
+        const liveId = c.checkpoint_id != null ? String(c.checkpoint_id) : '';
+        const liveName = (c.checkpoint_name || '').trim().toLowerCase();
 
         if (liveType === fType && (liveId === fId || (fRawId && liveId === fRawId) || (liveName && liveName === fNameLower))) {
           return true;
         }
-      }
-
-      // 7. Last recorded checkpoint match (if not checked in elsewhere)
-      const lastType = c.last_checkpoint_type;
-      const lastId = c.last_checkpoint_id != null ? String(c.last_checkpoint_id) : '';
-      if (lastType === fType && (lastId === fId || (fRawId && lastId === fRawId))) {
-        return true;
       }
 
       return false;
@@ -2652,7 +2624,7 @@
       const isStock = f.type === 'stock_warehouse';
       const facilityCrew = getFacilityCrewMembers(f, allCrew);
       const onSiteCrew = facilityCrew.filter((c) => c.daily_state === 'checked_in');
-      const headCount = onSiteCrew.length > 0 ? onSiteCrew.length : Number(f.on_site_now || 0);
+      const headCount = onSiteCrew.length;
       const assignedCount = facilityCrew.length;
 
       if (headCount > 0 || assignedCount > 0) activeHubsCount++;
@@ -2787,7 +2759,7 @@
     const allCrew = state.crew || [];
     const facilityCrew = getFacilityCrewMembers(facility, allCrew);
     const onSiteCrew = facilityCrew.filter((c) => c.daily_state === 'checked_in');
-    const headCount = onSiteCrew.length > 0 ? onSiteCrew.length : Number(facility.on_site_now || 0);
+    const headCount = onSiteCrew.length;
     const assignedCount = facilityCrew.length;
 
     const typePill = document.getElementById('inspector-type-pill');
@@ -2929,6 +2901,18 @@
                 return;
               }
               applyBootstrapPayload(data);
+              if (facility && Array.isArray(facility.assigned_technicians)) {
+                facility.assigned_technicians = facility.assigned_technicians.filter((tid) => Number(tid) !== uid);
+              }
+              if (facility && Array.isArray(facility.assigned_technician_names)) {
+                facility.assigned_technician_names = facility.assigned_technician_names.filter((n) => n.toLowerCase() !== uName.toLowerCase());
+              }
+              const mem = state.crew.find((c) => Number(c.id) === uid);
+              if (mem && mem.assigned_checkpoint_type === facility.type) {
+                mem.assigned_checkpoint_type = null;
+                mem.assigned_checkpoint_id = null;
+                mem.assigned_checkpoint_name = null;
+              }
               playKioskChime('approve');
               showToast(`✓ Removed ${uName} from ${facName}.`);
               renderAll();
@@ -8609,6 +8593,17 @@
           }
 
           applyBootstrapPayload(data);
+          if (facility) {
+            facility.assigned_technicians = [];
+            facility.assigned_technician_names = [];
+          }
+          state.crew.forEach((c) => {
+            if (c.assigned_checkpoint_type === selCp.type && (String(c.assigned_checkpoint_id) === String(selCp.id) || (facility && facility.raw_id && String(c.assigned_checkpoint_id) === String(facility.raw_id)))) {
+              c.assigned_checkpoint_type = null;
+              c.assigned_checkpoint_id = null;
+              c.assigned_checkpoint_name = null;
+            }
+          });
           playKioskChime('approve');
           showToast(`✓ Roster reset for ${facName}. All personnel returned to Standby.`);
           renderAll();

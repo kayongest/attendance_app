@@ -902,10 +902,6 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         }
 
         $whAssignedIds = [];
-        $ctrlLower = strtolower($ctrl);
-        if (isset($userNameToId[$ctrlLower])) {
-            $whAssignedIds[] = $userNameToId[$ctrlLower];
-        }
         foreach ($usersLookup as $uLk) {
             if (($uLk['assigned_checkpoint_type'] ?? '') === 'stock_warehouse' && (int) ($uLk['assigned_checkpoint_id'] ?? 0) === $sid) {
                 $whAssignedIds[] = (int) $uLk['id'];
@@ -978,15 +974,6 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
                         }
                     }
                 }
-            }
-        }
-        // Only inject PM/TL if assigned_technician was null or non-existent in the database
-        if (!$isExplicitJson && empty($assignedIds)) {
-            if ($pm !== '' && isset($userNameToId[strtolower($pm)])) {
-                $assignedIds[] = $userNameToId[strtolower($pm)];
-            }
-            if ($tl !== '' && isset($userNameToId[strtolower($tl)])) {
-                $assignedIds[] = $userNameToId[strtolower($tl)];
             }
         }
         $assignedIds = array_values(array_unique($assignedIds));
@@ -3135,23 +3122,29 @@ try {
 
         if ($cpType === 'event_venue' && !empty($userIds)) {
             try {
-                $st = $pdo->prepare("SELECT `assigned_technician` FROM `events` WHERE `id` = ?");
-                $st->execute([$cpId]);
-                $ev = $st->fetch(PDO::FETCH_ASSOC);
+                $realEventId = $cpId;
+                $chkEv = $pdo->prepare("SELECT `id`, `assigned_technician` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+                $chkEv->execute([$cpId, $cpId]);
+                $ev = $chkEv->fetch(PDO::FETCH_ASSOC);
                 $existing = [];
-                if (!empty($ev['assigned_technician'])) {
-                    $dec = json_decode((string)$ev['assigned_technician'], true);
-                    if (is_array($dec)) {
-                        $existing = $dec;
+                if ($ev) {
+                    $realEventId = (string) $ev['id'];
+                    $rawAssigned = trim((string)($ev['assigned_technician'] ?? ''));
+                    if ($rawAssigned !== '') {
+                        $dec = json_decode($rawAssigned, true);
+                        if (is_array($dec)) {
+                            $existing = $dec;
+                        }
                     }
                 }
                 $merged = array_values(array_unique(array_merge($existing, $userIds)));
                 $upd = $pdo->prepare("UPDATE `events` SET `assigned_technician` = ? WHERE `id` = ?");
-                $upd->execute([json_encode($merged), $cpId]);
+                $upd->execute([json_encode($merged), $realEventId]);
 
+                $crcVal = (string) (is_numeric($realEventId) ? (int)$realEventId : crc32($realEventId));
                 $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'event_venue', `assigned_checkpoint_id` = ? WHERE `id` = ?");
                 foreach ($userIds as $uid) {
-                    $updUser->execute([$cpId, $uid]);
+                    $updUser->execute([$realEventId, $uid]);
                 }
             } catch (Throwable $e) {}
         } elseif ($cpType === 'stock_warehouse' && !empty($userIds)) {
@@ -3160,23 +3153,6 @@ try {
                 foreach ($userIds as $uid) {
                     $updUser->execute([$cpId, $uid]);
                 }
-            } catch (Throwable $e) {}
-        }
-
-        // Record a dispatch entry in attendance_logs for audit traceability
-        foreach ($userIds as $uid) {
-            try {
-                $userStmt = $pdo->prepare("SELECT `badge_code` FROM `personnel` WHERE `id` = ?");
-                $userStmt->execute([$uid]);
-                $uRow = $userStmt->fetch(PDO::FETCH_ASSOC);
-                $bCode = $uRow['badge_code'] ?? 'REW-BADGE-' . str_pad((string)$uid, 4, '0', STR_PAD_LEFT);
-
-                $ins = $pdo->prepare("
-                    INSERT INTO `attendance_logs`
-                    (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `scan_action`, `access_status`, `punctuality_status`, `notes`, `scanned_at`)
-                    VALUES (?, ?, ?, ?, 'access_verify', 'granted', 'on_time', ?, NOW())
-                ");
-                $ins->execute([$uid, $bCode, $cpType, $cpId, $notes]);
             } catch (Throwable $e) {}
         }
 
@@ -3255,6 +3231,12 @@ try {
         }
 
         if ($targetUid > 0) {
+            $uInfo = $pdo->prepare("SELECT `id`, `full_name`, `username` FROM `users` WHERE `id` = ?");
+            $uInfo->execute([$targetUid]);
+            $targetUser = $uInfo->fetch(PDO::FETCH_ASSOC);
+            $targetName = strtolower(trim((string)($targetUser['full_name'] ?? '')));
+            $targetUsern = strtolower(trim((string)($targetUser['username'] ?? '')));
+
             if ($cpType === 'event_venue') {
                 try {
                     $realEventId = $cpId;
@@ -3263,14 +3245,27 @@ try {
                     $ev = $chkEv->fetch(PDO::FETCH_ASSOC);
                     if ($ev) {
                         $realEventId = (string) $ev['id'];
-                        if (!empty($ev['assigned_technician'])) {
-                            $dec = json_decode((string)$ev['assigned_technician'], true);
+                        $rawAssigned = trim((string)($ev['assigned_technician'] ?? ''));
+                        if ($rawAssigned !== '') {
+                            $dec = json_decode($rawAssigned, true);
                             if (is_array($dec)) {
                                 $filtered = array_values(array_filter($dec, function($id) use ($targetUid) {
                                     return (int)$id !== $targetUid;
                                 }));
                                 $upd = $pdo->prepare("UPDATE `events` SET `assigned_technician` = ? WHERE `id` = ?");
                                 $upd->execute([json_encode($filtered), $realEventId]);
+                            } else {
+                                $parts = array_map('trim', explode(',', $rawAssigned));
+                                $newParts = [];
+                                foreach ($parts as $p) {
+                                    $pLow = strtolower($p);
+                                    if ($p === '' || (int)$p === $targetUid) continue;
+                                    if ($targetName !== '' && ($pLow === $targetName || stripos($pLow, $targetName) !== false)) continue;
+                                    if ($targetUsern !== '' && ($pLow === $targetUsern || stripos($pLow, $targetUsern) !== false)) continue;
+                                    $newParts[] = $p;
+                                }
+                                $upd = $pdo->prepare("UPDATE `events` SET `assigned_technician` = ? WHERE `id` = ?");
+                                $upd->execute([implode(', ', $newParts), $realEventId]);
                             }
                         }
                     }
