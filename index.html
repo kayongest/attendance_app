@@ -714,14 +714,16 @@
                     <path class="kigali-artery branch" d="M 220,180 Q 260,250 320,300" />
                     <path class="kigali-artery branch" d="M 540,115 Q 580,170 640,250" />
 
-                    <!-- Active Transit Flow Corridor (Ndera Warehouse -> KCC -> BK Arena) -->
-                    <path class="transit-active-line" id="map-transit-line" d="M 580,68 Q 440,85 345,130 Q 420,165 490,150" />
+                    <!-- Active Transit Flow Corridor (Only shown & animated when crew are checked out / in transit) -->
+                    <g id="map-transit-overlay" style="display: none;">
+                      <path class="transit-active-line" id="map-transit-line" d="M 580,68 Q 440,85 345,130 Q 420,165 490,150" />
 
-                    <!-- Animated Moving Transit Truck / Courier Marker -->
-                    <g class="transit-courier-marker">
-                      <circle r="6" fill="#8b5cf6" stroke="#ffffff" stroke-width="2">
-                        <animateMotion dur="5s" repeatCount="indefinite" path="M 580,68 Q 440,85 345,130 Q 420,165 490,150" />
-                      </circle>
+                      <!-- Animated Moving Transit Marker -->
+                      <g class="transit-courier-marker">
+                        <circle r="6" fill="#8b5cf6" stroke="#ffffff" stroke-width="2">
+                          <animateMotion id="map-transit-motion" dur="5s" repeatCount="indefinite" path="M 580,68 Q 440,85 345,130 Q 420,165 490,150" />
+                        </circle>
+                      </g>
                     </g>
 
                     <!-- Kigali District Labels -->
@@ -4143,6 +4145,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261115_v11"></script>
+  <script src="app.js?v=20261115_v12"></script>
 </body>
 </html>

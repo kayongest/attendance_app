@@ -2870,9 +2870,12 @@
     const totalOnSiteCrew = allCrew.filter((c) => c.daily_state === 'checked_in').length;
     const totalAvailableCrew = allCrew.filter((c) => c.daily_state !== 'checked_in').length;
 
-    // Batches in transit or active movements
-    const inTransitBatches = (state.batches || []).filter((b) => b.status === 'in_transit' || b.status === 'pending');
-    const inTransitCount = Math.max(1, inTransitBatches.length);
+    // Crew currently checked out / in transit across venues and facility gates
+    const transitCrew = allCrew.filter((c) => {
+      const st = String(c.daily_state || '').toLowerCase();
+      return st === 'checked_out' || st === 'in_transit';
+    });
+    const inTransitCount = transitCrew.length;
 
     // Filter facilities based on state.mapFilter
     const filter = state.mapFilter || 'all';
@@ -2972,8 +2975,59 @@
       });
     }
 
-    // 3. Render Inspector Card
+    // 3. Toggle & Animate Transit Route Overlay ONLY when crew are checked out / in transit
+    syncMapTransitOverlay(transitCrew, facilityData);
+
+    // 4. Render Inspector Card
     renderMapFacilityInspector();
+  }
+
+  function syncMapTransitOverlay(transitCrew, facilityData) {
+    const overlay = document.getElementById('map-transit-overlay');
+    const lineEl = document.getElementById('map-transit-line');
+    const motionEl = document.getElementById('map-transit-motion');
+    if (!overlay) return;
+
+    if (!Array.isArray(transitCrew) || transitCrew.length === 0) {
+      overlay.style.display = 'none';
+      return;
+    }
+
+    const toSvgPoint = (coords) => ({
+      x: Math.round((parseFloat(coords.left) / 100) * 720),
+      y: Math.round((parseFloat(coords.top) / 100) * 340),
+    });
+
+    const findFacilityCoords = (cpType, cpId, cpName) => {
+      const match = facilityData.find((item) => {
+        const f = item.facility;
+        if (cpId && cpType && f.type === cpType && (String(f.id) === String(cpId) || String(f.raw_id) === String(cpId))) {
+          return true;
+        }
+        return cpName && String(f.name || '').toLowerCase() === String(cpName).toLowerCase();
+      });
+      return match ? toSvgPoint(match.coords) : null;
+    };
+
+    const mover = transitCrew[0];
+    const originPt = findFacilityCoords(mover.last_checkpoint_type, mover.last_checkpoint_id, mover.last_checkpoint_name);
+    let destPt = findFacilityCoords(mover.assigned_checkpoint_type, mover.assigned_checkpoint_id, mover.assigned_checkpoint_name);
+
+    if (originPt && !destPt && facilityData.length > 1) {
+      const alt = facilityData.find((item) => {
+        const pt = toSvgPoint(item.coords);
+        return pt.x !== originPt.x || pt.y !== originPt.y;
+      });
+      if (alt) destPt = toSvgPoint(alt.coords);
+    }
+
+    const pathStr = (originPt && destPt && (originPt.x !== destPt.x || originPt.y !== destPt.y))
+      ? `M ${originPt.x},${originPt.y} Q ${Math.round((originPt.x + destPt.x) / 2)},${Math.max(24, Math.min(originPt.y, destPt.y) - 36)} ${destPt.x},${destPt.y}`
+      : 'M 580,68 Q 440,85 345,130 Q 420,165 490,150';
+
+    if (lineEl) lineEl.setAttribute('d', pathStr);
+    if (motionEl) motionEl.setAttribute('path', pathStr);
+    overlay.style.display = '';
   }
 
   function selectMapFacility(type, id) {
