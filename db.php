@@ -407,6 +407,30 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
+    // 8c. Ensure `security_rate_limits` table exists for login & terminal PIN brute-force protection
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `security_rate_limits` (
+            `rate_key` VARCHAR(160) PRIMARY KEY,
+            `attempts` INT NOT NULL DEFAULT 0,
+            `first_attempt_at` DATETIME NOT NULL,
+            `blocked_until` DATETIME DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    // 8d. Add composite/lookup indexes for scale on attendance_logs & user_badges
+    $ensureIndex = static function (string $table, string $indexName, string $colsSql) use ($pdo): void {
+        try {
+            $chk = $pdo->prepare("SHOW INDEX FROM `{$table}` WHERE Key_name = ?");
+            $chk->execute([$indexName]);
+            if (!$chk->fetch()) {
+                $pdo->exec("ALTER TABLE `{$table}` ADD INDEX `{$indexName}` ({$colsSql})");
+            }
+        } catch (Throwable $e) {}
+    };
+    $ensureIndex('attendance_logs', 'idx_att_scanned_cp', '`scanned_at`, `checkpoint_type`, `checkpoint_id`');
+    $ensureIndex('attendance_logs', 'idx_att_user_scanned', '`user_id`, `scanned_at`');
+    $ensureIndex('user_badges', 'idx_badge_code', '`badge_code`');
+
     // Seed default access_clearance_levels if empty
     $clrCount = (int) $pdo->query("SELECT COUNT(*) FROM `access_clearance_levels`")->fetchColumn();
     if ($clrCount === 0) {
@@ -426,9 +450,24 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `image` VARCHAR(500) DEFAULT NULL");
     } catch (Throwable $e) {}
 
-    // Ensure `terminal_pin` column exists on stock_locations for dedicated warehouse lock screens
+    // Ensure `terminal_pin` and map coordinate columns exist on stock_locations & events
+    foreach (['stock_locations', 'events'] as $geoTable) {
+        try { $pdo->exec("ALTER TABLE `{$geoTable}` ADD COLUMN `lat` DECIMAL(10,6) DEFAULT NULL"); } catch (Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE `{$geoTable}` ADD COLUMN `lng` DECIMAL(10,6) DEFAULT NULL"); } catch (Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE `{$geoTable}` ADD COLUMN `map_x` DECIMAL(5,2) DEFAULT NULL"); } catch (Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE `{$geoTable}` ADD COLUMN `map_y` DECIMAL(5,2) DEFAULT NULL"); } catch (Throwable $e) {}
+    }
     try {
         $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `terminal_pin` VARCHAR(20) DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("UPDATE `stock_locations` SET `lat` = -1.9465, `lng` = 30.1585, `map_x` = 84.0, `map_y` = 20.0 WHERE `lat` IS NULL AND (`name` LIKE '%Ndera%' OR `code` = 'NDR-STK')");
+        $pdo->exec("UPDATE `stock_locations` SET `lat` = -1.9516, `lng` = 30.1153, `map_x` = 74.0, `map_y` = 67.0 WHERE `lat` IS NULL AND (`name` LIKE '%BK Arena%' OR `code` = 'BKA-STK')");
+        $pdo->exec("UPDATE `stock_locations` SET `lat` = -1.9547, `lng` = 30.0928, `map_x` = 42.5, `map_y` = 20.0 WHERE `lat` IS NULL AND (`name` LIKE '%KCC%' OR `name` LIKE '%Convention%' OR `code` = 'KCC-STK')");
+        $pdo->exec("UPDATE `events` SET `lat` = -1.9546, `lng` = 30.0927, `map_x` = 48.0, `map_y` = 40.0 WHERE `lat` IS NULL AND (`title` LIKE '%KCC%' OR `location` LIKE '%Convention%')");
+        $pdo->exec("UPDATE `events` SET `lat` = -1.9515, `lng` = 30.1151, `map_x` = 70.0, `map_y` = 44.0 WHERE `lat` IS NULL AND (`title` LIKE '%BK Arena%' OR `location` LIKE '%BK Arena%')");
+        $pdo->exec("UPDATE `events` SET `lat` = -1.9332, `lng` = 30.2055, `map_x` = 87.0, `map_y` = 48.0 WHERE `lat` IS NULL AND (`title` LIKE '%Intare%' OR `location` LIKE '%Intare%')");
+        $pdo->exec("UPDATE `events` SET `lat` = -1.9489, `lng` = 30.0628, `map_x` = 16.0, `map_y` = 66.0 WHERE `lat` IS NULL AND (`title` LIKE '%Marriott%' OR `location` LIKE '%Marriott%')");
     } catch (Throwable $e) {}
 
     // Seed items if empty

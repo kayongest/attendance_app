@@ -11,9 +11,20 @@ error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING & ~E_DEPRECATED);
 ini_set('display_errors', '0');
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
+$reqOrigin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
+$serverHost = trim((string) ($_SERVER['HTTP_HOST'] ?? ''));
+if ($reqOrigin !== '' && $serverHost !== '') {
+    $originHost = (string) (parse_url($reqOrigin, PHP_URL_HOST) ?? '');
+    $originPort = parse_url($reqOrigin, PHP_URL_PORT);
+    $originHostPort = $originHost . ($originPort ? ':' . $originPort : '');
+    if (strcasecmp($originHostPort, $serverHost) === 0 || strcasecmp($originHost, explode(':', $serverHost)[0]) === 0) {
+        header('Access-Control-Allow-Origin: ' . $reqOrigin);
+        header('Vary: Origin');
+        header('Access-Control-Allow-Credentials: true');
+    }
+}
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -893,6 +904,85 @@ function resolveWarehouseTerminalPin(array $row): string
     return trim((string) ($row['terminal_pin'] ?? ''));
 }
 
+function getSessionCsrfToken(): string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return '';
+    }
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return (string) $_SESSION['csrf_token'];
+}
+
+function validateCsrfForAuthenticatedPost(array $jsonBody): bool
+{
+    $sessionToken = getSessionCsrfToken();
+    if ($sessionToken === '') {
+        return false;
+    }
+    $headerToken = trim((string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+    $bodyToken = trim((string) ($_POST['csrf_token'] ?? $jsonBody['csrf_token'] ?? ''));
+    $candidate = $headerToken !== '' ? $headerToken : $bodyToken;
+    return $candidate !== '' && hash_equals($sessionToken, $candidate);
+}
+
+function checkSecurityRateLimit(PDO $pdo, string $rateKey, int $maxAttempts = 5, int $windowSeconds = 600): array
+{
+    try {
+        $stmt = $pdo->prepare("SELECT `attempts`, `first_attempt_at`, `blocked_until` FROM `security_rate_limits` WHERE `rate_key` = ? LIMIT 1");
+        $stmt->execute([$rateKey]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return ['allowed' => true, 'retry_after' => 0];
+        }
+        $now = time();
+        $blockedUntilTs = !empty($row['blocked_until']) ? strtotime((string) $row['blocked_until']) : false;
+        if ($blockedUntilTs !== false && $blockedUntilTs > $now) {
+            return ['allowed' => false, 'retry_after' => max(1, $blockedUntilTs - $now)];
+        }
+        $firstTs = strtotime((string) $row['first_attempt_at']) ?: $now;
+        if (($now - $firstTs) > $windowSeconds) {
+            $pdo->prepare("DELETE FROM `security_rate_limits` WHERE `rate_key` = ?")->execute([$rateKey]);
+        }
+    } catch (Throwable $e) {}
+    return ['allowed' => true, 'retry_after' => 0];
+}
+
+function recordFailedRateLimit(PDO $pdo, string $rateKey, int $maxAttempts = 5, int $windowSeconds = 600, int $blockSeconds = 60): int
+{
+    try {
+        $nowTs = time();
+        $nowSql = date('Y-m-d H:i:s', $nowTs);
+        $stmt = $pdo->prepare("SELECT `attempts`, `first_attempt_at` FROM `security_rate_limits` WHERE `rate_key` = ? LIMIT 1");
+        $stmt->execute([$rateKey]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            $pdo->prepare("INSERT INTO `security_rate_limits` (`rate_key`, `attempts`, `first_attempt_at`, `blocked_until`) VALUES (?, 1, ?, NULL)")
+                ->execute([$rateKey, $nowSql]);
+            return 1;
+        }
+
+        $firstTs = strtotime((string) $row['first_attempt_at']) ?: $nowTs;
+        $attempts = (($nowTs - $firstTs) > $windowSeconds) ? 1 : ((int) $row['attempts'] + 1);
+        $firstSql = ($attempts === 1) ? $nowSql : (string) $row['first_attempt_at'];
+        $blockedUntilSql = ($attempts >= $maxAttempts) ? date('Y-m-d H:i:s', $nowTs + $blockSeconds) : null;
+
+        $pdo->prepare("UPDATE `security_rate_limits` SET `attempts` = ?, `first_attempt_at` = ?, `blocked_until` = ? WHERE `rate_key` = ?")
+            ->execute([$attempts, $firstSql, $blockedUntilSql, $rateKey]);
+        return $attempts;
+    } catch (Throwable $e) {}
+    return 0;
+}
+
+function clearSecurityRateLimit(PDO $pdo, string $rateKey): void
+{
+    try {
+        $pdo->prepare("DELETE FROM `security_rate_limits` WHERE `rate_key` = ?")->execute([$rateKey]);
+    } catch (Throwable $e) {}
+}
+
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
 {
     $todayStr = date('Y-m-d');
@@ -955,6 +1045,10 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'min_clearance' => 'L2 / L3 / L4 Required (L1 Blocked)',
             'assigned_technicians' => $whAssignedIds,
             'assigned_count' => count($whAssignedIds),
+            'lat' => isset($sr['lat']) && $sr['lat'] !== null ? (float) $sr['lat'] : null,
+            'lng' => isset($sr['lng']) && $sr['lng'] !== null ? (float) $sr['lng'] : null,
+            'map_x' => isset($sr['map_x']) && $sr['map_x'] !== null ? (float) $sr['map_x'] : null,
+            'map_y' => isset($sr['map_y']) && $sr['map_y'] !== null ? (float) $sr['map_y'] : null,
         ];
         if ($canSeeTerminalPins) {
             $whRow['terminal_pin'] = resolveWarehouseTerminalPin($sr);
@@ -1025,9 +1119,13 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'assigned_technicians' => $assignedIds,
             'assigned_technician_names' => $assignedNames,
             'assigned_count' => count($assignedIds),
+            'lat' => isset($er['lat']) && $er['lat'] !== null ? (float) $er['lat'] : null,
+            'lng' => isset($er['lng']) && $er['lng'] !== null ? (float) $er['lng'] : null,
+            'map_x' => isset($er['map_x']) && $er['map_x'] !== null ? (float) $er['map_x'] : null,
+            'map_y' => isset($er['map_y']) && $er['map_y'] !== null ? (float) $er['map_y'] : null,
         ];
         if ($canSeeTerminalPins) {
-            $evItem['terminal_pin'] = trim((string) ($er['terminal_pin'] ?? '')) ?: '1234';
+            $evItem['terminal_pin'] = trim((string) ($er['terminal_pin'] ?? ''));
         }
         $eventVenues[] = $evItem;
         $fallbackIdx++;
@@ -1690,6 +1788,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     return [
         'ok' => true,
         'dbSource' => $activeDb,
+        'csrfToken' => getSessionCsrfToken(),
         'currentUser' => $currentUser,
         'read_notif_ids' => $readNotifIds,
         'clearanceMatrix' => $clearanceMatrix,
@@ -1801,6 +1900,21 @@ try {
         exit;
     }
 
+    // CSRF validation on authenticated mutating POST requests
+    if (
+        strtoupper((string) $method) === 'POST'
+        && !empty($_SESSION['auth_user_id'])
+        && !in_array($action, ['login', 'logout'], true)
+        && !validateCsrfForAuthenticatedPost($jsonBody)
+    ) {
+        http_response_code(403);
+        echo json_encode([
+            'ok' => false,
+            'error' => 'Invalid or expired security token. Refresh the page and try again.',
+        ]);
+        exit;
+    }
+
     if ($action === 'bootstrap') {
         echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
         exit;
@@ -1849,6 +1963,18 @@ try {
             exit;
         }
 
+        $clientIp = trim((string) ($_SERVER['REMOTE_ADDR'] ?? 'local'));
+        $loginRateKey = 'login:' . sha1(strtolower($clientIp) . '|' . strtolower($username));
+        $rateCheck = checkSecurityRateLimit($pdo, $loginRateKey, 5, 600);
+        if (!$rateCheck['allowed']) {
+            http_response_code(429);
+            echo json_encode([
+                'ok' => false,
+                'error' => "Too many failed login attempts. Try again in {$rateCheck['retry_after']}s.",
+            ]);
+            exit;
+        }
+
         // Search user by username, email, or badge code
         $stmt = $pdo->prepare("
             SELECT u.*, b.badge_code, b.clearance_level, b.badge_status
@@ -1863,6 +1989,7 @@ try {
         $userRow = $stmt->fetch();
 
         if (!$userRow) {
+            recordFailedRateLimit($pdo, $loginRateKey, 5, 600, 60);
             echo json_encode(['ok' => false, 'error' => "No account found matching '{$username}'."]);
             exit;
         }
@@ -1876,16 +2003,19 @@ try {
         $passValid = ($storedHash !== '' && password_verify($password, $storedHash));
 
         if (!$passValid) {
+            recordFailedRateLimit($pdo, $loginRateKey, 5, 600, 60);
             http_response_code(401);
             echo json_encode(['ok' => false, 'error' => 'Invalid username or password.']);
             exit;
         }
 
+        clearSecurityRateLimit($pdo, $loginRateKey);
         if (session_status() === PHP_SESSION_ACTIVE) {
             @session_regenerate_id(true);
         }
         $_SESSION['auth_user_id'] = (int) $userRow['id'];
         $_SESSION['auth_user_role'] = strtolower((string)$userRow['role']);
+        $freshCsrf = getSessionCsrfToken();
 
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $matchedMember = $full['currentUser'] ?? null;
@@ -1902,6 +2032,7 @@ try {
             'ok' => true,
             'message' => "Welcome back, {$userRow['full_name']}!",
             'user' => $matchedMember ?: $userRow,
+            'csrfToken' => $freshCsrf,
             'dbSource' => $activeDb,
         ]);
         exit;
@@ -3650,7 +3781,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $id]);
             }
         } else {
-            $pinToInsert = $terminalPinRaw !== '' ? $terminalPinRaw : resolveWarehouseTerminalPin(['name' => $name, 'code' => $code]);
+            $pinToInsert = $terminalPinRaw !== '' ? $terminalPinRaw : str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
             $stmt = $pdo->prepare("
                 INSERT INTO `stock_locations`
                 (`name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `controller_name`, `controller_phone`, `is_active`, `image`, `terminal_pin`)
@@ -3668,20 +3799,33 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         exit;
     }
 
-    if ($action === 'save_warehouse_pin') {
+    if ($action === 'save_warehouse_pin' || $action === 'save_checkpoint_pin') {
         $caller = getCallerUser($pdo);
-        $authCheck = canCallerPerformAction('save_warehouse_pin', $caller);
-        if (!$authCheck['ok']) {
-            http_response_code(403);
-            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
-            exit;
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse'));
+        if ($cpType !== 'event_venue') {
+            $cpType = 'stock_warehouse';
         }
 
-        $warehouseId = (int) ($_POST['warehouse_id'] ?? $jsonBody['warehouse_id'] ?? 0);
+        if ($cpType === 'stock_warehouse') {
+            $authCheck = canCallerPerformAction('save_warehouse_pin', $caller);
+            if (!$authCheck['ok']) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+                exit;
+            }
+        } else {
+            requireAuthorizedCaller(
+                $pdo,
+                ['admin', 'manager', 'administrator', 'tech_lead', 'technical_lead', 'project_manager', 'stock_manager'],
+                'Permission denied: Updating Event Venue Terminal PINs requires Technical Lead, Site Manager, or Administrator privileges.'
+            );
+        }
+
+        $cpIdRaw = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? $_POST['warehouse_id'] ?? $jsonBody['warehouse_id'] ?? '0'));
         $pin = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
 
-        if ($warehouseId <= 0) {
-            echo json_encode(['ok' => false, 'error' => 'Valid stock warehouse ID is required']);
+        if ($cpIdRaw === '' || $cpIdRaw === '0') {
+            echo json_encode(['ok' => false, 'error' => 'Valid checkpoint ID is required']);
             exit;
         }
         if (!preg_match('/^[A-Za-z0-9]{4,12}$/', $pin)) {
@@ -3689,25 +3833,59 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
 
-        $upd = $pdo->prepare("UPDATE `stock_locations` SET `terminal_pin` = ? WHERE `id` = ?");
-        $upd->execute([$pin, $warehouseId]);
+        if ($cpType === 'stock_warehouse') {
+            $warehouseId = (int) $cpIdRaw;
+            $upd = $pdo->prepare("UPDATE `stock_locations` SET `terminal_pin` = ? WHERE `id` = ?");
+            $upd->execute([$pin, $warehouseId]);
 
-        $whStmt = $pdo->prepare("SELECT `name` FROM `stock_locations` WHERE `id` = ?");
-        $whStmt->execute([$warehouseId]);
-        $whName = (string) ($whStmt->fetchColumn() ?: 'Stock Warehouse');
+            $whStmt = $pdo->prepare("SELECT `name` FROM `stock_locations` WHERE `id` = ?");
+            $whStmt->execute([$warehouseId]);
+            $whName = (string) ($whStmt->fetchColumn() ?: 'Stock Warehouse');
 
+            echo json_encode([
+                'ok' => true,
+                'checkpoint_type' => 'stock_warehouse',
+                'checkpoint_id' => $warehouseId,
+                'warehouse_id' => $warehouseId,
+                'checkpoint_name' => $whName,
+                'warehouse_name' => $whName,
+                'terminal_pin' => $pin,
+                'message' => "Dedicated Terminal PIN updated for {$whName}",
+            ]);
+            exit;
+        }
+
+        $evIdNumeric = (int) $cpIdRaw;
+        $evRow = null;
+        $evStmt = $pdo->query("SELECT `id`, `title` FROM `events`");
+        while ($candidate = $evStmt->fetch()) {
+            $cidRaw = (string) ($candidate['id'] ?? '');
+            $cidNum = is_numeric($cidRaw) ? (int) $cidRaw : crc32($cidRaw);
+            if ($cidRaw === $cpIdRaw || ($evIdNumeric > 0 && $cidNum === $evIdNumeric)) {
+                $evRow = $candidate;
+                break;
+            }
+        }
+        if (!$evRow) {
+            echo json_encode(['ok' => false, 'error' => 'Event Venue checkpoint not found']);
+            exit;
+        }
+        $pdo->prepare("UPDATE `events` SET `terminal_pin` = ? WHERE `id` = ?")->execute([$pin, (string) $evRow['id']]);
+        $evName = (string) ($evRow['title'] ?? 'Event Venue');
         echo json_encode([
             'ok' => true,
-            'warehouse_id' => $warehouseId,
-            'warehouse_name' => $whName,
+            'checkpoint_type' => 'event_venue',
+            'checkpoint_id' => is_numeric($evRow['id']) ? (int) $evRow['id'] : crc32((string) $evRow['id']),
+            'raw_id' => (string) $evRow['id'],
+            'checkpoint_name' => $evName,
             'terminal_pin' => $pin,
-            'message' => "Dedicated Terminal PIN updated for {$whName}",
+            'message' => "Dedicated Terminal PIN updated for {$evName}",
         ]);
         exit;
     }
 
     if ($action === 'verify_terminal_pin') {
-        requireAuthorizedCaller(
+        $caller = requireAuthorizedCaller(
             $pdo,
             ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'],
             'Permission denied: Unlocking a Gate Terminal requires an authorized operator session.'
@@ -3729,6 +3907,17 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
 
+        $pinRateKey = 'pin:' . (int) ($caller['id'] ?? 0) . ':' . $cpType . ':' . $cpIdRaw;
+        $pinRateCheck = checkSecurityRateLimit($pdo, $pinRateKey, 5, 600);
+        if (!$pinRateCheck['allowed']) {
+            http_response_code(429);
+            echo json_encode([
+                'ok' => false,
+                'error' => "Too many invalid PIN attempts. Terminal PIN entry paused for {$pinRateCheck['retry_after']}s.",
+            ]);
+            exit;
+        }
+
         if ($cpType === 'stock_warehouse') {
             $stmt = $pdo->prepare("SELECT * FROM `stock_locations` WHERE `id` = ? LIMIT 1");
             $stmt->execute([$cpId]);
@@ -3747,12 +3936,14 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 exit;
             }
             if (!verifyTerminalPinSecret($pin, $expectedPin)) {
+                recordFailedRateLimit($pdo, $pinRateKey, 5, 600, 60);
                 echo json_encode([
                     'ok' => false,
                     'error' => "Invalid PIN for {$cpName}",
                 ]);
                 exit;
             }
+            clearSecurityRateLimit($pdo, $pinRateKey);
             echo json_encode([
                 'ok' => true,
                 'checkpoint_type' => 'stock_warehouse',
@@ -3770,7 +3961,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             while ($candidate = $evStmt->fetch()) {
                 $cidRaw = (string) ($candidate['id'] ?? '');
                 $cidNum = is_numeric($cidRaw) ? (int) $cidRaw : crc32($cidRaw);
-                if ($cidRaw === (string) $cpId || $cidNum === $cpId) {
+                if ($cidRaw === $cpIdRaw || ($cpId > 0 && $cidNum === $cpId)) {
                     $evRow = $candidate;
                     break;
                 }
@@ -3793,9 +3984,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
 
         if (!verifyTerminalPinSecret($pin, $expectedEvPin)) {
+            recordFailedRateLimit($pdo, $pinRateKey, 5, 600, 60);
             echo json_encode(['ok' => false, 'error' => "Invalid PIN for {$evName}"]);
             exit;
         }
+        clearSecurityRateLimit($pdo, $pinRateKey);
         echo json_encode([
             'ok' => true,
             'checkpoint_type' => 'event_venue',

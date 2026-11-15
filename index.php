@@ -15,13 +15,19 @@ if (empty($_SESSION['auth_user_id'])) {
     exit;
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // Prevent browser caching of app shell so script and styling changes reflect immediately
 header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 header("Expires: 0");
 
-// Serve main app view with server-side theme preset if cookie exists
+// Serve main app view with server-side theme preset & per-session CSRF meta tag
 $html = file_get_contents(__DIR__ . '/index.html');
+$csrfMeta = '<meta name="csrf-token" content="' . htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') . '" />';
+$html = str_replace('</head>', "  {$csrfMeta}\n</head>", $html);
 if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
     $theme = htmlspecialchars($_COOKIE['ability_theme'], ENT_QUOTES, 'UTF-8');
     $html = str_replace('<html lang="en">', '<html lang="en" data-theme="' . $theme . '">', $html);

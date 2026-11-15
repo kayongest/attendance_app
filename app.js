@@ -4,7 +4,12 @@
 (function () {
   'use strict';
 
+  const getMetaCsrfToken = () =>
+    document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
   const state = {
+    csrfToken: getMetaCsrfToken(),
+    kioskMuted: localStorage.getItem('ability_kiosk_muted') === '1',
     activeScreen: 'overview',
     checkpointType: 'stock_warehouse',
     checkpointId: 1,
@@ -144,6 +149,28 @@
     notifications: [],
   };
 
+  // Attach per-session X-CSRF-Token automatically on mutating POST requests to api.php
+  if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+    const rawFetch = window.fetch.bind(window);
+    window.fetch = (input, init = {}) => {
+      const urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+      const methodStr = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+      if (methodStr === 'POST' && urlStr.includes('api.php')) {
+        const token = state.csrfToken || getMetaCsrfToken();
+        if (token) {
+          const nextInit = Object.assign({}, init);
+          const hdrs = new Headers(nextInit.headers || (typeof input !== 'string' && input && input.headers) || {});
+          if (!hdrs.has('X-CSRF-Token')) {
+            hdrs.set('X-CSRF-Token', token);
+          }
+          nextInit.headers = hdrs;
+          return rawFetch(input, nextInit);
+        }
+      }
+      return rawFetch(input, init);
+    };
+  }
+
   const TIER_CYCLE = ['all', 'L1', 'L2', 'L3', 'L4'];
   const GATE_STATE_CYCLE = ['all', 'ready', 'checked_in', 'checked_out'];
 
@@ -170,6 +197,9 @@
 
   function applyBootstrapPayload(data, preserveCurrentVerification = false) {
     if (!data || !data.ok) return;
+    if (data.csrfToken) {
+      state.csrfToken = String(data.csrfToken);
+    }
     state.dbSource = data.dbSource || 'ability_db';
     if (Array.isArray(data.clearanceMatrix) && data.clearanceMatrix.length > 0) {
       state.clearanceMatrix = data.clearanceMatrix;
@@ -443,7 +473,7 @@
       : null;
 
   function playKioskChime(type = 'approve') {
-    if (!audioCtx) return;
+    if (state.kioskMuted || !audioCtx) return;
     try {
       if (audioCtx.state === 'suspended') {
         audioCtx.resume();
@@ -721,6 +751,24 @@
       syncBtn.style.display = queue.length > 0 ? 'inline-flex' : 'none';
       syncBtn.disabled = offlineSyncInFlight || !isOnline;
       syncBtn.textContent = offlineSyncInFlight ? 'Syncing...' : 'Sync Now';
+    }
+
+    const headerNetPill = document.getElementById('terminal-net-status-pill');
+    if (headerNetPill) {
+      headerNetPill.classList.remove('online', 'is-offline', 'has-queued');
+      if (!isOnline) {
+        headerNetPill.classList.add('is-offline');
+        headerNetPill.textContent = queue.length > 0 ? `Offline · ${queue.length} Queued` : 'Offline Mode';
+        headerNetPill.title = 'Terminal is offline. Scans queue safely in local storage until connection returns.';
+      } else if (queue.length > 0) {
+        headerNetPill.classList.add('has-queued');
+        headerNetPill.textContent = offlineSyncInFlight ? `Syncing ${queue.length}...` : `Sync ${queue.length} Queued ↻`;
+        headerNetPill.title = 'Click to sync queued offline scans now';
+      } else {
+        headerNetPill.classList.add('online');
+        headerNetPill.textContent = 'Online · Synced';
+        headerNetPill.title = 'Connected to server · All terminal scans synchronized';
+      }
     }
   }
 
@@ -1297,6 +1345,7 @@
     }
     renderActivityTimeline();
     renderTechLeadRosterCard();
+    renderCrewDigitalPassCard();
     renderCrewTables();
     renderCheckpointsDirectory();
     renderBatchesAndMatrixScreen();
@@ -2302,7 +2351,7 @@
       quickTips.style.display = locked ? 'none' : 'flex';
     }
     if (pinMgrBtn) {
-      const canManagePins = isCurrentUserAdmin() || isCurrentUserStockManager();
+      const canManagePins = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserTechLead();
       pinMgrBtn.style.display = canManagePins ? 'inline-flex' : 'none';
     }
     if (quickbar) quickbar.style.display = locked ? 'none' : 'flex';
@@ -2328,54 +2377,192 @@
     }
   }
 
-  function renderWarehousePinList() {
-    const listEl = document.getElementById('warehouse-pin-list');
-    const selEl = document.getElementById('wh-pin-select');
+  function getManageablePinCheckpoints() {
+    const canManageWarehouses = isCurrentUserAdmin() || isCurrentUserStockManager();
+    const canManageVenues = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserTechLead();
     const warehouses =
       (state.checkpoints.stock_warehouses && state.checkpoints.stock_warehouses.length > 0
         ? state.checkpoints.stock_warehouses
         : state.stockManager.warehouses) || [];
+    const events = state.checkpoints.events || [];
+    const items = [];
+
+    if (canManageWarehouses) {
+      warehouses.forEach((w) => {
+        const cpId = String(w.id);
+        items.push({
+          key: `stock_warehouse:${cpId}`,
+          cpType: 'stock_warehouse',
+          cpId,
+          typeLabel: '🏭 Facility Gate',
+          name: w.name || 'Warehouse',
+          code: w.code || 'STK',
+          location: w.location || '',
+          pin: resolveWarehousePinClient(w),
+        });
+      });
+    }
+
+    if (canManageVenues) {
+      events.forEach((ev) => {
+        const cpId = String(ev.id || ev.raw_id || '');
+        if (!cpId) return;
+        items.push({
+          key: `event_venue:${cpId}`,
+          cpType: 'event_venue',
+          cpId,
+          typeLabel: '🎪 Event Venue',
+          name: ev.name || ev.title || 'Event Venue',
+          code: ev.code || ev.event_code || 'EVT',
+          location: ev.location || '',
+          pin: ev.terminal_pin ? String(ev.terminal_pin).trim() : '',
+        });
+      });
+    }
+
+    return { canManageWarehouses, canManageVenues, items };
+  }
+
+  function renderWarehousePinList() {
+    const listEl = document.getElementById('warehouse-pin-list');
+    const selEl = document.getElementById('wh-pin-select');
+    const { items } = getManageablePinCheckpoints();
 
     if (listEl) {
-      if (warehouses.length === 0) {
-        listEl.innerHTML = `<div style="font-size: 12px; color: var(--text-muted); padding: 12px;">No stock warehouses found.</div>`;
+      if (items.length === 0) {
+        listEl.innerHTML = `<div style="font-size: 12px; color: var(--text-muted); padding: 12px;">No manageable terminal checkpoints found for your role.</div>`;
       } else {
-        listEl.innerHTML = warehouses
-          .map((w) => {
-            const pin = resolveWarehousePinClient(w);
-            return `
-              <div class="warehouse-pin-row">
-                <div class="warehouse-pin-row-info">
-                  <span class="warehouse-pin-row-name">${escapeHtml(w.name || 'Warehouse')}</span>
-                  <span class="warehouse-pin-row-sub">${escapeHtml(w.code || 'STK')} · ${escapeHtml(w.location || '')}</span>
-                </div>
-                <div class="warehouse-pin-row-actions">
-                  <span class="warehouse-pin-code-pill">PIN: ${pin ? escapeHtml(pin) : 'Protected'}</span>
-                  <button type="button" class="btn btn-secondary-32-sm js-edit-wh-pin-btn" data-wh-id="${Number(w.id)}" data-pin="${escapeHtml(pin)}">Edit</button>
-                </div>
+        listEl.innerHTML = items
+          .map((item) => `
+            <div class="warehouse-pin-row">
+              <div class="warehouse-pin-row-info">
+                <span class="warehouse-pin-row-name">${escapeHtml(item.name)}</span>
+                <span class="warehouse-pin-row-sub">${escapeHtml(item.typeLabel)} · ${escapeHtml(item.code)}${item.location ? ` · ${escapeHtml(item.location)}` : ''}</span>
               </div>
-            `;
-          })
+              <div class="warehouse-pin-row-actions">
+                <span class="warehouse-pin-code-pill">PIN: ${item.pin ? escapeHtml(item.pin) : 'Not Set'}</span>
+                <button type="button" class="btn btn-secondary-32-sm js-edit-wh-pin-btn" data-cp-key="${escapeHtml(item.key)}" data-pin="${escapeHtml(item.pin)}">Edit</button>
+              </div>
+            </div>
+          `)
           .join('');
       }
     }
 
     if (selEl) {
       const prevVal = selEl.value;
-      selEl.innerHTML = warehouses
-        .map((w) => `<option value="${Number(w.id)}">${escapeHtml(w.name)} (${escapeHtml(w.code || 'STK')})</option>`)
-        .join('');
-      if (prevVal && warehouses.some((w) => String(w.id) === String(prevVal))) {
-        selEl.value = prevVal;
-      } else if (state.checkpointType === 'stock_warehouse' && warehouses.some((w) => Number(w.id) === Number(state.checkpointId))) {
-        selEl.value = String(state.checkpointId);
+      const whItems = items.filter((i) => i.cpType === 'stock_warehouse');
+      const evItems = items.filter((i) => i.cpType === 'event_venue');
+      const renderOpt = (i) => `<option value="${escapeHtml(i.key)}">${escapeHtml(i.name)} (${escapeHtml(i.code)})</option>`;
+      let html = '';
+      if (whItems.length > 0) {
+        html += `<optgroup label="Facility Gates (Stock Warehouses)">${whItems.map(renderOpt).join('')}</optgroup>`;
       }
-      const selectedWh = warehouses.find((w) => String(w.id) === String(selEl.value));
+      if (evItems.length > 0) {
+        html += `<optgroup label="Event Venues">${evItems.map(renderOpt).join('')}</optgroup>`;
+      }
+      selEl.innerHTML = html || `<option value="">No checkpoints available</option>`;
+
+      const activeKey = `${state.checkpointType}:${state.checkpointId}`;
+      if (prevVal && items.some((i) => i.key === prevVal)) {
+        selEl.value = prevVal;
+      } else if (items.some((i) => i.key === activeKey)) {
+        selEl.value = activeKey;
+      } else if (items.length > 0) {
+        selEl.value = items[0].key;
+      }
+
+      const selectedItem = items.find((i) => i.key === selEl.value);
       const pinValInput = document.getElementById('wh-pin-value');
-      if (pinValInput && selectedWh && !pinValInput.matches(':focus')) {
-        pinValInput.value = resolveWarehousePinClient(selectedWh);
+      if (pinValInput && selectedItem && !pinValInput.matches(':focus')) {
+        pinValInput.value = selectedItem.pin;
       }
     }
+  }
+
+  function buildBadgeQrSvg(codeText) {
+    const str = String(codeText || 'REW-BADGE-0000');
+    const size = 11;
+    let hash = 2166136261;
+    for (let i = 0; i < str.length; i += 1) {
+      hash ^= str.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    const isFinder = (r, c) =>
+      (r < 3 && c < 3) || (r < 3 && c >= size - 3) || (r >= size - 3 && c < 3);
+    const rects = [];
+    for (let r = 0; r < size; r += 1) {
+      for (let c = 0; c < size; c += 1) {
+        let on = false;
+        if (isFinder(r, c)) {
+          on = (r === 0 || r === 2 || r === size - 1 || r === size - 3 || c === 0 || c === 2 || c === size - 1 || c === size - 3 || (r === 1 && c === 1) || (r === 1 && c === size - 2) || (r === size - 2 && c === 1));
+        } else {
+          const bit = (r * size + c + (str.charCodeAt((r + c) % str.length) || 0)) & 31;
+          const mixed = Math.imul(hash ^ ((r + 1) * 73856093) ^ ((c + 1) * 19349663), 0x45d9f3b);
+          on = (((mixed >>> bit) ^ mixed) & 1) === 1;
+        }
+        if (on) {
+          rects.push(`<rect x="${c * 7}" y="${r * 7}" width="7" height="7" rx="1" fill="#0f172a"/>`);
+        }
+      }
+    }
+    return `<svg viewBox="0 0 ${size * 7} ${size * 7}" width="78" height="78" role="img" aria-label="Digital badge matrix for ${escapeHtml(str)}">${rects.join('')}</svg>`;
+  }
+
+  function renderCrewDigitalPassCard() {
+    const card = document.getElementById('crew-digital-pass-card');
+    if (!card) return;
+    if (!state.currentUser) {
+      card.style.display = 'none';
+      card.innerHTML = '';
+      return;
+    }
+
+    const meCrew = (state.crew || []).find((c) => Number(c.id) === Number(state.currentUser.id)) || state.currentUser;
+    const fullName = meCrew.full_name || state.currentUser.full_name || 'Crew Member';
+    const initials = meCrew.initials || fullName.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'CR';
+    const roleLabel = meCrew.role_display || meCrew.role || 'Field Crew';
+    const dept = meCrew.department || 'Operations';
+    const badgeCode = meCrew.badge_code || `REW-BADGE-${String(meCrew.id || 0).padStart(4, '0')}`;
+    const rfidUid = meCrew.rfid_uid || 'RFID-UNASSIGNED';
+    const clearance = meCrew.clearance_label || meCrew.clearance_level || 'L2 Technician';
+    const cpName = meCrew.assigned_checkpoint_name || meCrew.last_checkpoint_name || state.activeCheckpoint?.name || 'Any Authorized Gate';
+    const dailyState = meCrew.daily_state || '';
+    const statusLabel = dailyState === 'checked_in'
+      ? 'Checked In · On Site'
+      : (dailyState === 'checked_out' ? 'Checked Out · Transit' : 'Standby / Ready');
+    const statusClass = dailyState === 'checked_in'
+      ? 'status-in'
+      : (dailyState === 'checked_out' ? 'status-out' : '');
+    const kicker = isCurrentUserTechnician() ? 'MY DIGITAL CREW PASS' : 'PERSONAL DIGITAL ID PASS';
+    const avatarHtml = meCrew.photo_url
+      ? `<img src="${escapeHtml(meCrew.photo_url)}" alt="${escapeHtml(fullName)}" />`
+      : escapeHtml(initials);
+
+    card.style.display = 'flex';
+    card.innerHTML = `
+      <div class="crew-pass-left">
+        <div class="crew-pass-avatar">${avatarHtml}</div>
+        <div class="crew-pass-meta">
+          <span class="crew-pass-kicker">${escapeHtml(kicker)}</span>
+          <div class="crew-pass-name">${escapeHtml(fullName)}</div>
+          <div class="crew-pass-sub">${escapeHtml(roleLabel)} · ${escapeHtml(dept)}</div>
+          <div class="crew-pass-pills">
+            <span class="crew-pass-pill ${statusClass}">${escapeHtml(statusLabel)}</span>
+            <span class="crew-pass-pill">🔑 ${escapeHtml(clearance)}</span>
+            <span class="crew-pass-pill">📍 ${escapeHtml(cpName)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="crew-pass-qr-wrap">
+        <div class="crew-pass-qr-box">${buildBadgeQrSvg(badgeCode)}</div>
+        <div class="crew-pass-code-col">
+          <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #64748b;">Scan at Gate Terminal</span>
+          <span class="crew-pass-badge-code">${escapeHtml(badgeCode)}</span>
+          <span class="crew-pass-rfid">${escapeHtml(rfidUid)}</span>
+        </div>
+      </div>
+    `;
   }
 
   function openWarehousePinModal() {
@@ -2756,16 +2943,31 @@
   ];
 
   function getFacilityMapCoords(facility, index = 0) {
-    const haystack = `${facility.name || ''} ${facility.location || ''} ${facility.title || ''}`;
+    const dbX = Number(facility?.map_x);
+    const dbY = Number(facility?.map_y);
+    const hasDbCoords = Number.isFinite(dbX) && Number.isFinite(dbY) && dbX > 0 && dbY > 0;
+    const haystack = `${facility?.name || ''} ${facility?.location || ''} ${facility?.title || ''}`;
+    let matchedShortName = '';
     for (const kc of KIGALI_KNOWN_COORDS) {
-      if (kc.type && facility.type !== kc.type) continue;
+      if (kc.type && facility?.type !== kc.type) continue;
       if (kc.match.test(haystack)) {
-        return {
-          left: kc.left,
-          top: kc.top,
-          shortName: kc.shortName,
-        };
+        matchedShortName = kc.shortName;
+        if (!hasDbCoords) {
+          return {
+            left: kc.left,
+            top: kc.top,
+            shortName: kc.shortName,
+          };
+        }
+        break;
       }
+    }
+    if (hasDbCoords) {
+      return {
+        left: `${Math.min(92, Math.max(8, dbX))}%`,
+        top: `${Math.min(88, Math.max(12, dbY))}%`,
+        shortName: matchedShortName || facility?.name?.split('—')[0]?.split('-')[0]?.trim() || 'Site',
+      };
     }
     const isStock = facility.type === 'stock_warehouse';
     const defaults = isStock
@@ -3508,13 +3710,28 @@
       });
     }
 
+    const allCheckpoints = [
+      ...(state.checkpoints?.stock_warehouses || []),
+      ...(state.checkpoints?.events || []),
+    ];
     const venueOccupants = {};
     activeUsers.forEach((u) => {
       let vKeyMatched = u.venue;
-      let coord = OPTION_B_VENUES[u.venue];
+      const uVenueLower = String(u.venue || '').toLowerCase();
+      const dbCp = allCheckpoints.find((cp) => {
+        const cpName = String(cp?.name || cp?.title || '').toLowerCase();
+        return cpName && (cpName === uVenueLower || cpName.includes(uVenueLower) || uVenueLower.includes(cpName));
+      });
+      let coord = null;
+      if (dbCp && Number(dbCp.map_x) > 0 && Number(dbCp.map_y) > 0) {
+        coord = { x: Number(dbCp.map_x) / 100, y: Number(dbCp.map_y) / 100 };
+        vKeyMatched = dbCp.name || dbCp.title || u.venue;
+      } else {
+        coord = OPTION_B_VENUES[u.venue];
+      }
       if (!coord) {
         for (const vKey of Object.keys(OPTION_B_VENUES)) {
-          if (u.venue.toLowerCase().includes(vKey.toLowerCase()) || vKey.toLowerCase().includes(u.venue.toLowerCase())) {
+          if (uVenueLower.includes(vKey.toLowerCase()) || vKey.toLowerCase().includes(uVenueLower)) {
             coord = OPTION_B_VENUES[vKey];
             vKeyMatched = vKey;
             break;
@@ -8865,13 +9082,13 @@
       });
     }
 
-    // Terminals Page: Dedicated Stock Warehouse PIN Manager Modal
+    // Terminals Page: Unified Site Terminal PIN Manager Modal (Gates & Venues)
     const whPinModal = document.getElementById('warehouse-pin-modal');
     const openWhPinMgrBtn = document.getElementById('terminal-pin-manager-btn');
     if (openWhPinMgrBtn) {
       openWhPinMgrBtn.addEventListener('click', () => {
-        if (!isCurrentUserAdmin() && !isCurrentUserStockManager()) {
-          showToast('Access Restricted: Warehouse PIN configuration requires Stock Manager or Administrator privileges.');
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager() && !isCurrentUserTechLead()) {
+          showToast('Access Restricted: Terminal PIN configuration requires Technical Lead, Stock Manager, or Administrator privileges.');
           return;
         }
         openWarehousePinModal();
@@ -8894,11 +9111,11 @@
       whPinListEl.addEventListener('click', (e) => {
         const editBtn = e.target.closest('.js-edit-wh-pin-btn');
         if (!editBtn) return;
-        const wid = editBtn.getAttribute('data-wh-id');
+        const cpKey = editBtn.getAttribute('data-cp-key') || '';
         const pin = editBtn.getAttribute('data-pin') || '';
         const selEl = document.getElementById('wh-pin-select');
         const valEl = document.getElementById('wh-pin-value');
-        if (selEl && wid) selEl.value = wid;
+        if (selEl && cpKey) selEl.value = cpKey;
         if (valEl) {
           valEl.value = pin;
           valEl.focus();
@@ -8910,14 +9127,11 @@
     const whPinSelectEl = document.getElementById('wh-pin-select');
     if (whPinSelectEl) {
       whPinSelectEl.addEventListener('change', () => {
-        const warehouses =
-          (state.checkpoints.stock_warehouses && state.checkpoints.stock_warehouses.length > 0
-            ? state.checkpoints.stock_warehouses
-            : state.stockManager.warehouses) || [];
-        const selected = warehouses.find((w) => String(w.id) === String(whPinSelectEl.value));
+        const { items } = getManageablePinCheckpoints();
+        const selected = items.find((i) => i.key === whPinSelectEl.value);
         const valEl = document.getElementById('wh-pin-value');
         if (valEl && selected) {
-          valEl.value = resolveWarehousePinClient(selected);
+          valEl.value = selected.pin || '';
         }
       });
     }
@@ -8926,11 +9140,13 @@
     if (whPinForm) {
       whPinForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const wid = Number(document.getElementById('wh-pin-select')?.value || 0);
+        const rawKey = (document.getElementById('wh-pin-select')?.value || '').trim();
+        const [cpType, ...rest] = rawKey.split(':');
+        const cpId = rest.join(':');
         const pin = (document.getElementById('wh-pin-value')?.value || '').trim();
         const saveBtn = document.getElementById('save-warehouse-pin-btn');
-        if (!wid) {
-          showToast('Please select a stock warehouse.');
+        if (!cpType || !cpId) {
+          showToast('Please select a checkpoint terminal.');
           return;
         }
         if (!/^[A-Za-z0-9]{4,12}$/.test(pin)) {
@@ -8939,32 +9155,47 @@
         }
         if (saveBtn) saveBtn.disabled = true;
         try {
-          const res = await fetch('api.php?action=save_warehouse_pin', {
+          const res = await fetch('api.php?action=save_checkpoint_pin', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              action: 'save_warehouse_pin',
-              warehouse_id: wid,
+              action: 'save_checkpoint_pin',
+              checkpoint_type: cpType,
+              checkpoint_id: cpId,
               terminal_pin: pin,
             }),
           });
           const data = await res.json();
           if (data && data.ok) {
-            (state.checkpoints.stock_warehouses || []).forEach((w) => {
-              if (Number(w.id) === wid) w.terminal_pin = pin;
-            });
-            (state.stockManager.warehouses || []).forEach((w) => {
-              if (Number(w.id) === wid) w.terminal_pin = pin;
-            });
+            if (cpType === 'stock_warehouse') {
+              const wid = Number(cpId);
+              (state.checkpoints.stock_warehouses || []).forEach((w) => {
+                if (Number(w.id) === wid) w.terminal_pin = pin;
+              });
+              (state.stockManager.warehouses || []).forEach((w) => {
+                if (Number(w.id) === wid) w.terminal_pin = pin;
+              });
+            } else {
+              (state.checkpoints.events || []).forEach((ev) => {
+                if (String(ev.id) === String(cpId) || String(ev.raw_id || '') === String(cpId)) {
+                  ev.terminal_pin = pin;
+                }
+              });
+            }
+            if (state.activeCheckpoint && state.checkpointType === cpType && String(state.checkpointId) === String(cpId)) {
+              state.activeCheckpoint.terminal_pin = pin;
+            }
             renderWarehousePinList();
-            showToast(data.message || 'Dedicated warehouse PIN saved');
+            showToast(data.message || 'Checkpoint Terminal PIN saved');
             await fetchBootstrap(false);
-            loadStockManagerData();
+            if (cpType === 'stock_warehouse') {
+              loadStockManagerData();
+            }
           } else {
-            showToast(data?.error || 'Failed to save warehouse PIN');
+            showToast(data?.error || 'Failed to save checkpoint PIN');
           }
         } catch (err) {
-          showToast('Error saving warehouse PIN');
+          showToast('Error saving checkpoint PIN');
         } finally {
           if (saveBtn) saveBtn.disabled = false;
         }
@@ -11774,11 +12005,154 @@
     showToast(`Exported ${rows.length} attendance record${rows.length === 1 ? '' : 's'} to CSV.`);
   }
 
+  async function openClientShiftSignOffReport() {
+    const range = state.timelineRange || 'today';
+    let rows = [];
+    let summary = null;
+    let windowLabel = range === 'today' ? 'Today (Live Shift)' : range.toUpperCase();
+
+    try {
+      const params = new URLSearchParams({ action: 'attendance_report', range });
+      if (state.timelineDateFrom) params.set('date_from', state.timelineDateFrom);
+      if (state.timelineDateTo) params.set('date_to', state.timelineDateTo);
+      if (isCurrentUserStockController() && state.checkpointType && state.checkpointId) {
+        params.set('checkpoint_type', state.checkpointType);
+        params.set('checkpoint_id', String(state.checkpointId));
+      }
+      const res = await fetch(`api.php?${params.toString()}`);
+      const data = await res.json();
+      if (data && data.ok) {
+        rows = Array.isArray(data.rows) ? data.rows : [];
+        summary = data.summary || null;
+        if (data.window_label) windowLabel = data.window_label;
+      }
+    } catch (_) {
+      rows = range === 'today' ? (state.activityTimeline || []) : (state.timelineReportRows || []);
+    }
+
+    if (!rows.length) {
+      rows = range === 'today' ? (state.activityTimeline || []) : (state.timelineReportRows || []);
+    }
+
+    const totalScans = summary?.total_scans ?? rows.length;
+    const checkIns = summary?.check_ins ?? rows.filter((r) => /in/i.test(String(r.scan_action || r.action_title || ''))).length;
+    const checkOuts = summary?.check_outs ?? rows.filter((r) => /out/i.test(String(r.scan_action || r.action_title || ''))).length;
+    const onTimeCount = summary?.on_time ?? rows.filter((r) => /on.?time|early/i.test(String(r.punctuality_status || ''))).length;
+    const lateCount = summary?.late ?? rows.filter((r) => /late/i.test(String(r.punctuality_status || ''))).length;
+    const deniedCount = summary?.denied ?? rows.filter((r) => /declin|denied/i.test(String(r.access_status || ''))).length;
+
+    const generatedAt = new Date().toLocaleString();
+    const generatedBy = state.currentUser?.full_name || 'Authorized Operator';
+    const scopeName = state.activeCheckpoint?.name || 'All Kigali Sites & Venues';
+
+    const rowHtml = rows.length
+      ? rows.map((r, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(r.scanned_at || r.formatted_time || '—')}</td>
+            <td><strong>${escapeHtml(r.full_name || 'Unknown')}</strong><br><span class="muted">${escapeHtml(r.badge_code || '')}</span></td>
+            <td>${escapeHtml(r.role_display || r.role || '—')}</td>
+            <td>${escapeHtml(r.checkpoint_name || '—')}</td>
+            <td>${escapeHtml(r.scan_action || r.action_title || 'Scan')}</td>
+            <td>${escapeHtml(r.access_status || '—')}</td>
+            <td>${escapeHtml(r.punctuality_status || '—')}</td>
+            <td>${escapeHtml(r.duration_label || '—')}</td>
+            <td>${escapeHtml(r.notes || '')}</td>
+          </tr>
+        `).join('')
+      : '<tr><td colspan="10" style="text-align:center; padding: 24px; color:#64748b;">No attendance scans recorded in the selected shift window.</td></tr>';
+
+    const reportHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>aBility Client Shift Sign-Off Report</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 28px; font-size: 12px; }
+    .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #312e81; padding-bottom: 14px; margin-bottom: 18px; }
+    .brand { font-size: 20px; font-weight: 800; color: #1e1b4b; letter-spacing: -0.3px; }
+    .sub { font-size: 11px; color: #475569; margin-top: 3px; }
+    .meta { text-align: right; font-size: 11px; color: #334155; line-height: 1.5; }
+    .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 18px; }
+    .kpi { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #f8fafc; }
+    .kpi-v { font-size: 18px; font-weight: 800; color: #1e1b4b; }
+    .kpi-l { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 11px; }
+    th { background: #1e1b4b; color: #ffffff; text-align: left; padding: 7px 8px; font-weight: 700; }
+    td { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .muted { color: #64748b; font-size: 10px; }
+    .signoff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 26px; page-break-inside: avoid; }
+    .sig-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; }
+    .sig-title { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #334155; margin-bottom: 36px; }
+    .sig-line { border-top: 1px solid #0f172a; padding-top: 6px; font-size: 11px; color: #475569; display: flex; justify-content: space-between; }
+    @media print { body { margin: 14px; } .no-print { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="hdr">
+    <div>
+      <div class="brand">aBility Tech · Client Shift Sign-Off Report</div>
+      <div class="sub">Kigali Crew Attendance, Gate Punctuality &amp; Field Compliance Audit</div>
+    </div>
+    <div class="meta">
+      <div><strong>Window:</strong> ${escapeHtml(windowLabel)}</div>
+      <div><strong>Site / Checkpoint:</strong> ${escapeHtml(scopeName)}</div>
+      <div><strong>Generated:</strong> ${escapeHtml(generatedAt)} · ${escapeHtml(generatedBy)}</div>
+    </div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-v">${escapeHtml(String(totalScans))}</div><div class="kpi-l">Total Scans</div></div>
+    <div class="kpi"><div class="kpi-v">${escapeHtml(String(checkIns))}</div><div class="kpi-l">Check-Ins</div></div>
+    <div class="kpi"><div class="kpi-v">${escapeHtml(String(checkOuts))}</div><div class="kpi-l">Check-Outs</div></div>
+    <div class="kpi"><div class="kpi-v">${escapeHtml(String(onTimeCount))}</div><div class="kpi-l">On Time / Early</div></div>
+    <div class="kpi"><div class="kpi-v">${escapeHtml(String(lateCount))}</div><div class="kpi-l">Late Arrivals</div></div>
+    <div class="kpi"><div class="kpi-v">${escapeHtml(String(deniedCount))}</div><div class="kpi-l">Declined / Denied</div></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Timestamp</th><th>Crew / Badge</th><th>Role</th><th>Checkpoint</th><th>Action</th><th>Access</th><th>Punctuality</th><th>Duration</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>${rowHtml}</tbody>
+  </table>
+  <div class="signoff-grid">
+    <div class="sig-box">
+      <div class="sig-title">Technical Lead / Production Verification</div>
+      <div class="sig-line"><span>Name &amp; Signature</span><span>Date / Time</span></div>
+    </div>
+    <div class="sig-box">
+      <div class="sig-title">Site Manager / Client Representative Sign-Off</div>
+      <div class="sig-line"><span>Name &amp; Stamp</span><span>Date / Time</span></div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=980,height=780');
+    if (win) {
+      win.document.open();
+      win.document.write(reportHtml);
+      win.document.close();
+      win.focus();
+      setTimeout(() => {
+        try { win.print(); } catch (_) {}
+      }, 250);
+    } else {
+      window.print();
+    }
+  }
+
   function initPhase2Controls() {
     const camToggleBtn = document.getElementById('kiosk-camera-toggle-btn');
     const camFlipBtn = document.getElementById('kiosk-camera-flip-btn');
     const camCloseBtn = document.getElementById('kiosk-camera-close-btn');
     const syncBtn = document.getElementById('kiosk-offline-sync-btn');
+    const netPillBtn = document.getElementById('terminal-net-status-pill');
+    const soundBtn = document.getElementById('terminal-sound-toggle-btn');
+    const fullscreenBtn = document.getElementById('terminal-fullscreen-btn');
     const rangeSelect = document.getElementById('timeline-range-select');
     const customDatesEl = document.getElementById('timeline-custom-dates');
     const dateFromEl = document.getElementById('timeline-date-from');
@@ -11799,6 +12173,71 @@
     if (camFlipBtn) camFlipBtn.addEventListener('click', flipCameraFacing);
     if (camCloseBtn) camCloseBtn.addEventListener('click', stopCameraScanner);
     if (syncBtn) syncBtn.addEventListener('click', () => syncOfflineScans(true));
+    if (netPillBtn) {
+      netPillBtn.addEventListener('click', () => {
+        const queued = readOfflineScanQueue().length;
+        if (queued > 0) {
+          syncOfflineScans(true);
+        } else if (navigator.onLine) {
+          showToast('Gate Terminal online — 0 offline scans waiting.');
+        } else {
+          showToast('Terminal offline — badge scans queue locally until reconnected.');
+        }
+      });
+    }
+
+    const syncSoundBtnUi = () => {
+      if (!soundBtn) return;
+      soundBtn.textContent = state.kioskMuted ? '🔇 Muted' : '🔊 Sound';
+      soundBtn.title = state.kioskMuted ? 'Unmute gate terminal audio chimes' : 'Mute gate terminal audio chimes';
+    };
+    syncSoundBtnUi();
+    if (soundBtn) {
+      soundBtn.addEventListener('click', () => {
+        state.kioskMuted = !state.kioskMuted;
+        localStorage.setItem('ability_kiosk_muted', state.kioskMuted ? '1' : '0');
+        syncSoundBtnUi();
+        if (!state.kioskMuted) {
+          playKioskChime('approve');
+        }
+      });
+    }
+
+    const syncFullscreenBtnUi = () => {
+      const heroCard = document.getElementById('pane-kiosk');
+      const isFull = Boolean(document.fullscreenElement || heroCard?.classList.contains('is-kiosk-fullscreen'));
+      if (fullscreenBtn) {
+        fullscreenBtn.textContent = isFull ? '⛶ Exit Fullscreen' : '⛶ Fullscreen';
+      }
+    };
+    if (fullscreenBtn) {
+      fullscreenBtn.addEventListener('click', async () => {
+        const heroCard = document.getElementById('pane-kiosk');
+        if (!heroCard) return;
+        try {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+            heroCard.classList.remove('is-kiosk-fullscreen');
+          } else if (heroCard.classList.contains('is-kiosk-fullscreen')) {
+            heroCard.classList.remove('is-kiosk-fullscreen');
+          } else if (heroCard.requestFullscreen) {
+            await heroCard.requestFullscreen();
+          } else {
+            heroCard.classList.add('is-kiosk-fullscreen');
+          }
+        } catch (_) {
+          heroCard.classList.toggle('is-kiosk-fullscreen');
+        }
+        syncFullscreenBtnUi();
+      });
+      document.addEventListener('fullscreenchange', () => {
+        const heroCard = document.getElementById('pane-kiosk');
+        if (!document.fullscreenElement && heroCard) {
+          heroCard.classList.remove('is-kiosk-fullscreen');
+        }
+        syncFullscreenBtnUi();
+      });
+    }
 
     if (rangeSelect) {
       rangeSelect.addEventListener('change', (e) => {
@@ -11821,7 +12260,7 @@
       });
     }
     if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportShiftReportCsv);
-    if (printBtn) printBtn.addEventListener('click', () => window.print());
+    if (printBtn) printBtn.addEventListener('click', openClientShiftSignOffReport);
 
     window.addEventListener('online', () => {
       renderOfflineQueueBar();
