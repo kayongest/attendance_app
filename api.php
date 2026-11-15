@@ -838,29 +838,59 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
                 return ['ok' => false, 'error' => 'Permission denied: Only Administrators and Site Managers can approve or reject Gate Controller assignments and shift relief requests.'];
             }
             break;
+
+        case 'update_clearance':
+            if (!$isAdmin) {
+                return ['ok' => false, 'error' => 'Permission denied: Modifying badge clearance levels requires Administrator privileges.'];
+            }
+            break;
     }
 
     return ['ok' => true];
 }
 
+/**
+ * Ensures an authenticated session exists and optionally checks the caller's role.
+ * Emits a 401 or 403 JSON response and exits immediately when unauthorized.
+ */
+function requireAuthorizedCaller(PDO $pdo, array $allowedRoles = [], string $deniedMessage = 'Permission denied for this operation.'): array
+{
+    $caller = getCallerUser($pdo);
+    if ($caller === null) {
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'error' => 'Authentication required. Please sign in to continue.']);
+        exit;
+    }
+    if (!empty($allowedRoles)) {
+        $callerRole = strtolower(trim((string) ($caller['role'] ?? 'user')));
+        if (!in_array($callerRole, $allowedRoles, true)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $deniedMessage]);
+            exit;
+        }
+    }
+    return $caller;
+}
+
+/**
+ * Verifies a submitted terminal PIN against either a password_hash() digest or a constant-time DB string.
+ */
+function verifyTerminalPinSecret(string $inputPin, string $storedSecret): bool
+{
+    $candidate = trim($inputPin);
+    $expected = trim($storedSecret);
+    if ($candidate === '' || $expected === '') {
+        return false;
+    }
+    if (str_starts_with($expected, '$2y$') || str_starts_with($expected, '$2a$') || str_starts_with($expected, '$argon2')) {
+        return password_verify($candidate, $expected);
+    }
+    return hash_equals($expected, $candidate);
+}
+
 function resolveWarehouseTerminalPin(array $row): string
 {
-    $pin = trim((string) ($row['terminal_pin'] ?? ''));
-    if ($pin !== '') {
-        return $pin;
-    }
-    $code = strtoupper(trim((string) ($row['code'] ?? $row['location_code'] ?? '')));
-    $name = strtolower(trim((string) ($row['name'] ?? '')));
-    if (strpos($code, 'KCC') !== false || strpos($name, 'kcc') !== false || strpos($name, 'kigali convention') !== false) {
-        return '12345';
-    }
-    if (strpos($code, 'BKA') !== false || strpos($name, 'bk arena') !== false) {
-        return '67890';
-    }
-    if (strpos($code, 'NDR') !== false || strpos($name, 'ndera') !== false) {
-        return '247365';
-    }
-    return '1234';
+    return trim((string) ($row['terminal_pin'] ?? ''));
 }
 
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
@@ -1648,10 +1678,20 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         }
     } catch (Throwable $e) {}
 
+    $readNotifIds = [];
+    if ($authUserId > 0) {
+        try {
+            $notifStmt = $pdo->prepare("SELECT `notif_id` FROM `user_notification_reads` WHERE `user_id` = ? ORDER BY `read_at` DESC LIMIT 500");
+            $notifStmt->execute([$authUserId]);
+            $readNotifIds = array_values(array_filter(array_map('strval', $notifStmt->fetchAll(PDO::FETCH_COLUMN))));
+        } catch (Throwable $e) {}
+    }
+
     return [
         'ok' => true,
         'dbSource' => $activeDb,
         'currentUser' => $currentUser,
+        'read_notif_ids' => $readNotifIds,
         'clearanceMatrix' => $clearanceMatrix,
         'checkpoints' => [
             'stock_warehouses' => $stockWarehouses,
@@ -2060,6 +2100,7 @@ try {
     }
 
     if ($action === 'sync_db') {
+        requireAuthorizedCaller($pdo);
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $stats = [
             'database' => $activeDb,
@@ -2079,6 +2120,11 @@ try {
     }
 
     if ($action === 'process_gate_scan') {
+        $caller = requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'],
+            'Permission denied: Gate scanning requires an authorized Gate Controller, Technical Lead, Site Manager, or Administrator.'
+        );
         $scanInput = trim((string) ($_POST['scan_input'] ?? $jsonBody['scan_input'] ?? ''));
         $scanMode = strtolower(trim((string) ($_POST['scan_mode'] ?? $jsonBody['scan_mode'] ?? 'auto')));
         $rawOfflineAt = trim((string) ($_POST['offline_scanned_at'] ?? $jsonBody['offline_scanned_at'] ?? ''));
@@ -2125,7 +2171,7 @@ try {
         $allowed = (bool) $eval['allowed'];
         $reason = (string) $eval['reason'];
 
-        $scannedBy = !empty($_SESSION['auth_user_id']) ? (int) $_SESSION['auth_user_id'] : 1;
+        $scannedBy = (int) ($caller['id'] ?? $_SESSION['auth_user_id'] ?? 1);
 
         $isCrossFacilityTransfer = false;
         $prevFacilityName = null;
@@ -2343,6 +2389,17 @@ try {
     }
 
     if ($action === 'confirm_gate_action') {
+        $caller = requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'],
+            'Permission denied: Confirming gate actions requires an authorized Gate Controller, Technical Lead, Site Manager, or Administrator.'
+        );
+        $lockCheck = assertControllerCheckpointLock($pdo, (string) $reqCpType, (string) $reqCpId);
+        if (!$lockCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $lockCheck['error']]);
+            exit;
+        }
         $userId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
         $badgeCode = trim((string) ($_POST['badge_code'] ?? $jsonBody['badge_code'] ?? ''));
         $decision = trim((string) ($_POST['decision'] ?? $jsonBody['decision'] ?? 'approve_in'));
@@ -2380,7 +2437,7 @@ try {
         $scheduledTs = strtotime(date('Y-m-d') . ' ' . $callTime . ':00') ?: strtotime(date('Y-m-d 08:00:00'));
         $diffMinutes = (int) round(($nowTs - $scheduledTs) / 60);
 
-        $scannedBy = !empty($_SESSION['auth_user_id']) ? (int) $_SESSION['auth_user_id'] : 1;
+        $scannedBy = (int) ($caller['id'] ?? $_SESSION['auth_user_id'] ?? 1);
         $overrideById = null;
         $savedOverrideReason = null;
 
@@ -2574,6 +2631,13 @@ try {
     }
 
     if ($action === 'update_clearance') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('update_clearance', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code($caller === null ? 401 : 403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
         $userId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
         $newLevel = trim((string) ($_POST['clearance_level'] ?? $jsonBody['clearance_level'] ?? 'L2_TECH_STAGE'));
         $badgeStatus = trim((string) ($_POST['badge_status'] ?? $jsonBody['badge_status'] ?? 'active'));
@@ -2594,6 +2658,11 @@ try {
     }
 
     if ($action === 'approve_batch') {
+        requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'],
+            'Permission denied: Approving stock batches requires Site Operations, Site Manager, or Administrator privileges.'
+        );
         $batchId = (int) ($_POST['batch_id'] ?? $jsonBody['batch_id'] ?? 0);
         $newStatus = trim((string) ($_POST['status'] ?? $jsonBody['status'] ?? 'approved'));
         if ($batchId > 0) {
@@ -2610,6 +2679,11 @@ try {
     }
 
     if ($action === 'save_batch') {
+        requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'],
+            'Permission denied: Managing stock batches requires Site Operations, Site Manager, or Administrator privileges.'
+        );
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $batchNumber = trim((string) ($_POST['batch_number'] ?? $jsonBody['batch_number'] ?? ''));
         if ($batchNumber === '') {
@@ -2724,6 +2798,11 @@ try {
     }
 
     if ($action === 'delete_batch') {
+        requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager'],
+            'Permission denied: Deleting stock batches requires Site Manager or Administrator privileges.'
+        );
         $batchId = (int) ($_POST['batch_id'] ?? $jsonBody['batch_id'] ?? $_POST['id'] ?? $jsonBody['id'] ?? 0);
         if ($batchId > 0) {
             $pdo->prepare("DELETE FROM `batch_items` WHERE `batch_id` = ?")->execute([$batchId]);
@@ -3628,6 +3707,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
     }
 
     if ($action === 'verify_terminal_pin') {
+        requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'],
+            'Permission denied: Unlocking a Gate Terminal requires an authorized operator session.'
+        );
         $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse'));
         $cpIdRaw = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '0'));
         $cpId = (int) $cpIdRaw;
@@ -3655,7 +3739,14 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             }
             $expectedPin = resolveWarehouseTerminalPin($row);
             $cpName = (string) ($row['name'] ?? 'Facility Terminal');
-            if ($pin !== $expectedPin) {
+            if ($expectedPin === '') {
+                echo json_encode([
+                    'ok' => false,
+                    'error' => "No Terminal PIN is configured for {$cpName}. Ask an Administrator or Site Manager to configure one.",
+                ]);
+                exit;
+            }
+            if (!verifyTerminalPinSecret($pin, $expectedPin)) {
                 echo json_encode([
                     'ok' => false,
                     'error' => "Invalid PIN for {$cpName}",
@@ -3692,12 +3783,16 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
 
         $expectedEvPin = trim((string) ($evRow['terminal_pin'] ?? ''));
-        if ($expectedEvPin === '') {
-            $expectedEvPin = '1234';
-        }
         $evName = (string) ($evRow['title'] ?? 'Event Venue');
+        if ($expectedEvPin === '') {
+            echo json_encode([
+                'ok' => false,
+                'error' => "No Terminal PIN is configured for {$evName}. Ask an Administrator or Technical Lead to configure one.",
+            ]);
+            exit;
+        }
 
-        if ($pin !== $expectedEvPin) {
+        if (!verifyTerminalPinSecret($pin, $expectedEvPin)) {
             echo json_encode(['ok' => false, 'error' => "Invalid PIN for {$evName}"]);
             exit;
         }
@@ -3730,6 +3825,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
     }
 
     if ($action === 'save_stock_item') {
+        requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager'],
+            'Permission denied: Managing equipment items requires Site Manager or Administrator privileges.'
+        );
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $itemName = trim((string) ($_POST['item_name'] ?? $jsonBody['item_name'] ?? ''));
         $serialNumber = trim((string) ($_POST['serial_number'] ?? $jsonBody['serial_number'] ?? ''));
@@ -3870,6 +3970,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
     }
 
     if ($action === 'sync_all_stock_images') {
+        requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager'],
+            'Permission denied: Syncing equipment photos requires Site Manager or Administrator privileges.'
+        );
         // Collect latest image per identical equipment group (item_name, brand, model)
         $stmt = $pdo->query("
             SELECT `item_name`, `brand`, `model`, `image`, MAX(`id`) as latest_id
@@ -3924,6 +4029,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
     }
 
     if ($action === 'delete_stock_item') {
+        requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'manager', 'administrator', 'stock_manager'],
+            'Permission denied: Deleting equipment items requires Site Manager or Administrator privileges.'
+        );
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         if ($id > 0) {
             $del = $pdo->prepare("DELETE FROM `items` WHERE `id` = ?");
@@ -4382,6 +4492,48 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'message' => "Sample demo scans have been loaded.",
             ]
         ));
+        exit;
+    }
+
+    if ($action === 'mark_notifications_read') {
+        $caller = getCallerUser($pdo);
+        if (!$caller) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Authentication required.']);
+            exit;
+        }
+        $callerId = (int) ($caller['id'] ?? 0);
+        $rawIds = $jsonBody['notif_ids'] ?? $_POST['notif_ids'] ?? [];
+        if (is_string($rawIds)) {
+            $decoded = json_decode($rawIds, true);
+            $rawIds = is_array($decoded) ? $decoded : explode(',', $rawIds);
+        }
+        $cleanIds = [];
+        if (is_array($rawIds)) {
+            foreach ($rawIds as $nid) {
+                $nidStr = trim((string) $nid);
+                if ($nidStr !== '' && strlen($nidStr) <= 160) {
+                    $cleanIds[] = $nidStr;
+                }
+                if (count($cleanIds) >= 200) {
+                    break;
+                }
+            }
+        }
+        $cleanIds = array_values(array_unique($cleanIds));
+        if (!empty($cleanIds) && $callerId > 0) {
+            $insStmt = $pdo->prepare("INSERT IGNORE INTO `user_notification_reads` (`user_id`, `notif_id`) VALUES (?, ?)");
+            foreach ($cleanIds as $cid) {
+                $insStmt->execute([$callerId, $cid]);
+            }
+        }
+        $readStmt = $pdo->prepare("SELECT `notif_id` FROM `user_notification_reads` WHERE `user_id` = ? ORDER BY `read_at` DESC LIMIT 500");
+        $readStmt->execute([$callerId]);
+        $savedIds = array_values(array_filter(array_map('strval', $readStmt->fetchAll(PDO::FETCH_COLUMN))));
+        echo json_encode([
+            'ok' => true,
+            'read_notif_ids' => $savedIds,
+        ]);
         exit;
     }
 

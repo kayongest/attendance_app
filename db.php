@@ -397,6 +397,16 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     try { $pdo->exec("ALTER TABLE `access_clearance_levels` ADD COLUMN `stock_rule` VARCHAR(50) DEFAULT 'NO'"); } catch (Throwable $e) {}
     try { $pdo->exec("ALTER TABLE `access_clearance_levels` ADD COLUMN `is_system` TINYINT(1) DEFAULT 0"); } catch (Throwable $e) {}
 
+    // 8b. Ensure `user_notification_reads` table exists for persistent topbar alert read state
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `user_notification_reads` (
+            `user_id` INT NOT NULL,
+            `notif_id` VARCHAR(160) NOT NULL,
+            `read_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`user_id`, `notif_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
     // Seed default access_clearance_levels if empty
     $clrCount = (int) $pdo->query("SELECT COUNT(*) FROM `access_clearance_levels`")->fetchColumn();
     if ($clrCount === 0) {

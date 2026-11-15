@@ -190,6 +190,9 @@
     state.batches = Array.isArray(data.batches) ? data.batches : [];
     state.shiftRequests = Array.isArray(data.shiftRequests) ? data.shiftRequests : [];
     state.pendingShiftRequestCount = Number(data.pendingShiftRequestCount ?? state.shiftRequests.filter((r) => r.status === 'pending').length);
+    if (Array.isArray(data.read_notif_ids)) {
+      state.readNotifIds = new Set(data.read_notif_ids.map((id) => String(id)));
+    }
     if (Array.isArray(data.roles) && data.roles.length > 0) {
       state.roles = data.roles;
     } else if (state.roles.length === 0) {
@@ -2177,12 +2180,7 @@
     if (wh && wh.terminal_pin && String(wh.terminal_pin).trim() !== '') {
       return String(wh.terminal_pin).trim();
     }
-    const code = String(wh?.code || wh?.location_code || '').toUpperCase();
-    const name = String(wh?.name || '').toLowerCase();
-    if (code.includes('KCC') || name.includes('kcc') || name.includes('kigali convention')) return '12345';
-    if (code.includes('BKA') || name.includes('bk arena')) return '67890';
-    if (code.includes('NDR') || name.includes('ndera')) return '247365';
-    return '1234';
+    return '';
   }
 
   function getActiveCheckpointPin() {
@@ -2191,7 +2189,9 @@
       const wh = list.find((w) => Number(w.id) === Number(state.checkpointId)) || state.activeCheckpoint;
       return resolveWarehousePinClient(wh);
     }
-    return '1234';
+    return (state.activeCheckpoint && state.activeCheckpoint.terminal_pin)
+      ? String(state.activeCheckpoint.terminal_pin).trim()
+      : '';
   }
 
   async function verifyCheckpointPin(pin) {
@@ -2311,7 +2311,7 @@
                   <span class="warehouse-pin-row-sub">${escapeHtml(w.code || 'STK')} · ${escapeHtml(w.location || '')}</span>
                 </div>
                 <div class="warehouse-pin-row-actions">
-                  <span class="warehouse-pin-code-pill">PIN: ${escapeHtml(pin)}</span>
+                  <span class="warehouse-pin-code-pill">PIN: ${pin ? escapeHtml(pin) : 'Protected'}</span>
                   <button type="button" class="btn btn-secondary-32-sm js-edit-wh-pin-btn" data-wh-id="${Number(w.id)}" data-pin="${escapeHtml(pin)}">Edit</button>
                 </div>
               </div>
@@ -2696,35 +2696,34 @@
   // =========================================================================
 
   const KIGALI_KNOWN_COORDS = [
-    { match: /ndera/i, left: '80%', top: '20%', shortName: 'Ndera Hub' },
-    { match: /(convention|kcc)/i, left: '48%', top: '38%', shortName: 'KCC' },
-    { match: /(bk\s*arena|arena)/i, left: '68%', top: '44%', shortName: 'BK Arena' },
-    { match: /camp\s*kigali/i, left: '20%', top: '56%', shortName: 'Camp Kigali' },
-    { match: /intare/i, left: '88%', top: '48%', shortName: 'Intare Arena' },
-    { match: /gikondo/i, left: '38%', top: '72%', shortName: 'Gikondo Hub' },
-    { match: /masaka/i, left: '78%', top: '78%', shortName: 'Masaka Depot' },
-    { match: /remera/i, left: '58%', top: '58%', shortName: 'Remera Hub' },
-    { match: /marrio?tt/i, left: '32%', top: '52%', shortName: 'Marriott' },
-    { match: /four\s*points?/i, left: '28%', top: '42%', shortName: 'FourPoints' },
-    { match: /m[oö]venpick/i, left: '22%', top: '34%', shortName: 'Mövenpick' },
-    { match: /(f1|asili)/i, left: '54%', top: '30%', shortName: 'F1 Asili' },
-    { match: /(universe|mcf)/i, left: '64%', top: '26%', shortName: 'MCF Universe' },
-    { match: /world\s*bank/i, left: '44%', top: '46%', shortName: 'World Bank' },
-    { match: /mscard/i, left: '46%', top: '54%', shortName: 'MScard' },
-    { match: /demo/i, left: '40%', top: '48%', shortName: 'Demo Station' },
+    { match: /ndera/i, left: '84%', top: '20%', shortName: 'Ndera Hub' },
+    { match: /(convention|kcc)/i, type: 'stock_warehouse', left: '43%', top: '20%', shortName: 'KCC Stock' },
+    { match: /(bk\s*arena|arena)/i, type: 'stock_warehouse', left: '74%', top: '67%', shortName: 'BK Arena Stock' },
+    { match: /(convention|kcc)/i, left: '48%', top: '40%', shortName: 'KCC' },
+    { match: /(bk\s*arena|arena)/i, left: '70%', top: '44%', shortName: 'BK Arena' },
+    { match: /camp\s*kigali/i, left: '29%', top: '76%', shortName: 'Camp Kigali' },
+    { match: /intare/i, left: '87%', top: '48%', shortName: 'Intare Arena' },
+    { match: /gikondo/i, left: '39%', top: '80%', shortName: 'Gikondo Hub' },
+    { match: /masaka/i, left: '82%', top: '80%', shortName: 'Masaka Depot' },
+    { match: /remera/i, left: '59%', top: '60%', shortName: 'Remera Hub' },
+    { match: /marrio?tt/i, left: '16%', top: '66%', shortName: 'Marriott' },
+    { match: /four\s*points?/i, left: '24%', top: '45%', shortName: 'FourPoints' },
+    { match: /m[oö]venpick/i, left: '13%', top: '25%', shortName: 'Mövenpick' },
+    { match: /(f1|asili)/i, left: '55%', top: '23%', shortName: 'F1 Asili' },
+    { match: /(universe|mcf)/i, left: '67%', top: '24%', shortName: 'MCF Universe' },
+    { match: /world\s*bank/i, left: '36%', top: '57%', shortName: 'World Bank' },
+    { match: /mscard/i, left: '49%', top: '67%', shortName: 'MScard' },
+    { match: /demo/i, left: '32%', top: '28%', shortName: 'Demo Station' },
   ];
 
   function getFacilityMapCoords(facility, index = 0) {
     const haystack = `${facility.name || ''} ${facility.location || ''} ${facility.title || ''}`;
     for (const kc of KIGALI_KNOWN_COORDS) {
+      if (kc.type && facility.type !== kc.type) continue;
       if (kc.match.test(haystack)) {
-        const jitterLeft = ((index % 3) - 1) * 2;
-        const jitterTop = (((index + 1) % 3) - 1) * 2;
-        const baseLeft = parseFloat(kc.left);
-        const baseTop = parseFloat(kc.top);
         return {
-          left: `${Math.max(10, Math.min(90, baseLeft + jitterLeft))}%`,
-          top: `${Math.max(12, Math.min(88, baseTop + jitterTop))}%`,
+          left: kc.left,
+          top: kc.top,
           shortName: kc.shortName,
         };
       }
@@ -2732,16 +2731,16 @@
     const isStock = facility.type === 'stock_warehouse';
     const defaults = isStock
       ? [
-          { left: '80%', top: '20%', shortName: 'Ndera Hub' },
-          { left: '38%', top: '72%', shortName: 'Gikondo Hub' },
-          { left: '78%', top: '78%', shortName: 'Masaka Depot' },
-          { left: '58%', top: '58%', shortName: 'Remera Hub' },
+          { left: '84%', top: '20%', shortName: 'Ndera Hub' },
+          { left: '39%', top: '80%', shortName: 'Gikondo Hub' },
+          { left: '82%', top: '80%', shortName: 'Masaka Depot' },
+          { left: '59%', top: '60%', shortName: 'Remera Hub' },
         ]
       : [
-          { left: '48%', top: '38%', shortName: 'KCC' },
-          { left: '68%', top: '44%', shortName: 'BK Arena' },
-          { left: '20%', top: '56%', shortName: 'Camp Kigali' },
-          { left: '88%', top: '48%', shortName: 'Intare Arena' },
+          { left: '48%', top: '40%', shortName: 'KCC' },
+          { left: '70%', top: '44%', shortName: 'BK Arena' },
+          { left: '29%', top: '76%', shortName: 'Camp Kigali' },
+          { left: '87%', top: '48%', shortName: 'Intare Arena' },
         ];
     const item = defaults[index % defaults.length];
     return {
@@ -2749,6 +2748,72 @@
       top: item.top,
       shortName: facility.name?.split('—')[0]?.split('-')[0]?.trim() || item.shortName,
     };
+  }
+
+  /**
+   * Separates overlapping Option A Radar facility pins and label pills in percentage space.
+   * Mutates each item's `coords` (`left`, `top`) within safe stage bounds so pins remain legible.
+   */
+  function resolveMapPinOverlaps(items) {
+    if (!Array.isArray(items) || items.length <= 1) return items;
+    const minDx = 12.5;
+    const minDy = 15.5;
+    const minX = 10;
+    const maxX = 89;
+    const minY = 15;
+    const maxY = 84;
+
+    const pts = items.map((item, idx) => ({
+      item,
+      idx,
+      x: parseFloat(item.coords?.left) || 50,
+      y: parseFloat(item.coords?.top) || 50,
+    }));
+
+    for (let iter = 0; iter < 40; iter += 1) {
+      let moved = false;
+      for (let i = 0; i < pts.length; i += 1) {
+        for (let j = i + 1; j < pts.length; j += 1) {
+          const a = pts[i];
+          const b = pts[j];
+          let dx = b.x - a.x;
+          let dy = b.y - a.y;
+          if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
+            const angle = ((a.idx + b.idx + 1) * 2.399963);
+            dx = Math.cos(angle) * 0.5;
+            dy = Math.sin(angle) * 0.5;
+          }
+          const overlapX = minDx - Math.abs(dx);
+          const overlapY = minDy - Math.abs(dy);
+          if (overlapX > 0 && overlapY > 0) {
+            moved = true;
+            if ((overlapX / minDx) <= (overlapY / minDy)) {
+              const push = (overlapX * 0.55) * (dx >= 0 ? 1 : -1);
+              a.x -= push;
+              b.x += push;
+            } else {
+              const push = (overlapY * 0.55) * (dy >= 0 ? 1 : -1);
+              a.y -= push;
+              b.y += push;
+            }
+            a.x = Math.max(minX, Math.min(maxX, a.x));
+            b.x = Math.max(minX, Math.min(maxX, b.x));
+            a.y = Math.max(minY, Math.min(maxY, a.y));
+            b.y = Math.max(minY, Math.min(maxY, b.y));
+          }
+        }
+      }
+      if (!moved) break;
+    }
+
+    pts.forEach((p) => {
+      p.item.coords = {
+        ...p.item.coords,
+        left: `${p.x.toFixed(1)}%`,
+        top: `${p.y.toFixed(1)}%`,
+      };
+    });
+    return items;
   }
 
   function getAllFacilitiesList() {
@@ -2925,6 +2990,8 @@
         if (filter === 'active' && item.headCount === 0 && item.assignedCount === 0) return false;
         return true;
       });
+
+      resolveMapPinOverlaps(filteredData);
 
       pinsContainer.innerHTML = filteredData.map((item) => {
         const { facility, coords, headCount, assignedCount, isSelected, isStock } = item;
@@ -7494,15 +7561,34 @@
 
     const notifMarkRead = document.getElementById('topbar-notif-mark-read');
     if (notifMarkRead) {
-      notifMarkRead.addEventListener('click', () => {
+      notifMarkRead.addEventListener('click', async () => {
+        const idsToMark = state.notifications
+          .map((n) => (n && n.id ? String(n.id) : ''))
+          .filter(Boolean);
+        idsToMark.forEach((id) => state.readNotifIds.add(id));
         state.notifications.forEach((n) => {
-          if (n && n.id) state.readNotifIds.add(n.id);
           n.unread = false;
         });
         state.unreadNotifCount = 0;
         renderTopbarAndKpis();
         renderNotificationsList();
         showToast('All notifications marked as read.');
+        if (idsToMark.length > 0) {
+          try {
+            const res = await fetch('api.php?action=mark_notifications_read', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ notif_ids: idsToMark }),
+            });
+            const data = await res.json();
+            if (data && data.ok && Array.isArray(data.read_notif_ids)) {
+              state.readNotifIds = new Set(data.read_notif_ids.map((id) => String(id)));
+              syncDynamicNotifications();
+            }
+          } catch (err) {
+            // Local read state remains active in memory for this session
+          }
+        }
       });
     }
 
