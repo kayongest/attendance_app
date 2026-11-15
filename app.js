@@ -1114,8 +1114,8 @@
       users: 'Staff, Technicians & Role Management',
       attendees: 'Staff ID Badges & Kiosk',
       terminals: 'Terminals (#pane-kiosk)',
-      analytics: 'Stock Batch Approvals & Clearance Matrix',
-      'stock-manager': 'Stocks & Warehouses Inventory Manager',
+      analytics: 'Access Clearance Matrix',
+      'stock-manager': 'Facilities & Gates Registry',
     };
     const bc = document.getElementById('breadcrumb-page');
     if (bc) bc.textContent = pageTitles[screenKey] || 'Gate Dashboard';
@@ -3780,7 +3780,6 @@
         const isSelected = Number(c.id) === Number(state.selectedCrewId);
         const canCheckIn = c.daily_state === 'ready';
         const canCheckOut = c.daily_state === 'checked_in';
-        const hasBatch = Array.isArray(c.linked_batches) && c.linked_batches.length > 0;
 
         return `
           <div class="data-table-row attendee-table-row ${isSelected ? 'kiosk-selected-row' : ''}" data-crew-id="${c.id}">
@@ -3797,7 +3796,7 @@
             <div class="col-company">
               <div class="company-stack">
                 <span class="company-name">${escapeHtml(c.department)}</span>
-                <span class="company-role">${escapeHtml(c.role_display)}${hasBatch ? ' · 📦 Batch Linked' : ''}</span>
+                <span class="company-role">${escapeHtml(c.role_display)}</span>
               </div>
             </div>
             <div class="col-ticket">
