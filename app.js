@@ -2070,15 +2070,41 @@
 
   function renderCheckpointSelectors() {
     const isStock = state.checkpointType === 'stock_warehouse';
-    const isCtrlLocked = isCurrentUserStockController() && Boolean(state.currentUser?.assigned_checkpoint_id);
-    const isLocked = Boolean(state.stationLocked) || isCtrlLocked;
+    const isCtrlLocked = isCurrentUserStockController();
+    const isStationLocked = Boolean(state.stationLocked);
+    const isLocked = isStationLocked || isCtrlLocked;
+    const assignedCpName = state.currentUser?.assigned_checkpoint_name || state.activeCheckpoint?.name || 'assigned terminal';
+    const activeCpName = state.activeCheckpoint?.name || 'active checkpoint';
+    const lockReason = isCtrlLocked
+      ? `Gate Controller locked: Your account is assigned to ${assignedCpName}. Use Relief / Swap to request reassignment.`
+      : (isStationLocked
+          ? `Station PIN locked to ${activeCpName}. Click the Station Lock pill to unlock with your Site PIN.`
+          : '');
+
+    document.querySelectorAll('.cp-type-toggle').forEach((wrap) => {
+      wrap.classList.toggle('is-locked', isLocked);
+      if (isLocked) {
+        wrap.setAttribute('title', lockReason);
+      } else {
+        wrap.removeAttribute('title');
+      }
+    });
+
     document.querySelectorAll('.js-cp-type-btn').forEach((btn) => {
       const btnType = btn.getAttribute('data-cp-type');
       btn.classList.remove('active-stock', 'active-venue');
       if (btnType === state.checkpointType) {
         btn.classList.add(isStock ? 'active-stock' : 'active-venue');
       }
-      btn.disabled = isLocked;
+      // Keep button clickable so clicking when locked triggers a clear explanation toast
+      btn.disabled = false;
+      btn.classList.toggle('is-locked', isLocked);
+      btn.setAttribute('aria-disabled', isLocked ? 'true' : 'false');
+      if (isLocked) {
+        btn.setAttribute('title', lockReason);
+      } else {
+        btn.removeAttribute('title');
+      }
     });
 
     const optionsList = isStock
@@ -2095,19 +2121,32 @@
         )
         .join('');
       sel.disabled = isLocked;
+      if (isLocked) {
+        sel.setAttribute('title', lockReason);
+      } else {
+        sel.removeAttribute('title');
+      }
     });
 
     document.querySelectorAll('.js-station-lock-btn').forEach((btn) => {
-      btn.classList.toggle('locked', state.stationLocked || isCtrlLocked);
-      btn.classList.toggle('unlocked', !(state.stationLocked || isCtrlLocked));
+      btn.classList.toggle('locked', isLocked);
+      btn.classList.toggle('unlocked', !isLocked);
+      btn.setAttribute(
+        'title',
+        isCtrlLocked
+          ? lockReason
+          : (isStationLocked
+              ? `Station PIN locked to ${activeCpName} — click to unlock with Site PIN`
+              : `Lock terminal switcher to ${activeCpName} with Site PIN`)
+      );
     });
 
     document.querySelectorAll('.js-station-lock-label').forEach((lbl) => {
       if (isCtrlLocked) {
-        lbl.textContent = `ASSIGNED TERMINAL LOCKED (${state.activeCheckpoint.name})`;
+        lbl.textContent = `ASSIGNED TERMINAL LOCKED (${assignedCpName})`;
       } else {
-        lbl.textContent = state.stationLocked
-          ? `ENTRANCE STATION LOCKED (${state.activeCheckpoint.name}) · Unlock`
+        lbl.textContent = isStationLocked
+          ? `STATION PIN LOCKED (${activeCpName}) · Unlock`
           : 'MULTI-CHECKPOINT MODE · Lock Station';
       }
     });
@@ -7248,11 +7287,13 @@
     document.querySelectorAll('.js-cp-type-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (isCurrentUserStockController()) {
-          showToast('Checkpoint Locked: Gate Controllers are locked to their assigned terminal. Use Relief / Swap to request reassignment.');
+          const assignedName = state.currentUser?.assigned_checkpoint_name || state.activeCheckpoint?.name || 'your assigned terminal';
+          showToast(`Gate Controller locked: Assigned strictly to ${assignedName}. Use Relief / Swap to request reassignment.`);
           return;
         }
         if (state.stationLocked) {
-          showToast('Entrance Station is LOCKED. Unlock with the checkpoint Terminal PIN to switch checkpoints.');
+          const cpName = state.activeCheckpoint?.name || 'this checkpoint';
+          showToast(`Station PIN locked to ${cpName}. Click the Station Lock pill to unlock with your Site PIN.`);
           return;
         }
         const newType = btn.getAttribute('data-cp-type');
@@ -8700,8 +8741,13 @@
     const lockModal = document.getElementById('station-lock-modal');
     document.querySelectorAll('.js-station-lock-btn, #sidebar-station-lock-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        if (!isCurrentUserAdmin() && !isCurrentUserStockManager()) {
-          showToast('Access Restricted: Station PIN Locking requires Supervisor or Administrator privileges.');
+        if (isCurrentUserStockController()) {
+          const assignedName = state.currentUser?.assigned_checkpoint_name || state.activeCheckpoint?.name || 'your assigned terminal';
+          showToast(`Gate Controller locked to ${assignedName}. Click Relief / Swap to request a terminal change.`);
+          return;
+        }
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager() && !isCurrentUserTechLead()) {
+          showToast('Access Restricted: Station PIN Locking requires Technical Lead, Site Manager, or Administrator privileges.');
           return;
         }
         const cpNameEl = document.getElementById('station-lock-cp-name');

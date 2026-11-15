@@ -3002,6 +3002,35 @@ body[data-user-role="technical_lead"] #overview-allocation-card #overview-traffi
   background-color: #00d2ff;
 }
 
+.cp-type-toggle.is-locked {
+  border-style: dashed;
+  opacity: 0.9;
+}
+
+.cp-type-btn.is-locked,
+.cp-type-btn:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.cp-type-btn.is-locked.active-stock,
+.cp-type-btn.is-locked.active-venue {
+  opacity: 0.92;
+}
+
+.cp-type-btn.is-locked::after {
+  content: "🔒";
+  font-size: 10px;
+  margin-left: 2px;
+  opacity: 0.85;
+}
+
+.cp-select-dropdown:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background-color: var(--bg-subtle);
+}
+
 .cp-select-dropdown,
 .scan-mode-select {
   height: 34px;
