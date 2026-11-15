@@ -1192,26 +1192,218 @@ button {
 }
 
 .split-row > .timeline-card-overview,
-.split-row > .insights-card {
+.split-row > .insights-card,
+.split-row > .overview-right-stack {
   flex: 1 1 0;
   width: calc(50% - 10px);
   min-width: 0;
   box-sizing: border-box;
 }
 
+.overview-right-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.overview-right-stack > .insights-card {
+  width: 100%;
+  flex: 1 0 auto;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Tech Lead Roster Card: hidden for Administrator & all other roles */
+#tech-lead-roster-overview-card {
+  display: none;
+}
+
+body[data-user-role="tech_lead"] #tech-lead-roster-overview-card,
+body[data-user-role="technical_lead"] #tech-lead-roster-overview-card {
+  display: flex;
+  flex: 0 0 auto;
+  height: auto;
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.btn-link-inline {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  cursor: pointer;
+}
+
+.btn-link-inline:hover {
+  text-decoration: underline;
+}
+
+.btn-link-danger {
+  color: #dc2626;
+}
+
+#app-confirm-modal {
+  z-index: 200;
+}
+
+.metric-coordinates {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-color);
+  font-size: 11.5px;
+}
+
+.coordinate-label {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.coordinate-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.coordinate-context {
+  color: var(--text-secondary);
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.metric-region-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.region-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-canvas);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.region-row:hover {
+  border-color: var(--brand-primary);
+}
+
+.region-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.region-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.region-reset-btn {
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.region-reset-btn:hover {
+  background: rgba(220, 38, 38, 0.16);
+}
+
+.region-reset-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.region-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.region-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.region-crew-names {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.region-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-primary);
+  flex-shrink: 0;
+}
+
 /* Tech Lead Scoped View on Gate Dashboard (Overview Screen):
-   Only overview-top-block and timeline-card-overview are visible */
-body[data-user-role="tech_lead"] #overview-allocation-card,
-body[data-user-role="technical_lead"] #overview-allocation-card,
+   Show overview-top-block, User Activity Timeline (left), and Hourly Traffic chart (right);
+   hide Production Crew & Staff Roster and Allocation Map views */
 body[data-user-role="tech_lead"] #screen-overview .directory-card,
 body[data-user-role="technical_lead"] #screen-overview .directory-card {
   display: none !important;
 }
 
-body[data-user-role="tech_lead"] #screen-overview .timeline-card-overview,
-body[data-user-role="technical_lead"] #screen-overview .timeline-card-overview {
-  width: 100% !important;
-  flex: 1 1 100% !important;
+body[data-user-role="tech_lead"] #overview-allocation-card #overview-map-view,
+body[data-user-role="technical_lead"] #overview-allocation-card #overview-map-view,
+body[data-user-role="tech_lead"] #overview-allocation-card #live-map-panel,
+body[data-user-role="technical_lead"] #overview-allocation-card #live-map-panel,
+body[data-user-role="tech_lead"] #overview-allocation-card #toggle-view-option-a,
+body[data-user-role="technical_lead"] #overview-allocation-card #toggle-view-option-a,
+body[data-user-role="tech_lead"] #overview-allocation-card #toggle-view-option-b,
+body[data-user-role="technical_lead"] #overview-allocation-card #toggle-view-option-b,
+body[data-user-role="tech_lead"] #overview-allocation-card #toggle-option-a-collapse,
+body[data-user-role="technical_lead"] #overview-allocation-card #toggle-option-a-collapse,
+body[data-user-role="tech_lead"] #overview-allocation-card #overview-map-filter,
+body[data-user-role="technical_lead"] #overview-allocation-card #overview-map-filter,
+body[data-user-role="tech_lead"] #overview-allocation-card .map-radar-pulse,
+body[data-user-role="technical_lead"] #overview-allocation-card .map-radar-pulse {
+  display: none !important;
+}
+
+body[data-user-role="tech_lead"] #overview-allocation-card #overview-traffic-chart-view,
+body[data-user-role="technical_lead"] #overview-allocation-card #overview-traffic-chart-view {
+  display: block !important;
 }
 
 /* Attendance Insights Card (Overview Screen) */
@@ -1234,7 +1426,8 @@ body[data-user-role="technical_lead"] #screen-overview .timeline-card-overview {
     flex-direction: column;
   }
   .split-row > .timeline-card-overview,
-  .split-row > .insights-card {
+  .split-row > .insights-card,
+  .split-row > .overview-right-stack {
     width: 100%;
     flex: 1 1 auto;
   }
@@ -2315,11 +2508,13 @@ body[data-user-role="technical_lead"] #screen-overview .timeline-card-overview {
 
 /* Table Footer & Pagination */
 .table-footer {
-  height: 62px;
-  padding: 0 20px;
+  min-height: 62px;
+  padding: 12px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   width: 100%;
 }
 
@@ -5456,9 +5651,22 @@ body[data-user-role="technical_lead"] #screen-overview .timeline-card-overview {
 }
 
 .notif-item-icon {
-  font-size: 14px;
-  margin-top: 2px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-canvas);
+  margin-top: 1px;
   flex-shrink: 0;
+}
+
+.notif-svg-icon {
+  width: 15px;
+  height: 15px;
+  display: block;
 }
 
 .notif-item-content {

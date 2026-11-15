@@ -129,6 +129,8 @@
     timelinePerPage: 5,
 
     // Crew Roster pagination (5 items per page)
+    overviewPage: 1,
+    overviewPerPage: 5,
     directoryPage: 1,
     directoryPerPage: 5,
 
@@ -137,13 +139,9 @@
 
     // Current Operator Session & Alerts
     currentUser: null,
-    unreadNotifCount: 3,
-    notifications: [
-      { id: 1, type: 'denied', icon: '🔴', title: 'Scan Denied: Invalid Badge', desc: 'Badge code REW-BADGE-9999 attempted scan at Ndera Warehouse', time: '10m ago', unread: true },
-      { id: 2, type: 'late', icon: '🟡', title: 'Late Arrival Flagged', desc: 'Patrick Nshimiyimana (+14m late) checked in at Gate 1', time: '25m ago', unread: true },
-      { id: 3, type: 'granted', icon: '🟢', title: 'Check-in Granted', desc: 'Eric Havugimana (Rigging · L2) verified at Main Entrance', time: '42m ago', unread: true },
-      { id: 4, type: 'batch', icon: '📦', title: 'Stock Batch Dispatched', desc: 'Batch JS-2026-104 dispatched to Kigali Convention Centre', time: '1h ago', unread: false },
-    ],
+    unreadNotifCount: 0,
+    readNotifIds: new Set(),
+    notifications: [],
   };
 
   const TIER_CYCLE = ['all', 'L1', 'L2', 'L3', 'L4'];
@@ -516,10 +514,14 @@
 
       data.confirmed = true;
       state.currentVerification = data;
+      state.timelinePage = 1;
       if (data.bootstrap) {
         applyBootstrapPayload(data.bootstrap, true);
       } else {
         renderAll();
+      }
+      if (state.timelineRange && state.timelineRange !== 'today') {
+        fetchAttendanceReport(state.timelineRange);
       }
 
       if (decision === 'approve_out') {
@@ -975,10 +977,14 @@
       }
       state.currentVerification = data;
 
+      state.timelinePage = 1;
       if (data.bootstrap) {
         applyBootstrapPayload(data.bootstrap, true);
       } else {
         renderAll();
+      }
+      if (state.timelineRange && state.timelineRange !== 'today') {
+        fetchAttendanceReport(state.timelineRange);
       }
 
       if (!data.allowed) {
@@ -1158,6 +1164,124 @@
   // RENDER FUNCTIONS
   // =========================================================================
 
+  function renderTechLeadRosterCard() {
+    const cardEl = document.getElementById('tech-lead-roster-overview-card');
+    if (!cardEl || !isCurrentUserTechLead()) return;
+
+    const allFacilities = getAllFacilitiesList();
+    const allCrew = state.crew || [];
+    const assignedIds = new Set();
+    const onSiteIds = new Set();
+
+    const rows = allFacilities.map((f) => {
+      const members = getFacilityCrewMembers(f, allCrew);
+      members.forEach((m) => {
+        if (m && m.id != null) {
+          const uid = Number(m.id);
+          assignedIds.add(uid);
+          if (m.daily_state === 'checked_in') {
+            onSiteIds.add(uid);
+          }
+        }
+      });
+      const lookupName = String(f.title || f.name || '').trim();
+      const displayName = String(f.name || f.title || '').trim();
+      return {
+        facility: f,
+        lookupName,
+        displayName,
+        callTime: (f.call_time || '08:00').slice(0, 5),
+        members,
+        count: members.length,
+      };
+    });
+
+    rows.sort((a, b) => b.count - a.count);
+
+    const totalAssigned = assignedIds.size;
+    const onSiteAssigned = onSiteIds.size;
+    const standbyAssigned = Math.max(0, totalAssigned - onSiteAssigned);
+
+    const totalEl = document.getElementById('techlead-roster-total-count');
+    if (totalEl) totalEl.textContent = String(totalAssigned);
+
+    const statusEl = document.getElementById('techlead-roster-status-summary');
+    if (statusEl) statusEl.textContent = `${onSiteAssigned} On-Site · ${standbyAssigned} Standby`;
+
+    const locSummaryEl = document.getElementById('techlead-roster-location-summary');
+    if (locSummaryEl) locSummaryEl.textContent = `Across ${rows.length} locations`;
+
+    // Scale 10-bar sparkline proportionally to per-location staffing
+    const sparkEl = document.getElementById('techlead-roster-sparkline');
+    if (sparkEl) {
+      const barEls = sparkEl.querySelectorAll('.sparkline-bar');
+      const maxCount = Math.max(1, ...rows.map((r) => r.count));
+      barEls.forEach((bar, idx) => {
+        const entry = rows[idx % Math.max(1, rows.length)];
+        const val = entry ? entry.count : 0;
+        const h = val > 0 ? Math.max(10, Math.round((val / maxCount) * 30)) : 6;
+        bar.style.height = `${h}px`;
+      });
+    }
+
+    // Highlight latest scan location or active checkpoint context
+    const lastLocEl = document.getElementById('techlead-roster-last-location');
+    const lastCtxEl = document.getElementById('techlead-roster-last-context');
+    const latestScan = Array.isArray(state.activityTimeline) && state.activityTimeline.length > 0
+      ? state.activityTimeline[0]
+      : null;
+    if (lastLocEl) {
+      lastLocEl.textContent = (latestScan && latestScan.checkpoint_name)
+        ? latestScan.checkpoint_name
+        : (state.activeCheckpoint?.name || 'All Checkpoints');
+    }
+    if (lastCtxEl) {
+      if (latestScan && latestScan.full_name) {
+        const timePart = latestScan.time_formatted || latestScan.time || '';
+        lastCtxEl.textContent = `${latestScan.full_name}${timePart ? ' · ' + timePart : ''}`;
+      } else {
+        const cpLoc = state.activeCheckpoint?.location || '';
+        const cpCall = state.activeCheckpoint?.call_time || '08:00';
+        lastCtxEl.textContent = cpLoc ? `${cpLoc} · Call ${cpCall}` : `Call ${cpCall}`;
+      }
+    }
+
+    const resetAllBtn = document.getElementById('techlead-card-reset-all-btn');
+    if (resetAllBtn) {
+      resetAllBtn.style.display = rows.some((r) => r.count > 0) ? 'inline-flex' : 'none';
+    }
+
+    const breakdownEl = document.getElementById('techlead-roster-breakdown');
+    if (breakdownEl) {
+      if (rows.length === 0) {
+        breakdownEl.innerHTML = '<div class="region-row"><span class="region-crew-names">No locations configured.</span></div>';
+        return;
+      }
+      breakdownEl.innerHTML = rows.map((r) => {
+        const crewNames = r.count > 0
+          ? r.members.map((m) => escapeHtml(m.full_name || `Staff #${m.id}`)).join(', ')
+          : 'No crew assigned yet — click to schedule';
+        const resetBtnHtml = r.count > 0
+          ? `<button type="button" class="region-reset-btn js-techlead-row-reset" data-facility-name="${escapeHtml(r.lookupName)}" title="Reset all ${r.count} assigned crew from ${escapeHtml(r.displayName)}">↺ Reset</button>`
+          : '';
+        return `
+          <div class="region-row">
+            <button type="button" class="region-row-main js-techlead-location-row" data-facility-name="${escapeHtml(r.lookupName)}" title="Click to schedule or edit crew at ${escapeHtml(r.displayName)}">
+              <span class="region-info">
+                <span class="region-name">${escapeHtml(r.displayName)} · Call ${escapeHtml(r.callTime)}</span>
+                <span class="region-crew-names">${crewNames}</span>
+              </span>
+            </button>
+            <span class="region-row-actions">
+              ${resetBtnHtml}
+              <span class="region-count">${r.count}</span>
+            </span>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
   function renderAll() {
     renderTopbarAndKpis();
     renderCheckpointSelectors();
@@ -1169,6 +1293,7 @@
       renderAllocationMap();
     }
     renderActivityTimeline();
+    renderTechLeadRosterCard();
     renderCrewTables();
     renderCheckpointsDirectory();
     renderBatchesAndMatrixScreen();
@@ -1188,7 +1313,98 @@
     });
   }
 
+  function syncDynamicNotifications() {
+    const items = [];
+    const crewList = Array.isArray(state.crew) ? state.crew : [];
+    const timeline = Array.isArray(state.activityTimeline) ? state.activityTimeline : [];
+    const warehouses = Array.isArray(state.checkpoints?.stock_warehouses) ? state.checkpoints.stock_warehouses : [];
+
+    // 1. Users Added / Latest Staff Onboarded
+    if (crewList.length > 0) {
+      const sortedUsers = [...crewList].sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+      const latestUser = sortedUsers[0];
+      const userIdKey = `user-added-${latestUser.id || latestUser.full_name || '0'}`;
+      items.push({
+        id: userIdKey,
+        type: 'users',
+        iconSvg: 'assets/metric-users.svg',
+        title: `User Added: ${latestUser.full_name || 'Staff Member'}`,
+        desc: `${latestUser.role_display || latestUser.role || 'Crew'} · ${latestUser.clearance_code || 'L1'} (${crewList.length} total staff in directory)`,
+        time: latestUser.created_at ? String(latestUser.created_at).slice(0, 16) : 'Directory synced',
+        unread: !state.readNotifIds.has(userIdKey),
+      });
+    }
+
+    // 2. Permission Granted (Latest granted gate scans or active clearance tiers)
+    const grantedScans = timeline.filter((t) => String(t.status || '').toLowerCase() !== 'denied');
+    if (grantedScans.length > 0) {
+      grantedScans.slice(0, 2).forEach((scan, idx) => {
+        const grantKey = `perm-granted-${scan.id || scan.badge_code || idx}-${scan.time_formatted || scan.time || ''}`;
+        const scanAction = String(scan.action || scan.event_type || 'Check-in').toUpperCase();
+        items.push({
+          id: grantKey,
+          type: 'granted',
+          iconSvg: 'assets/metric-circle-check.svg',
+          title: `Permission Granted: ${scan.full_name || 'Verified Staff'}`,
+          desc: `${scanAction} · ${scan.clearance_code || 'L2'} verified at ${scan.checkpoint_name || 'Checkpoint'}`,
+          time: scan.time_formatted || scan.time || 'Today',
+          unread: !state.readNotifIds.has(grantKey),
+        });
+      });
+    } else {
+      const badgeTotal = Number(state.kpis?.activeBadges ?? crewList.length);
+      const grantKey = `perm-matrix-active-${badgeTotal}`;
+      items.push({
+        id: grantKey,
+        type: 'granted',
+        iconSvg: 'assets/shield-lock.svg',
+        title: `Permissions Active: ${badgeTotal} Issued Badges`,
+        desc: 'Clearance matrix (L1–L4) active across event venues and stock gates',
+        time: 'Live policy',
+        unread: !state.readNotifIds.has(grantKey),
+      });
+    }
+
+    // 3. Active Stocks / Warehouses
+    const activeWhs = warehouses.filter((w) => w && w.is_active !== 0);
+    if (activeWhs.length > 0) {
+      const summaryParts = activeWhs.map((w) => {
+        const wCrew = getFacilityCrewMembers(w, crewList);
+        return `${w.name || 'Warehouse'} (${wCrew.length})`;
+      });
+      const stockKey = `active-stocks-${activeWhs.length}-${summaryParts.join('|')}`;
+      items.push({
+        id: stockKey,
+        type: 'stock',
+        iconSvg: 'assets/warehouse-13.svg',
+        title: `Active Stocks & Warehouses (${activeWhs.length})`,
+        desc: summaryParts.join(' · '),
+        time: 'Active hubs',
+        unread: !state.readNotifIds.has(stockKey),
+      });
+    }
+
+    // 4. Optional latest Denied Scan alert (using SVG dot icon, never emoji)
+    const deniedScan = timeline.find((t) => String(t.status || '').toLowerCase() === 'denied');
+    if (deniedScan) {
+      const denyKey = `perm-denied-${deniedScan.id || deniedScan.badge_code || '0'}-${deniedScan.time_formatted || deniedScan.time || ''}`;
+      items.push({
+        id: denyKey,
+        type: 'denied',
+        iconSvg: 'assets/status-dot-red-5.svg',
+        title: `Access Denied: ${deniedScan.full_name || deniedScan.badge_code || 'Invalid Badge'}`,
+        desc: `${deniedScan.denial_reason || 'Insufficient clearance'} at ${deniedScan.checkpoint_name || 'Checkpoint'}`,
+        time: deniedScan.time_formatted || deniedScan.time || 'Today',
+        unread: !state.readNotifIds.has(denyKey),
+      });
+    }
+
+    state.notifications = items;
+    state.unreadNotifCount = items.filter((n) => n.unread).length;
+  }
+
   function renderNotificationsList() {
+    syncDynamicNotifications();
     const list = document.getElementById('topbar-notif-list');
     if (!list) return;
     if (!state.notifications || state.notifications.length === 0) {
@@ -1197,7 +1413,9 @@
     }
     list.innerHTML = state.notifications.map((n) => `
       <div class="notif-item ${n.unread ? 'unread' : ''}">
-        <span class="notif-item-icon">${n.icon || '🔔'}</span>
+        <span class="notif-item-icon">
+          <img src="${escapeHtml(n.iconSvg || 'assets/metric-users.svg')}" alt="" class="svg-icon notif-svg-icon" />
+        </span>
         <div class="notif-item-content">
           <div class="notif-item-title">${escapeHtml(n.title)}</div>
           <div class="notif-item-desc">${escapeHtml(n.desc)}</div>
@@ -1440,7 +1658,17 @@
     if (tabMatrix) tabMatrix.style.display = isAdmin ? 'inline-flex' : 'none';
     if (tabDepts) tabDepts.style.display = isAdmin ? 'inline-flex' : 'none';
 
-    // 4. User Dropdown Menu Administrative Controls (ONLY ADMIN)
+    // 4. User Dropdown & Topbar Administrative Controls (ONLY ADMIN)
+    const helpWrap = document.getElementById('topbar-help-wrap');
+    const notifWrap = document.getElementById('topbar-notif-wrap');
+    const helpDrop = document.getElementById('topbar-help-dropdown');
+    const notifDrop = document.getElementById('topbar-notif-dropdown');
+    if (helpWrap) helpWrap.style.display = isAdmin ? '' : 'none';
+    if (notifWrap) notifWrap.style.display = isAdmin ? '' : 'none';
+    if (!isAdmin) {
+      if (helpDrop) helpDrop.style.display = 'none';
+      if (notifDrop) notifDrop.style.display = 'none';
+    }
     const menuSwitch = document.getElementById('topbar-menu-switch-user');
     const menuAuth = document.getElementById('topbar-menu-auth-modal');
     if (menuSwitch) menuSwitch.style.display = isAdmin ? 'flex' : 'none';
@@ -1522,31 +1750,59 @@
     }
 
     // 9. Gate Dashboard Scoping for Tech Lead:
-    // Tech Lead views ONLY overview-top-block and timeline-card-overview!
+    // Tech Lead views overview-top-block, User Activity Timeline (left),
+    // and the Hourly Traffic chart inside #overview-allocation-card (right);
+    // map views and the Production Crew & Staff Roster remain hidden.
     const overviewMapCard = document.getElementById('overview-allocation-card');
     const overviewRosterCard = document.querySelector('#screen-overview .directory-card');
     const overviewTimelineCard = document.querySelector('#screen-overview .timeline-card-overview');
 
     if (overviewMapCard) {
-      overviewMapCard.style.display = isTech ? 'none' : '';
+      overviewMapCard.style.display = '';
+
+      const cardTitle = overviewMapCard.querySelector('.chart-title');
+      const cardSubtitle = overviewMapCard.querySelector('.chart-subtitle');
+      const radarBadge = overviewMapCard.querySelector('.map-radar-pulse');
+      const btnOptA = document.getElementById('toggle-view-option-a') || document.getElementById('toggle-view-map');
+      const btnOptB = document.getElementById('toggle-view-option-b');
+      const btnChart = document.getElementById('toggle-view-chart');
+
+      if (cardTitle) {
+        cardTitle.textContent = isTech
+          ? 'Hourly Venue vs. Facility Gate Traffic'
+          : 'Real-Time Personnel & Facility Allocation Map';
+      }
+      if (cardSubtitle) {
+        cardSubtitle.textContent = isTech
+          ? 'Live check-in volume across Kigali event venues and facility gates for today’s call-time window.'
+          : 'Real-time geographic tracking & instant crew attendance across Kigali venues and facility hubs.';
+      }
+      if (radarBadge) radarBadge.style.display = isTech ? 'none' : '';
+      if (btnOptA) btnOptA.style.display = isTech ? 'none' : '';
+      if (btnOptB) btnOptB.style.display = isTech ? 'none' : '';
+      if (btnChart) btnChart.style.display = '';
+
+      if (isTech) {
+        setAllocationMapView('chart');
+      }
     }
     if (overviewRosterCard) {
       overviewRosterCard.style.display = isTech ? 'none' : '';
     }
     if (overviewTimelineCard) {
-      if (isTech) {
-        overviewTimelineCard.style.width = '100%';
-        overviewTimelineCard.style.flex = '1 1 100%';
-      } else {
-        overviewTimelineCard.style.width = '';
-        overviewTimelineCard.style.flex = '';
-      }
+      overviewTimelineCard.style.width = '';
+      overviewTimelineCard.style.flex = '';
     }
 
     // Hide any "go-attendees" buttons for Tech Lead
     document.querySelectorAll('[data-action="go-attendees"]').forEach((btn) => {
       btn.style.display = isTech ? 'none' : '';
     });
+
+    const scheduleRosterBtn = document.getElementById('overview-schedule-roster-btn');
+    if (scheduleRosterBtn) {
+      scheduleRosterBtn.style.display = canCurrentUserAssignEvents() ? 'inline-flex' : 'none';
+    }
   }
 
   function openAuthModal(defaultTab = 'login') {
@@ -1739,6 +1995,7 @@
     }
 
     // Render Notifications Bubble
+    syncDynamicNotifications();
     const notifBubble = document.getElementById('topbar-notif-bubble');
     if (notifBubble) {
       if (state.unreadNotifCount > 0) {
@@ -2795,10 +3052,20 @@
 
     if (metaEl) {
       const callTime = facility.call_time || '08:00 AM';
-      const leadName = facility.lead_name || facility.assigned_lead_name || (facility.lead_label ? facility.lead_label.replace(/^.*?:\s*/, '') : 'Assigned Supervisor');
+      const assignedController = facilityCrew.find((c) => String(c.role || '').toLowerCase() === 'stock_controller');
+      const assignedManager = facilityCrew.find((c) => String(c.role || '').toLowerCase() === 'stock_manager');
+      const fallbackLead = facility.lead_name || facility.assigned_lead_name || (facility.lead_label ? facility.lead_label.replace(/^.*?:\s*/, '') : 'Unassigned');
+      const inChargeName = assignedController?.full_name
+        || assignedManager?.full_name
+        || (isStock ? facility.controller_name : '')
+        || facility.project_manager
+        || fallbackLead;
+      const inChargeLabel = assignedManager && !assignedController
+        ? 'Stock Manager'
+        : (isStock ? 'Stock Controller / Manager' : 'Controller / Manager');
       metaEl.innerHTML = `
         <span>Call Time: <strong>${escapeHtml(callTime)}</strong></span> ·
-        <span>Scheduled Lead: <strong>${escapeHtml(leadName)}</strong></span> ·
+        <span>${inChargeLabel}: <strong>${escapeHtml(inChargeName)}</strong></span> ·
         <span id="inspector-headcount-tag"><strong>${assignedCount}</strong> Assigned Personnel (<strong>${headCount}</strong> On-Site)</span>
       `;
     }
@@ -2933,6 +3200,11 @@
   }
 
   function setAllocationMapView(viewMode) {
+    const rawRole = (state.currentUser?.role || '').toLowerCase();
+    const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isCurrentUserAdmin();
+    if (isTech) {
+      viewMode = 'chart';
+    }
     state.mapViewMode = viewMode;
     const mapView = document.getElementById('overview-map-view');
     const liveMapPanel = document.getElementById('live-map-panel');
@@ -3589,27 +3861,32 @@
       .join('');
   }
 
-  function renderPaginationControls(currentPage, totalPages) {
+  function renderPaginationControls(currentPage, totalPages, scope = 'dir') {
     if (totalPages <= 1) return '';
 
-    let pageBtnsHtml = '';
-    for (let p = 1; p <= totalPages; p++) {
-      pageBtnsHtml += `
+    const pages = getPaginationPageNumbers(currentPage, totalPages);
+    const pageBtnsHtml = pages.map((p) => {
+      if (p === '...') {
+        return '<span class="pagination-ellipsis" style="padding:0 4px; color:var(--text-secondary);">…</span>';
+      }
+      return `
         <button
           type="button"
-          class="page-number-btn ${p === currentPage ? 'active' : ''} js-dir-page-btn"
+          class="page-number-btn ${p === currentPage ? 'active' : ''} js-crew-page-btn"
+          data-page-scope="${scope}"
           data-page="${p}"
           aria-label="Go to page ${p}"
         >
           ${p}
         </button>
       `;
-    }
+    }).join('');
 
     return `
       <button
         type="button"
-        class="btn btn-secondary-32-sm js-dir-prev-btn"
+        class="btn btn-secondary-32-sm js-crew-prev-btn"
+        data-page-scope="${scope}"
         ${currentPage <= 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}
         aria-label="Previous Page"
       >
@@ -3620,7 +3897,8 @@
       </div>
       <button
         type="button"
-        class="btn btn-secondary-32-sm js-dir-next-btn"
+        class="btn btn-secondary-32-sm js-crew-next-btn"
+        data-page-scope="${scope}"
         ${currentPage >= totalPages ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : ''}
         aria-label="Next Page"
       >
@@ -3629,51 +3907,70 @@
     `;
   }
 
+  function renderPaginatedCrewTable({
+    rowsEl,
+    countEl,
+    paginationEl,
+    tab,
+    search,
+    pageKey,
+    perPageKey,
+    scope,
+    unitLabel,
+  }) {
+    if (!rowsEl) return;
+
+    const list = filterCrewList(tab, search);
+    const totalItems = list.length;
+    const perPage = state[perPageKey] || 5;
+    const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+
+    if (state[pageKey] > totalPages) state[pageKey] = totalPages;
+    if (state[pageKey] < 1) state[pageKey] = 1;
+
+    const startIndex = (state[pageKey] - 1) * perPage;
+    const endIndex = Math.min(startIndex + perPage, totalItems);
+    const pagedList = list.slice(startIndex, endIndex);
+
+    rowsEl.innerHTML = renderCrewRowsHtml(pagedList);
+
+    if (countEl) {
+      if (totalItems === 0) {
+        countEl.textContent = 'Showing 0 crew members';
+      } else {
+        countEl.textContent = `Showing ${startIndex + 1}–${endIndex} of ${totalItems} ${unitLabel} (Page ${state[pageKey]} of ${totalPages})`;
+      }
+    }
+
+    if (paginationEl) {
+      paginationEl.innerHTML = renderPaginationControls(state[pageKey], totalPages, scope);
+    }
+  }
+
   function renderCrewTables() {
-    const overviewRowsEl = document.getElementById('overview-attendee-rows');
-    const overviewCountEl = document.getElementById('overview-results-count');
-    if (overviewRowsEl) {
-      const ovList = filterCrewList(state.overviewTab, state.overviewSearch);
-      overviewRowsEl.innerHTML = renderCrewRowsHtml(ovList);
-      if (overviewCountEl) {
-        overviewCountEl.textContent = `Showing ${ovList.length} of ${state.crew.length} badged production crew`;
-      }
-    }
+    renderPaginatedCrewTable({
+      rowsEl: document.getElementById('overview-attendee-rows'),
+      countEl: document.getElementById('overview-results-count'),
+      paginationEl: document.getElementById('overview-page-controls'),
+      tab: state.overviewTab,
+      search: state.overviewSearch,
+      pageKey: 'overviewPage',
+      perPageKey: 'overviewPerPage',
+      scope: 'ov',
+      unitLabel: 'badged production crew',
+    });
 
-    const dirRowsEl = document.getElementById('directory-attendee-rows');
-    const dirCountEl = document.getElementById('directory-results-count');
-    const dirPaginationEl = document.getElementById('directory-page-controls');
-    if (dirRowsEl) {
-      const dirList = filterCrewList(state.directoryTab, state.directorySearch);
-      const totalItems = dirList.length;
-      const perPage = state.directoryPerPage || 5;
-      const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
-
-      if (state.directoryPage > totalPages) {
-        state.directoryPage = totalPages;
-      }
-      if (state.directoryPage < 1) {
-        state.directoryPage = 1;
-      }
-
-      const startIndex = (state.directoryPage - 1) * perPage;
-      const endIndex = Math.min(startIndex + perPage, totalItems);
-      const pagedList = dirList.slice(startIndex, endIndex);
-
-      dirRowsEl.innerHTML = renderCrewRowsHtml(pagedList);
-
-      if (dirCountEl) {
-        if (totalItems === 0) {
-          dirCountEl.textContent = 'Showing 0 crew members';
-        } else {
-          dirCountEl.textContent = `Showing ${startIndex + 1}–${endIndex} of ${totalItems} badged crew (Page ${state.directoryPage} of ${totalPages})`;
-        }
-      }
-
-      if (dirPaginationEl) {
-        dirPaginationEl.innerHTML = renderPaginationControls(state.directoryPage, totalPages);
-      }
-    }
+    renderPaginatedCrewTable({
+      rowsEl: document.getElementById('directory-attendee-rows'),
+      countEl: document.getElementById('directory-results-count'),
+      paginationEl: document.getElementById('directory-page-controls'),
+      tab: state.directoryTab,
+      search: state.directorySearch,
+      pageKey: 'directoryPage',
+      perPageKey: 'directoryPerPage',
+      scope: 'dir',
+      unitLabel: 'badged crew',
+    });
   }
 
   function renderCheckpointsDirectory() {
@@ -6999,11 +7296,7 @@
           return;
         }
         const matched = findCrewMember(val);
-        if (matched) {
-          openKioskModal(matched);
-        } else {
-          triggerGateScan(val);
-        }
+        triggerGateScan(matched ? (matched.badge_code || val) : val);
       });
     }
 
@@ -7149,8 +7442,11 @@
     const notifMarkRead = document.getElementById('topbar-notif-mark-read');
     if (notifMarkRead) {
       notifMarkRead.addEventListener('click', () => {
+        state.notifications.forEach((n) => {
+          if (n && n.id) state.readNotifIds.add(n.id);
+          n.unread = false;
+        });
         state.unreadNotifCount = 0;
-        state.notifications.forEach((n) => { n.unread = false; });
         renderTopbarAndKpis();
         renderNotificationsList();
         showToast('All notifications marked as read.');
@@ -7568,30 +7864,34 @@
         return;
       }
 
-      // 0c. Directory Table Pagination: Prev button
-      const dirPrevBtn = e.target.closest('.js-dir-prev-btn');
-      if (dirPrevBtn && !dirPrevBtn.hasAttribute('disabled')) {
-        if (state.directoryPage > 1) {
-          state.directoryPage--;
+      // 0c–0e. Crew Tables Pagination (Overview & Directory)
+      const crewPageMap = { ov: 'overviewPage', dir: 'directoryPage' };
+      const crewPrevBtn = e.target.closest('.js-crew-prev-btn');
+      if (crewPrevBtn && !crewPrevBtn.hasAttribute('disabled')) {
+        const key = crewPageMap[crewPrevBtn.getAttribute('data-page-scope') || 'dir'];
+        if (key && state[key] > 1) {
+          state[key]--;
           renderCrewTables();
         }
         return;
       }
 
-      // 0d. Directory Table Pagination: Next button
-      const dirNextBtn = e.target.closest('.js-dir-next-btn');
-      if (dirNextBtn && !dirNextBtn.hasAttribute('disabled')) {
-        state.directoryPage++;
-        renderCrewTables();
+      const crewNextBtn = e.target.closest('.js-crew-next-btn');
+      if (crewNextBtn && !crewNextBtn.hasAttribute('disabled')) {
+        const key = crewPageMap[crewNextBtn.getAttribute('data-page-scope') || 'dir'];
+        if (key) {
+          state[key]++;
+          renderCrewTables();
+        }
         return;
       }
 
-      // 0e. Directory Table Pagination: Specific Page Number button
-      const dirPageBtn = e.target.closest('.js-dir-page-btn');
-      if (dirPageBtn) {
-        const targetPage = Number(dirPageBtn.getAttribute('data-page'));
-        if (targetPage && targetPage !== state.directoryPage) {
-          state.directoryPage = targetPage;
+      const crewPageBtn = e.target.closest('.js-crew-page-btn');
+      if (crewPageBtn) {
+        const key = crewPageMap[crewPageBtn.getAttribute('data-page-scope') || 'dir'];
+        const targetPage = Number(crewPageBtn.getAttribute('data-page'));
+        if (key && targetPage && targetPage !== state[key]) {
+          state[key] = targetPage;
           renderCrewTables();
         }
         return;
@@ -7943,6 +8243,7 @@
         const tab = e.target.closest('.status-tab[data-tab]');
         if (!tab) return;
         state.overviewTab = tab.getAttribute('data-tab');
+        state.overviewPage = 1;
         ovTabs.querySelectorAll('.status-tab').forEach((t) => t.classList.toggle('active', t === tab));
         renderCrewTables();
       });
@@ -7978,6 +8279,7 @@
     if (ovSearch) {
       ovSearch.addEventListener('input', (e) => {
         state.overviewSearch = e.target.value;
+        state.overviewPage = 1;
         renderCrewTables();
       });
     }
@@ -8166,6 +8468,7 @@
         btn.addEventListener('click', () => {
           const idx = (TIER_CYCLE.indexOf(state.tierFilter) + 1) % TIER_CYCLE.length;
           state.tierFilter = TIER_CYCLE[idx];
+          state.overviewPage = 1;
           state.directoryPage = 1;
           const lbl = state.tierFilter === 'all' ? 'Clearance: All Tiers' : `Clearance: Tier ${state.tierFilter}`;
           ['overview-ticket-filter-label', 'directory-ticket-filter-label'].forEach((lid) => {
@@ -8183,6 +8486,7 @@
         btn.addEventListener('click', () => {
           const idx = (GATE_STATE_CYCLE.indexOf(state.gateStateFilter) + 1) % GATE_STATE_CYCLE.length;
           state.gateStateFilter = GATE_STATE_CYCLE[idx];
+          state.overviewPage = 1;
           state.directoryPage = 1;
           const lbl =
             state.gateStateFilter === 'all'
@@ -8689,6 +8993,503 @@
             submitBtn.disabled = false;
             submitBtn.innerHTML = `<span>Confirm Allocation &amp; Dispatch →</span>`;
           }
+        }
+      });
+    }
+
+    // =========================================================================
+    // SCHEDULE EVENT ROSTER MODAL (Tech Lead / Gate Dashboard Header)
+    // Scoped strictly to: save_event, assign_event_crew, allocate_personnel
+    // (by stock/venue name only), reset_facility_crew, and unassign_personnel.
+    // =========================================================================
+    const scheduleRosterModal = document.getElementById('schedule-roster-modal');
+    const rosterTargetSelect = document.getElementById('roster-target-select');
+    const rosterSearchInput = document.getElementById('roster-crew-search');
+    const rosterCheckedIds = new Set();
+
+    function getFacilityLookupName(facility) {
+      if (!facility) return '';
+      return String(facility.title || facility.name || '').trim();
+    }
+
+    function findFacilityByLookupName(targetName) {
+      const needle = String(targetName || '').trim().toLowerCase();
+      if (!needle) return null;
+      return getAllFacilitiesList().find((f) => {
+        const titleName = String(f.title || '').trim().toLowerCase();
+        const fullName = String(f.name || '').trim().toLowerCase();
+        return titleName === needle || fullName === needle;
+      }) || null;
+    }
+
+    function populateRosterTargetSelect(preferredName) {
+      if (!rosterTargetSelect) return null;
+      const facilities = getAllFacilitiesList();
+      const prevValue = preferredName || rosterTargetSelect.value || getFacilityLookupName(state.activeCheckpoint) || '';
+      rosterTargetSelect.innerHTML = '';
+
+      facilities.forEach((f) => {
+        const pureName = getFacilityLookupName(f);
+        if (!pureName) return;
+        const opt = document.createElement('option');
+        opt.value = pureName;
+        opt.textContent = pureName;
+        rosterTargetSelect.appendChild(opt);
+      });
+
+      const matched = findFacilityByLookupName(prevValue);
+      if (matched) {
+        rosterTargetSelect.value = getFacilityLookupName(matched);
+      } else if (rosterTargetSelect.options.length > 0) {
+        rosterTargetSelect.selectedIndex = 0;
+      }
+      return findFacilityByLookupName(rosterTargetSelect.value);
+    }
+
+    function syncRosterCheckedFromFacility(facility) {
+      rosterCheckedIds.clear();
+      if (!facility) return;
+      const assigned = getFacilityCrewMembers(facility, state.crew || []);
+      assigned.forEach((u) => {
+        if (u && u.id != null) rosterCheckedIds.add(Number(u.id));
+      });
+    }
+
+    function updateRosterSelectedCount() {
+      const badge = document.getElementById('roster-selected-count');
+      if (badge) {
+        badge.textContent = `${rosterCheckedIds.size} Selected`;
+      }
+    }
+
+    function populateRosterTechLeadOptions(currentLead) {
+      const sel = document.getElementById('roster-event-techlead');
+      if (!sel) return;
+      sel.innerHTML = '';
+
+      const blankOpt = document.createElement('option');
+      blankOpt.value = '';
+      blankOpt.textContent = '-- Select Tech Lead --';
+      sel.appendChild(blankOpt);
+
+      const candidates = (state.crew || []).filter((u) => u && u.full_name);
+      let foundCurrent = false;
+      candidates.forEach((u) => {
+        const opt = document.createElement('option');
+        opt.value = u.full_name;
+        opt.textContent = u.full_name;
+        if (currentLead && u.full_name.trim().toLowerCase() === String(currentLead).trim().toLowerCase()) {
+          opt.selected = true;
+          foundCurrent = true;
+        }
+        sel.appendChild(opt);
+      });
+
+      if (currentLead && !foundCurrent) {
+        const customOpt = document.createElement('option');
+        customOpt.value = currentLead;
+        customOpt.textContent = currentLead;
+        customOpt.selected = true;
+        sel.appendChild(customOpt);
+      }
+    }
+
+    function renderRosterChecklist() {
+      const listEl = document.getElementById('roster-crew-checklist');
+      if (!listEl) return;
+      const query = String(rosterSearchInput ? rosterSearchInput.value : '').trim().toLowerCase();
+      const filtered = (state.crew || []).filter((u) => {
+        if (!u) return false;
+        if (!query) return true;
+        const hay = `${u.full_name || ''} ${u.role || ''} ${u.department || ''} ${u.clearance_level || ''}`.toLowerCase();
+        return hay.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<div style="font-size: 12px; color: var(--text-secondary); padding: 10px; text-align: center;">No matching personnel found.</div>';
+        updateRosterSelectedCount();
+        return;
+      }
+
+      listEl.innerHTML = filtered.map((u) => {
+        const uid = Number(u.id);
+        const checked = rosterCheckedIds.has(uid) ? 'checked' : '';
+        return `
+          <label style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; background: var(--surface-card, #ffffff);">
+            <span style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+              <input type="checkbox" class="js-roster-crew-cb" value="${uid}" ${checked} />
+              <span style="font-size: 12.5px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(u.full_name || 'Staff #' + uid)}</span>
+            </span>
+            <span style="font-size: 11px; color: var(--text-secondary); flex-shrink: 0;">${escapeHtml(u.role || 'Crew')} · ${escapeHtml(u.clearance_level || 'L1')}</span>
+          </label>
+        `;
+      }).join('');
+
+      listEl.querySelectorAll('.js-roster-crew-cb').forEach((cb) => {
+        cb.addEventListener('change', () => {
+          const idVal = Number(cb.value);
+          if (cb.checked) rosterCheckedIds.add(idVal);
+          else rosterCheckedIds.delete(idVal);
+          updateRosterSelectedCount();
+        });
+      });
+
+      updateRosterSelectedCount();
+    }
+
+    function renderScheduleRosterModalContent(options) {
+      const opts = options || {};
+      const facility = populateRosterTargetSelect(opts.preferredName);
+      const eventSection = document.getElementById('roster-event-section');
+      const assignedListEl = document.getElementById('roster-assigned-list');
+      const assignedCountEl = document.getElementById('roster-assigned-count');
+
+      if (!facility) {
+        if (eventSection) eventSection.style.display = 'none';
+        if (assignedListEl) assignedListEl.innerHTML = '<span style="font-size: 12px; color: var(--text-secondary);">No stock or venue selected.</span>';
+        renderRosterChecklist();
+        return;
+      }
+
+      if (opts.syncChecked) {
+        syncRosterCheckedFromFacility(facility);
+      }
+
+      const isEventVenue = facility.type === 'event_venue';
+      if (eventSection) {
+        eventSection.style.display = isEventVenue ? 'block' : 'none';
+      }
+
+      if (isEventVenue) {
+        const callInput = document.getElementById('roster-event-calltime');
+        const pmInput = document.getElementById('roster-event-pm');
+        const dateLabel = document.getElementById('roster-event-date-label');
+        if (callInput) callInput.value = (facility.call_time || '08:00').slice(0, 5);
+        if (pmInput) pmInput.value = facility.project_manager || '';
+        if (dateLabel) dateLabel.textContent = facility.date ? `Date: ${facility.date}` : '';
+        populateRosterTechLeadOptions(facility.tech_lead || facility.lead_name || '');
+      }
+
+      const assignedCrew = getFacilityCrewMembers(facility, state.crew || []);
+      if (assignedCountEl) assignedCountEl.textContent = String(assignedCrew.length);
+
+      if (assignedListEl) {
+        if (assignedCrew.length === 0) {
+          assignedListEl.innerHTML = '<span style="font-size: 12px; color: var(--text-secondary);">No crew currently assigned to this stock or venue.</span>';
+        } else {
+          assignedListEl.innerHTML = assignedCrew.map((member) => `
+            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: var(--surface-subtle, #f1f5f9); border: 1px solid var(--border-color); font-size: 11.5px; font-weight: 600;">
+              <span>${escapeHtml(member.full_name || 'Member #' + member.id)}</span>
+              <button type="button" class="js-roster-unassign-btn" data-user-id="${Number(member.id)}" data-user-name="${escapeHtml(member.full_name || '')}" title="Unassign personnel" style="border: none; background: transparent; color: #dc2626; font-weight: 700; cursor: pointer; padding: 0 2px; line-height: 1;">✕</button>
+            </span>
+          `).join('');
+        }
+      }
+
+      renderRosterChecklist();
+    }
+
+    async function postRosterAction(action, bodyPayload, successFallback) {
+      const qs = `action=${encodeURIComponent(action)}&checkpoint_type=${encodeURIComponent(state.checkpointType)}&checkpoint_id=${encodeURIComponent(state.checkpointId)}`;
+      const res = await fetch(`api.php?${qs}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload || {}),
+      });
+      const data = await res.json();
+      if (!res.ok || !data || !data.ok) {
+        const errMsg = (data && data.error) ? data.error : `Request failed (${res.status})`;
+        showToast(`⚠️ ${errMsg}`);
+        playKioskChime('decline');
+        return null;
+      }
+
+      applyBootstrapPayload(data, true);
+      if (scheduleRosterModal && scheduleRosterModal.classList.contains('open')) {
+        renderScheduleRosterModalContent({
+          preferredName: rosterTargetSelect ? rosterTargetSelect.value : '',
+          syncChecked: true,
+        });
+      }
+      playKioskChime('approve');
+      showToast(`✅ ${data.message || successFallback}`);
+      return data;
+    }
+
+    async function resetFacilityRostersByName(facilityNames, triggerBtn) {
+      const uniqueNames = Array.from(new Set((facilityNames || []).map((n) => String(n || '').trim()).filter(Boolean)));
+      if (uniqueNames.length === 0) {
+        showToast('No assigned crew to reset.');
+        return;
+      }
+
+      const confirmMsg = uniqueNames.length === 1
+        ? `Unassign all crew members from "${uniqueNames[0]}" and return them to Standby?`
+        : `Unassign all crew members across ${uniqueNames.length} locations (${uniqueNames.join(', ')}) and return them to Standby?`;
+
+      const { confirmed } = await showConfirmModal({
+        title: uniqueNames.length === 1 ? 'Reset Location Roster' : 'Reset All Assigned Rosters',
+        message: confirmMsg,
+        confirmText: 'Reset Roster',
+        tone: 'danger',
+      });
+      if (!confirmed) return;
+
+      if (triggerBtn) triggerBtn.disabled = true;
+      try {
+        let lastData = null;
+        for (const fname of uniqueNames) {
+          const qs = `action=reset_facility_crew&checkpoint_type=${encodeURIComponent(state.checkpointType)}&checkpoint_id=${encodeURIComponent(state.checkpointId)}`;
+          const res = await fetch(`api.php?${qs}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ facility_name: fname }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data || !data.ok) {
+            showToast(`⚠️ ${(data && data.error) ? data.error : `Failed resetting ${fname}`}`);
+            playKioskChime('decline');
+            return;
+          }
+          lastData = data;
+        }
+        if (lastData) {
+          applyBootstrapPayload(lastData, true);
+          playKioskChime('approve');
+          showToast(uniqueNames.length === 1
+            ? `✅ Roster reset for ${uniqueNames[0]}.`
+            : `✅ Reset rosters across ${uniqueNames.length} locations.`);
+        }
+      } catch (err) {
+        console.error('resetFacilityRostersByName error:', err);
+        showToast('⚠️ Error resetting roster.');
+      } finally {
+        if (triggerBtn) triggerBtn.disabled = false;
+      }
+    }
+
+    function openScheduleRosterModal(preferredName) {
+      if (!scheduleRosterModal) return;
+      if (!canCurrentUserAssignEvents()) {
+        showToast('⛔ Only Admin, Manager, or Tech Lead can schedule the event roster.');
+        return;
+      }
+      if (rosterSearchInput) rosterSearchInput.value = '';
+      renderScheduleRosterModalContent({ preferredName, syncChecked: true });
+      scheduleRosterModal.classList.add('open');
+      scheduleRosterModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeScheduleRosterModal() {
+      if (!scheduleRosterModal) return;
+      scheduleRosterModal.classList.remove('open');
+      scheduleRosterModal.setAttribute('aria-hidden', 'true');
+    }
+
+    const openRosterBtn = document.getElementById('overview-schedule-roster-btn');
+    if (openRosterBtn) {
+      openRosterBtn.addEventListener('click', () => openScheduleRosterModal());
+    }
+    const cardOpenRosterBtn = document.getElementById('techlead-card-open-roster-btn');
+    if (cardOpenRosterBtn) {
+      cardOpenRosterBtn.addEventListener('click', () => openScheduleRosterModal());
+    }
+    const cardResetAllBtn = document.getElementById('techlead-card-reset-all-btn');
+    if (cardResetAllBtn) {
+      cardResetAllBtn.addEventListener('click', () => {
+        const allCrew = state.crew || [];
+        const assignedNames = getAllFacilitiesList()
+          .filter((f) => getFacilityCrewMembers(f, allCrew).length > 0)
+          .map((f) => getFacilityLookupName(f));
+        resetFacilityRostersByName(assignedNames, cardResetAllBtn);
+      });
+    }
+    const techLeadBreakdownEl = document.getElementById('techlead-roster-breakdown');
+    if (techLeadBreakdownEl) {
+      techLeadBreakdownEl.addEventListener('click', (e) => {
+        const resetRowBtn = e.target.closest('.js-techlead-row-reset');
+        if (resetRowBtn) {
+          e.stopPropagation();
+          resetFacilityRostersByName([resetRowBtn.dataset.facilityName || ''], resetRowBtn);
+          return;
+        }
+        const row = e.target.closest('.js-techlead-location-row');
+        if (!row) return;
+        openScheduleRosterModal(row.dataset.facilityName || '');
+      });
+    }
+    const closeRosterBtn = document.getElementById('close-schedule-roster-modal');
+    if (closeRosterBtn) closeRosterBtn.addEventListener('click', closeScheduleRosterModal);
+    const cancelRosterBtn = document.getElementById('cancel-schedule-roster-modal');
+    if (cancelRosterBtn) cancelRosterBtn.addEventListener('click', closeScheduleRosterModal);
+    if (scheduleRosterModal) {
+      scheduleRosterModal.addEventListener('click', (e) => {
+        if (e.target === scheduleRosterModal) closeScheduleRosterModal();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && scheduleRosterModal.classList.contains('open')) {
+          closeScheduleRosterModal();
+        }
+      });
+    }
+
+    if (rosterTargetSelect) {
+      rosterTargetSelect.addEventListener('change', () => {
+        renderScheduleRosterModalContent({
+          preferredName: rosterTargetSelect.value,
+          syncChecked: true,
+        });
+      });
+    }
+
+    if (rosterSearchInput) {
+      rosterSearchInput.addEventListener('input', renderRosterChecklist);
+    }
+
+    const rosterSaveEventBtn = document.getElementById('roster-save-event-btn');
+    if (rosterSaveEventBtn) {
+      rosterSaveEventBtn.addEventListener('click', async () => {
+        const facilityName = String(rosterTargetSelect ? rosterTargetSelect.value : '').trim();
+        if (!facilityName) {
+          showToast('⚠️ Select an event venue first.');
+          return;
+        }
+        const callTime = document.getElementById('roster-event-calltime')?.value || '08:00';
+        const techLead = document.getElementById('roster-event-techlead')?.value || '';
+        const pm = document.getElementById('roster-event-pm')?.value || '';
+        const facility = findFacilityByLookupName(facilityName);
+        const existingCrewIds = getFacilityCrewMembers(facility, state.crew || []).map((m) => Number(m.id));
+        const crewToSave = rosterCheckedIds.size > 0 ? Array.from(rosterCheckedIds) : existingCrewIds;
+
+        rosterSaveEventBtn.disabled = true;
+        try {
+          await postRosterAction('save_event', {
+            facility_name: facilityName,
+            call_time: callTime,
+            tech_lead: techLead,
+            project_manager: pm,
+            assigned_technicians: crewToSave,
+          }, 'Event call-time and details saved.');
+        } catch (err) {
+          console.error('save_event error:', err);
+          showToast('⚠️ Error saving event details.');
+        } finally {
+          rosterSaveEventBtn.disabled = false;
+        }
+      });
+    }
+
+    const rosterAssignCrewBtn = document.getElementById('roster-assign-crew-btn');
+    if (rosterAssignCrewBtn) {
+      rosterAssignCrewBtn.addEventListener('click', async () => {
+        const facilityName = String(rosterTargetSelect ? rosterTargetSelect.value : '').trim();
+        if (!facilityName) {
+          showToast('⚠️ Select an event venue first.');
+          return;
+        }
+        const callTime = document.getElementById('roster-event-calltime')?.value || '08:00';
+        const techLead = document.getElementById('roster-event-techlead')?.value || '';
+        const pm = document.getElementById('roster-event-pm')?.value || '';
+        const crewIds = Array.from(rosterCheckedIds);
+
+        rosterAssignCrewBtn.disabled = true;
+        try {
+          await postRosterAction('assign_event_crew', {
+            facility_name: facilityName,
+            call_time: callTime,
+            tech_lead: techLead,
+            project_manager: pm,
+            assigned_technicians: crewIds,
+          }, 'Event crew roster synced.');
+        } catch (err) {
+          console.error('assign_event_crew error:', err);
+          showToast('⚠️ Error syncing event crew.');
+        } finally {
+          rosterAssignCrewBtn.disabled = false;
+        }
+      });
+    }
+
+    const rosterAllocateBtn = document.getElementById('roster-allocate-btn');
+    if (rosterAllocateBtn) {
+      rosterAllocateBtn.addEventListener('click', async () => {
+        const facilityName = String(rosterTargetSelect ? rosterTargetSelect.value : '').trim();
+        if (!facilityName) {
+          showToast('⚠️ Select a stock warehouse or event venue name.');
+          return;
+        }
+        const userIds = Array.from(rosterCheckedIds);
+        if (userIds.length === 0) {
+          showToast('⚠️ Select at least one crew member to allocate.');
+          return;
+        }
+        const notes = String(document.getElementById('roster-alloc-notes')?.value || 'Scheduled via Tech Lead Gate Roster').trim();
+
+        rosterAllocateBtn.disabled = true;
+        try {
+          await postRosterAction('allocate_personnel', {
+            facility_name: facilityName,
+            user_ids: userIds,
+            notes,
+          }, `Personnel allocated to ${facilityName}.`);
+        } catch (err) {
+          console.error('allocate_personnel error:', err);
+          showToast('⚠️ Error allocating personnel.');
+        } finally {
+          rosterAllocateBtn.disabled = false;
+        }
+      });
+    }
+
+    const rosterResetCrewBtn = document.getElementById('roster-reset-crew-btn');
+    if (rosterResetCrewBtn) {
+      rosterResetCrewBtn.addEventListener('click', async () => {
+        const facilityName = String(rosterTargetSelect ? rosterTargetSelect.value : '').trim();
+        if (!facilityName) return;
+
+        const { confirmed } = await showConfirmModal({
+          title: 'Reset Facility Crew',
+          message: `Unassign all crew members from "${facilityName}"?`,
+          confirmText: 'Reset Roster',
+          tone: 'danger',
+        });
+        if (!confirmed) return;
+
+        rosterResetCrewBtn.disabled = true;
+        try {
+          await postRosterAction('reset_facility_crew', {
+            facility_name: facilityName,
+          }, `Crew reset for ${facilityName}.`);
+        } catch (err) {
+          console.error('reset_facility_crew error:', err);
+          showToast('⚠️ Error resetting facility crew.');
+        } finally {
+          rosterResetCrewBtn.disabled = false;
+        }
+      });
+    }
+
+    const rosterAssignedListEl = document.getElementById('roster-assigned-list');
+    if (rosterAssignedListEl) {
+      rosterAssignedListEl.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.js-roster-unassign-btn');
+        if (!btn) return;
+        const facilityName = String(rosterTargetSelect ? rosterTargetSelect.value : '').trim();
+        const uid = Number(btn.dataset.userId || 0);
+        const userName = btn.dataset.userName || `Member #${uid}`;
+        if (!facilityName || !uid) return;
+
+        btn.disabled = true;
+        try {
+          await postRosterAction('unassign_personnel', {
+            facility_name: facilityName,
+            user_id: uid,
+          }, `${userName} unassigned from ${facilityName}.`);
+        } catch (err) {
+          console.error('unassign_personnel error:', err);
+          showToast('⚠️ Error unassigning personnel.');
+        } finally {
+          btn.disabled = false;
         }
       });
     }

@@ -817,7 +817,7 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
         case 'save_event':
         case 'assign_event_crew':
             // Tech Lead, Project Manager, Admin, and Stock Manager (for warehouses)
-            if (!in_array($role, ['admin', 'manager', 'tech_lead', 'project_manager'], true)) {
+            if (!in_array($role, ['admin', 'manager', 'tech_lead', 'technical_lead', 'project_manager'], true)) {
                 if ($role === 'stock_manager' && ($context['checkpoint_type'] ?? '') === 'stock_warehouse') {
                     break;
                 }
@@ -3032,6 +3032,55 @@ try {
         exit;
     }
 
+function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
+{
+    $name = trim($rawName);
+    if ($name === '') {
+        return null;
+    }
+
+    // 1. Match Stock Warehouse by exact name or code (case-insensitive)
+    $stStmt = $pdo->prepare("
+        SELECT `id`, `name`
+        FROM `stock_locations`
+        WHERE `is_active` = 1
+          AND (LOWER(TRIM(`name`)) = LOWER(?) OR LOWER(TRIM(`code`)) = LOWER(?))
+        LIMIT 1
+    ");
+    $stStmt->execute([$name, $name]);
+    $stRow = $stStmt->fetch(PDO::FETCH_ASSOC);
+    if ($stRow) {
+        return [
+            'type' => 'stock_warehouse',
+            'id' => (string) $stRow['id'],
+            'name' => (string) $stRow['name'],
+        ];
+    }
+
+    // 2. Match Event Venue by title, "title — location", or location (case-insensitive)
+    $evStmt = $pdo->prepare("
+        SELECT `id`, `title`, `location`
+        FROM `events`
+        WHERE LOWER(TRIM(`title`)) = LOWER(?)
+           OR LOWER(TRIM(CONCAT(`title`, ' — ', COALESCE(`location`, '')))) = LOWER(?)
+           OR LOWER(TRIM(CONCAT(`title`, ' - ', COALESCE(`location`, '')))) = LOWER(?)
+           OR LOWER(TRIM(COALESCE(`location`, ''))) = LOWER(?)
+        ORDER BY `date` DESC, `id` DESC
+        LIMIT 1
+    ");
+    $evStmt->execute([$name, $name, $name, $name]);
+    $evRow = $evStmt->fetch(PDO::FETCH_ASSOC);
+    if ($evRow) {
+        return [
+            'type' => 'event_venue',
+            'id' => (string) $evRow['id'],
+            'name' => (string) $evRow['title'],
+        ];
+    }
+
+    return null;
+}
+
     if ($action === 'save_event' || $action === 'assign_event_crew') {
         $caller = getCallerUser($pdo);
         $authCheck = canCallerPerformAction('save_event', $caller);
@@ -3042,6 +3091,7 @@ try {
         }
 
         $eventId = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $facilityName = trim((string) ($_POST['facility_name'] ?? $jsonBody['facility_name'] ?? $_POST['checkpoint_name'] ?? $jsonBody['checkpoint_name'] ?? ''));
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
         $projectManager = trim((string) ($_POST['project_manager'] ?? $jsonBody['project_manager'] ?? ''));
@@ -3051,6 +3101,13 @@ try {
         if ($eventPinRaw !== '' && !preg_match('/^[A-Za-z0-9]{4,12}$/', $eventPinRaw)) {
             echo json_encode(['ok' => false, 'error' => 'Venue Terminal PIN must be 4–12 letters or digits']);
             exit;
+        }
+
+        if ($eventId === '' && $facilityName !== '') {
+            $resolvedEv = resolveCheckpointByName($pdo, $facilityName);
+            if ($resolvedEv && $resolvedEv['type'] === 'event_venue') {
+                $eventId = $resolvedEv['id'];
+            }
         }
 
         if (!is_array($assignedTechs)) {
@@ -3065,9 +3122,11 @@ try {
         $formattedTime = str_pad($hRaw !== '' ? $hRaw : '08', 2, '0', STR_PAD_LEFT) . ':' . str_pad(substr($mRaw !== '' ? $mRaw : '00', 0, 2), 2, '0', STR_PAD_LEFT);
 
         if ($eventId !== '') {
-            $chk = $pdo->prepare("SELECT id FROM `events` WHERE id = ?");
-            $chk->execute([$eventId]);
-            if ($chk->fetch()) {
+            $chk = $pdo->prepare("SELECT `id` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $chk->execute([$eventId, $eventId]);
+            $realEventId = $chk->fetchColumn();
+            if ($realEventId !== false && $realEventId !== null) {
+                $realEventId = (string) $realEventId;
                 $stmtUpd = $pdo->prepare("
                     UPDATE `events`
                     SET `call_time` = ?,
@@ -3083,8 +3142,21 @@ try {
                     $projectManager, $projectManager,
                     $eventPinRaw, $eventPinRaw,
                     json_encode($assignedTechsInt),
-                    $eventId
+                    $realEventId
                 ]);
+
+                // Sync users whose assigned_checkpoint points to this event
+                try {
+                    $crcVal = (string) (is_numeric($realEventId) ? (int)$realEventId : crc32($realEventId));
+                    $clrStmt = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)");
+                    $clrStmt->execute([$realEventId, $crcVal]);
+                    if (!empty($assignedTechsInt)) {
+                        $setStmt = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'event_venue', `assigned_checkpoint_id` = ? WHERE `id` = ?");
+                        foreach ($assignedTechsInt as $uid) {
+                            $setStmt->execute([$realEventId, $uid]);
+                        }
+                    }
+                } catch (Throwable $e) {}
             }
         }
 
@@ -3111,8 +3183,21 @@ try {
             exit;
         }
 
+        $facilityName = trim((string) ($_POST['facility_name'] ?? $jsonBody['facility_name'] ?? $_POST['checkpoint_name'] ?? $jsonBody['checkpoint_name'] ?? $_POST['target_name'] ?? $jsonBody['target_name'] ?? ''));
         $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'event_venue'));
         $cpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '1'));
+
+        if ($facilityName !== '') {
+            $resolved = resolveCheckpointByName($pdo, $facilityName);
+            if (!$resolved) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => "No stock warehouse or event venue found matching '{$facilityName}'."]);
+                exit;
+            }
+            $cpType = $resolved['type'];
+            $cpId = $resolved['id'];
+        }
+
         $userIds = $_POST['user_ids'] ?? $jsonBody['user_ids'] ?? [];
         if (!is_array($userIds)) {
             $userIds = json_decode((string)$userIds, true) ?: [];
@@ -3173,6 +3258,19 @@ try {
         $caller = getCallerUser($pdo);
         $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'event_venue'));
         $cpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '1'));
+        $facilityName = trim((string) ($_POST['facility_name'] ?? $jsonBody['facility_name'] ?? $_POST['checkpoint_name'] ?? $jsonBody['checkpoint_name'] ?? $_POST['target_name'] ?? $jsonBody['target_name'] ?? ''));
+
+        if ($facilityName !== '') {
+            $resolved = resolveCheckpointByName($pdo, $facilityName);
+            if ($resolved === null) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Stock or venue "' . $facilityName . '" was not found']);
+                exit;
+            }
+            $cpType = $resolved['type'];
+            $cpId = $resolved['id'];
+        }
+
         $authCheck = canCallerPerformAction('assign_event_crew', $caller, ['checkpoint_type' => $cpType]);
         if (!$authCheck['ok']) {
             http_response_code(403);
@@ -3222,6 +3320,18 @@ try {
         $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'event_venue'));
         $cpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '1'));
         $targetUid = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
+        $facilityName = trim((string) ($_POST['facility_name'] ?? $jsonBody['facility_name'] ?? $_POST['checkpoint_name'] ?? $jsonBody['checkpoint_name'] ?? $_POST['target_name'] ?? $jsonBody['target_name'] ?? ''));
+
+        if ($facilityName !== '') {
+            $resolved = resolveCheckpointByName($pdo, $facilityName);
+            if ($resolved === null) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Stock or venue "' . $facilityName . '" was not found']);
+                exit;
+            }
+            $cpType = $resolved['type'];
+            $cpId = $resolved['id'];
+        }
 
         $authCheck = canCallerPerformAction('assign_event_crew', $caller, ['checkpoint_type' => $cpType]);
         if (!$authCheck['ok']) {

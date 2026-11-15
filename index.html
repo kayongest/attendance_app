@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261115_v2" />
+  <link rel="stylesheet" href="styles.css?v=20261115_v7" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -121,7 +121,7 @@
 
       <!-- Support Card -->
       <div class="support-card" data-node-id="2:3317">
-        <img src="assets/sparkles.svg" alt="" class="svg-icon" />
+        <img src="assets/brand-mark.svg" alt="" class="svg-icon" style="width: 18px; height: 18px;" />
         <p class="support-card-title" data-node-id="2:3319">Clearance Enforcement</p>
         <p class="support-card-desc" id="sidebar-support-desc" data-node-id="2:3320">
           Perimeter clearance verified with dual-gate RFID &amp; custody tracking.
@@ -203,8 +203,8 @@
             </svg>
           </button>
 
-          <!-- Help & Controls Dropdown -->
-          <div class="topbar-popover-wrap">
+          <!-- Help & Controls Dropdown (Administrator Only) -->
+          <div class="topbar-popover-wrap" id="topbar-help-wrap" style="display: none;">
             <button type="button" class="icon-btn" id="topbar-help-btn" title="Gate Terminal Help &amp; Quick Controls" data-node-id="2:3844">
               <img src="assets/circle-help.svg" alt="Help" class="svg-icon" />
             </button>
@@ -214,7 +214,7 @@
               </div>
               <div class="topbar-dropdown-menu">
                 <button type="button" class="topbar-dropdown-item" id="topbar-menu-tour">
-                  <img src="assets/sparkles.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
+                  <img src="assets/brand-mark.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
                   <div class="item-content">
                     <span class="item-title">Interactive Guided Tour</span>
                     <span class="item-sub">Spotlight walkthrough of key workflows</span>
@@ -251,8 +251,8 @@
             </div>
           </div>
 
-          <!-- Gate Activity Alerts Notifications -->
-          <div class="topbar-popover-wrap">
+          <!-- Gate Activity Alerts Notifications (Administrator Only) -->
+          <div class="topbar-popover-wrap" id="topbar-notif-wrap" style="display: none;">
             <button type="button" class="icon-btn notifications-btn" id="topbar-notif-btn" title="Gate Activity Alerts" data-node-id="2:3342">
               <img src="assets/notifications.svg" alt="Notifications" class="svg-icon" />
               <span class="notif-bubble" id="topbar-notif-bubble">3</span>
@@ -346,6 +346,9 @@
               </p>
             </div>
             <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" id="overview-schedule-roster-btn" style="display: none;">
+                <span>Schedule Event Roster</span>
+              </button>
               <button type="button" class="btn btn-secondary-38 js-open-rollcall-modal">
                 <img src="assets/metric-users.svg" alt="" class="svg-icon" />
                 <span>On-Site Roll-Call (<span class="js-stat-onsite">4</span>)</span>
@@ -574,8 +577,52 @@
             </div>
           </div>
 
-          <!-- 2nd: Real-Time Personnel & Facility Allocation Map (Next to User Activity Timeline) -->
-          <div class="insights-card map-insights-card" id="overview-allocation-card" data-node-id="2:3454">
+          <!-- 2nd Right Column: Tech Lead Assigned Roster Card (Tech Lead Only) + Allocation Map / Traffic Chart -->
+          <div class="overview-right-stack">
+            <div class="metric-card metric-card-overview tech-lead-roster-card" id="tech-lead-roster-overview-card">
+              <div class="metric-heading">
+                <span class="metric-label-md">Assigned Crew &amp; Locations</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <button type="button" class="btn-link-inline btn-link-danger" id="techlead-card-reset-all-btn" title="Reset all assigned crew back to Standby" style="display: none;">↺ Reset All</button>
+                  <button type="button" class="btn-link-inline" id="techlead-card-open-roster-btn" title="Open Schedule Event Roster">Schedule Roster ↗</button>
+                  <img src="assets/info.svg" alt="" class="svg-icon" />
+                </div>
+              </div>
+              <div class="metric-value-trend">
+                <span class="metric-value-31" id="techlead-roster-total-count">0</span>
+                <div class="sparkline-bars" id="techlead-roster-sparkline">
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 10px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 14px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 12px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 18px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 20px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 16px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 22px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 24px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 20px;"></div>
+                  <div class="sparkline-bar sparkline-bar-soft" style="height: 26px;"></div>
+                </div>
+              </div>
+              <div class="metric-comparison">
+                <span class="metric-change-up" id="techlead-roster-status-summary">0 On-Site · 0 Standby</span>
+                <span class="metric-context" id="techlead-roster-location-summary">Across 0 locations</span>
+              </div>
+
+              <!-- Latest Scan / Active Checkpoint Context -->
+              <div class="metric-coordinates">
+                <span class="coordinate-label">Last located</span>
+                <span class="coordinate-value" id="techlead-roster-last-location">—</span>
+                <span class="coordinate-context" id="techlead-roster-last-context">—</span>
+              </div>
+
+              <!-- Location & Assigned Crew Breakdown -->
+              <div class="metric-region-breakdown" id="techlead-roster-breakdown">
+                <!-- Populated dynamically for Tech Leads only -->
+              </div>
+            </div>
+
+            <!-- 2nd: Real-Time Personnel & Facility Allocation Map (Next to User Activity Timeline) -->
+            <div class="insights-card map-insights-card" id="overview-allocation-card" data-node-id="2:3454">
             <!-- Header with Title, Live Radar Badge, View Switcher [Map | Traffic], and Facility Filter -->
             <div class="map-card-header">
               <div class="map-card-heading">
@@ -816,6 +863,7 @@
               </div>
             </div>
           </div>
+          </div>
         </div>
 
         <!-- Production Crew & Staff Roster Section (Overview Node 2:3533) -->
@@ -917,7 +965,8 @@
           <!-- Table Footer -->
           <div class="table-footer" data-node-id="2:3783">
             <span class="results-count" id="overview-results-count" data-node-id="2:3784">Showing crew roster</span>
-            <div class="page-controls" data-node-id="2:3785">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <div class="page-controls" id="overview-page-controls" data-node-id="2:3785"></div>
               <button type="button" class="btn btn-secondary-32" data-action="go-kiosk">
                 <span>Open Full Gate Terminal (#pane-kiosk) →</span>
               </button>
@@ -2788,6 +2837,94 @@
   </div>
 
   <!-- ====================================================================== -->
+  <!-- SCHEDULE EVENT ROSTER & ALLOCATION MODAL (TECH LEAD GATE DASHBOARD)    -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="schedule-roster-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 640px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-labelledby="schedule-roster-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <div>
+          <h3 class="modal-title" id="schedule-roster-modal-title">Schedule Event Roster &amp; Crew Allocation</h3>
+          <p style="font-size: 11.5px; color: var(--text-secondary); margin-top: 3px;">
+            Set call-times, assign or reset event crew, and allocate personnel by stock or venue name.
+          </p>
+        </div>
+        <button type="button" class="modal-close-icon-btn" id="close-schedule-roster-modal" title="Close (Esc)">✕</button>
+      </div>
+
+      <!-- Target Stock or Venue Selector (By Name Only) -->
+      <div class="form-field" style="margin-bottom: 14px;">
+        <label class="form-label" for="roster-target-select">Target Stock or Event Venue Name</label>
+        <select id="roster-target-select" class="form-input" style="height: 40px; font-weight: 600;">
+          <!-- Populated dynamically with stock & venue names only -->
+        </select>
+      </div>
+
+      <!-- Event Call-Time & Lead Section (Event Venues Only) -->
+      <div id="roster-event-section" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-subtle, #f8fafc); margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+          <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">Event Call-Time &amp; Leadership</span>
+          <span style="font-size: 11px; color: var(--text-secondary);" id="roster-event-date-label"></span>
+        </div>
+        <div style="display: grid; grid-template-columns: 140px 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="roster-event-calltime">Call-Time</label>
+            <input type="time" id="roster-event-calltime" class="form-input" value="08:00" style="height: 36px;" />
+          </div>
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="roster-event-techlead">Tech Lead</label>
+            <select id="roster-event-techlead" class="form-input" style="height: 36px;"></select>
+          </div>
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="roster-event-pm">Project Manager</label>
+            <input type="text" id="roster-event-pm" class="form-input" placeholder="e.g. Sarah Jenkins" style="height: 36px;" />
+          </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary-38" id="roster-save-event-btn">Save Event &amp; Call-Time</button>
+          <button type="button" class="btn btn-primary-38" id="roster-assign-crew-btn">Sync Checked Crew to Event</button>
+        </div>
+      </div>
+
+      <!-- Currently Assigned Crew List (Unassign & Reset) -->
+      <div style="margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <label class="form-label" style="margin: 0;">Currently Assigned Roster (<span id="roster-assigned-count">0</span>)</label>
+          <button type="button" class="btn btn-secondary-38" id="roster-reset-crew-btn" style="height: 28px; padding: 0 10px; font-size: 11.5px; color: #dc2626; border-color: #fecaca;">
+            ↺ Reset Facility Crew
+          </button>
+        </div>
+        <div id="roster-assigned-list" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border: 1px solid var(--border-color); border-radius: 8px; min-height: 40px; max-height: 110px; overflow-y: auto;">
+          <!-- Populated dynamically with assigned crew pills + unassign button -->
+        </div>
+      </div>
+
+      <!-- Allocate Personnel Section (By Stock/Venue Name Only) -->
+      <div class="form-field" style="margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <label class="form-label" style="margin: 0;">Select Personnel to Allocate / Sync</label>
+          <span style="font-size: 11px; color: var(--brand-primary); font-weight: 600;" id="roster-selected-count">0 Selected</span>
+        </div>
+        <input type="text" id="roster-crew-search" class="form-input" placeholder="Search crew by name, role, department..." style="height: 34px; margin-bottom: 8px; font-size: 12px;" />
+        <div class="alloc-crew-checklist" id="roster-crew-checklist" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px;">
+          <!-- Populated dynamically with crew checkboxes -->
+        </div>
+      </div>
+
+      <div class="form-field" style="margin-bottom: 14px;">
+        <label class="form-label" for="roster-alloc-notes">Allocation / Roster Notes</label>
+        <input type="text" id="roster-alloc-notes" class="form-input" placeholder="e.g. Call-time audio rigging &amp; staging crew" value="Scheduled via Tech Lead Gate Roster" />
+      </div>
+
+      <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button type="button" class="btn btn-secondary-38" id="cancel-schedule-roster-modal">Close</button>
+        <button type="button" class="btn btn-primary-38" id="roster-allocate-btn" style="background: #10b981; border-color: #059669;">
+          Allocate Personnel by Name →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
   <!-- MODAL 1: LIVE ON-SITE CREW ROLL-CALL MODAL                             -->
   <!-- ====================================================================== -->
   <div class="modal-backdrop" id="rollcall-modal" aria-hidden="true">
@@ -4006,6 +4143,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261115_v2"></script>
+  <script src="app.js?v=20261115_v10"></script>
 </body>
 </html>

@@ -436,13 +436,19 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
 
     // Seed stock_locations if empty
     $stockCount = (int) $pdo->query("SELECT COUNT(*) FROM `stock_locations`")->fetchColumn();
-    if ($stockCount === 0) {
+    if ($stockCount === 0 || $forceReset) {
         $pdo->exec("
-            INSERT INTO `stock_locations` (`id`, `name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `is_active`, `terminal_pin`) VALUES
+            INSERT IGNORE INTO `stock_locations` (`id`, `name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `is_active`, `terminal_pin`) VALUES
             (1, 'Ndera Warehouse', 'NDR-STK', 'NDR', 'Ndera Central Logistics Hub', '08:00:00', '18:00:00', 1, '247365'),
             (2, 'BK Arena Stock', 'BKA-STK', 'BKA', 'BK Arena Technical Vault', '08:00:00', '18:00:00', 1, '67890'),
             (3, 'KCC Stock', 'KCC-STK', 'KCC', 'Kigali Convention Centre Stock', '08:00:00', '18:00:00', 1, '12345')
         ");
+
+        // Initial default single-checkpoint lock for newly seeded Gate Controllers only
+        try {
+            $pdo->exec("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = '1' WHERE `username` = 'mirene' AND `role` = 'stock_controller' AND (`assigned_checkpoint_id` IS NULL OR `assigned_checkpoint_id` = '')");
+            $pdo->exec("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = '3' WHERE `username` = 'prince_lorenzo' AND `role` = 'stock_controller' AND (`assigned_checkpoint_id` IS NULL OR `assigned_checkpoint_id` = '')");
+        } catch (Throwable $e) {}
     }
 
     // Backfill dedicated warehouse PINs when terminal_pin is unset
@@ -453,40 +459,18 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
     } catch (Throwable $e) {}
 
-    // Backfill default single-checkpoint lock for unassigned Gate Controllers
-    try {
-        $pdo->exec("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = '1' WHERE `username` = 'mirene' AND `role` = 'stock_controller' AND (`assigned_checkpoint_id` IS NULL OR `assigned_checkpoint_id` = '')");
-        $pdo->exec("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = '3' WHERE `username` = 'prince_lorenzo' AND `role` = 'stock_controller' AND (`assigned_checkpoint_id` IS NULL OR `assigned_checkpoint_id` = '')");
-    } catch (Throwable $e) {}
-
     // Seed events if empty
     $eventCount = (int) $pdo->query("SELECT COUNT(*) FROM `events`")->fetchColumn();
-    if ($eventCount === 0) {
+    if ($eventCount === 0 || $forceReset) {
         $today = date('Y-m-d');
         $stmtEv = $pdo->prepare("
-            INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`) VALUES
+            INSERT IGNORE INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`) VALUES
             ('1001', 'World Bank Summit — KCC', 'Kigali Convention Centre', ?, '08:00', 'Jean Paul', 'Eric Havugimana', '[3, 5, 6, 8, 11]'),
             ('1002', 'Move Afrika Tour — BK Arena', 'BK Arena Main Stage', ?, '08:30', 'Mirene', 'Patrick N.', '[5, 6, 8]'),
             ('1003', 'African Leadership Forum', 'Intare Conference Arena', ?, '09:00', 'didier', 'Olivier M.', '[3, 11]'),
             ('1004', 'Gala Dinner — Marriott Hotel', 'Kigali Marriott Hotel', ?, '10:00', 'Operations PM', 'Tech Lead', '[5, 8]')
         ");
         $stmtEv->execute([$today, $today, $today, $today]);
-    } else {
-        // Ensure Event 1001 (World Bank Summit) exists
-        try {
-            $stmt1001 = $pdo->query("SELECT id FROM `events` WHERE `id` = '1001'");
-            if (!$stmt1001->fetch()) {
-                $today = date('Y-m-d');
-                $pdo->prepare("
-                    INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`)
-                    VALUES ('1001', 'World Bank Summit — KCC', 'Kigali Convention Centre', ?, '08:00', 'Operations PM', 'Jean Paul Ndayisaba', '[36, 38, 9, 6]')
-                ")->execute([$today]);
-            }
-            $pdo->exec("UPDATE `events` SET `assigned_technician` = '[3, 5, 6, 8, 11, 36, 38]' WHERE `id` = '1001' AND (`assigned_technician` IS NULL OR `assigned_technician` = '')");
-            $pdo->exec("UPDATE `events` SET `assigned_technician` = '[5, 6, 8, 38]' WHERE `id` = '1002' AND (`assigned_technician` IS NULL OR `assigned_technician` = '')");
-            $pdo->exec("UPDATE `events` SET `assigned_technician` = '[3, 11, 36]' WHERE `id` = '1003' AND (`assigned_technician` IS NULL OR `assigned_technician` = '')");
-            $pdo->exec("UPDATE `events` SET `assigned_technician` = '[5, 8, 38]' WHERE `id` = '1004' AND (`assigned_technician` IS NULL OR `assigned_technician` = '')");
-        } catch (Throwable $e) {}
     }
 
     // Ensure the 5 core demo personas exist and are ready for testing
