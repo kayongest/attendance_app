@@ -142,22 +142,30 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     // 1. Ensure `users` table exists (if running in standalone `attendance_app` DB)
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `users` (
-            `id` INT AUTO_INCREMENT PRIMARY KEY,
-            `username` VARCHAR(64) NOT NULL UNIQUE,
-            `full_name` VARCHAR(120) NOT NULL,
-            `email` VARCHAR(150) DEFAULT NULL,
+            `id` INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            `username` VARCHAR(50) NOT NULL UNIQUE,
+            `email` VARCHAR(100) NOT NULL UNIQUE,
             `password_hash` VARCHAR(255) DEFAULT NULL,
-            `phone` VARCHAR(50) DEFAULT '+250 788 100 200',
-            `role` VARCHAR(50) NOT NULL DEFAULT 'technician',
-            `department` VARCHAR(80) DEFAULT 'Audio',
-            `profile_image` VARCHAR(255) DEFAULT NULL,
+            `full_name` VARCHAR(100) DEFAULT NULL,
+            `password` VARCHAR(255) NOT NULL DEFAULT '',
+            `department` VARCHAR(50) DEFAULT NULL,
+            `phone` VARCHAR(20) DEFAULT NULL,
+            `bio` TEXT DEFAULT NULL,
+            `profile_image` VARCHAR(500) DEFAULT NULL,
+            `signature_image` VARCHAR(500) DEFAULT NULL,
+            `hire_date` DATE DEFAULT NULL,
+            `address` TEXT DEFAULT NULL,
+            `role` VARCHAR(50) DEFAULT 'user',
+            `is_active` TINYINT(1) DEFAULT 1,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            `last_login` DATETIME DEFAULT NULL,
+            `last_login_ip` VARCHAR(45) DEFAULT NULL,
+            `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
             `assigned_checkpoint_type` VARCHAR(30) DEFAULT NULL,
             `assigned_checkpoint_id` VARCHAR(64) DEFAULT NULL,
-            `assignment_expires_at` DATETIME DEFAULT NULL,
-            `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
-            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
-            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            `assignment_expires_at` DATETIME DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
     ");
 
     // Ensure `password_hash` column exists if table already existed without it
@@ -173,12 +181,9 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     } catch (Throwable $e) {
     }
 
-    // Set default password hashes for users if null (admin: admin123, others: password123)
+    // Backfill `password_hash` from legacy `password` column ONLY when `password_hash` is missing
     try {
-        $defaultHash = password_hash('password123', PASSWORD_BCRYPT);
-        $adminHash = password_hash('admin123', PASSWORD_BCRYPT);
-        $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `username` = 'admin' AND (`password_hash` IS NULL OR `password_hash` = '')")->execute([$adminHash]);
-        $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `username` != 'admin' AND (`password_hash` IS NULL OR `password_hash` = '')")->execute([$defaultHash]);
+        $pdo->exec("UPDATE `users` SET `password_hash` = `password` WHERE (`password_hash` IS NULL OR `password_hash` = '') AND `password` IS NOT NULL AND `password` != ''");
     } catch (Throwable $e) {
     }
 
@@ -229,7 +234,8 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `project_manager` VARCHAR(120) DEFAULT 'Operations PM',
             `tech_lead` VARCHAR(120) DEFAULT 'Tech Lead',
             `assigned_technician` TEXT DEFAULT NULL,
-            `terminal_pin` VARCHAR(20) DEFAULT '1234'
+            `terminal_pin` VARCHAR(20) DEFAULT '1234',
+            `image` VARCHAR(500) DEFAULT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
@@ -238,6 +244,9 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     } catch (Throwable $e) {}
     try {
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `terminal_pin` VARCHAR(20) DEFAULT '1234'");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `image` VARCHAR(500) DEFAULT NULL");
     } catch (Throwable $e) {}
     try {
         $pdo->exec("UPDATE `events` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
@@ -320,7 +329,7 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `destination_room` VARCHAR(120) DEFAULT 'Main Auditorium',
             `technician_id` INT DEFAULT NULL,
             `submitted_by` VARCHAR(120) DEFAULT NULL,
-            `stock_controller_name` VARCHAR(120) DEFAULT 'Mirene',
+            `stock_controller_name` VARCHAR(120) DEFAULT 'Niyonase Prince',
             `status` VARCHAR(32) DEFAULT 'approved',
             `approval_status` VARCHAR(32) DEFAULT 'approved',
             `event_name` VARCHAR(160) DEFAULT 'World Bank Summit',
@@ -492,12 +501,6 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             (2, 'BK Arena Stock', 'BKA-STK', 'BKA', 'BK Arena Technical Vault', '08:00:00', '18:00:00', 1, '67890'),
             (3, 'KCC Stock', 'KCC-STK', 'KCC', 'Kigali Convention Centre Stock', '08:00:00', '18:00:00', 1, '12345')
         ");
-
-        // Initial default single-checkpoint lock for newly seeded Gate Controllers only
-        try {
-            $pdo->exec("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = '1' WHERE `username` = 'mirene' AND `role` = 'stock_controller' AND (`assigned_checkpoint_id` IS NULL OR `assigned_checkpoint_id` = '')");
-            $pdo->exec("UPDATE `users` SET `assigned_checkpoint_type` = 'stock_warehouse', `assigned_checkpoint_id` = '3' WHERE `username` = 'prince_lorenzo' AND `role` = 'stock_controller' AND (`assigned_checkpoint_id` IS NULL OR `assigned_checkpoint_id` = '')");
-        } catch (Throwable $e) {}
     }
 
     // Backfill dedicated warehouse PINs when terminal_pin is unset
@@ -514,16 +517,16 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $today = date('Y-m-d');
         $stmtEv = $pdo->prepare("
             INSERT IGNORE INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`) VALUES
-            ('1001', 'World Bank Summit — KCC', 'Kigali Convention Centre', ?, '08:00', 'Jean Paul', 'Eric Havugimana', '[3, 5, 6, 8, 11]'),
-            ('1002', 'Move Afrika Tour — BK Arena', 'BK Arena Main Stage', ?, '08:30', 'Mirene', 'Patrick N.', '[5, 6, 8]'),
-            ('1003', 'African Leadership Forum', 'Intare Conference Arena', ?, '09:00', 'didier', 'Olivier M.', '[3, 11]'),
-            ('1004', 'Gala Dinner — Marriott Hotel', 'Kigali Marriott Hotel', ?, '10:00', 'Operations PM', 'Tech Lead', '[5, 8]')
+            ('1001', 'World Bank Summit — KCC', 'Kigali Convention Centre', ?, '08:00', 'Uwineza Gisele', 'Musirikare Leonce', '[6, 8, 9, 11]'),
+            ('1002', 'Move Afrika Tour — BK Arena', 'BK Arena Main Stage', ?, '08:30', 'Diane Iradukunda', 'Hirwa Jean de Dieu', '[6, 12, 15]'),
+            ('1003', 'African Leadership Forum', 'Intare Conference Arena', ?, '09:00', 'Uwineza Gisele', 'Musirikare Leonce', '[9, 11]'),
+            ('1004', 'Gala Dinner — Marriott Hotel', 'Kigali Marriott Hotel', ?, '10:00', 'Diane Iradukunda', 'Hirwa Jean de Dieu', '[8, 19]')
         ");
         $stmtEv->execute([$today, $today, $today, $today]);
     }
 
-    // Ensure the 5 core demo personas exist and are ready for testing
-    ensureCoreDemoPersonas($pdo);
+    // Seed `users` ONLY when completely empty (never inject/overwrite existing `ability_db.users`)
+    seedUsersTableIfEmpty($pdo);
 
     // Ensure every user has a `user_badges` row with `REW-BADGE-XXXX` format if missing
     $users = $pdo->query("SELECT `id`, `username`, `full_name`, `role`, `is_active` FROM `users` ORDER BY `id` ASC")->fetchAll();
@@ -547,7 +550,7 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $badgeCode = 'REW-BADGE-' . str_pad((string) $uid, 4, '0', STR_PAD_LEFT);
         $rfid = 'RFID-88' . str_pad((string) $uid, 2, '0', STR_PAD_LEFT);
 
-        if (in_array($role, ['admin', 'manager', 'stock_manager', 'tech_lead'], true)) {
+        if (in_array($role, ['admin', 'manager', 'project_manager', 'stock_manager', 'tech_lead'], true)) {
             $lvl = 'L4_ALL_ACCESS';
             $sMode = 'all';
             $vMode = 'all';
@@ -588,9 +591,9 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             INSERT INTO `stock_movements`
               (`id`, `batch_number`, `movement_type`, `source_name`, `destination_name`, `destination_room`, `technician_id`, `submitted_by`, `stock_controller_name`, `status`, `approval_status`, `event_name`, `job_sheet`)
             VALUES
-              (14, 'BATCH-20261104-73E3EB', 'dispatch', 'Ndera Warehouse', 'Kigali Convention Centre', 'Main Auditorium', 6, 'Eric Havugimana', 'Mirene', 'approved', 'approved', 'World Bank Summit', 'JS-2026-104'),
-              (15, 'BATCH-20261107-91A4FC', 'dispatch', 'BK Arena Stock', 'BK Arena Main Stage', 'FOH Rigging Grid', 5, 'Patrick Nshimiyimana', 'Mirene', 'approved', 'approved', 'Move Afrika Tour', 'JS-2026-108'),
-              (16, 'BATCH-20261107-44C8BD', 'return', 'Intare Conference Arena', 'Ndera Warehouse', 'Bay B2', 3, 'Jean Paul Ndayisaba', 'Mirene', 'pending', 'pending', 'African Leadership Forum', 'JS-2026-112')
+              (14, 'BATCH-20261104-73E3EB', 'dispatch', 'Ndera Warehouse', 'Kigali Convention Centre', 'Main Auditorium', 9, 'Eric Havugimana', 'Niyonase Prince', 'approved', 'approved', 'World Bank Summit', 'JS-2026-104'),
+              (15, 'BATCH-20261107-91A4FC', 'dispatch', 'BK Arena Stock', 'BK Arena Main Stage', 'FOH Rigging Grid', 6, 'Patrick NYIRIMBIBI', 'Niyonase Prince', 'approved', 'approved', 'Move Afrika Tour', 'JS-2026-108'),
+              (16, 'BATCH-20261107-44C8BD', 'return', 'Intare Conference Arena', 'Ndera Warehouse', 'Bay B2', 22, 'Hirwa Jean de Dieu', 'Niyonase Prince', 'pending', 'pending', 'African Leadership Forum', 'JS-2026-112')
         ");
         $pdo->exec("
             INSERT IGNORE INTO `batch_items` (`batch_id`, `item_name`, `quantity`) VALUES
@@ -670,100 +673,53 @@ function seedSampleAttendanceLogs(PDO $pdo, array $users = []): void
     }
 }
 
-function ensureCoreDemoPersonas(PDO $pdo): void
+function seedUsersTableIfEmpty(PDO $pdo): void
 {
-    $defaultPass = password_hash('password123', PASSWORD_BCRYPT);
-    $adminPass = password_hash('admin123', PASSWORD_BCRYPT);
+    try {
+        $existingCount = (int) $pdo->query("SELECT COUNT(*) FROM `users`")->fetchColumn();
+        if ($existingCount > 0) {
+            return;
+        }
+    } catch (Throwable $e) {
+        return;
+    }
 
-    $personas = [
-        [
-            'username' => 'didier',
-            'full_name' => 'Didier Kayonge',
-            'email' => 'didier@ability.rw',
-            'phone' => '+250 788 100 001',
-            'role' => 'admin',
-            'department' => 'Executive',
-            'pass' => $adminPass,
-            'clearance' => 'L4_ALL_ACCESS',
-        ],
-        [
-            'username' => 'jeanpaul',
-            'full_name' => 'Jean Paul Ndayisaba',
-            'email' => 'jp@ability.rw',
-            'phone' => '+250 788 100 003',
-            'role' => 'tech_lead',
-            'department' => 'Audio',
-            'pass' => $defaultPass,
-            'clearance' => 'L4_ALL_ACCESS',
-        ],
-        [
-            'username' => 'theogene',
-            'full_name' => 'Theogene Nsengiyumva',
-            'email' => 'theogene@ability.rw',
-            'phone' => '+250 788 100 013',
-            'role' => 'stock_manager',
-            'department' => 'Warehouse',
-            'pass' => $defaultPass,
-            'clearance' => 'L4_ALL_ACCESS',
-        ],
-        [
-            'username' => 'mirene',
-            'full_name' => 'Mirene Uwase',
-            'email' => 'mirene@ability.rw',
-            'phone' => '+250 788 100 002',
-            'role' => 'stock_controller',
-            'department' => 'Warehouse',
-            'pass' => $defaultPass,
-            'clearance' => 'L3_STOCK_WAREHOUSE',
-        ],
-        [
-            'username' => 'eric',
-            'full_name' => 'Eric Havugimana',
-            'email' => 'eric@ability.rw',
-            'phone' => '+250 788 100 006',
-            'role' => 'technician',
-            'department' => 'Rigging',
-            'pass' => $defaultPass,
-            'clearance' => 'L2_TECH_STAGE',
-        ],
+    $seedRows = [
+        [1, 'sys_admin', 'admin@ability.com', '$2y$10$r00fY4ABmJUGORsi6Mwf8OzMbvRBfLpJC0V3N1BGrfvfWHcv88XVq', 'System Administrator', '$2y$10$sB9Nb6XRK/r7y4GAh35IOeyQ0zUu84/zeFbydtrjZ3QKhFtIweT/6', 'Production', '+250 788 100 001', null, null, null, 'admin', 1, '2026-01-01 16:53:20', '2026-11-11 21:30:36', null, null, 0, null, null, null],
+        [2, 'kayonga', 'kayonga70@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'kayonga', '$2y$10$sB9Nb6XRK/r7y4GAh35IOeyQ0zUu84/zeFbydtrjZ3QKhFtIweT/6', 'Video', 'kayonga', '', 'uploads/profiles/profile_2_1789409080.png', 'uploads/signatures/signature_2_1789408133.png', 'admin', 1, '2026-01-01 16:59:20', '2026-11-16 13:32:09', '2026-11-14 08:45:18', '127.0.0.1', 0, null, null, null],
+        [3, 'prince_lorenzo', 'princen@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Niyonase Prince', '$2y$10$DgrY/mVGXeIbIcieqyzYsec.023.cCZWqN9N/XaJ.IUk2X4Z1CL.a', 'Warehouse', '+250 788 100 003', '', 'uploads/profiles/profile_3_1789409415.png', 'uploads/signatures/signature_3_1789409611.png', 'stock_controller', 1, '2026-01-03 13:46:54', '2026-11-16 13:18:00', null, null, 0, null, null, '2026-11-17 10:42:00'],
+        [6, 'patricn', 'patrickn26@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Patrick NYIRIMBIBI', '$2y$10$B4X5Y.QnlDxAW85iU9fwE.N8AX3fTYjQ.0nSTvKLn8tqinpq69/fm', 'Video', '+250 788 100 006', null, 'uploads/profiles/profile_6_1793873223_6ddd8c4c.jpeg', 'uploads/signatures/signature_6_1793790752_d50986b4.png', 'technician', 1, '2026-01-14 08:55:42', '2026-11-16 13:32:06', '2026-11-03 18:59:36', '::1', 0, null, null, null],
+        [7, 'kayongar', 'kayonga80@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', '', '$2y$10$6SYlge82L3jA6kbjV/s44usjesF9P4KUSbdYG48d3h/.1tZsAITLm', 'video', '', null, null, null, 'user', 1, '2026-10-25 13:16:27', '2026-11-14 23:33:57', '2026-10-25 15:20:07', '127.0.0.1', 0, null, null, null],
+        [8, 'bembelezav', 'bembelezav@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Bembeleza Valentin', '$2y$10$DuEXnW11SWexuVP85FHHGOvuK0/Z3qZKBnqxkVUVRdJlzm4i7l7Sa', 'Warehouse', '+250 787 162 517', null, 'uploads/profiles/profile_8_1793868947_5f097523.jpg', null, 'driver', 1, '2026-11-03 16:18:43', '2026-11-16 13:18:00', '2026-11-04 15:02:12', '127.0.0.1', 0, null, null, null],
+        [9, 'erich', 'havugimanaeric53@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Eric Havugimana', '$2y$10$CCP4kxlsVzDOMp37PctPC.s7SVSdAVK7Xo9YawunVxw.LU2/tmp52', 'rigging', '+250784837781', null, 'uploads/profiles/profile_9_1793869160_b78508e4.jpeg', 'uploads/signatures/signature_1793796778_48bc893b.png', 'technician', 1, '2026-11-04 12:52:58', '2026-11-16 13:24:38', null, null, 0, null, null, null],
+        [10, 'apomus', 'mushimiyimanaappolinaire@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Appolinaire Mushimiyimana', '$2y$10$xXXwXc9J67KRvdVJid5yDuUebpUjnoFC95i6bYVFxdQ3uHvcx1.rO', 'scurt', '+250784980475', null, 'uploads/profiles/profile_10_1793883172_ff7c8b3f.png', 'uploads/signatures/signature_1793802364_e163c412.png', 'decorator', 1, '2026-11-04 14:26:04', '2026-11-15 21:12:19', null, null, 0, null, null, null],
+        [11, 'gakizas', 'gakizasolo@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Solomon Gakiza', '$2y$10$p1Qz6jDTVoOzLYaXrYHdquul7cBZPRaKhebv2qYtx8jaA.QT6M7SS', 'lighting', '+250790903406', null, 'uploads/profiles/profile_11_1793871684_1a79610f.jpeg', null, 'technician', 1, '2026-11-05 09:18:39', '2026-11-15 21:12:19', null, null, 0, null, null, null],
+        [12, 'jadeni', 'imanishimwejadon3@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Imanishimwe Jean de Dieu', '$2y$10$kR3ibYNpNfBGObZVFWBdYOhfNS6xWhMPIP6OVCdE5hCcS5OETwvtW', 'electrical', '+250788657257', null, 'uploads/profiles/profile_1793870542_bef11986.png', null, 'technician', 1, '2026-11-05 09:22:22', '2026-11-15 21:12:19', null, null, 0, null, null, null],
+        [14, 'uwinezag', 'uwinezag@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Uwineza Gisele', '$2y$10$JColF77u.h0wWXRbHFSYtOvk3JjOy.wcIraLFv89XzGB34VK7gUaC', 'Operations', '+250 788 624 126', null, null, null, 'project_manager', 1, '2026-11-05 09:50:49', '2026-11-09 15:22:16', null, null, 0, null, null, null],
+        [15, 'lucasi', 'lucasi@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Lucas Ishimwe', '$2y$10$I5DUp.G.1ceJBk7ZYk9k2eW3Ug5dy5zoALi2CHfK1vkmKJ8hX0L42', 'video', '+250 786 014 722', null, 'uploads/profiles/profile_1793872457_043b4c5c.jpeg', null, 'technician', 1, '2026-11-05 09:54:17', '2026-11-15 21:12:19', null, null, 0, null, null, null],
+        [17, 'loencem', 'leomusirikare@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Musirikare Leonce', '$2y$10$ZjE3Xt/CJY0Mt0XX5rYbQOCmri3wkQpTNx3G8UbOALPkK0MgSl7Dy', 'Video', '+250 725 403 445', null, 'uploads/profiles/profile_1793875485_2b7cf840.jpg', null, 'tech_lead', 1, '2026-11-05 10:44:45', '2026-11-15 19:11:37', null, null, 0, null, null, null],
+        [18, 'enockniyokwizera', 'enockniyokwizera68@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Enock Niyokwizera', '$2y$10$4yIWjtE/zZXzWdEIPiwvieNrpQitV7heje4egRslwsqdIAwJaREMW', 'Warehouse', '+250 791 747 844', null, 'uploads/profiles/profile_18_1793875874_20fa6a0c.jpeg', null, 'support_staff', 1, '2026-11-05 10:48:35', '2026-11-09 15:17:52', null, null, 0, null, null, null],
+        [19, 'mugaboh', 'hubertmugabo@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Mugabo Hubert', '$2y$10$kB4VN2/G4TzlT093GXySwOCULZL6LHbdRAt3rhe1C6wUkbQ28.0Bm', 'int', '+250788746250', null, 'uploads/profiles/profile_19_1793999575_eced9ff2.jpeg', null, 'technician', 1, '2026-11-06 14:16:26', '2026-11-09 09:03:02', null, null, 0, null, null, null],
+        [20, 'schadracki', 'schadrracknikiyiza@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Schadrack Niyikiza', '$2y$10$ehNyG40Lvtr4CYvTJho1TeVI08gnxxNdJUIiyosS6ffeKwdfjx85K', 'Warehouse', '+250 738 888 806', null, 'uploads/profiles/profile_1794058783_baab1041.jpeg', null, 'stock_manager', 1, '2026-11-07 13:39:43', '2026-11-14 10:02:06', '2026-11-07 15:50:30', '127.0.0.1', 0, null, null, null],
+        [21, 'rwagacyara', 'rwagacyaryan@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Rwagacya Ryan', '$2y$10$UhNiGt6GoCf1GnNOK9/RhOg0w8rNioS4yHiorXR1DpP4fjMdlppHy', 'video', '+250 786 897 752', null, null, null, 'technician', 1, '2026-11-07 13:54:27', '2026-11-16 13:18:00', '2026-11-08 21:33:38', '127.0.0.1', 0, null, null, null],
+        [22, 'jeandd', 'hirwaj10@gmail.com', '$2y$10$HRUrHfEl/mwI1CAJO/BSrebSl7g4FJlmPJ6elyKxSQ3Nn1yauy/zi', 'Hirwa Jean de Dieu', '', 'Video', '+250 781 260 613', null, 'uploads/profiles/profile_1794214613_ef6fe670.jpeg', null, 'tech_lead', 1, '2026-11-09 08:56:53', '2026-11-09 09:03:02', null, null, 0, null, null, null],
+        [24, 'rrwibutso', 'rwibutsorobert134@gmail.com', '$2y$10$BedCCH3AQWM14yc3tKV24eyOQYSjI41tiYR1sdXYbWdm6q1NyIWf.', 'Robert Rwibutso', '', 'Warehouse', '+250783031227', null, 'uploads/profiles/profile_1794221574_71e68c25.jpeg', null, 'technician', 1, '2026-11-09 10:48:39', '2026-11-09 10:52:54', null, null, 0, null, null, null],
+        [25, 'ayishakiyef', 'faustinayi@gmail.com', '$2y$10$rsR2LTmBJ9lwmPpEW9fnoehueD1i1M1YJtzmm5LeMsK2F6cTxnq2W', 'Faustin Ayishakiye', '', 'Warehouse', '+250785638202', null, 'uploads/profiles/profile_1794232103_345eb416.jpeg', null, 'support_staff', 1, '2026-11-09 13:48:23', '2026-11-09 13:48:23', null, null, 0, null, null, null],
+        [26, 'ahirwa', '', '$2y$10$l9mz/VksOnCCkdW6Ybgplel7aqu1RARDM7uvb56yaQJuOtH7xWU5K', 'Hirwa Aubin', '', 'Audio', '', null, null, null, 'technician', 1, '2026-11-09 21:13:19', '2026-11-15 18:03:43', null, null, 0, null, null, null],
+        [27, 'jmugisha', 'mugishajames100@gmail.com', '$2y$10$qvXaryC25aIQj95tKIVqGuifZxpu4q2QdRtoGuDwOZlfmpqDtyx7u', 'James Mugisha', '', 'Video', '+250788982366', null, 'uploads/profiles/profile_1794297499_f7467c6f.jpeg', null, 'technician', 1, '2026-11-10 07:58:19', '2026-11-10 07:58:20', null, null, 0, null, null, null],
+        [34, 'dianei', 'diane.iradukunda@rwandaevents.com', '$2y$10$Bm9.ywfYV8H1YYRdw1ovcuogRIxfkhpWPs/YYQatIvQ2Dt4tQ0bXi', 'Diane Iradukunda', '', 'Executive', '+250 786 234 061', null, null, null, 'project_manager', 1, '2026-11-10 17:56:21', '2026-11-10 17:56:21', null, null, 0, null, null, null],
+        [38, 'eric', 'eric@ability.rw', '$2y$10$HPpYyR.bUhXhpqx1hSe4GuPVPqAf3mNF0m99j4Ky3ypdn3vmh2QWi', 'Eric Havugimana', '', 'Rigging', '+250 788 100 006', null, null, null, 'technician', 1, '2026-11-11 10:11:26', '2026-11-11 10:11:26', null, null, 0, null, null, null],
+        [53, '_verify_admin_6897', '_verify_admin_6897@local.test', '$2y$10$4amAG30uKeVuoUSC.i9seuEsHT/yxEz5EXBa1bDUR10J6FIw7Dsuu', 'Verify Bot', '', 'IT', '0780000000', null, null, null, 'admin', 1, '2026-11-15 21:40:41', '2026-11-15 21:40:41', null, null, 0, null, null, null],
     ];
 
-    foreach ($personas as $p) {
-        try {
-            $stmt = $pdo->prepare("SELECT id FROM `users` WHERE email = ? OR username = ?");
-            $stmt->execute([$p['email'], $p['username']]);
-            $uid = $stmt->fetchColumn();
-
-            if ($uid) {
-                $uid = (int) $uid;
-                $pdo->prepare("
-                    UPDATE `users`
-                    SET full_name = ?, email = ?, username = ?, role = ?, department = ?, is_active = 1
-                    WHERE id = ?
-                ")->execute([$p['full_name'], $p['email'], $p['username'], $p['role'], $p['department'], $uid]);
-            } else {
-                $pdo->prepare("
-                    INSERT INTO `users` (`username`, `full_name`, `email`, `phone`, `role`, `department`, `password_hash`, `is_active`)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-                ")->execute([$p['username'], $p['full_name'], $p['email'], $p['phone'], $p['role'], $p['department'], $p['pass']]);
-                $uid = (int) $pdo->lastInsertId();
-            }
-
-            // Ensure badge
-            $bStmt = $pdo->prepare("SELECT id, badge_code FROM `user_badges` WHERE `user_id` = ?");
-            $bStmt->execute([$uid]);
-            $badgeRow = $bStmt->fetch();
-            if ($badgeRow) {
-                $pdo->prepare("UPDATE `user_badges` SET clearance_level = ?, badge_status = 'active' WHERE id = ?")
-                    ->execute([$p['clearance'], (int)$badgeRow['id']]);
-            } else {
-                $bCode = 'ABL-BDG-' . str_pad((string)$uid, 4, '0', STR_PAD_LEFT);
-                $pdo->prepare("
-                    INSERT INTO `user_badges`
-                      (`user_id`, `badge_code`, `rfid_uid`, `clearance_level`, `stock_access_mode`, `venue_access_mode`, `badge_status`, `issued_at`, `expires_at`)
-                    VALUES (?, ?, ?, ?, 'all', 'all', 'active', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR))
-                ")->execute([$uid, $bCode, 'RFID-88' . str_pad((string)$uid, 2, '0', STR_PAD_LEFT), $p['clearance']]);
-            }
-        } catch (Throwable $e) {}
-    }
+    try {
+        $stmt = $pdo->prepare("
+            INSERT IGNORE INTO `users`
+              (`id`, `username`, `email`, `password_hash`, `full_name`, `password`, `department`, `phone`, `bio`, `profile_image`, `signature_image`, `role`, `is_active`, `created_at`, `updated_at`, `last_login`, `last_login_ip`, `must_change_password`, `assigned_checkpoint_type`, `assigned_checkpoint_id`, `assignment_expires_at`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        foreach ($seedRows as $row) {
+            $stmt->execute($row);
+        }
+    } catch (Throwable $e) {}
 }

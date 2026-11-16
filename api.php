@@ -340,7 +340,7 @@ function getLinkedBatchesForUser(PDO $pdo, int $userId, string $fullName = '', s
                 'destination_room' => (string) ($r['destination_room'] ?? 'Main Stage'),
                 'technician_id' => (int) ($r['technician_id'] ?? $userId),
                 'submitted_by' => (string) ($r['submitted_by'] ?? $fullName),
-                'stock_controller_name' => (string) ($r['stock_controller_name'] ?? 'Mirene'),
+                'stock_controller_name' => (string) ($r['stock_controller_name'] ?? 'Gate Controller'),
                 'status' => (string) ($r['status'] ?? $r['approval_status'] ?? 'approved'),
                 'event_name' => (string) ($r['event_name'] ?? 'World Bank Summit'),
                 'job_sheet' => (string) ($r['job_sheet'] ?? 'JS-2026-104'),
@@ -363,7 +363,7 @@ function getLinkedBatchesForUser(PDO $pdo, int $userId, string $fullName = '', s
                     'destination_room' => (string) ($r['destination_room'] ?? ''),
                     'technician_id' => $userId,
                     'submitted_by' => (string) ($r['submitted_by'] ?? $fullName),
-                    'stock_controller_name' => (string) ($r['stock_controller_name'] ?? 'Mirene'),
+                    'stock_controller_name' => (string) ($r['stock_controller_name'] ?? 'Gate Controller'),
                     'status' => (string) ($r['status'] ?? $r['approval_status'] ?? 'approved'),
                     'event_name' => (string) ($r['event_name'] ?? 'Active Production'),
                     'job_sheet' => (string) ($r['job_sheet'] ?? ''),
@@ -1038,6 +1038,41 @@ function getCallerUser(PDO $pdo): ?array
     }
 }
 
+/**
+ * Verifies a plaintext password against either `password_hash` or legacy `password` column on `users`.
+ */
+function verifyUserPasswordRow(array $userRow, string $plain): bool
+{
+    if ($plain === '') {
+        return false;
+    }
+    foreach (['password_hash', 'password'] as $col) {
+        $hash = trim((string) ($userRow[$col] ?? ''));
+        if ($hash !== '' && password_verify($plain, $hash)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Checks whether the `users` table defines the legacy NOT NULL `password` column.
+ */
+function usersTableHasPasswordCol(PDO $pdo): bool
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    try {
+        $st = $pdo->query("SHOW COLUMNS FROM `users` LIKE 'password'");
+        $cached = (bool) ($st && $st->fetch());
+    } catch (Throwable $e) {
+        $cached = false;
+    }
+    return $cached;
+}
+
 function formatRoleDisplay(string $role): string
 {
     $r = strtolower(trim($role));
@@ -1215,13 +1250,21 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
 
         case 'update_call_time':
         case 'save_event':
+        case 'delete_event':
         case 'assign_event_crew':
             // Tech Lead, Project Manager, Admin, and Stock Manager (for warehouses)
             if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead', 'project_manager'], true)) {
                 if ($role === 'stock_manager' && ($context['checkpoint_type'] ?? '') === 'stock_warehouse') {
                     break;
                 }
-                return ['ok' => false, 'error' => 'Permission denied: Setting Call Times and assigning event crew requires Tech Lead, Project Manager, or Administrator privileges.'];
+                return ['ok' => false, 'error' => 'Permission denied: Setting Call Times and managing event venues requires Tech Lead, Project Manager, or Administrator privileges.'];
+            }
+            break;
+
+        case 'save_attendance_log':
+        case 'delete_attendance_log':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'stock_manager'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Activity Timeline CRUD requires Site Manager or Administrator privileges.'];
             }
             break;
 
@@ -1457,7 +1500,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $callTime = substr((string) ($er['call_time'] ?? '08:00'), 0, 5) ?: '08:00';
         $pm = trim((string) ($er['project_manager'] ?? ''));
         $tl = trim((string) ($er['tech_lead'] ?? ''));
-        $leadName = $tl ?: ($pm ?: 'Jean Paul Ndayisaba');
+        $leadName = $tl ?: ($pm ?: 'Technical Lead');
         $leadLabel = ($tl ? 'Tech Lead: ' . $tl : ($pm ? 'Project Manager: ' . $pm : 'Tech Lead: ' . $leadName));
 
         $assignedRaw = trim((string) ($er['assigned_technician'] ?? ''));
@@ -1508,6 +1551,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'assigned_technicians' => $assignedIds,
             'assigned_technician_names' => $assignedNames,
             'assigned_count' => count($assignedIds),
+            'image' => resolveProfileImageUrl($er['image'] ?? null),
             'lat' => isset($er['lat']) && $er['lat'] !== null ? (float) $er['lat'] : null,
             'lng' => isset($er['lng']) && $er['lng'] !== null ? (float) $er['lng'] : null,
             'map_x' => isset($er['map_x']) && $er['map_x'] !== null ? (float) $er['map_x'] : null,
@@ -1982,11 +2026,11 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
                 'destination_name' => (string) ($br['destination_name'] ?? 'Kigali Convention Centre'),
                 'destination_room' => (string) ($br['destination_room'] ?? 'Main Auditorium'),
                 'technician_id' => $techId,
-                'technician_name' => $techMember ? $techMember['full_name'] : (string) ($br['submitted_by'] ?: 'Eric Havugimana'),
+                'technician_name' => $techMember ? $techMember['full_name'] : (string) ($br['submitted_by'] ?: 'Unassigned Crew'),
                 'technician_badge' => $techMember ? $techMember['badge_code'] : 'REW-BADGE-0006',
                 'technician_clearance' => $techMember ? $techMember['clearance_code'] : 'L2',
                 'stock_controller_id' => (int) ($br['stock_controller_id'] ?? 0),
-                'stock_controller_name' => (string) ($br['stock_controller_name'] ?: 'Mirene Uwase'),
+                'stock_controller_name' => (string) ($br['stock_controller_name'] ?: 'Gate Controller'),
                 'submitted_by' => (string) ($br['submitted_by'] ?? ''),
                 'notes' => (string) ($br['notes'] ?? ''),
                 'status' => strtolower((string) ($br['status'] ?? $br['approval_status'] ?? 'approved')),
@@ -2389,8 +2433,7 @@ try {
             exit;
         }
 
-        $storedHash = (string) ($userRow['password_hash'] ?? '');
-        $passValid = ($storedHash !== '' && password_verify($password, $storedHash));
+        $passValid = verifyUserPasswordRow($userRow, $password);
 
         if (!$passValid) {
             recordFailedRateLimit($pdo, $loginRateKey, 5, 600, 60);
@@ -2488,11 +2531,19 @@ try {
 
         $passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
-        $insUser = $pdo->prepare("
-            INSERT INTO `users` (`username`, `full_name`, `email`, `password_hash`, `phone`, `role`, `department`, `is_active`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-        ");
-        $insUser->execute([$username, $fullName, $email, $passwordHash, $phone, $role, $department]);
+        if (usersTableHasPasswordCol($pdo)) {
+            $insUser = $pdo->prepare("
+                INSERT INTO `users` (`username`, `full_name`, `email`, `password_hash`, `password`, `phone`, `role`, `department`, `is_active`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ");
+            $insUser->execute([$username, $fullName, $email, $passwordHash, $passwordHash, $phone, $role, $department]);
+        } else {
+            $insUser = $pdo->prepare("
+                INSERT INTO `users` (`username`, `full_name`, `email`, `password_hash`, `phone`, `role`, `department`, `is_active`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            ");
+            $insUser->execute([$username, $fullName, $email, $passwordHash, $phone, $role, $department]);
+        }
         $newUserId = (int) $pdo->lastInsertId();
 
         $tier = normalizeClearanceTier('', $role);
@@ -3006,13 +3057,12 @@ try {
                     $candidateIds[] = (int)$caller['id'];
                 }
 
-                $chkSup = $pdo->prepare("SELECT `id`, `full_name`, `password_hash`, `role` FROM `users` WHERE `id` = ? AND `is_active` = 1");
+                $chkSup = $pdo->prepare("SELECT `id`, `full_name`, `password_hash`, `password`, `role` FROM `users` WHERE `id` = ? AND `is_active` = 1");
                 foreach ($candidateIds as $candId) {
                     $chkSup->execute([$candId]);
                     $supRow = $chkSup->fetch(PDO::FETCH_ASSOC);
                     if ($supRow && in_array(strtolower(trim((string)$supRow['role'])), $supervisorRoles, true)) {
-                        $supHash = (string) ($supRow['password_hash'] ?? '');
-                        if ($supHash !== '' && password_verify($supervisorPin, $supHash)) {
+                        if (verifyUserPasswordRow($supRow, $supervisorPin)) {
                             $authOk = true;
                             $overrideById = (int) $supRow['id'];
                             $authSupervisorName = $supRow['full_name'] ?: 'Supervisor';
@@ -3023,13 +3073,12 @@ try {
 
                 // 2. Allow any active Supervisor/Administrator password (UI has a single credential prompt with no user selector)
                 if (!$authOk) {
-                    $supStmt = $pdo->query("SELECT `id`, `full_name`, `password_hash`, `role` FROM `users` WHERE `is_active` = 1");
+                    $supStmt = $pdo->query("SELECT `id`, `full_name`, `password_hash`, `password`, `role` FROM `users` WHERE `is_active` = 1");
                     while ($supRow = $supStmt->fetch(PDO::FETCH_ASSOC)) {
                         if (!in_array(strtolower(trim((string)$supRow['role'])), $supervisorRoles, true)) {
                             continue;
                         }
-                        $supHash = (string) ($supRow['password_hash'] ?? '');
-                        if ($supHash !== '' && password_verify($supervisorPin, $supHash)) {
+                        if (verifyUserPasswordRow($supRow, $supervisorPin)) {
                             $authOk = true;
                             $overrideById = (int) $supRow['id'];
                             $authSupervisorName = $supRow['full_name'] ?: 'Supervisor';
@@ -3265,7 +3314,7 @@ try {
         $techId = (int) ($_POST['technician_id'] ?? $jsonBody['technician_id'] ?? 0);
         $submittedBy = trim((string) ($_POST['submitted_by'] ?? $jsonBody['submitted_by'] ?? ''));
         $controllerId = (int) ($_POST['stock_controller_id'] ?? $jsonBody['stock_controller_id'] ?? 0);
-        $controllerName = trim((string) ($_POST['stock_controller_name'] ?? $jsonBody['stock_controller_name'] ?? 'Mirene Uwase'));
+        $controllerName = trim((string) ($_POST['stock_controller_name'] ?? $jsonBody['stock_controller_name'] ?? 'Gate Controller'));
         $movementType = trim((string) ($_POST['movement_type'] ?? $jsonBody['movement_type'] ?? 'stock_to_venue_room'));
         $sourceName = trim((string) ($_POST['source_name'] ?? $jsonBody['source_name'] ?? 'Ndera Warehouse'));
         $destinationName = trim((string) ($_POST['destination_name'] ?? $jsonBody['destination_name'] ?? 'Kigali Convention Centre'));
@@ -3742,7 +3791,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
 
-        $eventId = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $eventId = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? $_POST['id'] ?? $jsonBody['id'] ?? ''));
+        if ($eventId === '0') {
+            $eventId = '';
+        }
+        $titleIn = trim((string) ($_POST['title'] ?? $jsonBody['title'] ?? ''));
+        $locationIn = trim((string) ($_POST['location'] ?? $jsonBody['location'] ?? ''));
+        $dateIn = trim((string) ($_POST['date'] ?? $jsonBody['date'] ?? ''));
         $facilityName = trim((string) ($_POST['facility_name'] ?? $jsonBody['facility_name'] ?? $_POST['checkpoint_name'] ?? $jsonBody['checkpoint_name'] ?? ''));
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
@@ -3755,7 +3810,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
 
-        if ($eventId === '' && $facilityName !== '') {
+        if ($eventId === '' && $facilityName !== '' && $titleIn === '') {
             $resolvedEv = resolveCheckpointByName($pdo, $facilityName);
             if ($resolvedEv && $resolvedEv['type'] === 'event_venue') {
                 $eventId = $resolvedEv['id'];
@@ -3773,6 +3828,37 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $mRaw = preg_replace('/\D/', '', $timeParts[1] ?? '00');
         $formattedTime = str_pad($hRaw !== '' ? $hRaw : '08', 2, '0', STR_PAD_LEFT) . ':' . str_pad(substr($mRaw !== '' ? $mRaw : '00', 0, 2), 2, '0', STR_PAD_LEFT);
 
+        $eventDateSafe = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIn) ? $dateIn : date('Y-m-d');
+        $syncAssignedUsers = static function (string $realEventId, array $techIds) use ($pdo): void {
+            try {
+                $crcVal = (string) (is_numeric($realEventId) ? (int) $realEventId : crc32($realEventId));
+                $clrStmt = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)");
+                $clrStmt->execute([$realEventId, $crcVal]);
+                if (!empty($techIds)) {
+                    $setStmt = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'event_venue', `assigned_checkpoint_id` = ? WHERE `id` = ?");
+                    foreach ($techIds as $uid) {
+                        $setStmt->execute([$realEventId, $uid]);
+                    }
+                }
+            } catch (Throwable $e) {}
+        };
+
+        // Handle Event Venue Image Upload
+        $uploadedEventImagePath = null;
+        if (!empty($_FILES['image']['tmp_name']) && is_uploaded_file($_FILES['image']['tmp_name'])) {
+            $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+                $dir = __DIR__ . '/uploads/events';
+                if (!is_dir($dir)) mkdir($dir, 0777, true);
+                $fileName = 'ev_' . time() . '_' . substr(md5(uniqid()), 0, 8) . '.' . $ext;
+                $dest = $dir . '/' . $fileName;
+                if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
+                    $uploadedEventImagePath = 'uploads/events/' . $fileName;
+                }
+            }
+        }
+
+        $msg = 'Event venue updated successfully';
         if ($eventId !== '') {
             $chk = $pdo->prepare("SELECT `id` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
             $chk->execute([$eventId, $eventId]);
@@ -3781,46 +3867,118 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $realEventId = (string) $realEventId;
                 $stmtUpd = $pdo->prepare("
                     UPDATE `events`
-                    SET `call_time` = ?,
+                    SET `title` = CASE WHEN ? != '' THEN ? ELSE `title` END,
+                        `location` = CASE WHEN ? != '' THEN ? ELSE `location` END,
+                        `date` = CASE WHEN ? != '' THEN ? ELSE `date` END,
+                        `call_time` = ?,
                         `tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END,
                         `project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END,
                         `terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END,
                         `assigned_technician` = ?
+                        " . ($uploadedEventImagePath !== null ? ", `image` = ?" : "") . "
                     WHERE `id` = ?
                 ");
-                $stmtUpd->execute([
+                $updParams = [
+                    $titleIn, $titleIn,
+                    $locationIn, $locationIn,
+                    ($dateIn !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIn)) ? $dateIn : '', ($dateIn !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIn)) ? $dateIn : '',
                     $formattedTime,
                     $techLead, $techLead,
                     $projectManager, $projectManager,
                     $eventPinRaw, $eventPinRaw,
                     json_encode($assignedTechsInt),
-                    $realEventId
-                ]);
-
-                // Sync users whose assigned_checkpoint points to this event
-                try {
-                    $crcVal = (string) (is_numeric($realEventId) ? (int)$realEventId : crc32($realEventId));
-                    $clrStmt = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)");
-                    $clrStmt->execute([$realEventId, $crcVal]);
-                    if (!empty($assignedTechsInt)) {
-                        $setStmt = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'event_venue', `assigned_checkpoint_id` = ? WHERE `id` = ?");
-                        foreach ($assignedTechsInt as $uid) {
-                            $setStmt->execute([$realEventId, $uid]);
-                        }
-                    }
-                } catch (Throwable $e) {}
+                ];
+                if ($uploadedEventImagePath !== null) {
+                    $updParams[] = $uploadedEventImagePath;
+                }
+                $updParams[] = $realEventId;
+                $stmtUpd->execute($updParams);
+                $syncAssignedUsers($realEventId, $assignedTechsInt);
             }
+        } else {
+            if ($titleIn === '') {
+                echo json_encode(['ok' => false, 'error' => 'Event Venue title is required.']);
+                exit;
+            }
+            $maxId = 1004;
+            try {
+                foreach ($pdo->query("SELECT `id` FROM `events`")->fetchAll(PDO::FETCH_COLUMN) as $existingEvId) {
+                    if (is_numeric($existingEvId)) {
+                        $maxId = max($maxId, (int) $existingEvId);
+                    }
+                }
+            } catch (Throwable $e) {}
+            $newEventId = (string) ($maxId + 1);
+            $newLoc = $locationIn !== '' ? $locationIn : 'Kigali Event Venue';
+            $newPin = $eventPinRaw !== '' ? $eventPinRaw : '1234';
+            $stmtIns = $pdo->prepare("
+                INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`, `terminal_pin`, `image`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmtIns->execute([
+                $newEventId,
+                $titleIn,
+                $newLoc,
+                $eventDateSafe,
+                $formattedTime,
+                $projectManager !== '' ? $projectManager : 'Operations PM',
+                $techLead !== '' ? $techLead : 'Tech Lead',
+                json_encode($assignedTechsInt),
+                $newPin,
+                $uploadedEventImagePath,
+            ]);
+            $eventId = $newEventId;
+            $syncAssignedUsers($newEventId, $assignedTechsInt);
+            $msg = "Event Venue \"{$titleIn}\" created successfully.";
         }
 
         echo json_encode(array_merge(
             buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
             [
                 'ok' => true,
-                'message' => 'Event roster and call time updated successfully by Tech Lead',
+                'message' => $msg,
                 'event_id' => $eventId,
                 'call_time' => $formattedTime,
                 'assigned_technicians' => $assignedTechsInt,
                 'assigned_count' => count($assignedTechsInt),
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'delete_event') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_event', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $eventId = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? $_POST['id'] ?? $jsonBody['id'] ?? ''));
+        if ($eventId === '') {
+            echo json_encode(['ok' => false, 'error' => 'Event Venue ID is required.']);
+            exit;
+        }
+        $chk = $pdo->prepare("SELECT `id`, `title` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $chk->execute([$eventId, $eventId]);
+        $row = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Event Venue not found.']);
+            exit;
+        }
+        $realId = (string) $row['id'];
+        $crcVal = (string) (is_numeric($realId) ? (int) $realId : crc32($realId));
+        try {
+            $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)")->execute([$realId, $crcVal]);
+        } catch (Throwable $e) {}
+        $pdo->prepare("DELETE FROM `events` WHERE `id` = ?")->execute([$realId]);
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => 'Deleted Event Venue "' . (string) ($row['title'] ?? $realId) . '".',
             ]
         ));
         exit;
@@ -4090,9 +4248,9 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'description' => (string) ($wr['description'] ?? ''),
                 'open_time' => substr((string) ($wr['open_time'] ?? '08:00:00'), 0, 5),
                 'close_time' => substr((string) ($wr['close_time'] ?? '18:00:00'), 0, 5),
-                'controller_name' => (string) ($wr['controller_name'] ?? 'Mirene Uwase'),
-                'controller_phone' => (string) ($wr['controller_phone'] ?? '+250 788 100 002'),
-                'controller_email' => (string) ($wr['controller_email'] ?? 'mirene@ability.rw'),
+                'controller_name' => (string) ($wr['controller_name'] ?? ''),
+                'controller_phone' => (string) ($wr['controller_phone'] ?? ''),
+                'controller_email' => (string) ($wr['controller_email'] ?? ''),
                 'is_active' => (int) ($wr['is_active'] ?? 1),
                 'image' => resolveProfileImageUrl($wr['image'] ?? null),
                 'item_count' => $itemCount,
@@ -4165,7 +4323,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $location = trim((string) ($_POST['location'] ?? $jsonBody['location'] ?? ''));
         $openTime = trim((string) ($_POST['open_time'] ?? $jsonBody['open_time'] ?? '08:00'));
         $closeTime = trim((string) ($_POST['close_time'] ?? $jsonBody['close_time'] ?? '18:00'));
-        $controllerName = trim((string) ($_POST['controller_name'] ?? $jsonBody['controller_name'] ?? 'Mirene Uwase'));
+        $controllerName = trim((string) ($_POST['controller_name'] ?? $jsonBody['controller_name'] ?? ''));
         $controllerPhone = trim((string) ($_POST['controller_phone'] ?? $jsonBody['controller_phone'] ?? ''));
         $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (int) ($jsonBody['is_active'] ?? 1);
         $terminalPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
@@ -4784,7 +4942,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             }
             if ($userPass !== '') {
                 $pHash = password_hash($userPass, PASSWORD_BCRYPT);
-                $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `id` = ?")->execute([$pHash, $id]);
+                if (usersTableHasPasswordCol($pdo)) {
+                    $pdo->prepare("UPDATE `users` SET `password_hash` = ?, `password` = ? WHERE `id` = ?")->execute([$pHash, $pHash, $id]);
+                } else {
+                    $pdo->prepare("UPDATE `users` SET `password_hash` = ? WHERE `id` = ?")->execute([$pHash, $id]);
+                }
             }
             if ($canAssignCp && $hasAssignedCpField) {
                 if (strtolower($role) === 'stock_controller' && $assignedCpId !== '') {
@@ -4800,12 +4962,21 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 ? (in_array($assignedCpType, ['stock_warehouse', 'event_venue'], true) ? $assignedCpType : 'stock_warehouse')
                 : null;
             $insCpId = $insCpType ? $assignedCpId : null;
-            $stmt = $pdo->prepare("
-                INSERT INTO `users`
-                (`username`, `full_name`, `email`, `password_hash`, `phone`, `role`, `department`, `profile_image`, `assigned_checkpoint_type`, `assigned_checkpoint_id`, `is_active`, `must_change_password`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-            ");
-            $stmt->execute([$username, $fullName, $email, $pHash, $phone, $role, $department, $uploadedImagePath, $insCpType, $insCpId, $isActive]);
+            if (usersTableHasPasswordCol($pdo)) {
+                $stmt = $pdo->prepare("
+                    INSERT INTO `users`
+                    (`username`, `full_name`, `email`, `password_hash`, `password`, `phone`, `role`, `department`, `profile_image`, `assigned_checkpoint_type`, `assigned_checkpoint_id`, `is_active`, `must_change_password`)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                ");
+                $stmt->execute([$username, $fullName, $email, $pHash, $pHash, $phone, $role, $department, $uploadedImagePath, $insCpType, $insCpId, $isActive]);
+            } else {
+                $stmt = $pdo->prepare("
+                    INSERT INTO `users`
+                    (`username`, `full_name`, `email`, `password_hash`, `phone`, `role`, `department`, `profile_image`, `assigned_checkpoint_type`, `assigned_checkpoint_id`, `is_active`, `must_change_password`)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                ");
+                $stmt->execute([$username, $fullName, $email, $pHash, $phone, $role, $department, $uploadedImagePath, $insCpType, $insCpId, $isActive]);
+            }
             $id = (int) $pdo->lastInsertId();
         }
 
@@ -5294,8 +5465,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
         $confirmPassword = (string) ($_POST['confirm_password'] ?? $jsonBody['confirm_password'] ?? '');
-        $callerHash = (string) ($caller['password_hash'] ?? '');
-        if ($confirmPassword === '' || $callerHash === '' || !password_verify($confirmPassword, $callerHash)) {
+        if ($confirmPassword === '' || !verifyUserPasswordRow($caller, $confirmPassword)) {
             http_response_code(403);
             echo json_encode(['ok' => false, 'error' => 'Administrator password confirmation required to reset attendance logs.']);
             exit;
@@ -5311,6 +5481,157 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'ok' => true,
                 'message' => "All gate attendance and activity timeline logs have been successfully reset. All crew members are now Ready (0 on-site).",
                 'today_reset' => true,
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'save_attendance_log') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_attendance_log', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $inLogId = (int) ($_POST['in_log_id'] ?? $jsonBody['in_log_id'] ?? 0);
+        $outLogId = (int) ($_POST['out_log_id'] ?? $jsonBody['out_log_id'] ?? 0);
+        $userId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse'));
+        $cpIdRaw = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? '1'));
+        $mode = strtolower(trim((string) ($_POST['scan_action'] ?? $jsonBody['scan_action'] ?? 'check_in')));
+        $accessStatus = strtolower(trim((string) ($_POST['access_status'] ?? $jsonBody['access_status'] ?? 'granted')));
+        $punctuality = strtolower(trim((string) ($_POST['punctuality_status'] ?? $jsonBody['punctuality_status'] ?? 'on_time')));
+        $inTimeRaw = trim((string) ($_POST['scanned_at'] ?? $jsonBody['scanned_at'] ?? ''));
+        $outTimeRaw = trim((string) ($_POST['check_out_at'] ?? $jsonBody['check_out_at'] ?? ''));
+        $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
+        $denialReason = trim((string) ($_POST['denial_reason'] ?? $jsonBody['denial_reason'] ?? ''));
+
+        if ($userId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Please select a staff member.']);
+            exit;
+        }
+        if (!in_array($cpType, ['stock_warehouse', 'event_venue'], true)) {
+            $cpType = 'stock_warehouse';
+        }
+        if (!in_array($mode, ['check_in', 'check_out', 'access_verify', 'session_complete'], true)) {
+            $mode = 'check_in';
+        }
+        if (!in_array($accessStatus, ['granted', 'denied'], true)) {
+            $accessStatus = 'granted';
+        }
+        if (!in_array($punctuality, ['early', 'on_time', 'late', 'n/a'], true)) {
+            $punctuality = 'on_time';
+        }
+
+        $uStmt = $pdo->prepare("
+            SELECT u.`id`, u.`full_name`, u.`username`, b.`badge_code`
+            FROM `users` u
+            LEFT JOIN `user_badges` b ON b.`user_id` = u.`id`
+            WHERE u.`id` = ? LIMIT 1
+        ");
+        $uStmt->execute([$userId]);
+        $uRow = $uStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$uRow) {
+            echo json_encode(['ok' => false, 'error' => 'Staff member not found.']);
+            exit;
+        }
+        $badgeCode = formatRewBadgeCode($userId, $uRow['badge_code'] ?? null);
+
+        $lookup = loadCheckpointsLookup($pdo);
+        $cpRec = findCheckpointRecord($lookup['stock_warehouses'], $lookup['event_venues'], $cpType, $cpIdRaw);
+        $cpIdNum = $cpRec ? (int) $cpRec['id'] : (is_numeric($cpIdRaw) ? (int) $cpIdRaw : crc32($cpIdRaw));
+        $cpName = $cpRec ? $cpRec['name'] : ($cpType === 'stock_warehouse' ? 'Facility Gate' : 'Event Venue');
+
+        $normalizeTs = static function (string $raw): string {
+            if ($raw === '') {
+                return date('Y-m-d H:i:s');
+            }
+            $ts = strtotime(str_replace('T', ' ', $raw));
+            return $ts ? date('Y-m-d H:i:s', $ts) : date('Y-m-d H:i:s');
+        };
+        $inTsFormatted = $normalizeTs($inTimeRaw);
+        $scannedBy = (int) ($caller['id'] ?? 1);
+
+        $upsertSingle = static function (int $rowId, string $scanAct, string $scanTs) use (
+            $pdo, $userId, $badgeCode, $cpType, $cpIdNum, $cpName, $accessStatus, $denialReason, $punctuality, $scannedBy, $notes
+        ): void {
+            $denialSafe = ($accessStatus === 'denied') ? ($denialReason !== '' ? $denialReason : 'Denied via Timeline Audit') : null;
+            if ($rowId > 0) {
+                $upd = $pdo->prepare("
+                    UPDATE `attendance_logs`
+                    SET `user_id` = ?, `badge_code` = ?, `checkpoint_type` = ?, `checkpoint_id` = ?, `checkpoint_name` = ?,
+                        `scan_action` = ?, `access_status` = ?, `denial_reason` = ?, `punctuality_status` = ?, `notes` = ?, `scanned_at` = ?
+                    WHERE `id` = ?
+                ");
+                $upd->execute([$userId, $badgeCode, $cpType, $cpIdNum, $cpName, $scanAct, $accessStatus, $denialSafe, $punctuality, $notes, $scanTs, $rowId]);
+            } else {
+                $ins = $pdo->prepare("
+                    INSERT INTO `attendance_logs`
+                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $ins->execute([$userId, $badgeCode, $cpType, $cpIdNum, $cpName, $scanAct, $accessStatus, $denialSafe, $punctuality, $scannedBy, $notes, $scanTs]);
+            }
+        };
+
+        if ($mode === 'session_complete' && $accessStatus === 'granted') {
+            $outTsFormatted = $normalizeTs($outTimeRaw !== '' ? $outTimeRaw : $inTsFormatted);
+            $targetInId = $inLogId > 0 ? $inLogId : ($id > 0 && $outLogId <= 0 ? $id : 0);
+            $upsertSingle($targetInId, 'check_in', $inTsFormatted);
+            $upsertSingle($outLogId, 'check_out', $outTsFormatted);
+        } else {
+            $targetId = $id > 0 ? $id : ($inLogId > 0 ? $inLogId : $outLogId);
+            $singleAct = ($mode === 'session_complete') ? 'check_in' : $mode;
+            $upsertSingle($targetId, $singleAct, $inTsFormatted);
+        }
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => ($id > 0 || $inLogId > 0 || $outLogId > 0)
+                    ? 'Activity timeline log updated.'
+                    : 'Activity timeline log recorded.',
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'delete_attendance_log') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_attendance_log', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        $singleId = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $rawIds = $_POST['ids'] ?? $jsonBody['ids'] ?? [];
+        if (!is_array($rawIds)) {
+            $rawIds = json_decode((string) $rawIds, true) ?: [];
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $rawIds))));
+        if ($singleId > 0 && !in_array($singleId, $ids, true)) {
+            $ids[] = $singleId;
+        }
+        if (empty($ids)) {
+            echo json_encode(['ok' => false, 'error' => 'Log ID is required.']);
+            exit;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $del = $pdo->prepare("DELETE FROM `attendance_logs` WHERE `id` IN ({$placeholders})");
+        $del->execute($ids);
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'message' => count($ids) > 1 ? 'Deleted attendance session (Check-In & Check-Out).' : 'Deleted activity timeline log.',
             ]
         ));
         exit;

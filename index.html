@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261116_v3" />
+  <link rel="stylesheet" href="styles.css?v=20261116_v4" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -37,14 +37,14 @@
         </button>
       </div>
 
-      <button type="button" class="workspace-switcher" id="workspace-switcher-btn" data-node-id="2:3277">
+      <!-- <button type="button" class="workspace-switcher" id="workspace-switcher-btn" data-node-id="2:3277">
         <div class="workspace-monogram" data-node-id="2:3278">A</div>
         <div class="workspace-info" data-node-id="2:3280">
           <span class="workspace-name" data-node-id="2:3281">aBility Manager</span>
           <span class="workspace-plan" data-node-id="2:3282">Gate &amp; Access Matrix</span>
         </div>
         <img src="assets/chevrons-up-down.svg" alt="" class="svg-icon" />
-      </button>
+      </button> -->
 
       <!-- Main Navigation (6 items per Section 4.1 of Spec) -->
       <nav class="nav-group" aria-label="Main navigation" data-node-id="2:3284">
@@ -142,11 +142,11 @@
       </div>
 
       <!-- Account Footer -->
-      <div class="account-footer" id="account-footer-btn" data-node-id="2:3322">
-        <div class="avatar-circle avatar-jl" data-node-id="2:3323">MU</div>
+      <div class="account-footer" id="account-footer-btn" data-node-id="2:3322" title="Active Signed-In Account">
+        <div class="avatar-circle avatar-jl" id="account-footer-avatar" data-node-id="2:3323">--</div>
         <div class="account-details" data-node-id="2:3325">
-          <span class="account-name" data-node-id="2:3326">Mirene Uwase</span>
-          <span class="account-role" data-node-id="2:3327">Gate Controller · L3</span>
+          <span class="account-name" id="account-footer-name" data-node-id="2:3326">Loading...</span>
+          <span class="account-role" id="account-footer-role" data-node-id="2:3327">Active Session</span>
         </div>
         <img src="assets/chevrons-up-down.svg" alt="" class="svg-icon" />
       </div>
@@ -361,14 +361,14 @@
               <button type="button" class="btn btn-secondary-38" id="overview-schedule-roster-btn" style="display: none;">
                 <span>Schedule Event Roster</span>
               </button>
-              <button type="button" class="btn btn-secondary-38 js-open-rollcall-modal">
+              <!-- <button type="button" class="btn btn-secondary-38 js-open-rollcall-modal">
                 <img src="assets/metric-users.svg" alt="" class="svg-icon" />
                 <span>On-Site Roll-Call (<span class="js-stat-onsite">4</span>)</span>
               </button>
               <button type="button" class="btn btn-primary-38" data-action="go-kiosk" data-node-id="2:3353">
                 <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
                 <span>Open Gate Kiosk (#pane-kiosk)</span>
-              </button>
+              </button> -->
             </div>
           </div>
 
@@ -395,10 +395,10 @@
 
             <div class="checkpoint-right-group" data-node-id="2:3366">
               <span class="updated-text js-active-cp-meta" data-node-id="2:3368">Call Time: 08:00 · L2–L4 Required</span>
-              <button type="button" class="btn btn-secondary-32" data-action="go-kiosk" data-node-id="2:3369">
+              <!-- <button type="button" class="btn btn-secondary-32" data-action="go-kiosk" data-node-id="2:3369">
                 <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
                 <span>Scan Badge</span>
-              </button>
+              </button> -->
             </div>
           </div>
 
@@ -532,6 +532,15 @@
                 >
                   <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 11px; height: 11px; opacity: 0.7;" />
                   <span>Reset Logs</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-primary-32 js-open-create-timeline-btn"
+                  title="Record new attendance / gate scan entry"
+                  style="height: 24px; padding: 0 9px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"
+                >
+                  <img src="assets/plus-white.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" />
+                  <span>+ Add Log</span>
                 </button>
                 <span class="status-badge status-badge-green-sm">Live Stream</span>
               </div>
@@ -1423,6 +1432,15 @@
                   <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 11px; height: 11px; opacity: 0.7;" />
                   <span>Reset Logs</span>
                 </button>
+                <button
+                  type="button"
+                  class="btn btn-primary-32 js-open-create-timeline-btn"
+                  title="Record new attendance / gate scan entry"
+                  style="height: 24px; padding: 0 9px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"
+                >
+                  <img src="assets/plus-white.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" />
+                  <span>+ Add Log</span>
+                </button>
                 <span class="status-badge status-badge-green-sm">Live Stream</span>
               </div>
             </div>
@@ -1803,7 +1821,7 @@
               </p>
             </div>
             <div class="page-actions">
-              <button type="button" class="btn btn-primary-38" id="open-add-warehouse-btn">
+              <button type="button" class="btn btn-primary-38" id="open-add-warehouse-btn" style="display: none;">
                 <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
                 <span>+ New Facility Gate</span>
               </button>
@@ -1870,11 +1888,15 @@
           <!-- Segmented View Toggle Bar -->
           <div class="status-tabs" id="sm-segmented-tabs" style="border-bottom: 1px solid var(--border-color); padding: 0 20px;">
             <button type="button" class="status-tab active js-sm-tab-btn" data-tab="warehouses" data-target-tab="warehouses">
-              <span class="status-tab-label">🏬 Facility Gates &amp; Sites</span>
+              <span class="status-tab-label" style="display: inline-flex; align-items: center; gap: 6px;"><img src="assets/warehouse-13.svg" alt="" class="svg-icon" style="width: 14px; height: 14px;" /><span>Facility Gates &amp; Sites</span></span>
               <span class="status-tab-count" id="sm-tab-wh-count">03</span>
             </button>
+            <button type="button" class="status-tab js-sm-tab-btn" data-tab="events" data-target-tab="events">
+              <span class="status-tab-label" style="display: inline-flex; align-items: center; gap: 6px;"><img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" style="width: 14px; height: 14px;" /><span>Event Venues &amp; Gates</span></span>
+              <span class="status-tab-count" id="sm-tab-ev-count">04</span>
+            </button>
             <button type="button" class="status-tab js-sm-tab-btn" data-tab="items" data-target-tab="items" style="display: none;">
-              <span class="status-tab-label">📦 Stock &amp; Equipment Inventory</span>
+              <span class="status-tab-label" style="display: inline-flex; align-items: center; gap: 6px;"><img src="assets/nav-campaigns.svg" alt="" class="svg-icon" style="width: 14px; height: 14px;" /><span>Stock &amp; Equipment Inventory</span></span>
               <span class="status-tab-count" id="sm-tab-item-count">21</span>
             </button>
           </div>
@@ -1900,6 +1922,29 @@
 
             <!-- Warehouse Cards Grid -->
             <div id="sm-warehouses-grid" class="sm-grid-container"></div>
+          </div>
+
+          <!-- TAB PANE 1B: EVENT VENUES & GATES -->
+          <div id="sm-pane-events" class="sm-tab-pane" style="display: none;">
+            <div class="table-tools" style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <label class="table-search-box" style="flex: 1 1 320px; max-width: 440px;">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input
+                  type="text"
+                  id="sm-ev-search-input"
+                  class="table-search-input"
+                  placeholder="Search event venues by title, location, Tech Lead, or PM..."
+                  autocomplete="off"
+                />
+              </label>
+              <button type="button" class="btn btn-primary-32 js-trigger-add-ev">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>Add Event Venue</span>
+              </button>
+            </div>
+
+            <!-- Event Venues Cards Grid (5 per row, 5 per page) -->
+            <div id="sm-events-grid" class="sm-grid-container"></div>
           </div>
 
           <!-- TAB PANE 2: STOCK & EQUIPMENT ITEMS -->
@@ -2528,10 +2573,14 @@
                 <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
                 <span>Manage Venues</span>
               </button>
-              <button type="button" class="btn btn-primary-38" id="vs-launch-first-kiosk-btn">
+              <button type="button" class="btn btn-primary-38" id="vs-add-venue-btn" style="background: #4f46e5; border-color: #4f46e5; color: #fff;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add Event Venue</span>
+              </button>
+              <!-- <button type="button" class="btn btn-primary-38" id="vs-launch-first-kiosk-btn">
                 <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
                 <span>Launch Venue Gate Kiosk</span>
-              </button>
+              </button> -->
             </div>
           </div>
 
@@ -2579,11 +2628,21 @@
                 <span class="status-badge status-badge-purple-sm" id="vs-stations-count-badge">0 Venues</span>
               </div>
               <p class="directory-desc">
-                Select any Event Venue below to launch its live Gate Kiosk scanner (#pane-kiosk) or inspect its assigned leads and schedule.
+                Create, edit, or delete Event Venues, configure their Terminal PIN &amp; roster, or launch any venue’s Gate Kiosk (#pane-kiosk).
               </p>
             </div>
           </div>
+          <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <label class="table-search-box" for="vs-search-input" style="flex: 1 1 260px;">
+              <img src="assets/search-table.svg" alt="" class="svg-icon" />
+              <input type="text" id="vs-search-input" class="table-search-input" placeholder="Search Event Venues by title, location, Tech Lead, PM, or date..." />
+            </label>
+          </div>
           <div id="vs-venues-grid" class="dedicated-page-grid-3" style="padding: 18px 20px;"></div>
+          <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+            <span class="results-count" id="vs-results-footer">Showing 0 of 0 event venues</span>
+            <div class="page-controls" id="vs-page-controls" style="display: flex; gap: 4px; align-items: center;"></div>
+          </div>
         </section>
       </main>
 
@@ -3705,8 +3764,8 @@
             <select id="roster-event-techlead" class="form-input" style="height: 36px;"></select>
           </div>
           <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="roster-event-pm">Project Manager</label>
-            <input type="text" id="roster-event-pm" class="form-input" placeholder="e.g. Sarah Jenkins" style="height: 36px;" />
+            <label class="form-label" for="roster-event-pm">Project Manager / Coordinator</label>
+            <select id="roster-event-pm" class="form-input" style="height: 36px;"></select>
           </div>
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
@@ -5089,6 +5148,177 @@
     </div>
   </div>
 
+  <!-- ====================================================================== -->
+  <!-- MODAL 11: USER ACTIVITY TIMELINE LOG CRUD MODAL                        -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="timeline-crud-modal" aria-hidden="true" style="display: none;">
+    <div class="modal-card" style="width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-labelledby="tl-crud-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h3 class="modal-title" id="tl-crud-modal-title" style="font-family: 'Marvel', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Record Gate Activity Log</h3>
+        <button type="button" class="icon-btn js-close-timeline-crud-modal" aria-label="Close">✕</button>
+      </div>
+      <form id="timeline-crud-form">
+        <input type="hidden" id="tl-crud-id" value="0" />
+        <input type="hidden" id="tl-crud-in-id" value="0" />
+        <input type="hidden" id="tl-crud-out-id" value="0" />
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="tl-crud-user">Staff Member *</label>
+            <select id="tl-crud-user" class="form-input" required></select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="tl-crud-checkpoint">Gate / Venue Checkpoint *</label>
+            <select id="tl-crud-checkpoint" class="form-input" required></select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="tl-crud-mode">Activity Type *</label>
+            <select id="tl-crud-mode" class="form-input" required>
+              <option value="session_complete">Check-In &amp; Check-Out (Session)</option>
+              <option value="check_in">Check-In Only</option>
+              <option value="check_out">Check-Out Only</option>
+              <option value="access_verify">Access Verification</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="tl-crud-access">Access Status *</label>
+            <select id="tl-crud-access" class="form-input" required>
+              <option value="granted">Granted</option>
+              <option value="denied">Denied</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="tl-crud-punctuality">Punctuality</label>
+            <select id="tl-crud-punctuality" class="form-input">
+              <option value="on_time">On Time</option>
+              <option value="early">Early</option>
+              <option value="late">Late</option>
+              <option value="n/a">N/A</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="tl-crud-in-time" id="tl-crud-in-label">Check-In Timestamp *</label>
+            <input type="datetime-local" id="tl-crud-in-time" class="form-input" required />
+          </div>
+          <div class="form-field" id="tl-crud-out-time-wrap">
+            <label class="form-label" for="tl-crud-out-time">Check-Out Timestamp *</label>
+            <input type="datetime-local" id="tl-crud-out-time" class="form-input" />
+          </div>
+        </div>
+
+        <div class="form-field" id="tl-crud-denial-wrap" style="display: none; margin-bottom: 12px;">
+          <label class="form-label" for="tl-crud-denial">Denial Reason</label>
+          <input type="text" id="tl-crud-denial" class="form-input" placeholder="e.g. Level 1 crew restricted from warehouse gate" />
+        </div>
+
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label class="form-label" for="tl-crud-notes">Audit / Shift Notes</label>
+          <input type="text" id="tl-crud-notes" class="form-input" placeholder="e.g. Verified shift entry &amp; tool checkout" />
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary-38 js-close-timeline-crud-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="tl-crud-submit-btn">Save Log Entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL 12: EVENT VENUE SECURITY STATION CRUD MODAL                      -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="venue-crud-modal" aria-hidden="true" style="display: none;">
+    <div class="modal-card modal-card-wide" style="width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-labelledby="venue-crud-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h3 class="modal-title" id="venue-crud-modal-title" style="font-family: 'Marvel', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Add Event Venue Station</h3>
+        <button type="button" class="icon-btn js-close-venue-crud-modal" aria-label="Close">✕</button>
+      </div>
+      <form id="venue-crud-form">
+        <input type="hidden" id="venue-crud-id" value="" />
+
+        <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-title">Event Venue Title *</label>
+            <input type="text" id="venue-crud-title" class="form-input" placeholder="e.g. World Bank Summit — KCC" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-location">Location / Site *</label>
+            <input type="text" id="venue-crud-location" class="form-input" placeholder="e.g. Kigali Convention Centre" required />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-date">Event Date</label>
+            <input type="date" id="venue-crud-date" class="form-input" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-calltime">Call Time (24h CAT)</label>
+            <input type="time" id="venue-crud-calltime" class="form-input" value="08:00" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-pin">Terminal PIN (4–12 chars)</label>
+            <input type="text" id="venue-crud-pin" class="form-input" placeholder="e.g. 1234" minlength="4" maxlength="12" autocomplete="off" />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-techlead">Technical Lead</label>
+            <select id="venue-crud-techlead" class="form-input"></select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-pm">Project Manager / Coordinator</label>
+            <select id="venue-crud-pm" class="form-input"></select>
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Assigned Crew / Technicians</span>
+            <span style="display: inline-flex; gap: 8px; font-size: 11px;">
+              <button type="button" class="btn-link-inline" id="venue-crud-select-all-btn">Select All</button>
+              <button type="button" class="btn-link-inline btn-link-danger" id="venue-crud-clear-btn">Clear</button>
+            </span>
+          </label>
+          <div id="venue-crud-crew-list" class="nav-crud-roles-grid" style="max-height: 180px; overflow-y: auto;"></div>
+        </div>
+
+        <!-- Event Venue Photo Upload Dropzone -->
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label class="form-label">Event Venue Banner Photo</label>
+          <div class="image-upload-dropzone" id="venue-dropzone">
+            <input type="file" id="venue-modal-image" accept="image/*" style="display: none;" />
+            <div class="dropzone-prompt" id="venue-dropzone-prompt">
+              <img src="assets/upload-15.svg" alt="" class="svg-icon" style="width: 20px; height: 20px; opacity: 0.6; margin-bottom: 4px;" />
+              <span style="font-size: 12px; font-weight: 500; color: var(--text-primary); display: block;">Click or drag to upload venue photo</span>
+              <span style="font-size: 10px; color: var(--text-muted);">JPG, PNG, WEBP supported</span>
+            </div>
+            <div class="dropzone-preview" id="venue-dropzone-preview" style="display: none;">
+              <img src="" alt="Preview" id="venue-preview-img" class="dropzone-thumb" />
+              <div style="flex: 1; min-width: 0;">
+                <span id="venue-preview-filename" class="dropzone-filename">venue.jpg</span>
+                <span style="font-size: 10px; color: #16a34a; font-weight: 600;">Image Selected</span>
+              </div>
+              <button type="button" class="btn btn-secondary-32-sm" id="venue-remove-image-btn">Change</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary-38 js-close-venue-crud-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="venue-crud-submit-btn">Save Event Venue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Reusable App Confirm Modal (Replaces native browser confirm/prompt) -->
   <div class="modal-backdrop" id="app-confirm-modal" aria-hidden="true">
     <div class="modal-card" style="width: 420px; max-width: 94vw;" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title">
@@ -5117,6 +5347,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261116_v6"></script>
+  <script src="app.js?v=20261116_v13"></script>
 </body>
 </html>

@@ -88,6 +88,9 @@
     srFilterStatus: 'all',
     rollCallSearch: '',
     rollCallCpFilter: 'all',
+    vsSearch: '',
+    vsPage: 1,
+    vsPerPage: 10,
     currentVerification: null,
     selectedCrewId: 6,
 
@@ -131,6 +134,11 @@
         in_use_count: 0,
       },
       whSearch: '',
+      whPage: 1,
+      whPerPage: 5,
+      evSearch: '',
+      evPage: 1,
+      evPerPage: 5,
       itemSearch: '',
       categoryFilter: 'all',
       locationFilter: 'all',
@@ -1406,6 +1414,9 @@
     renderRollCallModalList();
     renderUsersScreen();
     renderDedicatedNavPages();
+    if (state.activeScreen === 'stock-manager') {
+      renderStockManager();
+    }
     if (state.activeScreen === 'users') {
       switchUsersView(state.usersViewMode || 'personnel');
     }
@@ -2024,43 +2035,62 @@
         : 'Connected: attendance_app (Standalone)';
     }
 
-    // Render User Avatar and Info in Topbar
+    // Render User Avatar and Info in Topbar & Sidebar Account Footer
     const u = state.currentUser || (state.crew.length > 0 ? (state.crew.find((c) => Number(c.id) === 2) || state.crew[0]) : null);
     if (u) {
       state.currentUser = u;
-      const initials = u.initials || computeInitials(u.full_name || 'Mirene Uwase');
+      const displayName = u.full_name || u.username || 'Active Operator';
+      const displayRole = `${u.role_display || u.role || 'Staff'} · ${u.clearance_code || 'L2'}`;
+      const initials = u.initials || computeInitials(displayName);
+      const applyUserAvatarDisplay = (el) => {
+        if (!el) return;
+        if (u.profile_image_url) {
+          el.innerHTML = `<img src="${escapeHtml(u.profile_image_url)}" alt="${escapeHtml(displayName)}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        } else {
+          el.textContent = initials;
+        }
+      };
+
       const topAvatar = document.getElementById('topbar-avatar');
       if (topAvatar) {
-        if (u.profile_image_url) {
-          topAvatar.innerHTML = `<img src="${escapeHtml(u.profile_image_url)}" alt="${escapeHtml(u.full_name)}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
-        } else {
-          topAvatar.textContent = initials;
-        }
-        topAvatar.title = `${u.full_name} (${u.role_display || u.role} · ${u.clearance_code || 'L2'}) · Click for Account Menu`;
+        applyUserAvatarDisplay(topAvatar);
+        topAvatar.title = `${displayName} (${u.role_display || u.role} · ${u.clearance_code || 'L2'}) · Click for Account Menu`;
       }
 
       const menuAvatar = document.getElementById('user-menu-avatar');
-      if (menuAvatar) {
-        if (u.profile_image_url) {
-          menuAvatar.innerHTML = `<img src="${escapeHtml(u.profile_image_url)}" alt="${escapeHtml(u.full_name)}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
-        } else {
-          menuAvatar.textContent = initials;
-        }
-      }
+      applyUserAvatarDisplay(menuAvatar);
 
       const menuName = document.getElementById('user-menu-name');
-      if (menuName) menuName.textContent = u.full_name || 'Active Operator';
+      if (menuName) menuName.textContent = displayName;
 
       const topName = document.getElementById('topbar-user-name');
       const topRole = document.getElementById('topbar-user-role-badge');
-      if (topName) topName.textContent = u.full_name || 'Active Operator';
+      if (topName) topName.textContent = displayName;
       if (topRole) topRole.textContent = `${u.role_display || u.role} (${u.clearance_code || 'L2'})`;
 
       const menuRole = document.getElementById('user-menu-role');
-      if (menuRole) menuRole.textContent = `${u.role_display || u.role} · ${u.clearance_code || 'L2'}`;
+      if (menuRole) menuRole.textContent = displayRole;
 
       const menuBadge = document.getElementById('user-menu-badge');
       if (menuBadge) menuBadge.textContent = u.badge_code || 'REW-BADGE-0002';
+
+      // Sidebar Account Footer (#account-footer-btn)
+      const footerBtn = document.getElementById('account-footer-btn');
+      const footerAvatar = document.getElementById('account-footer-avatar');
+      const footerName = document.getElementById('account-footer-name');
+      const footerRole = document.getElementById('account-footer-role');
+      applyUserAvatarDisplay(footerAvatar);
+      if (footerName) {
+        footerName.textContent = displayName;
+        footerName.title = displayName;
+      }
+      if (footerRole) {
+        footerRole.textContent = displayRole;
+        footerRole.title = displayRole;
+      }
+      if (footerBtn) {
+        footerBtn.title = `Signed in as ${displayName} (@${u.username || 'user'}) · ${displayRole}`;
+      }
 
       const isAdmin = isCurrentUserAdmin();
       const userDropdown = document.getElementById('topbar-user-dropdown');
@@ -3126,10 +3156,10 @@
     return [
       { id: 1, type: 'stock_warehouse', name: 'Ndera Warehouse', location: 'Ndera Central Logistics Hub', call_time: '08:00', lead_name: 'Schadrack Niyikiza' },
       { id: 2, type: 'stock_warehouse', name: 'KCC Stock', location: 'Kigali Convention Centre', call_time: '07:30', lead_name: 'Niyonase Prince' },
-      { id: 3, type: 'stock_warehouse', name: 'BK Arena Stock', location: 'BK Arena Remera', call_time: '08:00', lead_name: 'Irene Mudacumura' },
-      { id: 1, type: 'event_venue', name: 'Kigali Convention Centre', location: 'Gasabo District', call_time: '08:00', lead_name: 'Jean Paul Ndayisaba' },
+      { id: 3, type: 'stock_warehouse', name: 'BK Arena Stock', location: 'BK Arena Remera', call_time: '08:00', lead_name: 'Musirikare Leonce' },
+      { id: 1, type: 'event_venue', name: 'Kigali Convention Centre', location: 'Gasabo District', call_time: '08:00', lead_name: 'Hirwa Jean de Dieu' },
       { id: 2, type: 'event_venue', name: 'BK Arena', location: 'Remera', call_time: '08:00', lead_name: 'Musirikare Leonce' },
-      { id: 3, type: 'event_venue', name: 'Camp Kigali', location: 'Nyarugenge', call_time: '08:30', lead_name: 'Patrick Nyirimbibi' },
+      { id: 3, type: 'event_venue', name: 'Camp Kigali', location: 'Nyarugenge', call_time: '08:30', lead_name: 'Patrick NYIRIMBIBI' },
       { id: 4, type: 'event_venue', name: 'Intare Conference Arena', location: 'Rusororo', call_time: '09:00', lead_name: 'Diane Iradukunda' },
       { id: 4, type: 'stock_warehouse', name: 'Remera Technical Hub', location: 'Remera Transit Station', call_time: '08:00', lead_name: 'Solomon Gakiza' },
     ];
@@ -4035,6 +4065,159 @@
     }
   }
 
+  function pairTimelineEvents(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    const parseTs = (r) => {
+      if (!r || !r.scanned_at) return 0;
+      const d = new Date(String(r.scanned_at).replace(' ', 'T'));
+      return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+    const fmtShortTime = (r) => {
+      if (r.scanned_time) {
+        const m = String(r.scanned_time).match(/^(\d{1,2}:\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+        if (m) return `${m[1]} ${m[2].toUpperCase()}`;
+      }
+      const ts = parseTs(r);
+      if (!ts) return '';
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+    const fmtTimeWithSecs = (r) => {
+      const m = String(r.formatted_time || '').match(/(\d{1,2}:\d{2}:\d{2}\s*(?:AM|PM))/i);
+      if (m) return m[1];
+      if (r.scanned_time) return String(r.scanned_time);
+      return fmtShortTime(r);
+    };
+    const fmtDatePrefix = (r) => {
+      const ft = String(r.formatted_time || '');
+      const idx = ft.indexOf('•');
+      if (idx > 0) return ft.slice(0, idx).trim();
+      return String(r.scanned_date || '').trim();
+    };
+    const calcDuration = (inMs, outMs) => {
+      if (!inMs || !outMs || outMs <= inMs) return '';
+      const mins = Math.max(1, Math.round((outMs - inMs) / 60000));
+      const hrs = Math.floor(mins / 60);
+      const rem = mins % 60;
+      return hrs > 0 ? `${hrs}h ${rem}m` : `${rem}m`;
+    };
+
+    const chronological = [...rows].sort((a, b) => {
+      const tA = parseTs(a);
+      const tB = parseTs(b);
+      if (tA !== tB) return tA - tB;
+      return Number(a.id || 0) - Number(b.id || 0);
+    });
+
+    const paired = [];
+    const openByKey = new Map();
+
+    chronological.forEach((raw) => {
+      const item = { ...raw };
+      const isDenied = item.access_status === 'denied';
+      const action = String(item.scan_action || 'check_in').toLowerCase();
+      const key = `${item.user_id || 0}::${item.checkpoint_type || ''}::${item.checkpoint_id || item.checkpoint_name || ''}`;
+      const tsMs = parseTs(item);
+
+      if (isDenied || action === 'access_verify') {
+        item._inLogId = Number(item.id || 0);
+        item._outLogId = 0;
+        item._inScannedAt = item.scanned_at || '';
+        item._outScannedAt = '';
+        item._sortTs = tsMs;
+        paired.push(item);
+        return;
+      }
+
+      if (action === 'check_in') {
+        const shortIn = fmtShortTime(item);
+        const entry = {
+          ...item,
+          in_pill: item.in_pill || (shortIn ? `In: ${shortIn}` : null),
+          out_pill: null,
+          _inLogId: Number(item.id || 0),
+          _outLogId: 0,
+          _inScannedAt: item.scanned_at || '',
+          _outScannedAt: '',
+          _inTsMs: tsMs,
+          _inFormatted: item.formatted_time || `${item.scanned_date || ''} ${item.scanned_time || ''}`.trim(),
+          _inShortWithSec: fmtTimeWithSecs(item),
+          _inDate: fmtDatePrefix(item),
+          _sortTs: tsMs,
+        };
+        const idx = paired.push(entry) - 1;
+        openByKey.set(key, idx);
+        return;
+      }
+
+      if (action === 'check_out') {
+        if (openByKey.has(key)) {
+          const idx = openByKey.get(key);
+          const openItem = paired[idx];
+          openByKey.delete(key);
+
+          const shortIn = fmtShortTime(openItem);
+          const shortOut = fmtShortTime(item);
+          const inSec = openItem._inShortWithSec || shortIn;
+          const outSec = fmtTimeWithSecs(item) || shortOut;
+          const dateLabel = openItem._inDate || fmtDatePrefix(item);
+          const durLabel = (item.duration_label && item.duration_label !== '—')
+            ? item.duration_label
+            : calcDuration(openItem._inTsMs, tsMs);
+          const isStock = item.checkpoint_type === 'stock_warehouse';
+          const cpLabel = item.checkpoint_name || openItem.checkpoint_name || 'Checkpoint';
+
+          paired[idx] = {
+            ...openItem,
+            id: item.id || openItem.id,
+            scanned_at: item.scanned_at || openItem.scanned_at,
+            scan_action: 'session_complete',
+            action_title: `${isStock ? 'Stock Gate' : 'Venue Gate'} Attendance (In & Out) — ${cpLabel}`,
+            formatted_time: dateLabel
+              ? `${dateLabel} • In ${inSec} → Out ${outSec}`
+              : `In ${inSec} → Out ${outSec}`,
+            in_pill: shortIn ? `In: ${shortIn}` : openItem.in_pill,
+            out_pill: shortOut ? `Out: ${shortOut}` : (item.out_pill || null),
+            duration_label: durLabel || openItem.duration_label || '—',
+            is_transit: Boolean(openItem.is_transit || item.is_transit),
+            is_night_shift: Boolean(openItem.is_night_shift || item.is_night_shift),
+            notes: item.notes || openItem.notes,
+            _inLogId: Number(openItem._inLogId || openItem.id || 0),
+            _outLogId: Number(item.id || 0),
+            _inScannedAt: openItem._inScannedAt || openItem.scanned_at || '',
+            _outScannedAt: item.scanned_at || '',
+            _sortTs: tsMs || openItem._sortTs,
+          };
+          return;
+        }
+
+        // Standalone check-out (when matching check-in is not present in window)
+        const shortOut = fmtShortTime(item);
+        item.in_pill = item.in_pill || null;
+        item.out_pill = item.out_pill || (shortOut ? `Out: ${shortOut}` : null);
+        item._inLogId = 0;
+        item._outLogId = Number(item.id || 0);
+        item._inScannedAt = '';
+        item._outScannedAt = item.scanned_at || '';
+        item._sortTs = tsMs;
+        paired.push(item);
+        return;
+      }
+
+      item._inLogId = Number(item.id || 0);
+      item._outLogId = 0;
+      item._inScannedAt = item.scanned_at || '';
+      item._outScannedAt = '';
+      item._sortTs = tsMs;
+      paired.push(item);
+    });
+
+    return paired.sort((a, b) => {
+      const tDiff = (b._sortTs || 0) - (a._sortTs || 0);
+      if (tDiff !== 0) return tDiff;
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+  }
+
   function renderActivityTimeline() {
     const listEls = [
       document.getElementById('timeline-feed-list'),
@@ -4060,7 +4243,8 @@
     const q = state.timelineSearch.trim().toLowerCase();
     const scope = state.timelineScope;
     const isReportMode = state.timelineRange && state.timelineRange !== 'today';
-    const sourceRows = isReportMode ? (state.timelineReportRows || []) : (state.activityTimeline || []);
+    const rawRows = isReportMode ? (state.timelineReportRows || []) : (state.activityTimeline || []);
+    const sourceRows = pairTimelineEvents(rawRows);
 
     const summaryEl = document.getElementById('timeline-report-summary');
     if (summaryEl) {
@@ -4105,6 +4289,11 @@
     const pageItems = filtered.slice(startIdx, startIdx + state.timelinePerPage);
 
     let htmlContent = '';
+    const canManageTimeline = isCurrentUserAdmin() || isCurrentUserStockManager();
+    document.querySelectorAll('.js-open-create-timeline-btn').forEach((btn) => {
+      btn.style.display = canManageTimeline ? 'inline-flex' : 'none';
+    });
+
     if (pageItems.length === 0) {
       htmlContent = `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-secondary);">No gate activity logs match your filter.</div>`;
     } else {
@@ -4122,6 +4311,10 @@
             : '';
           const nightChip = item.is_night_shift
             ? `<span class="status-badge status-badge-purple-sm">Night Shift</span>`
+            : '';
+          const crudBtns = canManageTimeline
+            ? `<button type="button" class="btn btn-secondary-32-sm js-edit-timeline-log" data-timeline-id="${Number(item.id || 0)}" data-in-id="${Number(item._inLogId || 0)}" data-out-id="${Number(item._outLogId || 0)}" title="Edit Activity Log" style="height: 22px; padding: 0 7px; font-size: 10.5px;">Edit</button>
+               <button type="button" class="btn btn-secondary-32-sm js-delete-timeline-log" data-timeline-id="${Number(item.id || 0)}" data-in-id="${Number(item._inLogId || 0)}" data-out-id="${Number(item._outLogId || 0)}" data-log-label="${escapeHtml(item.full_name)}" title="Delete Activity Log" style="height: 22px; padding: 0 7px; font-size: 10.5px; color: #dc2626; border-color: #fecaca;">Del</button>`
             : '';
           return `
             <div class="timeline-event-card" data-timeline-uid="${item.user_id}" data-timeline-id="${item.id}" style="cursor: pointer;" title="Click to view ${escapeHtml(item.full_name)} verification &amp; scan record">
@@ -4159,6 +4352,7 @@
                 <span class="status-badge status-badge-neutral-sm">
                   ${isStock ? 'Facility Gate' : 'Event Venue'}
                 </span>
+                ${crudBtns}
               </div>
             </div>
           `;
@@ -5771,20 +5965,137 @@
     }
   }
 
+  /**
+   * Populates a Technical Lead or Project Manager / Event Coordinator `<select>` from loaded personnel.
+   */
+  function populateLeadershipSelect(selectEl, currentVal = '', mode = 'pm') {
+    if (!selectEl) return;
+    const isPm = mode === 'pm';
+    const placeholder = isPm ? '-- Select Project Manager / Coordinator --' : '-- Select Technical Lead --';
+    const preferredRoles = isPm
+      ? new Set(['project_manager', 'manager', 'admin', 'administrator'])
+      : new Set(['tech_lead', 'technical_lead', 'stage_manager', 'sound_engineer', 'rigging_lead']);
+    const preferredDepts = isPm ? new Set(['operations', 'executive', 'production']) : new Set(['video', 'audio', 'lighting', 'rigging', 'production']);
+
+    const crewList = (state.crew || []).filter((u) => u && (u.full_name || u.username));
+    const preferred = [];
+    const others = [];
+    crewList.forEach((u) => {
+      const role = String(u.role || '').toLowerCase();
+      const dept = String(u.department || '').toLowerCase();
+      if (preferredRoles.has(role) || preferredDepts.has(dept)) {
+        preferred.push(u);
+      } else {
+        others.push(u);
+      }
+    });
+
+    const targetLower = String(currentVal || '').trim().toLowerCase();
+    let matched = false;
+    const buildOpt = (u) => {
+      const name = String(u.full_name || u.username || '').trim();
+      const roleLabel = u.role_display || u.role || 'Staff';
+      const isSel = targetLower !== '' && name.toLowerCase() === targetLower;
+      if (isSel) matched = true;
+      return `<option value="${escapeHtml(name)}" ${isSel ? 'selected' : ''}>${escapeHtml(name)} (${escapeHtml(roleLabel)})</option>`;
+    };
+
+    let html = `<option value="">${placeholder}</option>`;
+    if (preferred.length > 0) {
+      html += `<optgroup label="${isPm ? 'Project Managers &amp; Coordinators' : 'Technical Leads'}">${preferred.map(buildOpt).join('')}</optgroup>`;
+    }
+    if (others.length > 0) {
+      html += `<optgroup label="All Team Members">${others.map(buildOpt).join('')}</optgroup>`;
+    }
+    if (currentVal && !matched) {
+      html += `<option value="${escapeHtml(currentVal)}" selected>${escapeHtml(currentVal)}</option>`;
+    }
+    selectEl.innerHTML = html;
+  }
+
+  function renderCardGridPagination({ footerEl, controlsEl, totalItems, currentPage, perPage, itemNoun, onPageChange }) {
+    const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+    const safePage = Math.min(Math.max(1, currentPage), totalPages);
+    const startIdx = (safePage - 1) * perPage;
+    const endIdx = Math.min(startIdx + perPage, totalItems);
+
+    if (footerEl) {
+      footerEl.textContent = totalItems === 0
+        ? `Showing 0 ${itemNoun}s`
+        : `Showing ${startIdx + 1}–${endIdx} of ${totalItems} ${totalItems === 1 ? itemNoun : itemNoun + 's'}`;
+    }
+    if (!controlsEl) return safePage;
+    if (totalPages <= 1) {
+      controlsEl.innerHTML = '';
+      return safePage;
+    }
+
+    let html = `<button type="button" class="btn btn-secondary-32 js-grid-page-btn" data-page="${safePage - 1}" ${safePage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>&larr; Prev</button>`;
+    for (let p = 1; p <= totalPages; p++) {
+      html += `<button type="button" class="btn ${p === safePage ? 'btn-primary-32' : 'btn-secondary-32'} js-grid-page-btn" data-page="${p}" style="min-width:32px;padding:0 8px;font-weight:600;">${p}</button>`;
+    }
+    html += `<button type="button" class="btn btn-secondary-32 js-grid-page-btn" data-page="${safePage + 1}" ${safePage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>Next &rarr;</button>`;
+    controlsEl.innerHTML = html;
+
+    controlsEl.querySelectorAll('.js-grid-page-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const nextP = Number(btn.getAttribute('data-page') || 1);
+        if (nextP >= 1 && nextP <= totalPages && nextP !== safePage) {
+          onPageChange(nextP);
+        }
+      });
+    });
+    return safePage;
+  }
+
+  async function confirmAndDeleteEventVenue(vid, vTitle) {
+    if (!canCurrentUserAssignEvents()) {
+      showToast('Permission Denied: Deleting Event Venues requires Tech Lead, PM, or Administrator privileges.');
+      return;
+    }
+    const { confirmed } = await showConfirmModal({
+      title: 'Delete Event Venue',
+      message: `Delete Event Venue "${vTitle}"? Any crew assignments pointing to this venue will be cleared.`,
+      confirmText: 'Delete Venue',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      const res = await fetch('api.php?action=delete_event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: vid }),
+      });
+      const data = await res.json();
+      if (res.ok && data && data.ok) {
+        applyBootstrapPayload(data, true);
+        renderAll();
+        showToast(data.message || `Deleted Event Venue "${vTitle}".`);
+      } else {
+        showToast((data && data.error) || 'Failed to delete Event Venue.');
+      }
+    } catch (err) {
+      showToast('Network error deleting Event Venue.');
+    }
+  }
+
   function renderStockManager() {
-    const isWh = state.stockManager.activeTab === 'warehouses';
+    const activeTab = state.stockManager.activeTab || 'warehouses';
+    const isWh = activeTab === 'warehouses';
+    const isEvents = activeTab === 'events';
 
     // Update segmented tab buttons
     document.querySelectorAll('.js-sm-tab-btn').forEach((btn) => {
       const tab = btn.getAttribute('data-tab') || btn.getAttribute('data-target-tab');
-      btn.classList.toggle('active', tab === state.stockManager.activeTab);
+      btn.classList.toggle('active', tab === activeTab);
     });
 
     // Update active view badge & tab count numbers
     const activeBadge = document.getElementById('sm-active-view-badge');
     if (activeBadge) {
-      activeBadge.textContent = 'Facility Gates';
-      activeBadge.className = 'status-badge status-badge-purple-sm';
+      activeBadge.textContent = isEvents ? 'Event Venues' : (isWh ? 'Facility Gates' : 'Inventory');
+      activeBadge.className = isEvents ? 'status-badge status-badge-green-sm' : 'status-badge status-badge-purple-sm';
     }
 
     const whCountNum = state.stockManager.warehouses.length;
@@ -5797,35 +6108,26 @@
     if (smVenuesKpi) smVenuesKpi.textContent = String(evCountNum).padStart(2, '0');
 
     const whTabCount = document.getElementById('sm-tab-wh-count');
+    const evTabCount = document.getElementById('sm-tab-ev-count');
     const itemTabCount = document.getElementById('sm-tab-item-count');
-    if (whTabCount) whTabCount.textContent = String(state.stockManager.warehouses.length).padStart(2, '0');
+    if (whTabCount) whTabCount.textContent = String(whCountNum).padStart(2, '0');
+    if (evTabCount) evTabCount.textContent = String(evCountNum).padStart(2, '0');
     if (itemTabCount) itemTabCount.textContent = String(state.stockManager.items.length).padStart(2, '0');
 
     const whSection = document.getElementById('sm-pane-warehouses');
+    const evSection = document.getElementById('sm-pane-events');
     const itemsSection = document.getElementById('sm-pane-items');
 
-    if (whSection && itemsSection) {
-      if (isWh) {
-        whSection.style.display = 'block';
-        itemsSection.style.display = 'none';
-        renderWarehousesGrid();
-        const smPageControls = document.getElementById('sm-page-controls');
-        if (smPageControls) {
-          smPageControls.innerHTML = `<span style="font-size: 11px; color: var(--text-secondary);">Supports drag-and-drop image uploads for facility gates</span>`;
-        }
-      } else {
-        whSection.style.display = 'none';
-        itemsSection.style.display = 'block';
-        renderStockItemsTable();
-      }
-    }
+    if (whSection) whSection.style.display = isWh ? 'block' : 'none';
+    if (evSection) evSection.style.display = isEvents ? 'block' : 'none';
+    if (itemsSection) itemsSection.style.display = (!isWh && !isEvents) ? 'block' : 'none';
 
-    // Update footer results count
-    const footerEl = document.getElementById('sm-results-footer');
-    if (footerEl) {
-      if (isWh) {
-        footerEl.textContent = `Showing ${state.stockManager.warehouses.length} facility ${state.stockManager.warehouses.length === 1 ? 'gate' : 'gates'}`;
-      }
+    if (isWh) {
+      renderWarehousesGrid();
+    } else if (isEvents) {
+      renderStockManagerEventsGrid();
+    } else {
+      renderStockItemsTable();
     }
 
     // Populate category dropdown
@@ -5874,10 +6176,24 @@
       );
     });
 
+    const perPage = state.stockManager.whPerPage || 5;
+    state.stockManager.whPage = renderCardGridPagination({
+      footerEl: document.getElementById('sm-results-footer'),
+      controlsEl: document.getElementById('sm-page-controls'),
+      totalItems: list.length,
+      currentPage: state.stockManager.whPage || 1,
+      perPage,
+      itemNoun: 'facility gate',
+      onPageChange: (p) => {
+        state.stockManager.whPage = p;
+        renderWarehousesGrid();
+      },
+    });
+
     if (list.length === 0) {
       grid.innerHTML = `
         <div style="grid-column: 1 / -1; padding: 40px 20px; text-align: center; background: var(--bg-surface); border-radius: 8px; border: 1px dashed var(--border-color);">
-          <div style="font-size: 32px; margin-bottom: 8px;">🏬</div>
+          <div style="margin-bottom: 10px;"><img src="assets/warehouse-13.svg" alt="" class="svg-icon" style="width: 32px; height: 32px; opacity: 0.7;" /></div>
           <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">No Warehouses Found</h4>
           <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
             ${q ? `No warehouses matching "${escapeHtml(q)}"` : 'Get started by creating your first warehouse facility.'}
@@ -5891,11 +6207,15 @@
       return;
     }
 
-    grid.innerHTML = list
+    const startIdx = ((state.stockManager.whPage || 1) - 1) * perPage;
+    const pagedList = list.slice(startIdx, startIdx + perPage);
+
+    grid.innerHTML = pagedList
       .map((w) => {
+        const whFallbackSvg = `<img src="assets/warehouse-13.svg" alt="" class="svg-icon" style="width: 34px; height: 34px; filter: brightness(0) invert(1); opacity: 0.85;" />`;
         const bannerHtml = w.image
-          ? `<img src="${escapeHtml(w.image)}" alt="${escapeHtml(w.name)}" class="wh-card-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="wh-card-fallback-icon" style="display:none;">🏬</div>`
-          : `<div class="wh-card-fallback-icon">🏬</div>`;
+          ? `<img src="${escapeHtml(w.image)}" alt="${escapeHtml(w.name)}" class="wh-card-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="wh-card-fallback-icon" style="display:none;">${whFallbackSvg}</div>`
+          : `<div class="wh-card-fallback-icon">${whFallbackSvg}</div>`;
 
         const statusBadge = w.is_active
           ? `<span class="status-badge status-badge-green-sm">Active Operational</span>`
@@ -5920,11 +6240,12 @@
               <span>Hours: ${escapeHtml(w.open_time)} – ${escapeHtml(w.close_time)}</span>
             </div>
             <div class="wh-card-controller-box">
-              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 2px;">
-                👤 ${escapeHtml(w.controller_name)}
+              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 2px; display: inline-flex; align-items: center; gap: 5px;">
+                <img src="assets/metric-users.svg" alt="" class="svg-icon" style="width: 13px; height: 13px; opacity: 0.7;" />
+                <span>${escapeHtml(w.controller_name || 'Unassigned')}</span>
               </div>
               <div style="color: var(--text-secondary); font-size: 11px;">
-                ${escapeHtml(w.controller_phone)} ${w.controller_email ? `· ${escapeHtml(w.controller_email)}` : ''}
+                ${escapeHtml(w.controller_phone || '')} ${w.controller_email ? `· ${escapeHtml(w.controller_email)}` : ''}
               </div>
             </div>
             <div class="wh-card-footer">
@@ -5943,6 +6264,107 @@
       `;
       })
       .join('');
+  }
+
+  function renderStockManagerEventsGrid() {
+    const grid = document.getElementById('sm-events-grid');
+    if (!grid) return;
+
+    const allEvents = state.checkpoints?.event_venues || [];
+    const q = (state.stockManager.evSearch || '').toLowerCase().trim();
+    const list = allEvents.filter((ev) => {
+      if (!q) return true;
+      return `${ev.title || ''} ${ev.name || ''} ${ev.location || ''} ${ev.tech_lead || ''} ${ev.project_manager || ''} ${ev.date || ''}`.toLowerCase().includes(q);
+    });
+
+    const perPage = state.stockManager.evPerPage || 5;
+    state.stockManager.evPage = renderCardGridPagination({
+      footerEl: document.getElementById('sm-results-footer'),
+      controlsEl: document.getElementById('sm-page-controls'),
+      totalItems: list.length,
+      currentPage: state.stockManager.evPage || 1,
+      perPage,
+      itemNoun: 'event venue',
+      onPageChange: (p) => {
+        state.stockManager.evPage = p;
+        renderStockManagerEventsGrid();
+      },
+    });
+
+    if (list.length === 0) {
+      grid.innerHTML = `
+        <div style="grid-column: 1 / -1; padding: 40px 20px; text-align: center; background: var(--bg-surface); border-radius: 8px; border: 1px dashed var(--border-color);">
+          <div style="margin-bottom: 10px;"><img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" style="width: 32px; height: 32px; opacity: 0.7;" /></div>
+          <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">No Event Venues Found</h4>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
+            ${q ? `No events matching "${escapeHtml(q)}"` : 'Get started by adding your first Event Venue.'}
+          </p>
+          <button type="button" class="btn btn-primary-38 js-trigger-add-ev">
+            <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+            <span>+ Add Event Venue</span>
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    const startIdx = ((state.stockManager.evPage || 1) - 1) * perPage;
+    const pagedList = list.slice(startIdx, startIdx + perPage);
+    const canManage = canCurrentUserAssignEvents();
+
+    grid.innerHTML = pagedList.map((ev) => {
+      const venueIdAttr = escapeHtml(String(ev.raw_id || ev.id));
+      const onsiteCount = Number(ev.on_site_now || 0);
+      const statusBadge = onsiteCount > 0
+        ? `<span class="status-badge status-badge-green-sm">${onsiteCount} On-Site</span>`
+        : `<span class="status-badge status-badge-purple-sm">Event Gate</span>`;
+      const crudBtns = canManage
+        ? `<button type="button" class="btn btn-secondary-32-sm js-vs-edit-venue" data-venue-id="${venueIdAttr}">Edit</button>
+           <button type="button" class="btn btn-secondary-32-sm js-vs-delete-venue" data-venue-id="${venueIdAttr}" data-venue-title="${escapeHtml(ev.title || ev.name)}" style="color: #dc2626; border-color: #fecaca;">Delete</button>`
+        : '';
+
+      const evFallbackSvg = `<img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" style="width: 36px; height: 36px; filter: brightness(0) invert(1); opacity: 0.9;" />`;
+      const bannerHtml = ev.image
+        ? `<img src="${escapeHtml(ev.image)}" alt="${escapeHtml(ev.title || ev.name)}" class="wh-card-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" /><div class="wh-card-fallback-icon" style="display:none;">${evFallbackSvg}</div>`
+        : `<div class="wh-card-fallback-icon">${evFallbackSvg}</div>`;
+
+      return `
+        <div class="wh-card">
+          <div class="wh-card-banner" style="background: linear-gradient(135deg, #312e81, #4f46e5);">
+            ${bannerHtml}
+            <div class="wh-card-badge-top">${statusBadge}</div>
+          </div>
+          <div class="wh-card-body">
+            <div class="wh-card-title-row">
+              <h3 class="wh-card-name">${escapeHtml(ev.title || ev.name)}</h3>
+              <span class="wh-code-badge">EV-${escapeHtml(String(ev.raw_id || ev.id))}</span>
+            </div>
+            <div class="wh-card-meta-line">
+              <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="opacity: 0.6;" />
+              <span>${escapeHtml(ev.location || 'Kigali Event Venue')}</span>
+            </div>
+            <div class="wh-card-meta-line">
+              <span>${ev.date ? `${escapeHtml(ev.date)} · ` : ''}Call: ${escapeHtml(ev.call_time || '08:00')} CAT</span>
+            </div>
+            <div class="wh-card-controller-box">
+              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 2px; display: inline-flex; align-items: center; gap: 5px;">
+                <img src="assets/metric-users.svg" alt="" class="svg-icon" style="width: 13px; height: 13px; opacity: 0.7;" />
+                <span>TL: ${escapeHtml(ev.tech_lead || ev.lead_name || 'Unassigned')}</span>
+              </div>
+              <div style="color: var(--text-secondary); font-size: 11px;">
+                PM: ${escapeHtml(ev.project_manager || 'Unassigned')}
+              </div>
+            </div>
+            <div class="wh-card-footer">
+              <span class="wh-stored-pill">${Number(ev.assigned_count || 0)} crew</span>
+              <div style="display: flex; gap: 6px;">
+                ${crudBtns}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   function getPaginationPageNumbers(currentPage, totalPages) {
@@ -6170,7 +6592,10 @@
       if (idInput) idInput.value = '0';
       if (openTimeInput) openTimeInput.value = '08:00';
       if (closeTimeInput) closeTimeInput.value = '18:00';
-      if (ctrlInput) ctrlInput.value = 'Mirene Uwase';
+      if (ctrlInput) {
+        const defaultCtrl = (state.crew || []).find((c) => String(c.role || '').toLowerCase() === 'stock_controller');
+        ctrlInput.value = defaultCtrl ? defaultCtrl.full_name : '';
+      }
       if (pinInput) pinInput.value = '';
     }
 
@@ -7601,14 +8026,22 @@
   }
 
   function renderVenueSecurityPage() {
-    const venues = state.checkpoints?.event_venues || [];
+    const allVenues = state.checkpoints?.event_venues || [];
+    const q = (state.vsSearch || '').trim().toLowerCase();
+    const venues = q
+      ? allVenues.filter((v) => `${v.name} ${v.title || ''} ${v.location || ''} ${v.tech_lead || ''} ${v.project_manager || ''} ${v.date || ''}`.toLowerCase().includes(q))
+      : allVenues;
     const rcList = state.rollCallList || [];
     const crewList = state.crew || [];
     const venueOnsite = rcList.filter((r) => String(r.checkpoint_type || '') === 'event_venue');
     const venueControllers = crewList.filter((c) => String(c.assigned_checkpoint_type || '') === 'event_venue' && Number(c.is_active ?? 1) !== 0);
     const activeVenue = state.checkpointType === 'event_venue'
-      ? (venues.find((v) => String(v.id) === String(state.checkpointId)) || venues[0])
-      : venues[0];
+      ? (allVenues.find((v) => String(v.id) === String(state.checkpointId)) || allVenues[0])
+      : allVenues[0];
+    const canManageVenues = canCurrentUserAssignEvents();
+
+    const addVenueBtn = document.getElementById('vs-add-venue-btn');
+    if (addVenueBtn) addVenueBtn.style.display = canManageVenues ? 'inline-flex' : 'none';
 
     const elTotal = document.getElementById('vs-kpi-venues');
     const elOnsite = document.getElementById('vs-kpi-onsite');
@@ -7618,49 +8051,230 @@
     const elBadge = document.getElementById('vs-stations-count-badge');
     const gridEl = document.getElementById('vs-venues-grid');
 
-    if (elTotal) elTotal.textContent = String(venues.length);
+    if (elTotal) elTotal.textContent = String(allVenues.length);
     if (elOnsite) elOnsite.textContent = String(venueOnsite.length);
     if (elCtrls) elCtrls.textContent = String(venueControllers.length);
     if (elCt) elCt.textContent = activeVenue?.call_time || '08:00';
     if (elCtCp) elCtCp.textContent = activeVenue ? activeVenue.name : 'No Event Venue';
     if (elBadge) elBadge.textContent = `${venues.length} Venues`;
 
+    const perPage = state.vsPerPage || 10;
+    state.vsPage = renderCardGridPagination({
+      footerEl: document.getElementById('vs-results-footer'),
+      controlsEl: document.getElementById('vs-page-controls'),
+      totalItems: venues.length,
+      currentPage: state.vsPage || 1,
+      perPage,
+      itemNoun: 'event venue',
+      onPageChange: (p) => {
+        state.vsPage = p;
+        renderVenueSecurityPage();
+      },
+    });
+
     if (!gridEl) return;
     if (venues.length === 0) {
-      gridEl.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No Event Venues registered yet. Create one under Venues &amp; Facility Gates.</div>';
+      gridEl.innerHTML = allVenues.length === 0
+        ? '<div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No Event Venues registered yet. Click "+ Add Event Venue" to create one.</div>'
+        : '<div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No Event Venues match your search query.</div>';
       return;
     }
 
-    gridEl.innerHTML = venues.map((v) => {
+    const startIdx = ((state.vsPage || 1) - 1) * perPage;
+    const pagedVenues = venues.slice(startIdx, startIdx + perPage);
+
+    gridEl.innerHTML = pagedVenues.map((v) => {
       const onsiteCount = rcList.filter((r) => String(r.checkpoint_type) === 'event_venue' && String(r.checkpoint_id) === String(v.id)).length;
       const assignedCtrls = crewList.filter((c) => String(c.assigned_checkpoint_type || '') === 'event_venue' && String(c.assigned_checkpoint_id || '') === String(v.id));
       const ctrlLabel = assignedCtrls.length > 0
         ? assignedCtrls.map((u) => escapeHtml(u.full_name)).join(', ')
         : (v.lead_name ? escapeHtml(v.lead_name) : 'Unassigned');
+      const venueIdAttr = escapeHtml(String(v.raw_id || v.id));
+      const crudRow = canManageVenues
+        ? `<button type="button" class="btn btn-secondary-32-sm js-vs-edit-venue" data-venue-id="${venueIdAttr}" title="Edit Event Venue">Edit</button>
+           <button type="button" class="btn btn-secondary-32-sm js-vs-delete-venue" data-venue-id="${venueIdAttr}" data-venue-title="${escapeHtml(v.title || v.name)}" title="Delete Event Venue" style="color: #dc2626; border-color: #fecaca;">Del</button>`
+        : '';
+      const thumbStrip = v.image
+        ? `<div style="height: 88px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: #312e81;"><img src="${escapeHtml(v.image)}" alt="${escapeHtml(v.title || v.name)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.display='none';" /></div>`
+        : '';
       return `
-        <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; background: var(--surface-white); display: flex; flex-direction: column; gap: 10px;">
+        <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; background: var(--surface-white); display: flex; flex-direction: column; gap: 10px;">
+          ${thumbStrip}
           <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
             <div>
-              <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(v.name)}</strong>
-              <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(v.location || v.venue_location || 'Kigali Event Venue')}</div>
+              <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(v.title || v.name)}</strong>
+              <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(v.location || v.venue_location || 'Kigali Event Venue')}${v.date ? ' · ' + escapeHtml(v.date) : ''}</div>
             </div>
             <span class="status-badge ${onsiteCount > 0 ? 'status-badge-green-sm' : 'status-badge-purple-sm'}">${onsiteCount} On-Site</span>
           </div>
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px;">
-            <span>Call Time: <strong>${escapeHtml(v.call_time || '08:00')} CAT</strong></span>
+            <span>Call Time: <strong>${escapeHtml(v.call_time || '08:00')} CAT</strong> · Assigned: <strong>${Number(v.assigned_count || 0)}</strong></span>
             <span>Gate Controller / Lead: <strong>${ctrlLabel}</strong></span>
           </div>
-          <div style="display: flex; gap: 8px; margin-top: auto; padding-top: 6px;">
-            <button type="button" class="btn btn-primary-32 js-vs-launch-kiosk" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" style="flex: 1;">
-              Launch Gate Kiosk
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 6px;">
+            <button type="button" class="btn btn-primary-32 js-vs-launch-kiosk" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" style="flex: 1 1 120px;">
+              Launch Kiosk
             </button>
             <button type="button" class="btn btn-secondary-32-sm js-vs-edit-calltime" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" data-call-time="${escapeHtml(v.call_time || '08:00')}">
               Call Time
             </button>
+            ${crudRow}
           </div>
         </div>
       `;
     }).join('');
+  }
+
+  function toDatetimeLocalValue(mysqlOrIso) {
+    if (!mysqlOrIso) {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    const clean = String(mysqlOrIso).trim().replace(' ', 'T');
+    return clean.length >= 16 ? clean.slice(0, 16) : clean;
+  }
+
+  function openTimelineCrudModal(item = null) {
+    const modal = document.getElementById('timeline-crud-modal');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('tl-crud-modal-title');
+    const idEl = document.getElementById('tl-crud-id');
+    const inIdEl = document.getElementById('tl-crud-in-id');
+    const outIdEl = document.getElementById('tl-crud-out-id');
+    const userSel = document.getElementById('tl-crud-user');
+    const cpSel = document.getElementById('tl-crud-checkpoint');
+    const modeSel = document.getElementById('tl-crud-mode');
+    const accessSel = document.getElementById('tl-crud-access');
+    const punctSel = document.getElementById('tl-crud-punctuality');
+    const inTimeEl = document.getElementById('tl-crud-in-time');
+    const outTimeEl = document.getElementById('tl-crud-out-time');
+    const outWrapEl = document.getElementById('tl-crud-out-time-wrap');
+    const inLabelEl = document.getElementById('tl-crud-in-label');
+    const denialWrapEl = document.getElementById('tl-crud-denial-wrap');
+    const denialEl = document.getElementById('tl-crud-denial');
+    const notesEl = document.getElementById('tl-crud-notes');
+
+    if (userSel) {
+      userSel.innerHTML = (state.crew || []).map((c) =>
+        `<option value="${Number(c.id)}">${escapeHtml(c.full_name)} (${escapeHtml(c.badge_code || '')})</option>`
+      ).join('');
+    }
+    if (cpSel) {
+      cpSel.innerHTML = buildCheckpointSelectOptionsHtml(
+        item ? `${item.checkpoint_type || 'stock_warehouse'}:${item.checkpoint_id || 1}` : `${state.checkpointType}:${state.checkpointId}`
+      );
+    }
+
+    const syncModeFields = () => {
+      const m = modeSel ? modeSel.value : 'check_in';
+      const acc = accessSel ? accessSel.value : 'granted';
+      const isSess = m === 'session_complete' && acc === 'granted';
+      if (outWrapEl) outWrapEl.style.display = isSess ? 'block' : 'none';
+      if (inLabelEl) {
+        inLabelEl.textContent = isSess
+          ? 'Check-In Timestamp *'
+          : (m === 'check_out' ? 'Check-Out Timestamp *' : 'Scan Timestamp *');
+      }
+      if (denialWrapEl) denialWrapEl.style.display = acc === 'denied' ? 'block' : 'none';
+    };
+
+    if (item) {
+      const inId = Number(item._inLogId || (item.scan_action === 'check_in' ? item.id : 0));
+      const outId = Number(item._outLogId || (item.scan_action === 'check_out' ? item.id : 0));
+      const isSess = item.scan_action === 'session_complete' || (inId > 0 && outId > 0);
+      if (titleEl) titleEl.textContent = `Edit Activity Log: ${item.full_name || 'Staff'}`;
+      if (idEl) idEl.value = String(item.id || 0);
+      if (inIdEl) inIdEl.value = String(inId);
+      if (outIdEl) outIdEl.value = String(outId);
+      if (userSel && item.user_id) userSel.value = String(item.user_id);
+      if (modeSel) modeSel.value = isSess ? 'session_complete' : (item.scan_action || 'check_in');
+      if (accessSel) accessSel.value = item.access_status || 'granted';
+      if (punctSel) punctSel.value = item.punctuality_status || 'on_time';
+      if (inTimeEl) inTimeEl.value = toDatetimeLocalValue(item._inScannedAt || item.scanned_at);
+      if (outTimeEl) outTimeEl.value = toDatetimeLocalValue(item._outScannedAt || item.scanned_at);
+      if (denialEl) denialEl.value = item.denial_reason || '';
+      if (notesEl) notesEl.value = item.notes || '';
+    } else {
+      if (titleEl) titleEl.textContent = 'Add Gate Activity Log';
+      if (idEl) idEl.value = '0';
+      if (inIdEl) inIdEl.value = '0';
+      if (outIdEl) outIdEl.value = '0';
+      if (modeSel) modeSel.value = 'session_complete';
+      if (accessSel) accessSel.value = 'granted';
+      if (punctSel) punctSel.value = 'on_time';
+      const nowVal = toDatetimeLocalValue('');
+      if (inTimeEl) inTimeEl.value = nowVal;
+      if (outTimeEl) outTimeEl.value = nowVal;
+      if (denialEl) denialEl.value = '';
+      if (notesEl) notesEl.value = '';
+    }
+
+    syncModeFields();
+    modal.style.display = 'flex';
+  }
+
+  function closeTimelineCrudModal() {
+    const modal = document.getElementById('timeline-crud-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function openVenueCrudModal(venue = null) {
+    const modal = document.getElementById('venue-crud-modal');
+    if (!modal) return;
+    const titleHead = document.getElementById('venue-crud-modal-title');
+    const idEl = document.getElementById('venue-crud-id');
+    const titleEl = document.getElementById('venue-crud-title');
+    const locEl = document.getElementById('venue-crud-location');
+    const dateEl = document.getElementById('venue-crud-date');
+    const ctEl = document.getElementById('venue-crud-calltime');
+    const pinEl = document.getElementById('venue-crud-pin');
+    const tlEl = document.getElementById('venue-crud-techlead');
+    const pmEl = document.getElementById('venue-crud-pm');
+    const crewBox = document.getElementById('venue-crud-crew-list');
+
+    const assignedSet = new Set((venue && Array.isArray(venue.assigned_technicians) ? venue.assigned_technicians : []).map(Number));
+    if (crewBox) {
+      crewBox.innerHTML = (state.crew || []).map((c) => `
+        <label class="nav-crud-role-opt">
+          <input type="checkbox" class="js-venue-crud-crew-cb" value="${Number(c.id)}" ${assignedSet.has(Number(c.id)) ? 'checked' : ''} />
+          <span>${escapeHtml(c.full_name)} (${escapeHtml(c.role_display || c.role)})</span>
+        </label>
+      `).join('');
+    }
+
+    resetDropzone('venue');
+    if (venue) {
+      if (titleHead) titleHead.textContent = `Edit Event Venue: ${venue.title || venue.name}`;
+      if (idEl) idEl.value = String(venue.raw_id || venue.id || '');
+      if (titleEl) titleEl.value = venue.title || venue.name || '';
+      if (locEl) locEl.value = venue.location || '';
+      if (dateEl) dateEl.value = venue.date || new Date().toISOString().slice(0, 10);
+      if (ctEl) ctEl.value = venue.call_time || '08:00';
+      if (pinEl) pinEl.value = venue.terminal_pin || '';
+      populateLeadershipSelect(tlEl, venue.tech_lead || venue.lead_name || '', 'techlead');
+      populateLeadershipSelect(pmEl, venue.project_manager || '', 'pm');
+      if (venue.image) {
+        setDropzonePreview('venue', venue.image, venue.image.split('/').pop());
+      }
+    } else {
+      if (titleHead) titleHead.textContent = 'Add Event Venue Station';
+      if (idEl) idEl.value = '';
+      if (titleEl) titleEl.value = '';
+      if (locEl) locEl.value = '';
+      if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+      if (ctEl) ctEl.value = '08:00';
+      if (pinEl) pinEl.value = '1234';
+      populateLeadershipSelect(tlEl, '', 'techlead');
+      populateLeadershipSelect(pmEl, '', 'pm');
+    }
+    modal.style.display = 'flex';
+  }
+
+  function closeVenueCrudModal() {
+    const modal = document.getElementById('venue-crud-modal');
+    if (modal) modal.style.display = 'none';
   }
 
   function renderShiftReliefPage() {
@@ -8864,26 +9478,31 @@
       });
     }
     const userTrigger = document.getElementById('topbar-user-trigger') || topAvatar;
-    if (userTrigger && userDropdown) {
-      userTrigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!isCurrentUserAdmin()) {
-          // Non-Admin: Direct access to personal Digital ID Badge (User Dropdown is restricted to Admin)
-          closeAllTopbarDropdowns();
-          const u = state.currentUser || state.crew[0];
-          if (u) {
-            state.selectedCrewId = u.id;
-            state.currentVerification = buildClientVerificationFromMember(u);
-            renderVerificationDeck();
-            highlightSelectedCrewRow(u.id);
-            openKioskModal(u);
-          }
-          return;
-        }
-        const isOpen = userDropdown.style.display === 'block';
+    const handleAccountTriggerClick = (e) => {
+      e.stopPropagation();
+      if (!isCurrentUserAdmin()) {
+        // Non-Admin: Direct access to personal Digital ID Badge (User Dropdown is restricted to Admin)
         closeAllTopbarDropdowns();
-        if (!isOpen) userDropdown.style.display = 'block';
-      });
+        const u = state.currentUser || state.crew[0];
+        if (u) {
+          state.selectedCrewId = u.id;
+          state.currentVerification = buildClientVerificationFromMember(u);
+          renderVerificationDeck();
+          highlightSelectedCrewRow(u.id);
+          openKioskModal(u);
+        }
+        return;
+      }
+      const isOpen = userDropdown.style.display === 'block';
+      closeAllTopbarDropdowns();
+      if (!isOpen) userDropdown.style.display = 'block';
+    };
+    if (userTrigger && userDropdown) {
+      userTrigger.addEventListener('click', handleAccountTriggerClick);
+    }
+    const accountFooterBtn = document.getElementById('account-footer-btn');
+    if (accountFooterBtn && userDropdown) {
+      accountFooterBtn.addEventListener('click', handleAccountTriggerClick);
     }
 
     const menuMyBadge = document.getElementById('topbar-menu-mybadge');
@@ -9323,13 +9942,75 @@
         return;
       }
 
+      // 4a. User Activity Timeline Edit / Delete CRUD Buttons
+      const tlEditBtn = e.target.closest('.js-edit-timeline-log');
+      if (tlEditBtn) {
+        e.stopPropagation();
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager()) {
+          showToast('Permission Denied: Activity Timeline CRUD requires Site Manager or Administrator privileges.');
+          return;
+        }
+        const tlId = Number(tlEditBtn.getAttribute('data-timeline-id') || 0);
+        const isRpt = state.timelineRange && state.timelineRange !== 'today';
+        const pairedList = pairTimelineEvents(isRpt ? (state.timelineReportRows || []) : (state.activityTimeline || []));
+        const tlItem = pairedList.find((t) => Number(t.id) === tlId) || (state.activityTimeline || []).find((t) => Number(t.id) === tlId);
+        if (tlItem) {
+          openTimelineCrudModal(tlItem);
+        }
+        return;
+      }
+
+      const tlDelBtn = e.target.closest('.js-delete-timeline-log');
+      if (tlDelBtn) {
+        e.stopPropagation();
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager()) {
+          showToast('Permission Denied: Activity Timeline CRUD requires Site Manager or Administrator privileges.');
+          return;
+        }
+        const inId = Number(tlDelBtn.getAttribute('data-in-id') || 0);
+        const outId = Number(tlDelBtn.getAttribute('data-out-id') || 0);
+        const tlId = Number(tlDelBtn.getAttribute('data-timeline-id') || 0);
+        const label = tlDelBtn.getAttribute('data-log-label') || 'this staff member';
+        const ids = Array.from(new Set([inId, outId, tlId].filter((n) => n > 0)));
+        const { confirmed } = await showConfirmModal({
+          title: 'Delete Activity Log',
+          message: `Delete ${ids.length > 1 ? 'this paired Check-In & Check-Out session' : 'this gate scan entry'} for ${label}?`,
+          confirmText: 'Delete Log',
+          tone: 'danger',
+        });
+        if (!confirmed) return;
+        try {
+          const res = await fetch('api.php?action=delete_attendance_log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: tlId, ids }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            applyBootstrapPayload(data, true);
+            renderAll();
+            if (state.timelineRange && state.timelineRange !== 'today') {
+              fetchAttendanceReport(state.timelineRange);
+            }
+            showToast(data.message || 'Activity log deleted.');
+          } else {
+            showToast((data && data.error) || 'Failed to delete activity log.');
+          }
+        } catch (err) {
+          showToast('Network error deleting activity log.');
+        }
+        return;
+      }
+
       // 4. User Activity Timeline Card Click -> Open Dedicated Audit & Transit Log Modal
       const tlCard = e.target.closest('.timeline-event-card[data-timeline-uid]');
       if (tlCard) {
         const uid = Number(tlCard.getAttribute('data-timeline-uid'));
         const tlId = Number(tlCard.getAttribute('data-timeline-id'));
         const member = (state.crew || []).find((m) => Number(m.id) === uid);
-        const tlItem = (state.activityTimeline || []).find((t) => Number(t.id) === tlId);
+        const isRpt = state.timelineRange && state.timelineRange !== 'today';
+        const pairedList = pairTimelineEvents(isRpt ? (state.timelineReportRows || []) : (state.activityTimeline || []));
+        const tlItem = pairedList.find((t) => Number(t.id) === tlId) || (state.activityTimeline || []).find((t) => Number(t.id) === tlId);
 
         if (tlItem) {
           openTimelineDetailModal(tlItem, member);
@@ -10284,9 +10965,29 @@
       });
     }
 
+    const vsSearchInput = document.getElementById('vs-search-input');
+    if (vsSearchInput) {
+      vsSearchInput.addEventListener('input', (e) => {
+        state.vsSearch = e.target.value;
+        state.vsPage = 1;
+        renderVenueSecurityPage();
+      });
+    }
+
+    const vsAddVenueBtn = document.getElementById('vs-add-venue-btn');
+    if (vsAddVenueBtn) {
+      vsAddVenueBtn.addEventListener('click', () => {
+        if (!canCurrentUserAssignEvents()) {
+          showToast('Permission Denied: Creating Event Venues requires Tech Lead, PM, or Administrator privileges.');
+          return;
+        }
+        openVenueCrudModal(null);
+      });
+    }
+
     const vsVenuesGrid = document.getElementById('vs-venues-grid');
     if (vsVenuesGrid) {
-      vsVenuesGrid.addEventListener('click', (e) => {
+      vsVenuesGrid.addEventListener('click', async (e) => {
         const launchBtn = e.target.closest('.js-vs-launch-kiosk');
         if (launchBtn) {
           if (state.stationLocked && state.checkpointType !== 'event_venue') {
@@ -10308,6 +11009,194 @@
           const cpName = ctBtn.getAttribute('data-cp-name');
           const ct = ctBtn.getAttribute('data-call-time');
           openCallTimeModal('event_venue', cpId, cpName, ct);
+          return;
+        }
+        const editBtn = e.target.closest('.js-vs-edit-venue');
+        if (editBtn) {
+          if (!canCurrentUserAssignEvents()) {
+            showToast('Permission Denied: Editing Event Venues requires Tech Lead, PM, or Administrator privileges.');
+            return;
+          }
+          const vid = editBtn.getAttribute('data-venue-id') || '';
+          const venue = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === String(vid) || String(v.id) === String(vid));
+          if (venue) openVenueCrudModal(venue);
+          return;
+        }
+        const delBtn = e.target.closest('.js-vs-delete-venue');
+        if (delBtn) {
+          const vid = delBtn.getAttribute('data-venue-id') || '';
+          const vTitle = delBtn.getAttribute('data-venue-title') || 'this Event Venue';
+          await confirmAndDeleteEventVenue(vid, vTitle);
+        }
+      });
+    }
+
+    // Event Venue CRUD Modal Listeners
+    document.querySelectorAll('.js-close-venue-crud-modal').forEach((btn) => {
+      btn.addEventListener('click', closeVenueCrudModal);
+    });
+    const venueCrudBackdrop = document.getElementById('venue-crud-modal');
+    if (venueCrudBackdrop) {
+      venueCrudBackdrop.addEventListener('click', (e) => {
+        if (e.target === venueCrudBackdrop) closeVenueCrudModal();
+      });
+    }
+    const venueSelectAllBtn = document.getElementById('venue-crud-select-all-btn');
+    if (venueSelectAllBtn) {
+      venueSelectAllBtn.addEventListener('click', () => {
+        document.querySelectorAll('#venue-crud-crew-list .js-venue-crud-crew-cb').forEach((cb) => {
+          cb.checked = true;
+        });
+      });
+    }
+    const venueClearBtn = document.getElementById('venue-crud-clear-btn');
+    if (venueClearBtn) {
+      venueClearBtn.addEventListener('click', () => {
+        document.querySelectorAll('#venue-crud-crew-list .js-venue-crud-crew-cb').forEach((cb) => {
+          cb.checked = false;
+        });
+      });
+    }
+    const venueCrudForm = document.getElementById('venue-crud-form');
+    if (venueCrudForm) {
+      venueCrudForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('venue-crud-submit-btn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Saving...';
+        }
+        const assignedTechs = Array.from(document.querySelectorAll('#venue-crud-crew-list .js-venue-crud-crew-cb:checked'))
+          .map((cb) => Number(cb.value));
+        const fd = new FormData();
+        fd.append('event_id', document.getElementById('venue-crud-id')?.value.trim() || '');
+        fd.append('title', document.getElementById('venue-crud-title')?.value.trim() || '');
+        fd.append('location', document.getElementById('venue-crud-location')?.value.trim() || '');
+        fd.append('date', document.getElementById('venue-crud-date')?.value || '');
+        fd.append('call_time', document.getElementById('venue-crud-calltime')?.value || '08:00');
+        fd.append('terminal_pin', document.getElementById('venue-crud-pin')?.value.trim() || '');
+        fd.append('tech_lead', document.getElementById('venue-crud-techlead')?.value.trim() || '');
+        fd.append('project_manager', document.getElementById('venue-crud-pm')?.value.trim() || '');
+        fd.append('assigned_technicians', JSON.stringify(assignedTechs));
+        const fileInput = document.getElementById('venue-modal-image');
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+          fd.append('image', fileInput.files[0]);
+        }
+        try {
+          const res = await fetch('api.php?action=save_event', {
+            method: 'POST',
+            body: fd,
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            closeVenueCrudModal();
+            applyBootstrapPayload(data, true);
+            renderAll();
+            showToast(data.message || 'Event Venue saved successfully.');
+          } else {
+            showToast((data && data.error) || 'Failed to save Event Venue.');
+          }
+        } catch (err) {
+          showToast('Network error saving Event Venue.');
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Save Event Venue';
+          }
+        }
+      });
+    }
+
+    // User Activity Timeline CRUD Modal Listeners
+    document.querySelectorAll('.js-open-create-timeline-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager()) {
+          showToast('Permission Denied: Activity Timeline CRUD requires Site Manager or Administrator privileges.');
+          return;
+        }
+        openTimelineCrudModal(null);
+      });
+    });
+    document.querySelectorAll('.js-close-timeline-crud-modal').forEach((btn) => {
+      btn.addEventListener('click', closeTimelineCrudModal);
+    });
+    const tlCrudBackdrop = document.getElementById('timeline-crud-modal');
+    if (tlCrudBackdrop) {
+      tlCrudBackdrop.addEventListener('click', (e) => {
+        if (e.target === tlCrudBackdrop) closeTimelineCrudModal();
+      });
+    }
+    const tlModeSel = document.getElementById('tl-crud-mode');
+    const tlAccessSel = document.getElementById('tl-crud-access');
+    const syncTlCrudVisibility = () => {
+      const m = tlModeSel ? tlModeSel.value : 'check_in';
+      const acc = tlAccessSel ? tlAccessSel.value : 'granted';
+      const outWrap = document.getElementById('tl-crud-out-time-wrap');
+      const inLabel = document.getElementById('tl-crud-in-label');
+      const denialWrap = document.getElementById('tl-crud-denial-wrap');
+      const isSess = m === 'session_complete' && acc === 'granted';
+      if (outWrap) outWrap.style.display = isSess ? 'block' : 'none';
+      if (inLabel) {
+        inLabel.textContent = isSess
+          ? 'Check-In Timestamp *'
+          : (m === 'check_out' ? 'Check-Out Timestamp *' : 'Scan Timestamp *');
+      }
+      if (denialWrap) denialWrap.style.display = acc === 'denied' ? 'block' : 'none';
+    };
+    if (tlModeSel) tlModeSel.addEventListener('change', syncTlCrudVisibility);
+    if (tlAccessSel) tlAccessSel.addEventListener('change', syncTlCrudVisibility);
+
+    const tlCrudForm = document.getElementById('timeline-crud-form');
+    if (tlCrudForm) {
+      tlCrudForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('tl-crud-submit-btn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Saving...';
+        }
+        const cpVal = document.getElementById('tl-crud-checkpoint')?.value || `${state.checkpointType}:${state.checkpointId}`;
+        const [cpType, ...rest] = cpVal.split(':');
+        const cpId = rest.join(':');
+        try {
+          const res = await fetch('api.php?action=save_attendance_log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: Number(document.getElementById('tl-crud-id')?.value || 0),
+              in_log_id: Number(document.getElementById('tl-crud-in-id')?.value || 0),
+              out_log_id: Number(document.getElementById('tl-crud-out-id')?.value || 0),
+              user_id: Number(document.getElementById('tl-crud-user')?.value || 0),
+              checkpoint_type: cpType,
+              checkpoint_id: cpId,
+              scan_action: document.getElementById('tl-crud-mode')?.value || 'check_in',
+              access_status: document.getElementById('tl-crud-access')?.value || 'granted',
+              punctuality_status: document.getElementById('tl-crud-punctuality')?.value || 'on_time',
+              scanned_at: document.getElementById('tl-crud-in-time')?.value || '',
+              check_out_at: document.getElementById('tl-crud-out-time')?.value || '',
+              denial_reason: document.getElementById('tl-crud-denial')?.value.trim() || '',
+              notes: document.getElementById('tl-crud-notes')?.value.trim() || '',
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            closeTimelineCrudModal();
+            applyBootstrapPayload(data, true);
+            renderAll();
+            if (state.timelineRange && state.timelineRange !== 'today') {
+              fetchAttendanceReport(state.timelineRange);
+            }
+            showToast(data.message || 'Activity log saved.');
+          } else {
+            showToast((data && data.error) || 'Failed to save activity log.');
+          }
+        } catch (err) {
+          showToast('Network error saving activity log.');
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Save Log Entry';
+          }
         }
       });
     }
@@ -10711,11 +11600,12 @@
       if (isEventVenue) {
         const callInput = document.getElementById('roster-event-calltime');
         const pmInput = document.getElementById('roster-event-pm');
+        const tlSelect = document.getElementById('roster-event-techlead');
         const dateLabel = document.getElementById('roster-event-date-label');
         if (callInput) callInput.value = (facility.call_time || '08:00').slice(0, 5);
-        if (pmInput) pmInput.value = facility.project_manager || '';
         if (dateLabel) dateLabel.textContent = facility.date ? `Date: ${facility.date}` : '';
-        populateRosterTechLeadOptions(facility.tech_lead || facility.lead_name || '');
+        populateLeadershipSelect(pmInput, facility.project_manager || '', 'pm');
+        populateLeadershipSelect(tlSelect, facility.tech_lead || facility.lead_name || '', 'techlead');
       }
 
       const assignedCrew = getFacilityCrewMembers(facility, state.crew || []);
@@ -11105,7 +11995,7 @@
         const stock_controller_id = Number(ctrlSelect ? ctrlSelect.value : 0);
         const stock_controller_name = ctrlSelect && ctrlSelect.selectedOptions[0]
           ? ctrlSelect.selectedOptions[0].getAttribute('data-name') || ctrlSelect.selectedOptions[0].text
-          : 'Mirene Uwase';
+          : '';
         const notes = document.getElementById('batch-crud-notes').value.trim();
 
         // Extract manifest items
@@ -12641,7 +13531,48 @@
     if (whSearch) {
       whSearch.addEventListener('input', (e) => {
         state.stockManager.whSearch = e.target.value;
+        state.stockManager.whPage = 1;
         renderWarehousesGrid();
+      });
+    }
+
+    const smEvSearch = document.getElementById('sm-ev-search-input');
+    if (smEvSearch) {
+      smEvSearch.addEventListener('input', (e) => {
+        state.stockManager.evSearch = e.target.value;
+        state.stockManager.evPage = 1;
+        renderStockManagerEventsGrid();
+      });
+    }
+
+    const smPaneEvents = document.getElementById('sm-pane-events');
+    if (smPaneEvents) {
+      smPaneEvents.addEventListener('click', async (e) => {
+        if (e.target.closest('.js-trigger-add-ev')) {
+          if (!canCurrentUserAssignEvents()) {
+            showToast('Permission Denied: Creating Event Venues requires Tech Lead, PM, or Administrator privileges.');
+            return;
+          }
+          openVenueCrudModal(null);
+          return;
+        }
+        const editBtn = e.target.closest('.js-vs-edit-venue');
+        if (editBtn) {
+          if (!canCurrentUserAssignEvents()) {
+            showToast('Permission Denied: Editing Event Venues requires Tech Lead, PM, or Administrator privileges.');
+            return;
+          }
+          const vid = editBtn.getAttribute('data-venue-id') || '';
+          const venue = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === String(vid) || String(v.id) === String(vid));
+          if (venue) openVenueCrudModal(venue);
+          return;
+        }
+        const delBtn = e.target.closest('.js-vs-delete-venue');
+        if (delBtn) {
+          const vid = delBtn.getAttribute('data-venue-id') || '';
+          const vTitle = delBtn.getAttribute('data-venue-title') || 'this Event Venue';
+          await confirmAndDeleteEventVenue(vid, vTitle);
+        }
       });
     }
 
@@ -12714,6 +13645,7 @@
     setupDropzoneEvents('wh');
     setupDropzoneEvents('item');
     setupDropzoneEvents('user');
+    setupDropzoneEvents('venue');
 
     // User Management Modal Triggers & Controls
     const openAddUserBtn = document.getElementById('open-add-user-btn');

@@ -904,8 +904,8 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
             type="text"
             id="signin-username"
             class="input-field"
-            placeholder="lorem@gmail.com"
-            value="mirene@ability.rw"
+            placeholder="Username or email (e.g. admin@ability.com)"
+            value=""
             required
             autocomplete="username"
           />
@@ -917,7 +917,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
             id="signin-password"
             class="input-field has-eye"
             placeholder="••••••••"
-            value="password123"
+            value=""
             required
             autocomplete="current-password"
           />
@@ -1194,36 +1194,14 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
                 window.location.href = targetUrl;
               }, 600);
             } else {
-              // Local fallback for offline mode
-              if (password === 'password123' || password === 'admin123') {
-                const isGateOnly = username.toLowerCase().includes('mirene') || username.toLowerCase().includes('eric');
-                const targetUrl = isGateOnly ? 'index.php#pane-kiosk' : 'index.php';
-                if (isGateOnly) {
-                  showToast(`Welcome back, ${username}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
-                } else {
-                  showToast(`Welcome back, ${username}!`, 'success', 3500);
-                }
-                setTimeout(() => {
-                  window.location.href = targetUrl;
-                }, 600);
-              } else {
-                showToast(data.error || 'Invalid username or password.', 'error');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'SIGN IN';
-              }
+              showToast(data.error || 'Invalid username or password.', 'error');
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'SIGN IN';
             }
           } catch (err) {
-            // Offline fallback
-            const isGateOnly = username.toLowerCase().includes('mirene') || username.toLowerCase().includes('eric');
-            const targetUrl = isGateOnly ? 'index.php#pane-kiosk' : 'index.php';
-            if (isGateOnly) {
-              showToast(`Welcome back, ${username}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
-            } else {
-              showToast(`Welcome back, ${username}!`, 'success', 3500);
-            }
-            setTimeout(() => {
-              window.location.href = targetUrl;
-            }, 600);
+            showToast('Unable to verify credentials. Check server or database connection.', 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'SIGN IN';
           }
         });
       }
