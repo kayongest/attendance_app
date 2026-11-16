@@ -76,15 +76,9 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap');
-
-    .share-tech-regular {
-      font-family: "Share Tech", sans-serif;
-      font-weight: 400;
-      font-style: normal;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
     .marvel-regular {
       font-family: "Marvel", sans-serif;
@@ -184,7 +178,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       justify-content: center;
       align-items: center;
       flex-direction: column;
-      font-family: 'Share Tech', 'Marvel', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: "Marvel", -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       min-height: 100vh;
       margin: 0;
       padding: 20px;

@@ -77,6 +77,17 @@
     deptsFilterStatus: 'all',
     deptsPage: 1,
     deptsPageSize: 10,
+    navigationConfig: {
+      main_nav_enabled: true,
+      workspace_nav_enabled: true,
+      items: [],
+    },
+    navSearch: '',
+    navFilterGroup: 'all',
+    navFilterStatus: 'all',
+    srFilterStatus: 'all',
+    rollCallSearch: '',
+    rollCallCpFilter: 'all',
     currentVerification: null,
     selectedCrewId: 6,
 
@@ -245,6 +256,17 @@
 
     if (Array.isArray(data.departments)) {
       state.departments = data.departments;
+    }
+
+    if (data.navigationConfig && Array.isArray(data.navigationConfig.items)) {
+      state.navigationConfig = {
+        main_nav_enabled: data.navigationConfig.main_nav_enabled !== false,
+        workspace_nav_enabled: data.navigationConfig.workspace_nav_enabled !== false,
+        items: data.navigationConfig.items,
+      };
+      try {
+        localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig));
+      } catch (e) {}
     }
 
     if (data.currentUser) {
@@ -527,7 +549,7 @@
       checkpoint_type: state.checkpointType,
       checkpoint_id: state.checkpointId,
       decline_reason: extra.decline_reason || '',
-      supervisor_id: extra.supervisor_id || (state.currentUser?.id || 1),
+      supervisor_id: extra.supervisor_id || state.currentUser?.id || 0,
       supervisor_pin: extra.supervisor_pin || '',
       override_reason: extra.override_reason || '',
     };
@@ -567,8 +589,10 @@
 
       const pOv = document.getElementById('kiosk-override-panel');
       const pDec = document.getElementById('kiosk-decline-panel');
+      const pinOv = document.getElementById('kiosk-override-pin');
       if (pOv) pOv.style.display = 'none';
       if (pDec) pDec.style.display = 'none';
+      if (pinOv) pinOv.value = '';
 
       renderVerificationDeck();
 
@@ -1120,8 +1144,9 @@
       }
     }
     const wasScreen = state.activeScreen;
-    state.activeScreen = screenKey;
-    if (screenKey === 'terminals' && wasScreen !== 'terminals') {
+    const resolvedKey = screenKey === 'access-matrix' ? 'analytics' : screenKey;
+    state.activeScreen = resolvedKey;
+    if (resolvedKey === 'terminals' && wasScreen !== 'terminals') {
       state.terminalScreenLocked = true;
       localStorage.setItem('ability_terminal_screen_locked', '1');
       const errEl = document.getElementById('terminal-unlock-error');
@@ -1138,27 +1163,43 @@
       terminals: document.getElementById('screen-terminals'),
       analytics: document.getElementById('screen-analytics'),
       'stock-manager': document.getElementById('screen-stock-manager'),
+      'venue-security': document.getElementById('screen-venue-security'),
+      'shift-relief': document.getElementById('screen-shift-relief'),
+      calltime: document.getElementById('screen-calltime'),
+      rollcall: document.getElementById('screen-rollcall'),
+      'station-lock': document.getElementById('screen-station-lock'),
+      'reset-scans': document.getElementById('screen-reset-scans'),
+      'custom-nav-page': document.getElementById('screen-custom-nav-page'),
     };
+    const activeDomKey = screens[resolvedKey] ? resolvedKey : 'custom-nav-page';
     Object.keys(screens).forEach((k) => {
       if (screens[k]) {
-        screens[k].classList.toggle('active', k === screenKey);
+        screens[k].classList.toggle('active', k === activeDomKey);
       }
     });
 
-    // Update sidebar active state
-    document.querySelectorAll('.sidebar .nav-item[data-nav-target]').forEach((btn) => {
-      const target = btn.getAttribute('data-nav-target');
-      btn.classList.toggle('active', target === screenKey);
+    // Update sidebar active state & icons across both Main Nav and Checkpoint Controls
+    document.querySelectorAll('.sidebar .nav-item').forEach((btn) => {
+      const target = btn.getAttribute('data-nav-target') || btn.getAttribute('data-nav-action');
+      const isMatch = target === screenKey || target === resolvedKey || (target === 'access-matrix' && resolvedKey === 'analytics');
+      btn.classList.toggle('active', isMatch);
+      const img = btn.querySelector('img[data-inactive-icon]');
+      if (img) {
+        const activeIc = img.getAttribute('data-active-icon') || '';
+        const inactiveIc = img.getAttribute('data-inactive-icon') || '';
+        img.src = (isMatch && activeIc) ? activeIc : inactiveIc;
+      }
     });
 
     // Update nav icons
     const ovIcon = document.getElementById('nav-icon-overview');
     const evIcon = document.getElementById('nav-icon-events');
     const atIcon = document.getElementById('nav-icon-attendees');
-    if (ovIcon) ovIcon.src = screenKey === 'overview' ? 'assets/nav-overview-active.svg' : 'assets/nav-overview-inactive.svg';
-    if (evIcon) evIcon.src = screenKey === 'events' ? 'assets/nav-events-active.svg' : 'assets/nav-events-inactive.svg';
-    if (atIcon) atIcon.src = screenKey === 'attendees' ? 'assets/nav-attendees-active.svg' : 'assets/nav-attendees-inactive.svg';
+    if (ovIcon) ovIcon.src = resolvedKey === 'overview' ? 'assets/nav-overview-active.svg' : 'assets/nav-overview-inactive.svg';
+    if (evIcon) evIcon.src = resolvedKey === 'events' ? 'assets/nav-events-active.svg' : 'assets/nav-events-inactive.svg';
+    if (atIcon) atIcon.src = resolvedKey === 'attendees' ? 'assets/nav-attendees-active.svg' : 'assets/nav-attendees-inactive.svg';
 
+    const matchedNavItem = (state.navigationConfig?.items || []).find((it) => String(it.nav_target) === String(screenKey));
     const pageTitles = {
       overview: 'Gate Operations Dashboard',
       events: 'Venues & Stock Gates',
@@ -1166,18 +1207,31 @@
       attendees: 'Staff ID Badges & Kiosk',
       terminals: 'Terminals (#pane-kiosk)',
       analytics: 'Access Clearance Matrix',
+      'access-matrix': 'Access Clearance Matrix',
       'stock-manager': 'Facilities & Gates Registry',
+      'venue-security': 'Venue Security Portal',
+      'shift-relief': 'Shift Relief & Swaps',
+      calltime: 'Set Call Time',
+      rollcall: 'On-Site Roll-Call',
+      'station-lock': 'Station Lock (PIN)',
+      'reset-scans': 'Reset Today’s Scans',
     };
     const bc = document.getElementById('breadcrumb-page');
-    if (bc) bc.textContent = pageTitles[screenKey] || 'Gate Dashboard';
+    if (bc) {
+      bc.textContent = pageTitles[screenKey] || pageTitles[resolvedKey] || (matchedNavItem ? matchedNavItem.label : 'Gate Dashboard');
+    }
 
-    if (screenKey === 'stock-manager') {
+    if (resolvedKey === 'stock-manager') {
       loadStockManagerData();
     }
-    if (screenKey === 'users') {
+    if (resolvedKey === 'users') {
       renderUsersScreen();
       switchUsersView(state.usersViewMode || 'personnel');
     }
+    if (activeDomKey === 'custom-nav-page') {
+      state.customNavScreenKey = screenKey;
+    }
+    renderDedicatedNavPages(activeDomKey);
 
     if (scrollToId === 'pane-kiosk' || screenKey === 'terminals') {
       setTimeout(() => {
@@ -1351,6 +1405,7 @@
     renderBatchesAndMatrixScreen();
     renderRollCallModalList();
     renderUsersScreen();
+    renderDedicatedNavPages();
     if (state.activeScreen === 'users') {
       switchUsersView(state.usersViewMode || 'personnel');
     }
@@ -1509,6 +1564,17 @@
 
   function isScreenPermittedForCurrentUser(screenKey) {
     if (isCurrentUserAdmin()) return true;
+    const navItems = state.navigationConfig?.items || [];
+    if (Array.isArray(navItems) && navItems.length > 0) {
+      const navMatch = navItems.find((it) =>
+        String(it.nav_target) === String(screenKey) ||
+        (screenKey === 'analytics' && String(it.nav_target) === 'access-matrix') ||
+        (screenKey === 'access-matrix' && String(it.nav_target) === 'analytics')
+      );
+      if (navMatch) {
+        return isNavItemPermittedForCurrentUser(navMatch);
+      }
+    }
     const rawRole = (state.currentUser?.role || '').toLowerCase();
     const isAdmin = isCurrentUserAdmin();
     const isManager = (rawRole === 'manager' || rawRole === 'project_manager') && !isAdmin;
@@ -1517,17 +1583,17 @@
     const isStockCtrl = (rawRole === 'stock_controller');
 
     if (isManager) {
-      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'users' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'venue-security';
+      return ['overview', 'events', 'users', 'attendees', 'terminals', 'venue-security', 'shift-relief', 'calltime', 'rollcall'].includes(screenKey);
     }
     if (isStockCtrl) {
-      return screenKey === 'terminals' || screenKey === 'attendees' || screenKey === 'analytics' || screenKey === 'stock-manager';
+      return ['terminals', 'attendees', 'analytics', 'stock-manager', 'shift-relief'].includes(screenKey);
     }
     if (isTech) {
       // Tech Lead is strictly scoped to Gate Dashboard (overview) & Terminal (terminals)
       return screenKey === 'overview' || screenKey === 'terminals';
     }
     if (isStockMgr) {
-      return screenKey === 'overview' || screenKey === 'events' || screenKey === 'attendees' || screenKey === 'terminals' || screenKey === 'analytics' || screenKey === 'stock-manager';
+      return ['overview', 'events', 'attendees', 'terminals', 'analytics', 'stock-manager', 'shift-relief', 'calltime', 'rollcall'].includes(screenKey);
     }
     // Field Crew / Technicians / Drivers / Decorators / Standard crew:
     return screenKey === 'attendees' || screenKey === 'terminals';
@@ -1634,7 +1700,10 @@
       }
     };
 
-    // 1. Main Navigation Items (Sidebar)
+    // 1. Main Navigation Items (Sidebar) — Re-render from navigationConfig + apply role & enable/disable rules
+    renderMainNavigation();
+
+    // Sync any extra nav items if navigationConfig wasn't loaded yet
     const navOverview = document.querySelector('.sidebar .nav-item[data-nav-target="overview"]');
     const navEvents = document.querySelector('.sidebar .nav-item[data-nav-target="events"]');
     const navUsers = document.getElementById('nav-users-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="users"]');
@@ -1645,34 +1714,20 @@
     const navStockMgr = document.getElementById('nav-stock-manager-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="stock-manager"]');
     const navMatrix = document.getElementById('nav-access-matrix-btn');
 
-    // Gate Dashboard: Admin, Project Manager, Tech Lead, Stock Manager (Hidden for Stock Controller & Field Crew)
-    setVis(navOverview, isAdmin || isManager || isTech || isStockMgr);
+    if (!state.navigationConfig || !Array.isArray(state.navigationConfig.items) || state.navigationConfig.items.length === 0) {
+      setVis(navOverview, isAdmin || isManager || isTech || isStockMgr);
+      setVis(navEvents, isAdmin || isManager || isStockMgr);
+      setVis(navUsers, isAdmin || isManager);
+      setVis(navAttendees, !isTech);
+      setVis(navTerminals, true);
+      setVis(navVenueSec, isAdmin || isManager);
+      setVis(navAnalytics, isAdmin || isStockMgr || isStockCtrl);
+      setVis(navStockMgr, isAdmin || isStockMgr || isStockCtrl);
+      setVis(navMatrix, isAdmin);
+    }
 
-    // Venues & Facility Gates: Admin, Project Manager, Stock Manager (Hidden for Tech Lead, Stock Controller & Field Crew)
-    setVis(navEvents, isAdmin || isManager || isStockMgr);
-
-    // Users & Roles: Admin and Project Manager ONLY (Hidden for Tech Lead, Stock Manager, Stock Controller, Field Crew)
-    setVis(navUsers, isAdmin || isManager);
-
-    // ID Badges & Kiosk: Hidden for Tech Lead (Visible to Admin, Manager, Stock Mgr, Stock Ctrl, Field Crew)
-    setVis(navAttendees, !isTech);
-
-    // Terminals: Visible to all personas (including Tech Lead)
-    setVis(navTerminals, true);
-
-    // Venue Security Portal: Admin, Project Manager (Hidden for Tech Lead, Stock Manager, Stock Controller, Field Crew)
-    setVis(navVenueSec, isAdmin || isManager);
-
-    // Stock Batch Approvals / Analytics: Admin, Stock Manager, Stock Controller
-    setVis(navAnalytics, isAdmin || isStockMgr || isStockCtrl);
-
-    // Facilities & Gates (Stock Manager): Admin, Stock Manager, Stock Controller
-    setVis(navStockMgr, isAdmin || isStockMgr || isStockCtrl);
-
-    // Clearance Matrix: Admin ONLY
-    setVis(navMatrix, isAdmin);
-
-    // 2. Checkpoint Controls Navigation Group
+    // 2. Checkpoint Controls Navigation Group (fallback only if workspace items not in navigationConfig)
+    const hasWorkspaceNavConfig = Array.isArray(state.navigationConfig?.items) && state.navigationConfig.items.some((it) => it.nav_group === 'workspace');
     const cpNav = document.getElementById('sidebar-checkpoint-controls') || document.querySelector('.nav-group-workspace');
     const btnShiftRelief = document.getElementById('sidebar-shift-relief-btn');
     const btnCallTime = document.getElementById('sidebar-calltime-btn');
@@ -1680,7 +1735,7 @@
     const btnStationLock = document.getElementById('sidebar-station-lock-btn');
     const btnResetDemo = document.getElementById('sidebar-reset-demo-btn');
 
-    if (cpNav) {
+    if (cpNav && !hasWorkspaceNavConfig) {
       if (isFieldCrew || isTech) {
         // Entire checkpoint controls group hidden for Field Crew & Tech Lead
         cpNav.style.display = 'none';
@@ -1706,9 +1761,11 @@
     const tabRoles = document.getElementById('view-tab-roles');
     const tabMatrix = document.getElementById('view-tab-matrix');
     const tabDepts = document.getElementById('view-tab-departments');
+    const tabNav = document.getElementById('view-tab-navigation');
     if (tabRoles) tabRoles.style.display = isAdmin ? 'inline-flex' : 'none';
     if (tabMatrix) tabMatrix.style.display = isAdmin ? 'inline-flex' : 'none';
     if (tabDepts) tabDepts.style.display = isAdmin ? 'inline-flex' : 'none';
+    if (tabNav) tabNav.style.display = isAdmin ? 'inline-flex' : 'none';
 
     // 4. User Dropdown & Topbar Administrative Controls (ONLY ADMIN)
     const helpWrap = document.getElementById('topbar-help-wrap');
@@ -3520,31 +3577,29 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   checkpoint_type: facility.type,
-                  checkpoint_id: facility.id,
+                  checkpoint_id: facility.raw_id || facility.id,
                   user_id: uid,
                 }),
               });
               const data = await res.json();
-              if (!data.ok) {
-                showToast(data.error || 'Failed to unassign personnel.');
+              if (!res.ok || !data || !data.ok) {
+                showToast((data && data.error) || 'Failed to unassign personnel.');
                 return;
               }
-              applyBootstrapPayload(data);
-              if (facility && Array.isArray(facility.assigned_technicians)) {
-                facility.assigned_technicians = facility.assigned_technicians.filter((tid) => Number(tid) !== uid);
-              }
-              if (facility && Array.isArray(facility.assigned_technician_names)) {
-                facility.assigned_technician_names = facility.assigned_technician_names.filter((n) => n.toLowerCase() !== uName.toLowerCase());
-              }
+              applyBootstrapPayload(data, true);
               const mem = state.crew.find((c) => Number(c.id) === uid);
-              if (mem && mem.assigned_checkpoint_type === facility.type) {
-                mem.assigned_checkpoint_type = null;
-                mem.assigned_checkpoint_id = null;
-                mem.assigned_checkpoint_name = null;
-              }
+              const stillOnSiteHere = Boolean(
+                mem &&
+                mem.daily_state === 'checked_in' &&
+                mem.checkpoint_type === facility.type &&
+                (String(mem.checkpoint_id) === String(facility.id) || (facility.raw_id && String(mem.checkpoint_id) === String(facility.raw_id)))
+              );
               playKioskChime('approve');
-              showToast(`✓ Removed ${uName} from ${facName}.`);
-              renderAll();
+              showToast(
+                stillOnSiteHere
+                  ? `✓ Unassigned ${uName} from ${facName} roster (still visible while checked in on-site until checked out).`
+                  : `✓ Removed ${uName} from ${facName}.`
+              );
             } catch (err) {
               showToast('Error communicating with server: ' + err.message);
             }
@@ -4641,14 +4696,17 @@
     const tabRoles = document.getElementById('view-tab-roles');
     const tabMatrix = document.getElementById('view-tab-matrix');
     const tabDepts = document.getElementById('view-tab-departments');
+    const tabNav = document.getElementById('view-tab-navigation');
     const personnelView = document.getElementById('personnel-view-container');
     const rolesView = document.getElementById('roles-view-container');
     const matrixView = document.getElementById('matrix-view-container');
     const deptsView = document.getElementById('departments-view-container');
+    const navView = document.getElementById('navigation-view-container');
     const addStaffBtn = document.getElementById('open-add-user-btn');
     const addRoleBtn = document.getElementById('open-add-role-btn');
     const addTierTopBtn = document.getElementById('open-add-tier-top-btn');
     const addDeptTopBtn = document.getElementById('open-add-dept-top-btn');
+    const addNavTopBtn = document.getElementById('open-add-nav-top-btn');
     const exportBtn = document.getElementById('users-export-btn');
 
     const tabs = [
@@ -4656,6 +4714,7 @@
       { el: tabRoles, active: mode === 'roles' },
       { el: tabMatrix, active: mode === 'matrix' },
       { el: tabDepts, active: mode === 'departments' },
+      { el: tabNav, active: mode === 'navigation' },
     ];
 
     tabs.forEach(({ el, active }) => {
@@ -4675,11 +4734,13 @@
     if (rolesView) rolesView.style.display = mode === 'roles' ? 'block' : 'none';
     if (matrixView) matrixView.style.display = mode === 'matrix' ? 'block' : 'none';
     if (deptsView) deptsView.style.display = mode === 'departments' ? 'block' : 'none';
+    if (navView) navView.style.display = mode === 'navigation' ? 'block' : 'none';
 
     if (addStaffBtn) addStaffBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
     if (addRoleBtn) addRoleBtn.style.display = mode === 'roles' ? 'inline-flex' : 'none';
     if (addTierTopBtn) addTierTopBtn.style.display = mode === 'matrix' ? 'inline-flex' : 'none';
     if (addDeptTopBtn) addDeptTopBtn.style.display = mode === 'departments' ? 'inline-flex' : 'none';
+    if (addNavTopBtn) addNavTopBtn.style.display = mode === 'navigation' ? 'inline-flex' : 'none';
     if (exportBtn) exportBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
 
     if (mode === 'matrix') {
@@ -4688,6 +4749,8 @@
       renderRolesScreen();
     } else if (mode === 'departments') {
       renderDepartmentsScreen();
+    } else if (mode === 'navigation') {
+      renderNavigationManagerScreen();
     } else {
       renderUsersScreen();
     }
@@ -4842,43 +4905,7 @@
   function renderRollCallModalList() {
     const listEl = document.getElementById('rollcall-modal-list');
     if (!listEl) return;
-
-    if (state.rollCallList.length === 0) {
-      listEl.innerHTML = `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-secondary);">No crew members are currently checked in on-site.</div>`;
-      return;
-    }
-
-    listEl.innerHTML = state.rollCallList
-      .map(
-        (rc) => `
-        <div class="timeline-event-card" style="align-items: center;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div class="avatar-circle avatar-jl">${escapeHtml(rc.initials)}</div>
-            <div style="display: flex; flex-direction: column; gap: 2px;">
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="font-size: 12px; font-weight: 700;">${escapeHtml(rc.full_name)}</span>
-                <span class="tier-code-badge tier-code-${escapeHtml(rc.clearance_code)}">${escapeHtml(rc.clearance_code)}</span>
-                <span class="badge-code-primary">${escapeHtml(rc.badge_code)}</span>
-              </div>
-              <span style="font-size: 11px; color: var(--text-secondary);">
-                ${escapeHtml(rc.role_display)} (${escapeHtml(rc.department)}) · At <strong>${escapeHtml(rc.checkpoint_name)}</strong>
-              </span>
-            </div>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="ts-mini-pill in">In: ${escapeHtml(rc.check_in_time)}</span>
-            <button
-              type="button"
-              class="gate-btn gate-btn-checkout js-rollcall-checkout-btn"
-              data-badge="${escapeHtml(rc.badge_code)}"
-            >
-              Checkout Now
-            </button>
-          </div>
-        </div>
-      `
-      )
-      .join('');
+    listEl.innerHTML = buildRollCallListHtml(state.rollCallList);
   }
 
   function openKioskModal(memberOrVerification = null) {
@@ -7057,6 +7084,886 @@
     if (modal) modal.style.display = 'none';
   }
 
+  // =========================================================================
+  // NAVIGATION MENU ENABLE/DISABLE & CRUD CONTROLLER
+  // =========================================================================
+
+  function getNavBadgeValueAndId(item) {
+    const type = String(item.badge_type || 'none');
+    if (type === 'events') {
+      const evCount = (state.checkpoints?.event_venues?.length || 0) + (state.checkpoints?.stock_warehouses?.length || 0);
+      return {
+        id: item.badge_id || 'sidebar-events-count',
+        text: String(evCount).padStart(2, '0'),
+      };
+    }
+    if (type === 'users') {
+      const uCount = (state.crew || []).length;
+      return {
+        id: item.badge_id || 'sidebar-users-count',
+        text: String(uCount).padStart(2, '0'),
+      };
+    }
+    if (type === 'stock') {
+      const sCount = (state.checkpoints?.stock_warehouses || []).length;
+      return {
+        id: item.badge_id || 'sidebar-stock-count',
+        text: String(sCount).padStart(2, '0'),
+      };
+    }
+    if (type === 'onsite') {
+      const oCount = (state.rollCallList || []).length;
+      return {
+        id: item.badge_id || '',
+        className: 'js-stat-onsite',
+        text: String(oCount).padStart(2, '0'),
+      };
+    }
+    if (type === 'shift_relief') {
+      const srCount = Number(state.pendingShiftRequestCount || 0);
+      return {
+        id: item.badge_id || 'sidebar-shift-relief-badge',
+        style: `${srCount > 0 ? '' : 'display: none; '}background: #fef3c7; color: #b45309;`,
+        text: String(srCount),
+      };
+    }
+    if (type === 'calltime') {
+      const ct = String(state.activeCheckpoint?.call_time || '08:00').slice(0, 5);
+      return {
+        id: item.badge_id || 'sidebar-active-calltime-pill',
+        text: ct,
+      };
+    }
+    if (type === 'custom' && item.badge_text) {
+      return {
+        id: item.badge_id || '',
+        text: String(item.badge_text),
+      };
+    }
+    return null;
+  }
+
+  function renderNavItemIconHtml(item, isActive = false) {
+    const ic = String(item.icon || 'assets/nav-overview-inactive.svg');
+    const actIc = String(item.active_icon || '');
+    if (ic === 'svg:warehouse') {
+      return `
+        <svg class="svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+          <line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg>
+      `;
+    }
+    const src = (isActive && actIc) ? actIc : ic;
+    const idAttr = item.icon_id ? `id="${escapeHtml(item.icon_id)}"` : '';
+    const inactiveAttr = `data-inactive-icon="${escapeHtml(ic)}"`;
+    const activeAttr = actIc ? `data-active-icon="${escapeHtml(actIc)}"` : '';
+    return `<img src="${escapeHtml(src)}" alt="" class="svg-icon" ${idAttr} ${inactiveAttr} ${activeAttr} />`;
+  }
+
+  function isNavItemPermittedForCurrentUser(item) {
+    if (!item || Number(item.is_enabled) !== 1) return false;
+    const allowedRaw = String(item.allowed_roles || 'all').trim().toLowerCase();
+    if (!allowedRaw || allowedRaw === 'all') return true;
+    const rawRole = String(state.currentUser?.role || '').trim().toLowerCase();
+    const roleTokens = allowedRaw.split(',').map((r) => r.trim()).filter(Boolean);
+    if (isCurrentUserAdmin()) {
+      return roleTokens.includes('admin') || roleTokens.includes('administrator') || roleTokens.includes('all');
+    }
+    return roleTokens.includes(rawRole);
+  }
+
+  function buildSidebarNavButtonHtml(item) {
+    const target = String(item.nav_target || 'overview');
+    const isShortcut = target.startsWith('action:');
+    const isCustomUrl = target.startsWith('http://') || target.startsWith('https://') || target.startsWith('#') || target.endsWith('.html') || target.endsWith('.php');
+    const isActive = !isShortcut && !isCustomUrl && (state.activeScreen === target || (target === 'access-matrix' && state.activeScreen === 'analytics'));
+    const visible = isNavItemPermittedForCurrentUser(item);
+    const idAttr = item.dom_id ? `id="${escapeHtml(item.dom_id)}"` : '';
+    const nodeAttr = item.node_id ? `data-node-id="${escapeHtml(item.node_id)}"` : '';
+    const targetAttr = (!isShortcut && !isCustomUrl)
+      ? `data-nav-target="${escapeHtml(target)}"`
+      : `data-nav-action="${escapeHtml(target)}"`;
+    const badge = getNavBadgeValueAndId(item);
+    const badgeHtml = badge
+      ? `<span class="nav-item-count${badge.className ? ` ${escapeHtml(badge.className)}` : ''}"${badge.id ? ` id="${escapeHtml(badge.id)}"` : ''}${badge.style ? ` style="${escapeHtml(badge.style)}"` : ''}>${escapeHtml(badge.text)}</span>`
+      : '';
+
+    return `
+      <button type="button" class="nav-item${isActive ? ' active' : ''}" ${idAttr} ${targetAttr} data-nav-group="${escapeHtml(item.nav_group || 'main')}" data-nav-key="${escapeHtml(item.nav_key)}" data-nav-id="${Number(item.id)}" ${nodeAttr} title="${escapeHtml(item.label)}" style="display: ${visible ? 'flex' : 'none'}; opacity: 1; filter: none; cursor: pointer;" ${visible ? '' : 'data-restricted="true" tabindex="-1"'}>
+        ${renderNavItemIconHtml(item, isActive)}
+        <span class="nav-item-label">${escapeHtml(item.label)}</span>
+        ${badgeHtml}
+      </button>
+    `;
+  }
+
+  function renderMainNavigation() {
+    const navGroup = document.querySelector('.sidebar .nav-group[aria-label="Main navigation"]');
+    const wsGroup = document.getElementById('sidebar-checkpoint-controls') || document.querySelector('.sidebar .nav-group-workspace');
+    const disabledNotice = document.getElementById('sidebar-nav-disabled-notice');
+    const wsDisabledNotice = document.getElementById('sidebar-workspace-disabled-notice');
+    const cfg = state.navigationConfig || { main_nav_enabled: true, workspace_nav_enabled: true, items: [] };
+    const isMainEnabled = cfg.main_nav_enabled !== false;
+    const isWorkspaceEnabled = cfg.workspace_nav_enabled !== false;
+    const isAdmin = isCurrentUserAdmin();
+    const allItems = Array.isArray(cfg.items) ? cfg.items : [];
+    const sortByOrder = (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || Number(a.id || 0) - Number(b.id || 0);
+
+    if (navGroup) {
+      const mainItems = allItems.filter((it) => (it.nav_group || 'main') === 'main').sort(sortByOrder);
+      if (mainItems.length > 0) {
+        navGroup.innerHTML = mainItems.map(buildSidebarNavButtonHtml).join('');
+      }
+      navGroup.style.display = isMainEnabled ? 'flex' : 'none';
+    }
+
+    if (wsGroup) {
+      const wsItems = allItems.filter((it) => it.nav_group === 'workspace').sort(sortByOrder);
+      let anyWsVisible = false;
+      if (wsItems.length > 0) {
+        anyWsVisible = wsItems.some((it) => isNavItemPermittedForCurrentUser(it));
+        wsGroup.innerHTML = `<span class="nav-section-label" data-node-id="2:3306">CHECKPOINT CONTROLS</span>` + wsItems.map(buildSidebarNavButtonHtml).join('');
+      } else {
+        anyWsVisible = true;
+      }
+      wsGroup.style.display = (isWorkspaceEnabled && anyWsVisible) ? 'flex' : 'none';
+    }
+
+    if (disabledNotice) {
+      disabledNotice.style.display = (!isMainEnabled && isAdmin) ? 'flex' : 'none';
+    }
+    if (wsDisabledNotice) {
+      wsDisabledNotice.style.display = (!isWorkspaceEnabled && isAdmin) ? 'flex' : 'none';
+    }
+
+    const pillCountEl = document.getElementById('pill-nav-count');
+    if (pillCountEl && allItems.length > 0) {
+      pillCountEl.textContent = String(allItems.length);
+    }
+  }
+
+  function formatNavRolesSummary(allowedRolesStr) {
+    const raw = String(allowedRolesStr || 'all').trim().toLowerCase();
+    if (!raw || raw === 'all') {
+      return '<span class="status-badge status-badge-green-sm" style="font-size: 11px;">All Roles</span>';
+    }
+    const tokens = raw.split(',').map((t) => t.trim()).filter(Boolean);
+    const labels = [];
+    if (tokens.some((t) => t === 'admin' || t === 'administrator')) labels.push('Admin');
+    if (tokens.some((t) => t === 'manager' || t === 'project_manager')) labels.push('Manager');
+    if (tokens.some((t) => t === 'tech_lead' || t === 'technical_lead')) labels.push('Tech Lead');
+    if (tokens.includes('stock_manager')) labels.push('Site Mgr');
+    if (tokens.includes('stock_controller')) labels.push('Gate Ctrl');
+    if (tokens.some((t) => ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'stage_manager', 'rigging_lead', 'user', 'security', 'driver'].includes(t))) {
+      labels.push('Crew');
+    }
+    if (labels.length === 0) {
+      return `<span class="status-badge status-badge-blue-sm" style="font-size: 11px;">${escapeHtml(raw)}</span>`;
+    }
+    return labels.map((l) => `<span class="status-badge status-badge-blue-sm" style="font-size: 10.5px; margin-right: 4px; margin-bottom: 2px;">${escapeHtml(l)}</span>`).join('');
+  }
+
+  function renderNavigationManagerScreen() {
+    const cfg = state.navigationConfig || { main_nav_enabled: true, workspace_nav_enabled: true, items: [] };
+    const items = Array.isArray(cfg.items) ? cfg.items : [];
+    const isMainEnabled = cfg.main_nav_enabled !== false;
+    const isWorkspaceEnabled = cfg.workspace_nav_enabled !== false;
+
+    const syncGroupToggle = (toggleId, badgeId, enabled) => {
+      const tEl = document.getElementById(toggleId);
+      const bEl = document.getElementById(badgeId);
+      if (tEl) tEl.checked = enabled;
+      if (bEl) {
+        bEl.textContent = enabled ? 'Enabled' : 'Disabled';
+        bEl.className = enabled ? 'status-badge status-badge-green-sm' : 'status-badge';
+        if (!enabled) {
+          bEl.style.background = '#fee2e2';
+          bEl.style.color = '#dc2626';
+        } else {
+          bEl.style.background = '';
+          bEl.style.color = '';
+        }
+      }
+    };
+    syncGroupToggle('nav-main-group-toggle', 'nav-main-group-status-badge', isMainEnabled);
+    syncGroupToggle('nav-workspace-group-toggle', 'nav-workspace-group-status-badge', isWorkspaceEnabled);
+
+    const totalCount = items.length;
+    const enabledCount = items.filter((i) => Number(i.is_enabled) === 1).length;
+    const disabledCount = totalCount - enabledCount;
+    const customCount = items.filter((i) => Number(i.is_system) !== 1).length;
+
+    const elTotal = document.getElementById('nav-kpi-total');
+    const elEnabled = document.getElementById('nav-kpi-enabled');
+    const elDisabled = document.getElementById('nav-kpi-disabled');
+    const elCustom = document.getElementById('nav-kpi-custom');
+    const elPill = document.getElementById('pill-nav-count');
+    const elBadge = document.getElementById('nav-items-badge-count');
+    if (elTotal) elTotal.textContent = String(totalCount);
+    if (elEnabled) elEnabled.textContent = String(enabledCount);
+    if (elDisabled) elDisabled.textContent = String(disabledCount);
+    if (elCustom) elCustom.textContent = String(customCount);
+    if (elPill) elPill.textContent = String(totalCount);
+    if (elBadge) elBadge.textContent = `${totalCount} Items`;
+
+    const rowsEl = document.getElementById('navigation-table-rows');
+    if (!rowsEl) return;
+
+    const q = (state.navSearch || '').trim().toLowerCase();
+    const groupFilter = state.navFilterGroup || 'all';
+    const statusFilter = state.navFilterStatus || 'all';
+    const sorted = [...items].sort((a, b) => {
+      const gA = (a.nav_group || 'main') === 'workspace' ? 1 : 0;
+      const gB = (b.nav_group || 'main') === 'workspace' ? 1 : 0;
+      if (gA !== gB) return gA - gB;
+      return Number(a.sort_order || 0) - Number(b.sort_order || 0) || Number(a.id || 0) - Number(b.id || 0);
+    });
+    const filtered = sorted.filter((it) => {
+      const grp = (it.nav_group || 'main') === 'workspace' ? 'workspace' : 'main';
+      if (groupFilter !== 'all' && grp !== groupFilter) return false;
+      const enabled = Number(it.is_enabled) === 1;
+      if (statusFilter === 'enabled' && !enabled) return false;
+      if (statusFilter === 'disabled' && enabled) return false;
+      if (q) {
+        const hay = `${it.label} ${it.nav_key} ${grp} ${it.nav_target} ${it.allowed_roles}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      rowsEl.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No navigation items match the current filter.</div>`;
+      return;
+    }
+
+    rowsEl.innerHTML = filtered.map((it) => {
+      const enabled = Number(it.is_enabled) === 1;
+      const isWs = it.nav_group === 'workspace';
+      const groupBadge = isWs
+        ? '<span class="status-badge" style="background: rgba(124, 58, 237, 0.12); color: #7c3aed; font-size: 10.5px;">Checkpoint</span>'
+        : '<span class="status-badge status-badge-blue-sm" style="font-size: 10.5px;">Main Nav</span>';
+      const badgeLabel = it.badge_type && it.badge_type !== 'none'
+        ? (it.badge_type === 'custom' ? (it.badge_text || 'Custom') : it.badge_type)
+        : 'None';
+      const systemTag = Number(it.is_system) === 1
+        ? '<span style="font-size: 10px; color: var(--text-muted);">System</span>'
+        : '<span style="font-size: 10px; color: #4f46e5; font-weight: 700;">Custom</span>';
+
+      return `
+        <div class="data-table-row" style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border-color); font-size: 12px; gap: 8px; ${enabled ? '' : 'opacity: 0.65;'}">
+          <div style="width: 55px; font-weight: 700; color: var(--text-secondary);">#${Number(it.sort_order || 0)}</div>
+
+          <div style="width: 125px;">${groupBadge}</div>
+
+          <div style="width: 220px; display: flex; align-items: center; gap: 10px; min-width: 0;">
+            <span style="width: 28px; height: 28px; border-radius: 8px; background: var(--bg-subtle); border: 1px solid var(--border-color); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              ${renderNavItemIconHtml(it, false)}
+            </span>
+            <div style="min-width: 0;">
+              <div style="font-weight: 700; color: var(--text-primary); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(it.label)}</div>
+              <div style="font-size: 10.5px; color: var(--text-muted);">${escapeHtml(it.nav_key)} · ${systemTag}</div>
+            </div>
+          </div>
+
+          <div style="width: 155px;">
+            <code style="font-size: 11px; background: var(--bg-subtle); padding: 2px 6px; border-radius: 4px; color: var(--text-primary);">${escapeHtml(it.nav_target)}</code>
+          </div>
+
+          <div style="flex: 1 0 180px; min-width: 0; display: flex; flex-wrap: wrap; align-items: center;">
+            ${formatNavRolesSummary(it.allowed_roles)}
+          </div>
+
+          <div style="width: 100px; text-align: center;">
+            <span class="status-badge" style="background: var(--bg-subtle); color: var(--text-secondary); font-size: 11px;">${escapeHtml(badgeLabel)}</span>
+          </div>
+
+          <div style="width: 90px; display: flex; justify-content: center;">
+            <label class="nav-toggle-switch" title="${enabled ? 'Disable' : 'Enable'} ${escapeHtml(it.label)}">
+              <input type="checkbox" class="js-toggle-nav-item" data-nav-id="${Number(it.id)}" ${enabled ? 'checked' : ''} />
+              <span class="nav-toggle-slider"></span>
+            </label>
+          </div>
+
+          <div style="width: 130px; display: flex; justify-content: flex-end; gap: 6px;">
+            <button type="button" class="btn btn-secondary-32 js-edit-nav-item" data-nav-id="${Number(it.id)}" title="Edit Navigation Item" style="padding: 0 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+              <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+              <span>Edit</span>
+            </button>
+            <button type="button" class="btn btn-secondary-32 js-delete-nav-item" data-nav-id="${Number(it.id)}" data-nav-label="${escapeHtml(it.label)}" title="Delete Navigation Item" style="color: #dc2626; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+              <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+              <span>Del</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function openNavItemModal(item = null) {
+    const modal = document.getElementById('nav-item-crud-modal');
+    if (!modal) return;
+    const titleEl = document.getElementById('nav-crud-modal-title');
+    const idEl = document.getElementById('nav-crud-id');
+    const groupEl = document.getElementById('nav-crud-group');
+    const labelEl = document.getElementById('nav-crud-label');
+    const keyEl = document.getElementById('nav-crud-key');
+    const orderEl = document.getElementById('nav-crud-order');
+    const targetEl = document.getElementById('nav-crud-target');
+    const customUrlWrap = document.getElementById('nav-crud-custom-url-wrap');
+    const customUrlEl = document.getElementById('nav-crud-custom-url');
+    const iconEl = document.getElementById('nav-crud-icon');
+    const badgeTypeEl = document.getElementById('nav-crud-badge-type');
+    const badgeTextWrap = document.getElementById('nav-crud-badge-text-wrap');
+    const badgeTextEl = document.getElementById('nav-crud-badge-text');
+    const rolesAllEl = document.getElementById('nav-crud-roles-all');
+    const roleCbs = Array.from(document.querySelectorAll('#nav-crud-roles-list .js-nav-role-cb'));
+    const enabledEl = document.getElementById('nav-crud-enabled');
+
+    const knownTargets = [
+      'overview', 'events', 'users', 'attendees', 'terminals', 'venue-security',
+      'stock-manager', 'access-matrix', 'analytics',
+      'shift-relief', 'calltime', 'rollcall', 'station-lock', 'reset-scans',
+      'action:shift-relief', 'action:calltime', 'action:rollcall', 'action:station-lock', 'action:reset-scans',
+    ];
+
+    if (item) {
+      if (titleEl) titleEl.textContent = `Edit Nav Item: ${item.label}`;
+      if (idEl) idEl.value = String(item.id || 0);
+      if (groupEl) groupEl.value = item.nav_group === 'workspace' ? 'workspace' : 'main';
+      if (labelEl) labelEl.value = item.label || '';
+      if (keyEl) keyEl.value = item.nav_key || '';
+      if (orderEl) orderEl.value = String(item.sort_order || 1);
+      const tgt = String(item.nav_target || 'overview');
+      if (knownTargets.includes(tgt)) {
+        if (targetEl) targetEl.value = tgt;
+        if (customUrlWrap) customUrlWrap.style.display = 'none';
+        if (customUrlEl) customUrlEl.value = '';
+      } else {
+        if (targetEl) targetEl.value = 'custom';
+        if (customUrlWrap) customUrlWrap.style.display = 'block';
+        if (customUrlEl) customUrlEl.value = tgt;
+      }
+      if (iconEl) {
+        const icVal = item.icon || 'assets/nav-overview-inactive.svg';
+        if (!Array.from(iconEl.options).some((o) => o.value === icVal)) {
+          const opt = document.createElement('option');
+          opt.value = icVal;
+          opt.textContent = icVal;
+          iconEl.appendChild(opt);
+        }
+        iconEl.value = icVal;
+      }
+      const bType = item.badge_type || 'none';
+      if (badgeTypeEl) badgeTypeEl.value = bType;
+      if (badgeTextWrap) badgeTextWrap.style.display = bType === 'custom' ? 'block' : 'none';
+      if (badgeTextEl) badgeTextEl.value = item.badge_text || '';
+      if (enabledEl) enabledEl.checked = Number(item.is_enabled) === 1;
+
+      const allowedRaw = String(item.allowed_roles || 'all').toLowerCase().trim();
+      const isAll = !allowedRaw || allowedRaw === 'all';
+      if (rolesAllEl) rolesAllEl.checked = isAll;
+      const tokens = allowedRaw.split(',').map((t) => t.trim()).filter(Boolean);
+      roleCbs.forEach((cb) => {
+        if (isAll) {
+          cb.checked = true;
+          cb.disabled = true;
+        } else {
+          cb.disabled = false;
+          const cbTokens = cb.value.split(',').map((t) => t.trim());
+          cb.checked = cbTokens.some((t) => tokens.includes(t));
+        }
+      });
+    } else {
+      const defGroup = (state.navFilterGroup === 'workspace') ? 'workspace' : 'main';
+      const nextOrder = ((state.navigationConfig?.items || []).filter((i) => (i.nav_group || 'main') === defGroup).length || 0) + 1;
+      if (titleEl) titleEl.textContent = 'Add Navigation Item';
+      if (idEl) idEl.value = '0';
+      if (groupEl) groupEl.value = defGroup;
+      if (labelEl) labelEl.value = '';
+      if (keyEl) keyEl.value = '';
+      if (orderEl) orderEl.value = String(nextOrder);
+      if (targetEl) targetEl.value = defGroup === 'workspace' ? 'shift-relief' : 'overview';
+      if (customUrlWrap) customUrlWrap.style.display = 'none';
+      if (customUrlEl) customUrlEl.value = '';
+      if (iconEl) iconEl.value = 'assets/nav-overview-inactive.svg';
+      if (badgeTypeEl) badgeTypeEl.value = 'none';
+      if (badgeTextWrap) badgeTextWrap.style.display = 'none';
+      if (badgeTextEl) badgeTextEl.value = '';
+      if (enabledEl) enabledEl.checked = true;
+      if (rolesAllEl) rolesAllEl.checked = true;
+      roleCbs.forEach((cb) => {
+        cb.checked = true;
+        cb.disabled = true;
+      });
+    }
+    modal.style.display = 'flex';
+  }
+
+  function closeNavItemModal() {
+    const modal = document.getElementById('nav-item-crud-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  // =========================================================================
+  // DEDICATED NAVIGATION PAGE RENDERERS & SHARED UI BUILDERS
+  // =========================================================================
+
+  function buildCheckpointSelectOptionsHtml(selectedVal = '') {
+    const whs = state.checkpoints.stock_warehouses || [];
+    const evs = state.checkpoints.event_venues || [];
+    const curVal = selectedVal || `${state.checkpointType}:${state.checkpointId}`;
+    const opts = [];
+    if (whs.length > 0) {
+      opts.push('<optgroup label="Facility Gates (Stock Warehouses)">');
+      whs.forEach((w) => {
+        const val = `stock_warehouse:${w.id}`;
+        opts.push(`<option value="${escapeHtml(val)}" ${val === curVal ? 'selected' : ''}>${escapeHtml(w.name)} (${escapeHtml(w.call_time || '08:00')})</option>`);
+      });
+      opts.push('</optgroup>');
+    }
+    if (evs.length > 0) {
+      opts.push('<optgroup label="Event Venues">');
+      evs.forEach((v) => {
+        const val = `event_venue:${v.id}`;
+        opts.push(`<option value="${escapeHtml(val)}" ${val === curVal ? 'selected' : ''}>${escapeHtml(v.name)} (${escapeHtml(v.call_time || '08:00')})</option>`);
+      });
+      opts.push('</optgroup>');
+    }
+    return opts.join('');
+  }
+
+  function buildShiftRequestListHtml(reqs, canApprove) {
+    if (!Array.isArray(reqs) || reqs.length === 0) {
+      return '<div style="padding: 18px; text-align: center; font-size: 12px; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 8px;">No Gate Controller relief or assignment requests match this view.</div>';
+    }
+    return reqs.map((r) => {
+      const st = String(r.status || 'pending').toLowerCase();
+      const badgeCls = st === 'approved' ? 'status-badge-green-sm' : (st === 'rejected' ? 'status-badge-red-sm' : 'status-badge-amber-sm');
+      const winText = (r.shift_start || r.shift_end)
+        ? `Window: ${escapeHtml(r.shift_start || 'Now')} -> ${escapeHtml(r.shift_end || 'Ongoing')}`
+        : 'Ongoing / Immediate';
+      const actionBtns = (st === 'pending' && canApprove)
+        ? `<div style="display: flex; gap: 6px; margin-top: 8px;">
+            <button type="button" class="btn btn-primary-32 js-review-shift-btn" data-req-id="${r.id}" data-decision="approved" style="background: #16a34a; border-color: #15803d;">Approve</button>
+            <button type="button" class="btn btn-secondary-32-sm js-review-shift-btn" data-req-id="${r.id}" data-decision="rejected" style="color: #dc2626; border-color: #fecaca;">Reject</button>
+          </div>`
+        : (st === 'pending'
+            ? '<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Requires Administrator or Site Manager approval</div>'
+            : `<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Reviewed by ${escapeHtml(r.reviewed_by_name || 'Supervisor')} ${r.reviewed_by_role ? '(' + escapeHtml(r.reviewed_by_role) + ')' : ''}</div>`);
+
+      return `
+        <div style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-white);">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <strong style="font-size: 12.5px; color: var(--text-primary);">${escapeHtml(r.checkpoint_name)} · ${escapeHtml(formatShiftReasonLabel(r.reason_type))}</strong>
+            <span class="status-badge ${badgeCls}">${escapeHtml(st.toUpperCase())}</span>
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px;">
+            Incoming Controller: <strong>${escapeHtml(r.replacement_controller_name)}</strong>${r.outgoing_controller_name ? ` (Relieving: ${escapeHtml(r.outgoing_controller_name)})` : ''}
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+            Requested by ${escapeHtml(r.requested_by_name)} · ${winText}${r.notes ? ' · ' + escapeHtml(r.notes) : ''}
+          </div>
+          ${actionBtns}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function buildRollCallListHtml(list, emptyText = 'No crew members are currently checked in on-site.') {
+    if (!Array.isArray(list) || list.length === 0) {
+      return `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-secondary); border: 1px dashed var(--border-color); border-radius: 8px;">${escapeHtml(emptyText)}</div>`;
+    }
+    return list.map((rc) => `
+      <div class="timeline-event-card" style="align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="avatar-circle avatar-jl">${escapeHtml(rc.initials)}</div>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <span style="font-size: 12px; font-weight: 700;">${escapeHtml(rc.full_name)}</span>
+              <span class="tier-code-badge tier-code-${escapeHtml(rc.clearance_code)}">${escapeHtml(rc.clearance_code)}</span>
+              <span class="badge-code-primary">${escapeHtml(rc.badge_code)}</span>
+            </div>
+            <span style="font-size: 11px; color: var(--text-secondary);">
+              ${escapeHtml(rc.role_display)} (${escapeHtml(rc.department)}) · At <strong>${escapeHtml(rc.checkpoint_name)}</strong>
+            </span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="ts-mini-pill in">In: ${escapeHtml(rc.check_in_time)}</span>
+          <button type="button" class="gate-btn gate-btn-checkout js-rollcall-checkout-btn" data-badge="${escapeHtml(rc.badge_code)}">
+            Checkout Now
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderVenueSecurityPage() {
+    const venues = state.checkpoints?.event_venues || [];
+    const rcList = state.rollCallList || [];
+    const crewList = state.crew || [];
+    const venueOnsite = rcList.filter((r) => String(r.checkpoint_type || '') === 'event_venue');
+    const venueControllers = crewList.filter((c) => String(c.assigned_checkpoint_type || '') === 'event_venue' && Number(c.is_active ?? 1) !== 0);
+    const activeVenue = state.checkpointType === 'event_venue'
+      ? (venues.find((v) => String(v.id) === String(state.checkpointId)) || venues[0])
+      : venues[0];
+
+    const elTotal = document.getElementById('vs-kpi-venues');
+    const elOnsite = document.getElementById('vs-kpi-onsite');
+    const elCtrls = document.getElementById('vs-kpi-controllers');
+    const elCt = document.getElementById('vs-kpi-calltime');
+    const elCtCp = document.getElementById('vs-kpi-calltime-cp');
+    const elBadge = document.getElementById('vs-stations-count-badge');
+    const gridEl = document.getElementById('vs-venues-grid');
+
+    if (elTotal) elTotal.textContent = String(venues.length);
+    if (elOnsite) elOnsite.textContent = String(venueOnsite.length);
+    if (elCtrls) elCtrls.textContent = String(venueControllers.length);
+    if (elCt) elCt.textContent = activeVenue?.call_time || '08:00';
+    if (elCtCp) elCtCp.textContent = activeVenue ? activeVenue.name : 'No Event Venue';
+    if (elBadge) elBadge.textContent = `${venues.length} Venues`;
+
+    if (!gridEl) return;
+    if (venues.length === 0) {
+      gridEl.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No Event Venues registered yet. Create one under Venues &amp; Facility Gates.</div>';
+      return;
+    }
+
+    gridEl.innerHTML = venues.map((v) => {
+      const onsiteCount = rcList.filter((r) => String(r.checkpoint_type) === 'event_venue' && String(r.checkpoint_id) === String(v.id)).length;
+      const assignedCtrls = crewList.filter((c) => String(c.assigned_checkpoint_type || '') === 'event_venue' && String(c.assigned_checkpoint_id || '') === String(v.id));
+      const ctrlLabel = assignedCtrls.length > 0
+        ? assignedCtrls.map((u) => escapeHtml(u.full_name)).join(', ')
+        : (v.lead_name ? escapeHtml(v.lead_name) : 'Unassigned');
+      return `
+        <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; background: var(--surface-white); display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+            <div>
+              <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(v.name)}</strong>
+              <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(v.location || v.venue_location || 'Kigali Event Venue')}</div>
+            </div>
+            <span class="status-badge ${onsiteCount > 0 ? 'status-badge-green-sm' : 'status-badge-purple-sm'}">${onsiteCount} On-Site</span>
+          </div>
+          <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px;">
+            <span>Call Time: <strong>${escapeHtml(v.call_time || '08:00')} CAT</strong></span>
+            <span>Gate Controller / Lead: <strong>${ctrlLabel}</strong></span>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: auto; padding-top: 6px;">
+            <button type="button" class="btn btn-primary-32 js-vs-launch-kiosk" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" style="flex: 1;">
+              Launch Gate Kiosk
+            </button>
+            <button type="button" class="btn btn-secondary-32-sm js-vs-edit-calltime" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" data-call-time="${escapeHtml(v.call_time || '08:00')}">
+              Call Time
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderShiftReliefPage() {
+    const reqs = state.shiftRequests || [];
+    const pendingReqs = reqs.filter((r) => String(r.status || 'pending').toLowerCase() === 'pending');
+    const approvedReqs = reqs.filter((r) => String(r.status || '').toLowerCase() === 'approved');
+    const controllers = (state.crew || []).filter((c) => String(c.role || '').toLowerCase() === 'stock_controller' && Number(c.is_active ?? 1) !== 0);
+    const whs = state.checkpoints.stock_warehouses || [];
+    const evs = state.checkpoints.event_venues || [];
+    const allCps = [...whs.map((w) => ({ ...w, type: 'stock_warehouse', typeLabel: 'Facility Gate' })), ...evs.map((e) => ({ ...e, type: 'event_venue', typeLabel: 'Event Venue' }))];
+
+    const elPend = document.getElementById('page-sr-kpi-pending');
+    const elAppr = document.getElementById('page-sr-kpi-approved');
+    const elCtrl = document.getElementById('page-sr-kpi-controllers');
+    const elCps = document.getElementById('page-sr-kpi-checkpoints');
+    const pillEl = document.getElementById('page-sr-pending-summary-pill');
+    const rosterPillEl = document.getElementById('page-sr-roster-count');
+    if (elPend) elPend.textContent = String(pendingReqs.length);
+    if (elAppr) elAppr.textContent = String(approvedReqs.length);
+    if (elCtrl) elCtrl.textContent = String(controllers.length);
+    if (elCps) elCps.textContent = String(allCps.length);
+    if (pillEl) pillEl.textContent = `${pendingReqs.length} Pending`;
+    if (rosterPillEl) rosterPillEl.textContent = `${allCps.length} Checkpoints`;
+
+    const cpSel = document.getElementById('page-sr-checkpoint-select');
+    if (cpSel) {
+      const prev = cpSel.value || `${state.checkpointType}:${state.checkpointId}`;
+      cpSel.innerHTML = buildCheckpointSelectOptionsHtml(prev);
+      syncShiftControllersForCheckpoint(cpSel.value, 'page-sr-replacement-select', 'page-sr-outgoing-select');
+    }
+
+    const filterStatus = state.srFilterStatus || 'all';
+    const filteredReqs = filterStatus === 'all'
+      ? reqs
+      : reqs.filter((r) => String(r.status || 'pending').toLowerCase() === filterStatus);
+    const listEl = document.getElementById('page-shift-request-list');
+    if (listEl) {
+      listEl.innerHTML = buildShiftRequestListHtml(filteredReqs, canCurrentUserApproveShiftRequests());
+    }
+
+    const rosterEl = document.getElementById('page-sr-assignments-list');
+    if (rosterEl) {
+      rosterEl.innerHTML = allCps.map((cp) => {
+        const assigned = (state.crew || []).filter((u) => String(u.assigned_checkpoint_type || '') === cp.type && String(u.assigned_checkpoint_id || '') === String(cp.id));
+        const namesHtml = assigned.length > 0
+          ? assigned.map((u) => `<span class="status-badge status-badge-green-sm" style="margin: 2px 4px 2px 0;">${escapeHtml(u.full_name)}</span>`).join('')
+          : '<span style="font-size: 11.5px; color: var(--text-muted);">No assigned controller</span>';
+        return `
+          <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; background: var(--surface-white);">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px;">
+              <strong style="font-size: 13px; color: var(--text-primary);">${escapeHtml(cp.name)}</strong>
+              <span class="status-badge ${cp.type === 'stock_warehouse' ? 'status-badge-blue-sm' : 'status-badge-purple-sm'}" style="font-size: 10px;">${escapeHtml(cp.typeLabel)}</span>
+            </div>
+            <div>${namesHtml}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  function renderCallTimePage() {
+    const allCps = state.checkpoints.directory || [];
+    const activeCp = state.activeCheckpoint || allCps[0] || { type: 'stock_warehouse', id: 1, name: 'Checkpoint', call_time: '08:00' };
+    const times = allCps.map((c) => String(c.call_time || '08:00')).sort();
+
+    const elActive = document.getElementById('page-ct-kpi-active');
+    const elActiveName = document.getElementById('page-ct-kpi-active-name');
+    const elTotal = document.getElementById('page-ct-kpi-total');
+    const elEarliest = document.getElementById('page-ct-kpi-earliest');
+    const elListCount = document.getElementById('page-ct-list-count');
+    if (elActive) elActive.textContent = activeCp.call_time || '08:00';
+    if (elActiveName) elActiveName.textContent = activeCp.name || 'Active Checkpoint';
+    if (elTotal) elTotal.textContent = String(allCps.length);
+    if (elEarliest) elEarliest.textContent = times[0] || '08:00';
+    if (elListCount) elListCount.textContent = `${allCps.length} Sites`;
+
+    const selEl = document.getElementById('page-ct-cp-select');
+    const typeInp = document.getElementById('page-ct-cp-type');
+    const idInp = document.getElementById('page-ct-cp-id');
+    const timeInp = document.getElementById('page-ct-input');
+    const targetNameEl = document.getElementById('page-ct-target-name');
+    const targetBadgeEl = document.getElementById('page-ct-target-type');
+
+    if (selEl) {
+      const currentVal = selEl.value || `${activeCp.type}:${activeCp.id}`;
+      selEl.innerHTML = buildCheckpointSelectOptionsHtml(currentVal);
+      const [selType, selId] = (selEl.value || `${activeCp.type}:${activeCp.id}`).split(':');
+      const found = allCps.find((c) => c.type === selType && String(c.id) === String(selId)) || activeCp;
+      if (typeInp) typeInp.value = found.type;
+      if (idInp) idInp.value = found.id;
+      if (targetNameEl) targetNameEl.textContent = found.name;
+      if (targetBadgeEl) {
+        const isStock = found.type === 'stock_warehouse';
+        targetBadgeEl.textContent = isStock ? 'Stock Warehouse' : 'Event Venue';
+        targetBadgeEl.className = `status-badge ${isStock ? 'status-badge-green-sm' : 'status-badge-purple-sm'}`;
+      }
+      if (timeInp && !timeInp.matches(':focus')) {
+        timeInp.value = found.call_time || '08:00';
+      }
+    }
+
+    const rowsEl = document.getElementById('page-calltime-schedule-rows');
+    if (rowsEl) {
+      rowsEl.innerHTML = allCps.length === 0
+        ? '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">No checkpoints found.</div>'
+        : allCps.map((cp) => {
+            const isStock = cp.type === 'stock_warehouse';
+            return `
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-white); flex-wrap: wrap;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <strong style="font-size: 13px; color: var(--text-primary);">${escapeHtml(cp.name)}</strong>
+                    <span class="status-badge ${isStock ? 'status-badge-green-sm' : 'status-badge-purple-sm'}" style="font-size: 10px;">${isStock ? 'Facility Gate' : 'Event Venue'}</span>
+                  </div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">Scheduled Call Time: <strong>${escapeHtml(cp.call_time || '08:00')} CAT</strong> · 15m Grace Window</div>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                  <button type="button" class="btn btn-secondary-32-sm js-page-ct-load" data-cp-key="${escapeHtml(cp.type + ':' + cp.id)}">Edit</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-ct-row-extend" data-cp-type="${escapeHtml(cp.type)}" data-cp-id="${escapeHtml(String(cp.id))}" data-mins="15">+15m</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+    }
+  }
+
+  function renderRollCallPage() {
+    const rcList = state.rollCallList || [];
+    const stockOnsite = rcList.filter((r) => String(r.checkpoint_type || '') === 'stock_warehouse');
+    const venueOnsite = rcList.filter((r) => String(r.checkpoint_type || '') === 'event_venue');
+    const occupiedSites = new Set(rcList.map((r) => `${r.checkpoint_type || ''}:${r.checkpoint_id || r.checkpoint_name}`));
+
+    const elStock = document.getElementById('page-rc-kpi-stock');
+    const elVenues = document.getElementById('page-rc-kpi-venues');
+    const elSites = document.getElementById('page-rc-kpi-sites');
+    if (elStock) elStock.textContent = String(stockOnsite.length);
+    if (elVenues) elVenues.textContent = String(venueOnsite.length);
+    if (elSites) elSites.textContent = String(occupiedSites.size);
+
+    const cpFilterEl = document.getElementById('page-rc-cp-filter');
+    if (cpFilterEl) {
+      const prev = state.rollCallCpFilter || cpFilterEl.value || 'all';
+      const allCps = state.checkpoints.directory || [];
+      cpFilterEl.innerHTML = '<option value="all">All Checkpoints</option>' +
+        allCps.map((c) => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+      if (Array.from(cpFilterEl.options).some((o) => o.value === prev)) {
+        cpFilterEl.value = prev;
+      }
+    }
+
+    const q = (state.rollCallSearch || '').trim().toLowerCase();
+    const cpFilter = state.rollCallCpFilter || 'all';
+    const filtered = rcList.filter((rc) => {
+      if (cpFilter !== 'all' && String(rc.checkpoint_name || '') !== cpFilter) return false;
+      if (q) {
+        const hay = `${rc.full_name} ${rc.badge_code} ${rc.role_display} ${rc.department} ${rc.checkpoint_name}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const listEl = document.getElementById('page-rollcall-list');
+    if (listEl) {
+      listEl.innerHTML = buildRollCallListHtml(filtered, rcList.length === 0 ? 'No crew members are currently checked in on-site.' : 'No on-site personnel match your search filter.');
+    }
+  }
+
+  function renderStationLockPage() {
+    const bannerEl = document.getElementById('page-station-lock-banner');
+    const titleEl = document.getElementById('page-sl-status-title');
+    const badgeEl = document.getElementById('page-sl-status-badge');
+    const cpLabelEl = document.getElementById('page-sl-active-cp-label');
+    const formCpEl = document.getElementById('page-sl-form-cp-name');
+    const screenBadgeEl = document.getElementById('page-sl-screen-lock-badge');
+    const activeName = state.activeCheckpoint?.name || 'Active Checkpoint';
+
+    if (bannerEl) {
+      bannerEl.classList.toggle('is-locked', Boolean(state.stationLocked));
+      bannerEl.classList.toggle('is-unlocked', !state.stationLocked);
+    }
+    if (titleEl) {
+      titleEl.textContent = state.stationLocked
+        ? `Station Locked to ${activeName}`
+        : 'Multi-Checkpoint Mode (Unlocked)';
+    }
+    if (badgeEl) {
+      badgeEl.textContent = state.stationLocked ? 'LOCKED' : 'UNLOCKED';
+      badgeEl.className = state.stationLocked ? 'status-badge status-badge-amber-sm' : 'status-badge status-badge-green-sm';
+    }
+    if (cpLabelEl) cpLabelEl.textContent = activeName;
+    if (formCpEl) formCpEl.textContent = activeName;
+    if (screenBadgeEl) {
+      screenBadgeEl.textContent = state.terminalScreenLocked ? 'Terminal Screen: PIN Locked' : 'Terminal Screen: Unlocked';
+    }
+
+    const { items } = getManageablePinCheckpoints();
+    const listEl = document.getElementById('page-warehouse-pin-list');
+    const selEl = document.getElementById('page-wh-pin-select');
+    if (listEl) {
+      listEl.innerHTML = items.length === 0
+        ? '<div style="font-size: 12px; color: var(--text-muted); padding: 12px;">No manageable terminal checkpoints found for your role.</div>'
+        : items.map((item) => `
+            <div class="warehouse-pin-row">
+              <div class="warehouse-pin-row-info">
+                <span class="warehouse-pin-row-name">${escapeHtml(item.name)}</span>
+                <span class="warehouse-pin-row-sub">${escapeHtml(item.typeLabel)} · ${escapeHtml(item.code)}${item.location ? ` · ${escapeHtml(item.location)}` : ''}</span>
+              </div>
+              <div class="warehouse-pin-row-actions">
+                <span class="warehouse-pin-code-pill">PIN: ${item.pin ? escapeHtml(item.pin) : 'Not Set'}</span>
+                <button type="button" class="btn btn-secondary-32-sm js-page-edit-wh-pin-btn" data-cp-key="${escapeHtml(item.key)}" data-pin="${escapeHtml(item.pin)}">Edit</button>
+              </div>
+            </div>
+          `).join('');
+    }
+    if (selEl) {
+      const prevVal = selEl.value;
+      const whItems = items.filter((i) => i.cpType === 'stock_warehouse');
+      const evItems = items.filter((i) => i.cpType === 'event_venue');
+      const renderOpt = (i) => `<option value="${escapeHtml(i.key)}">${escapeHtml(i.name)} (${escapeHtml(i.code)})</option>`;
+      let html = '';
+      if (whItems.length > 0) html += `<optgroup label="Facility Gates (Stock Warehouses)">${whItems.map(renderOpt).join('')}</optgroup>`;
+      if (evItems.length > 0) html += `<optgroup label="Event Venues">${evItems.map(renderOpt).join('')}</optgroup>`;
+      selEl.innerHTML = html || '<option value="">No checkpoints available</option>';
+
+      const activeKey = `${state.checkpointType}:${state.checkpointId}`;
+      if (prevVal && items.some((i) => i.key === prevVal)) selEl.value = prevVal;
+      else if (items.some((i) => i.key === activeKey)) selEl.value = activeKey;
+      else if (items.length > 0) selEl.value = items[0].key;
+
+      const selectedItem = items.find((i) => i.key === selEl.value);
+      const pinValInput = document.getElementById('page-wh-pin-value');
+      if (pinValInput && selectedItem && !pinValInput.matches(':focus')) {
+        pinValInput.value = selectedItem.pin;
+      }
+    }
+  }
+
+  function renderResetScansPage() {
+    const elEvents = document.getElementById('page-reset-kpi-events');
+    const elCrew = document.getElementById('page-reset-kpi-crew');
+    if (elEvents) elEvents.textContent = String((state.activityTimeline || []).length);
+    if (elCrew) elCrew.textContent = String((state.crew || []).length);
+  }
+
+  function renderCustomNavPage(targetKey = state.customNavScreenKey || state.activeScreen) {
+    const titleEl = document.getElementById('custom-nav-page-title');
+    const subEl = document.getElementById('custom-nav-page-subtitle');
+    const manageBtn = document.getElementById('custom-nav-manage-btn');
+    const bodyEl = document.getElementById('custom-nav-page-body');
+    const item = (state.navigationConfig?.items || []).find((it) => String(it.nav_target) === String(targetKey));
+
+    if (titleEl) titleEl.textContent = item ? item.label : `Workspace Page: ${targetKey || 'Custom'}`;
+    if (subEl) {
+      subEl.textContent = item
+        ? `Sidebar group: ${(item.nav_group || 'main') === 'workspace' ? 'Checkpoint Controls' : 'Main Navigation'} · Route key: ${item.nav_target}`
+        : 'Dedicated view rendered dynamically from Navigation Menu CRUD.';
+    }
+    if (manageBtn) {
+      manageBtn.style.display = isCurrentUserAdmin() ? 'inline-flex' : 'none';
+    }
+    if (bodyEl) {
+      bodyEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <strong style="font-size: 15px; color: var(--text-primary);">${escapeHtml(item ? item.label : (targetKey || 'Custom Page'))}</strong>
+              <p style="font-size: 12.5px; color: var(--text-secondary); margin: 4px 0 0;">
+                This dedicated page was automatically provisioned for navigation target <code>${escapeHtml(targetKey || 'custom')}</code>.
+              </p>
+            </div>
+            <div>${formatNavRolesSummary(item ? item.allowed_roles : 'all')}</div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+            <div style="padding: 14px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-canvas);">
+              <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Active Checkpoint</div>
+              <div style="font-size: 14px; font-weight: 700; margin-top: 4px;">${escapeHtml(state.activeCheckpoint?.name || 'Kigali Operations')}</div>
+            </div>
+            <div style="padding: 14px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-canvas);">
+              <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Personnel On-Site</div>
+              <div style="font-size: 14px; font-weight: 700; margin-top: 4px;">${(state.rollCallList || []).length} Active Today</div>
+            </div>
+            <div style="padding: 14px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-canvas);">
+              <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Scheduled Call Time</div>
+              <div style="font-size: 14px; font-weight: 700; margin-top: 4px;">${escapeHtml(state.activeCheckpoint?.call_time || '08:00')} CAT</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function renderDedicatedNavPages(onlyScreen = null) {
+    if (!onlyScreen || onlyScreen === 'venue-security') renderVenueSecurityPage();
+    if (!onlyScreen || onlyScreen === 'shift-relief') renderShiftReliefPage();
+    if (!onlyScreen || onlyScreen === 'calltime') renderCallTimePage();
+    if (!onlyScreen || onlyScreen === 'rollcall') renderRollCallPage();
+    if (!onlyScreen || onlyScreen === 'station-lock') renderStationLockPage();
+    if (!onlyScreen || onlyScreen === 'reset-scans') renderResetScansPage();
+    if (onlyScreen === 'custom-nav-page' || (state.activeScreen && document.getElementById('screen-custom-nav-page')?.classList.contains('active'))) {
+      renderCustomNavPage(state.customNavScreenKey || state.activeScreen);
+    }
+  }
+
   function populateRoleDropdowns() {
     const roleSelects = [
       document.getElementById('user-modal-role'),
@@ -7419,11 +8326,15 @@
   // EVENT LISTENERS
   // =========================================================================
 
+  let triggerResetTodayScans = null;
+
   function bindEvents() {
-    // Sidebar navigation
-    document.querySelectorAll('.sidebar .nav-item[data-nav-target]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const target = btn.getAttribute('data-nav-target');
+    function handleSidebarNavInteraction(btn) {
+      if (!btn) return;
+      const target = btn.getAttribute('data-nav-target');
+      const action = btn.getAttribute('data-nav-action');
+
+      if (target) {
         if (target === 'terminals') {
           state.terminalScreenLocked = true;
           localStorage.setItem('ability_terminal_screen_locked', '1');
@@ -7434,8 +8345,126 @@
           renderTerminalLockScreen();
         }
         switchScreen(target);
+        return;
+      }
+
+      if (action === 'venue-security') {
+        switchScreen('venue-security');
+        return;
+      }
+
+      if (action === 'access-matrix') {
+        if (!isCurrentUserAdmin()) {
+          showToast('Access Restricted: Security Clearance Matrix configuration requires Administrator privileges.');
+          return;
+        }
+        switchScreen('analytics', 'matrix-config-section');
+        return;
+      }
+
+      if (action === 'action:shift-relief' || action === 'shift-relief') {
+        openShiftRequestModal();
+        return;
+      }
+
+      if (action === 'action:calltime' || action === 'calltime') {
+        if (!canCurrentUserSetCallTime()) {
+          showToast('Access Restricted: Setting Call Times requires Tech Lead, Stock Manager, or Administrator privileges.');
+          return;
+        }
+        const cp = state.activeCheckpoint;
+        openCallTimeModal(cp ? cp.type : null, cp ? cp.id : null, cp ? cp.name : null, cp ? cp.call_time : null);
+        return;
+      }
+
+      if (action === 'action:rollcall' || action === 'rollcall') {
+        if (isCurrentUserStockController() || isCurrentUserTechnician()) {
+          showToast('Access Restricted: Roll-Call inspection requires Supervisor or Administrator privileges.');
+          return;
+        }
+        renderRollCallModalList();
+        const rcModal = document.getElementById('rollcall-modal');
+        if (rcModal) rcModal.classList.add('open');
+        return;
+      }
+
+      if (action === 'action:station-lock' || action === 'station-lock') {
+        if (isCurrentUserStockController()) {
+          const assignedName = state.currentUser?.assigned_checkpoint_name || state.activeCheckpoint?.name || 'your assigned terminal';
+          showToast(`Gate Controller locked to ${assignedName}. Click Relief / Swap to request a terminal change.`);
+          return;
+        }
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager() && !isCurrentUserTechLead()) {
+          showToast('Access Restricted: Station PIN Locking requires Technical Lead, Site Manager, or Administrator privileges.');
+          return;
+        }
+        const cpNameEl = document.getElementById('station-lock-cp-name');
+        const pinInput = document.getElementById('station-pin-input');
+        if (cpNameEl) cpNameEl.textContent = state.activeCheckpoint?.name || 'Active Checkpoint';
+        if (pinInput) {
+          pinInput.value = '';
+          setTimeout(() => pinInput.focus(), 50);
+        }
+        const lkModal = document.getElementById('station-lock-modal');
+        if (lkModal) lkModal.classList.add('open');
+        return;
+      }
+
+      if (action === 'action:reset-scans' || action === 'reset-scans') {
+        if (typeof triggerResetTodayScans === 'function') {
+          triggerResetTodayScans();
+        }
+        return;
+      }
+
+      if (action) {
+        if (action.startsWith('http://') || action.startsWith('https://') || action.endsWith('.html') || action.endsWith('.php')) {
+          window.open(action, '_blank', 'noopener');
+        } else if (action.startsWith('#')) {
+          window.location.hash = action;
+        } else {
+          switchScreen(action);
+        }
+      }
+    }
+
+    // Delegated Sidebar Main Navigation (supports dynamic CRUD & enable/disable)
+    const mainNavGroup = document.querySelector('.sidebar .nav-group[aria-label="Main navigation"]');
+    if (mainNavGroup) {
+      mainNavGroup.addEventListener('click', (e) => {
+        const btn = e.target.closest('.nav-item');
+        if (!btn) return;
+        handleSidebarNavInteraction(btn);
       });
-    });
+    }
+
+    // Delegated Sidebar Checkpoint Controls (Workspace Navigation)
+    const workspaceNavGroup = document.getElementById('sidebar-checkpoint-controls');
+    if (workspaceNavGroup) {
+      workspaceNavGroup.addEventListener('click', (e) => {
+        const btn = e.target.closest('.nav-item');
+        if (!btn) return;
+        handleSidebarNavInteraction(btn);
+      });
+    }
+
+    const navDisabledNotice = document.getElementById('sidebar-nav-disabled-notice');
+    if (navDisabledNotice) {
+      navDisabledNotice.addEventListener('click', () => {
+        if (!isCurrentUserAdmin()) return;
+        state.usersViewMode = 'navigation';
+        switchScreen('users');
+      });
+    }
+
+    const workspaceNavDisabledNotice = document.getElementById('sidebar-workspace-disabled-notice');
+    if (workspaceNavDisabledNotice) {
+      workspaceNavDisabledNotice.addEventListener('click', () => {
+        if (!isCurrentUserAdmin()) return;
+        state.usersViewMode = 'navigation';
+        switchScreen('users');
+      });
+    }
 
     const brandHome = document.getElementById('brand-home-btn');
     if (brandHome) {
@@ -7445,39 +8474,6 @@
         } else {
           switchScreen('overview');
         }
-      });
-    }
-
-    // Venue Security Portal nav shortcut
-    const venueSecBtn = document.getElementById('nav-venue-security-btn');
-    if (venueSecBtn) {
-      venueSecBtn.addEventListener('click', () => {
-        if (!isCurrentUserAdmin() && !isCurrentUserTechLead()) {
-          showToast('Access Restricted: Venue Security Portal is reserved for Technical Leads and Administrators.');
-          return;
-        }
-        if (state.stationLocked && state.checkpointType !== 'event_venue') {
-          showToast('Station is locked. Unlock with the checkpoint Terminal PIN first.');
-          return;
-        }
-        state.checkpointType = 'event_venue';
-        const firstVenue = (state.checkpoints.event_venues || [])[0];
-        if (firstVenue) state.checkpointId = Number(firstVenue.id);
-        switchScreen('terminals', 'pane-kiosk');
-        fetchBootstrap(false);
-        showToast('Switched to Event Venue Security Portal (#pane-kiosk)');
-      });
-    }
-
-    // Clearance Matrix nav shortcut
-    const matrixNavBtn = document.getElementById('nav-access-matrix-btn');
-    if (matrixNavBtn) {
-      matrixNavBtn.addEventListener('click', () => {
-        if (!isCurrentUserAdmin()) {
-          showToast('Access Restricted: Security Clearance Matrix configuration requires Administrator privileges.');
-          return;
-        }
-        switchScreen('analytics', 'matrix-config-section');
       });
     }
 
@@ -8198,8 +9194,8 @@
           if (!isShown) {
             const pinInp = document.getElementById('kiosk-override-pin');
             if (pinInp) {
+              pinInp.value = '';
               pinInp.focus();
-              pinInp.select();
             }
           }
         }
@@ -8216,7 +9212,7 @@
         const pin = pinInp ? pinInp.value.trim() : '';
         const reason = rSelect ? rSelect.value : 'Authorized by Supervisor';
         if (!pin) {
-          showToast('Enter Supervisor PIN (e.g. 1234)');
+          showToast('Enter Supervisor Password or Terminal PIN');
           if (pinInp) pinInp.focus();
           return;
         }
@@ -8939,12 +9935,8 @@
 
     // Modals: Roll-Call Modal
     const rollcallModal = document.getElementById('rollcall-modal');
-    document.querySelectorAll('.js-open-rollcall-modal, #sidebar-rollcall-btn, #topbar-help-btn').forEach((btn) => {
+    document.querySelectorAll('.js-open-rollcall-modal, #topbar-help-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        if (btn.id === 'sidebar-rollcall-btn' && (isCurrentUserStockController() || isCurrentUserTechnician())) {
-          showToast('Access Restricted: Roll-Call inspection requires Supervisor or Administrator privileges.');
-          return;
-        }
         renderRollCallModalList();
         if (rollcallModal) rollcallModal.classList.add('open');
       });
@@ -8956,7 +9948,7 @@
 
     // Modals: Station Lock PIN Modal (Uses Dedicated Warehouse PIN or Venue PIN)
     const lockModal = document.getElementById('station-lock-modal');
-    document.querySelectorAll('.js-station-lock-btn, #sidebar-station-lock-btn').forEach((btn) => {
+    document.querySelectorAll('.js-station-lock-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (isCurrentUserStockController()) {
           const assignedName = state.currentUser?.assigned_checkpoint_name || state.activeCheckpoint?.name || 'your assigned terminal';
@@ -8981,31 +9973,52 @@
     if (cancelLock && lockModal) {
       cancelLock.addEventListener('click', () => lockModal.classList.remove('open'));
     }
+    async function submitStationLockToggle(pinInputEl, modalToClose = null) {
+      if (isCurrentUserStockController()) {
+        const assignedName = state.currentUser?.assigned_checkpoint_name || state.activeCheckpoint?.name || 'your assigned terminal';
+        showToast(`Gate Controller locked to ${assignedName}. Click Relief / Swap to request a terminal change.`);
+        return;
+      }
+      if (!isCurrentUserAdmin() && !isCurrentUserStockManager() && !isCurrentUserTechLead()) {
+        showToast('Access Restricted: Station PIN Locking requires Technical Lead, Site Manager, or Administrator privileges.');
+        return;
+      }
+      const pin = pinInputEl ? pinInputEl.value.trim() : '';
+      const check = await verifyCheckpointPin(pin);
+      if (!check || !check.ok) {
+        showToast(check?.error || `Invalid PIN for ${state.activeCheckpoint?.name || 'this checkpoint'}`);
+        if (pinInputEl) {
+          pinInputEl.focus();
+          pinInputEl.select();
+        }
+        return;
+      }
+      state.stationLocked = !state.stationLocked;
+      localStorage.setItem('ability_station_locked', state.stationLocked ? '1' : '0');
+      if (modalToClose) modalToClose.classList.remove('open');
+      if (pinInputEl) pinInputEl.value = '';
+      renderCheckpointSelectors();
+      renderStationLockPage();
+      showToast(
+        state.stationLocked
+          ? `Terminal LOCKED to ${state.activeCheckpoint.name}`
+          : 'Terminal UNLOCKED — Multi-Checkpoint Mode enabled'
+      );
+    }
+
     const lockForm = document.getElementById('station-lock-form');
     if (lockForm && lockModal) {
       lockForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const pinInput = document.getElementById('station-pin-input');
-        const pin = pinInput ? pinInput.value.trim() : '';
-        const check = await verifyCheckpointPin(pin);
-        if (!check || !check.ok) {
-          showToast(check?.error || `Invalid PIN for ${state.activeCheckpoint?.name || 'this checkpoint'}`);
-          if (pinInput) {
-            pinInput.focus();
-            pinInput.select();
-          }
-          return;
-        }
-        state.stationLocked = !state.stationLocked;
-        localStorage.setItem('ability_station_locked', state.stationLocked ? '1' : '0');
-        lockModal.classList.remove('open');
-        if (pinInput) pinInput.value = '';
-        renderCheckpointSelectors();
-        showToast(
-          state.stationLocked
-            ? `Terminal LOCKED to ${state.activeCheckpoint.name}`
-            : 'Terminal UNLOCKED — Multi-Checkpoint Mode enabled'
-        );
+        await submitStationLockToggle(document.getElementById('station-pin-input'), lockModal);
+      });
+    }
+
+    const pageLockForm = document.getElementById('page-station-lock-form');
+    if (pageLockForm) {
+      pageLockForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await submitStationLockToggle(document.getElementById('page-station-pin-input'), null);
       });
     }
 
@@ -9136,69 +10149,200 @@
       });
     }
 
+    async function submitCheckpointPinUpdate(selectId, valueId, saveBtnId) {
+      if (!isCurrentUserAdmin() && !isCurrentUserStockManager() && !isCurrentUserTechLead()) {
+        showToast('Access Restricted: Terminal PIN configuration requires Technical Lead, Stock Manager, or Administrator privileges.');
+        return;
+      }
+      const rawKey = (document.getElementById(selectId)?.value || '').trim();
+      const [cpType, ...rest] = rawKey.split(':');
+      const cpId = rest.join(':');
+      const pin = (document.getElementById(valueId)?.value || '').trim();
+      const saveBtn = document.getElementById(saveBtnId);
+      if (!cpType || !cpId) {
+        showToast('Please select a checkpoint terminal.');
+        return;
+      }
+      if (!/^[A-Za-z0-9]{4,12}$/.test(pin)) {
+        showToast('PIN must be 4–12 digits or alphanumeric characters.');
+        return;
+      }
+      if (saveBtn) saveBtn.disabled = true;
+      try {
+        const res = await fetch('api.php?action=save_checkpoint_pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'save_checkpoint_pin',
+            checkpoint_type: cpType,
+            checkpoint_id: cpId,
+            terminal_pin: pin,
+          }),
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          if (cpType === 'stock_warehouse') {
+            const wid = Number(cpId);
+            (state.checkpoints.stock_warehouses || []).forEach((w) => {
+              if (Number(w.id) === wid) w.terminal_pin = pin;
+            });
+            (state.stockManager.warehouses || []).forEach((w) => {
+              if (Number(w.id) === wid) w.terminal_pin = pin;
+            });
+          } else {
+            (state.checkpoints.events || []).forEach((ev) => {
+              if (String(ev.id) === String(cpId) || String(ev.raw_id || '') === String(cpId)) {
+                ev.terminal_pin = pin;
+              }
+            });
+          }
+          if (state.activeCheckpoint && state.checkpointType === cpType && String(state.checkpointId) === String(cpId)) {
+            state.activeCheckpoint.terminal_pin = pin;
+          }
+          renderWarehousePinList();
+          renderStationLockPage();
+          showToast(data.message || 'Checkpoint Terminal PIN saved');
+          await fetchBootstrap(false);
+          if (cpType === 'stock_warehouse') {
+            loadStockManagerData();
+          }
+        } else {
+          showToast(data?.error || 'Failed to save checkpoint PIN');
+        }
+      } catch (err) {
+        showToast('Error saving checkpoint PIN');
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
     const whPinForm = document.getElementById('warehouse-pin-form');
     if (whPinForm) {
       whPinForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const rawKey = (document.getElementById('wh-pin-select')?.value || '').trim();
-        const [cpType, ...rest] = rawKey.split(':');
-        const cpId = rest.join(':');
-        const pin = (document.getElementById('wh-pin-value')?.value || '').trim();
-        const saveBtn = document.getElementById('save-warehouse-pin-btn');
-        if (!cpType || !cpId) {
-          showToast('Please select a checkpoint terminal.');
+        await submitCheckpointPinUpdate('wh-pin-select', 'wh-pin-value', 'save-warehouse-pin-btn');
+      });
+    }
+
+    // Station Lock Dedicated Page Controls
+    const pageWhPinListEl = document.getElementById('page-warehouse-pin-list');
+    if (pageWhPinListEl) {
+      pageWhPinListEl.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.js-page-edit-wh-pin-btn');
+        if (!editBtn) return;
+        const cpKey = editBtn.getAttribute('data-cp-key') || '';
+        const pin = editBtn.getAttribute('data-pin') || '';
+        const selEl = document.getElementById('page-wh-pin-select');
+        const valEl = document.getElementById('page-wh-pin-value');
+        if (selEl && cpKey) selEl.value = cpKey;
+        if (valEl) {
+          valEl.value = pin;
+          valEl.focus();
+          valEl.select();
+        }
+      });
+    }
+
+    const pageWhPinSelectEl = document.getElementById('page-wh-pin-select');
+    if (pageWhPinSelectEl) {
+      pageWhPinSelectEl.addEventListener('change', () => {
+        const { items } = getManageablePinCheckpoints();
+        const selected = items.find((i) => i.key === pageWhPinSelectEl.value);
+        const valEl = document.getElementById('page-wh-pin-value');
+        if (valEl && selected) {
+          valEl.value = selected.pin || '';
+        }
+      });
+    }
+
+    const pageWhPinForm = document.getElementById('page-warehouse-pin-form');
+    if (pageWhPinForm) {
+      pageWhPinForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await submitCheckpointPinUpdate('page-wh-pin-select', 'page-wh-pin-value', 'page-save-warehouse-pin-btn');
+      });
+    }
+
+    // Venue Security Portal Dedicated Page Controls
+    const vsLaunchFirstBtn = document.getElementById('vs-launch-first-kiosk-btn');
+    if (vsLaunchFirstBtn) {
+      vsLaunchFirstBtn.addEventListener('click', () => {
+        if (state.stationLocked && state.checkpointType !== 'event_venue') {
+          showToast('Station is locked. Unlock with the checkpoint Terminal PIN first.');
           return;
         }
-        if (!/^[A-Za-z0-9]{4,12}$/.test(pin)) {
-          showToast('PIN must be 4–12 digits or alphanumeric characters.');
+        const firstVenue = (state.checkpoints.event_venues || [])[0];
+        if (!firstVenue) {
+          showToast('No Event Venues available.');
           return;
         }
-        if (saveBtn) saveBtn.disabled = true;
-        try {
-          const res = await fetch('api.php?action=save_checkpoint_pin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'save_checkpoint_pin',
-              checkpoint_type: cpType,
-              checkpoint_id: cpId,
-              terminal_pin: pin,
-            }),
-          });
-          const data = await res.json();
-          if (data && data.ok) {
-            if (cpType === 'stock_warehouse') {
-              const wid = Number(cpId);
-              (state.checkpoints.stock_warehouses || []).forEach((w) => {
-                if (Number(w.id) === wid) w.terminal_pin = pin;
-              });
-              (state.stockManager.warehouses || []).forEach((w) => {
-                if (Number(w.id) === wid) w.terminal_pin = pin;
-              });
-            } else {
-              (state.checkpoints.events || []).forEach((ev) => {
-                if (String(ev.id) === String(cpId) || String(ev.raw_id || '') === String(cpId)) {
-                  ev.terminal_pin = pin;
-                }
-              });
-            }
-            if (state.activeCheckpoint && state.checkpointType === cpType && String(state.checkpointId) === String(cpId)) {
-              state.activeCheckpoint.terminal_pin = pin;
-            }
-            renderWarehousePinList();
-            showToast(data.message || 'Checkpoint Terminal PIN saved');
-            await fetchBootstrap(false);
-            if (cpType === 'stock_warehouse') {
-              loadStockManagerData();
-            }
-          } else {
-            showToast(data?.error || 'Failed to save checkpoint PIN');
+        state.checkpointType = 'event_venue';
+        state.checkpointId = Number(firstVenue.id);
+        switchScreen('terminals', 'pane-kiosk');
+        fetchBootstrap(false);
+        showToast(`Switched Gate Terminal to ${firstVenue.name}`);
+      });
+    }
+
+    const vsVenuesGrid = document.getElementById('vs-venues-grid');
+    if (vsVenuesGrid) {
+      vsVenuesGrid.addEventListener('click', (e) => {
+        const launchBtn = e.target.closest('.js-vs-launch-kiosk');
+        if (launchBtn) {
+          if (state.stationLocked && state.checkpointType !== 'event_venue') {
+            showToast('Station is locked. Unlock with the checkpoint Terminal PIN first.');
+            return;
           }
-        } catch (err) {
-          showToast('Error saving checkpoint PIN');
-        } finally {
-          if (saveBtn) saveBtn.disabled = false;
+          const cpId = Number(launchBtn.getAttribute('data-cp-id') || 0);
+          const cpName = launchBtn.getAttribute('data-cp-name') || 'Event Venue';
+          state.checkpointType = 'event_venue';
+          if (cpId) state.checkpointId = cpId;
+          switchScreen('terminals', 'pane-kiosk');
+          fetchBootstrap(false);
+          showToast(`Launched Venue Gate Kiosk for ${cpName}`);
+          return;
         }
+        const ctBtn = e.target.closest('.js-vs-edit-calltime');
+        if (ctBtn) {
+          const cpId = ctBtn.getAttribute('data-cp-id');
+          const cpName = ctBtn.getAttribute('data-cp-name');
+          const ct = ctBtn.getAttribute('data-call-time');
+          openCallTimeModal('event_venue', cpId, cpName, ct);
+        }
+      });
+    }
+
+    // On-Site Roll-Call Dedicated Page Controls
+    const pageRcSearchInp = document.getElementById('page-rc-search-input');
+    if (pageRcSearchInp) {
+      pageRcSearchInp.addEventListener('input', (e) => {
+        state.rollCallSearch = e.target.value;
+        renderRollCallPage();
+      });
+    }
+    const pageRcCpFilter = document.getElementById('page-rc-cp-filter');
+    if (pageRcCpFilter) {
+      pageRcCpFilter.addEventListener('change', (e) => {
+        state.rollCallCpFilter = e.target.value;
+        renderRollCallPage();
+      });
+    }
+    const pageRcRefreshBtn = document.getElementById('page-rc-refresh-btn');
+    if (pageRcRefreshBtn) {
+      pageRcRefreshBtn.addEventListener('click', async () => {
+        await fetchBootstrap(false);
+        renderRollCallPage();
+        showToast('On-Site Roll-Call refreshed.');
+      });
+    }
+
+    // Custom Nav Page Configure Shortcut
+    const customNavManageBtn = document.getElementById('custom-nav-manage-btn');
+    if (customNavManageBtn) {
+      customNavManageBtn.addEventListener('click', () => {
+        if (!isCurrentUserAdmin()) return;
+        state.usersViewMode = 'navigation';
+        switchScreen('users');
       });
     }
 
@@ -9303,30 +10447,18 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               checkpoint_type: selCp.type,
-              checkpoint_id: selCp.id,
+              checkpoint_id: (facility && facility.raw_id) ? facility.raw_id : selCp.id,
             }),
           });
           const data = await res.json();
-          if (!data.ok) {
-            showToast(data.error || 'Failed to reset roster.');
+          if (!res.ok || !data || !data.ok) {
+            showToast((data && data.error) || 'Failed to reset roster.');
             return;
           }
 
-          applyBootstrapPayload(data);
-          if (facility) {
-            facility.assigned_technicians = [];
-            facility.assigned_technician_names = [];
-          }
-          state.crew.forEach((c) => {
-            if (c.assigned_checkpoint_type === selCp.type && (String(c.assigned_checkpoint_id) === String(selCp.id) || (facility && facility.raw_id && String(c.assigned_checkpoint_id) === String(facility.raw_id)))) {
-              c.assigned_checkpoint_type = null;
-              c.assigned_checkpoint_id = null;
-              c.assigned_checkpoint_name = null;
-            }
-          });
+          applyBootstrapPayload(data, true);
           playKioskChime('approve');
           showToast(`✓ Roster reset for ${facName}. All personnel returned to Standby.`);
-          renderAll();
         } catch (err) {
           showToast('Error communicating with server: ' + err.message);
         } finally {
@@ -10341,20 +11473,7 @@
       });
     }
 
-    // Sidebar Set Call Time Button
-    const sidebarCallTimeBtn = document.getElementById('sidebar-calltime-btn');
-    if (sidebarCallTimeBtn) {
-      sidebarCallTimeBtn.addEventListener('click', () => {
-        if (!canCurrentUserSetCallTime()) {
-          showToast('Access Restricted: Setting Call Times requires Tech Lead, Stock Manager, or Administrator privileges.');
-          return;
-        }
-        const cp = state.activeCheckpoint;
-        openCallTimeModal(cp ? cp.type : null, cp ? cp.id : null, cp ? cp.name : null, cp ? cp.call_time : null);
-      });
-    }
-
-    // Open Call Time Modal for Active Checkpoint
+    // Open Call Time Modal for Active Checkpoint (sidebar-calltime-btn is handled via delegated #sidebar-checkpoint-controls listener)
     document.querySelectorAll('.js-open-active-calltime-modal').forEach((btn) => {
       btn.addEventListener('click', () => {
         const cp = state.activeCheckpoint;
@@ -10370,6 +11489,7 @@
     const tabRoles = document.getElementById('view-tab-roles');
     const tabMatrix = document.getElementById('view-tab-matrix');
     const tabDepts = document.getElementById('view-tab-departments');
+    const tabNav = document.getElementById('view-tab-navigation');
     const addRoleBtn = document.getElementById('open-add-role-btn');
     const addDeptTopBtn = document.getElementById('open-add-dept-top-btn');
 
@@ -10377,6 +11497,7 @@
     if (tabRoles) tabRoles.addEventListener('click', () => switchUsersView('roles'));
     if (tabMatrix) tabMatrix.addEventListener('click', () => switchUsersView('matrix'));
     if (tabDepts) tabDepts.addEventListener('click', () => switchUsersView('departments'));
+    if (tabNav) tabNav.addEventListener('click', () => switchUsersView('navigation'));
 
     // Open Add Role Modal
     if (addRoleBtn) {
@@ -10726,6 +11847,324 @@
       });
     }
 
+    // =========================================================================
+    // NAVIGATION MENU ENABLE/DISABLE & CRUD LISTENERS
+    // =========================================================================
+    const mainNavToggle = document.getElementById('nav-main-group-toggle');
+    if (mainNavToggle) {
+      mainNavToggle.addEventListener('change', async (e) => {
+        const enabled = e.target.checked ? 1 : 0;
+        try {
+          const res = await fetch('api.php?action=toggle_main_nav', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group: 'main', enabled }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.navigationConfig) {
+            state.navigationConfig = data.navigationConfig;
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            renderMainNavigation();
+            renderNavigationManagerScreen();
+            showToast(data.message || (enabled ? 'Main navigation enabled.' : 'Main navigation disabled.'));
+          } else {
+            e.target.checked = !enabled;
+            showToast((data && data.error) || 'Failed to update main navigation visibility.');
+          }
+        } catch (err) {
+          state.navigationConfig.main_nav_enabled = Boolean(enabled);
+          renderMainNavigation();
+          renderNavigationManagerScreen();
+        }
+      });
+    }
+
+    const workspaceNavToggle = document.getElementById('nav-workspace-group-toggle');
+    if (workspaceNavToggle) {
+      workspaceNavToggle.addEventListener('change', async (e) => {
+        const enabled = e.target.checked ? 1 : 0;
+        try {
+          const res = await fetch('api.php?action=toggle_main_nav', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ group: 'workspace', enabled }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.navigationConfig) {
+            state.navigationConfig = data.navigationConfig;
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            renderMainNavigation();
+            renderNavigationManagerScreen();
+            showToast(data.message || (enabled ? 'Checkpoint Controls enabled.' : 'Checkpoint Controls disabled.'));
+          } else {
+            e.target.checked = !enabled;
+            showToast((data && data.error) || 'Failed to update Checkpoint Controls visibility.');
+          }
+        } catch (err) {
+          state.navigationConfig.workspace_nav_enabled = Boolean(enabled);
+          renderMainNavigation();
+          renderNavigationManagerScreen();
+        }
+      });
+    }
+
+    const navResetDefaultsBtn = document.getElementById('nav-reset-defaults-btn');
+    if (navResetDefaultsBtn) {
+      navResetDefaultsBtn.addEventListener('click', async () => {
+        const { confirmed } = await showConfirmModal({
+          title: 'Restore Default Navigation & Controls',
+          message: 'Restore the 8 default Main Navigation items and 5 Checkpoint Controls items, and re-enable both sidebar sections? Custom items will be removed.',
+          confirmText: 'Restore Defaults',
+          tone: 'warning',
+        });
+        if (!confirmed) return;
+        try {
+          const res = await fetch('api.php?action=reset_navigation_defaults', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.navigationConfig) {
+            state.navigationConfig = data.navigationConfig;
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            renderMainNavigation();
+            renderNavigationManagerScreen();
+            showToast(data.message || 'Default navigation restored.');
+          } else {
+            showToast((data && data.error) || 'Failed to restore default navigation.');
+          }
+        } catch (err) {
+          showToast('Network error restoring default navigation.');
+        }
+      });
+    }
+
+    document.querySelectorAll('.js-open-create-nav-btn').forEach((btn) => {
+      btn.addEventListener('click', () => openNavItemModal(null));
+    });
+    document.querySelectorAll('.js-close-nav-crud-modal').forEach((btn) => {
+      btn.addEventListener('click', () => closeNavItemModal());
+    });
+    const navCrudModalEl = document.getElementById('nav-item-crud-modal');
+    if (navCrudModalEl) {
+      navCrudModalEl.addEventListener('click', (e) => {
+        if (e.target === navCrudModalEl) closeNavItemModal();
+      });
+    }
+
+    const navSearchInp = document.getElementById('nav-search-input');
+    if (navSearchInp) {
+      navSearchInp.addEventListener('input', (e) => {
+        state.navSearch = e.target.value;
+        renderNavigationManagerScreen();
+      });
+    }
+    const navFilterGroupSel = document.getElementById('nav-filter-group');
+    if (navFilterGroupSel) {
+      navFilterGroupSel.addEventListener('change', (e) => {
+        state.navFilterGroup = e.target.value;
+        renderNavigationManagerScreen();
+      });
+    }
+
+    const navFilterSel = document.getElementById('nav-filter-status');
+    if (navFilterSel) {
+      navFilterSel.addEventListener('change', (e) => {
+        state.navFilterStatus = e.target.value;
+        renderNavigationManagerScreen();
+      });
+    }
+
+    const navLabelInp = document.getElementById('nav-crud-label');
+    const navKeyInp = document.getElementById('nav-crud-key');
+    if (navLabelInp && navKeyInp) {
+      navLabelInp.addEventListener('input', () => {
+        const idVal = Number(document.getElementById('nav-crud-id')?.value || 0);
+        if (idVal === 0) {
+          navKeyInp.value = navLabelInp.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        }
+      });
+    }
+
+    const navTargetSel = document.getElementById('nav-crud-target');
+    const navCustomUrlWrap = document.getElementById('nav-crud-custom-url-wrap');
+    if (navTargetSel && navCustomUrlWrap) {
+      navTargetSel.addEventListener('change', () => {
+        navCustomUrlWrap.style.display = navTargetSel.value === 'custom' ? 'block' : 'none';
+      });
+    }
+
+    const navBadgeTypeSel = document.getElementById('nav-crud-badge-type');
+    const navBadgeTextWrap = document.getElementById('nav-crud-badge-text-wrap');
+    if (navBadgeTypeSel && navBadgeTextWrap) {
+      navBadgeTypeSel.addEventListener('change', () => {
+        navBadgeTextWrap.style.display = navBadgeTypeSel.value === 'custom' ? 'block' : 'none';
+      });
+    }
+
+    const navRolesAllCb = document.getElementById('nav-crud-roles-all');
+    if (navRolesAllCb) {
+      navRolesAllCb.addEventListener('change', () => {
+        const isAll = navRolesAllCb.checked;
+        document.querySelectorAll('#nav-crud-roles-list .js-nav-role-cb').forEach((cb) => {
+          cb.disabled = isAll;
+          if (isAll) cb.checked = true;
+        });
+      });
+    }
+
+    const navCrudForm = document.getElementById('nav-item-crud-form');
+    if (navCrudForm) {
+      navCrudForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = Number(document.getElementById('nav-crud-id').value || 0);
+        const nav_group = document.getElementById('nav-crud-group')?.value || 'main';
+        const label = document.getElementById('nav-crud-label').value.trim();
+        const nav_key = document.getElementById('nav-crud-key').value.trim();
+        const sort_order = Number(document.getElementById('nav-crud-order').value || 10);
+        const targetSel = document.getElementById('nav-crud-target').value;
+        const customUrl = document.getElementById('nav-crud-custom-url').value.trim();
+        const nav_target = targetSel === 'custom' ? (customUrl || 'overview') : targetSel;
+        const icon = document.getElementById('nav-crud-icon').value;
+        const activeIconMap = {
+          'assets/nav-overview-inactive.svg': 'assets/nav-overview-active.svg',
+          'assets/nav-events-inactive.svg': 'assets/nav-events-active.svg',
+          'assets/nav-attendees-inactive.svg': 'assets/nav-attendees-active.svg',
+        };
+        const active_icon = activeIconMap[icon] || '';
+        const badge_type = document.getElementById('nav-crud-badge-type').value;
+        const badge_text = document.getElementById('nav-crud-badge-text').value.trim();
+        const is_enabled = document.getElementById('nav-crud-enabled').checked ? 1 : 0;
+        const allRoles = document.getElementById('nav-crud-roles-all').checked;
+
+        let allowed_roles = 'all';
+        if (!allRoles) {
+          const picked = Array.from(document.querySelectorAll('#nav-crud-roles-list .js-nav-role-cb:checked')).map((cb) => cb.value);
+          allowed_roles = picked.length > 0 ? picked.join(',') : 'admin,administrator';
+        }
+
+        const submitBtn = document.getElementById('nav-crud-submit-btn');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving...';
+        }
+
+        try {
+          const res = await fetch('api.php?action=save_nav_item', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id,
+              nav_group,
+              label,
+              nav_key,
+              nav_target,
+              icon,
+              active_icon,
+              badge_type,
+              badge_text,
+              allowed_roles,
+              sort_order,
+              is_enabled,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.navigationConfig) {
+            closeNavItemModal();
+            state.navigationConfig = data.navigationConfig;
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            renderMainNavigation();
+            renderNavigationManagerScreen();
+            showToast(data.message || `Saved navigation item "${label}".`);
+          } else {
+            showToast((data && data.error) || 'Failed to save navigation item.');
+          }
+        } catch (err) {
+          showToast('Network error saving navigation item.');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save Nav Item';
+          }
+        }
+      });
+    }
+
+    const navTableRows = document.getElementById('navigation-table-rows');
+    if (navTableRows) {
+      navTableRows.addEventListener('change', async (e) => {
+        const toggleCb = e.target.closest('.js-toggle-nav-item');
+        if (!toggleCb) return;
+        const id = Number(toggleCb.getAttribute('data-nav-id') || 0);
+        const is_enabled = toggleCb.checked ? 1 : 0;
+        try {
+          const res = await fetch('api.php?action=toggle_nav_item', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, is_enabled }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.navigationConfig) {
+            state.navigationConfig = data.navigationConfig;
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            renderMainNavigation();
+            renderNavigationManagerScreen();
+            showToast(data.message || (is_enabled ? 'Navigation item enabled.' : 'Navigation item disabled.'));
+          } else {
+            toggleCb.checked = !is_enabled;
+            showToast((data && data.error) || 'Failed to toggle navigation item.');
+          }
+        } catch (err) {
+          toggleCb.checked = !is_enabled;
+          showToast('Network error updating navigation item.');
+        }
+      });
+
+      navTableRows.addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('.js-edit-nav-item');
+        if (editBtn) {
+          const nid = Number(editBtn.getAttribute('data-nav-id') || 0);
+          const item = (state.navigationConfig?.items || []).find((x) => Number(x.id) === nid);
+          if (item) openNavItemModal(item);
+          return;
+        }
+
+        const delBtn = e.target.closest('.js-delete-nav-item');
+        if (delBtn) {
+          const nid = Number(delBtn.getAttribute('data-nav-id') || 0);
+          const label = delBtn.getAttribute('data-nav-label') || 'this item';
+          const { confirmed } = await showConfirmModal({
+            title: 'Delete Navigation Item',
+            message: `Are you sure you want to delete "${label}" from the Main Navigation bar?\nYou can always re-create it or use Restore Defaults later.`,
+            confirmText: 'Delete Item',
+            tone: 'danger',
+          });
+          if (!confirmed) return;
+
+          try {
+            const res = await fetch('api.php?action=delete_nav_item', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: nid }),
+            });
+            const data = await res.json();
+            if (res.ok && data && data.ok && data.navigationConfig) {
+              state.navigationConfig = data.navigationConfig;
+              try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+              renderMainNavigation();
+              renderNavigationManagerScreen();
+              showToast(data.message || `Deleted "${label}".`);
+            } else {
+              showToast((data && data.error) || 'Failed to delete navigation item.');
+            }
+          } catch (err) {
+            showToast('Network error deleting navigation item.');
+          }
+        }
+      });
+    }
+
     // Submit Call Time Form
     const callTimeForm = document.getElementById('call-time-form');
     if (callTimeForm) {
@@ -10735,6 +12174,101 @@
         const cpId = document.getElementById('call-time-cp-id').value;
         const callTime = document.getElementById('call-time-input').value;
         await updateCheckpointCallTime({ cpType, cpId, callTime });
+      });
+    }
+
+    // Set Call Time Dedicated Page Listeners
+    const pageCtSelectEl = document.getElementById('page-ct-cp-select');
+    if (pageCtSelectEl) {
+      pageCtSelectEl.addEventListener('change', () => {
+        const [selType, selId] = (pageCtSelectEl.value || '').split(':');
+        const found = (state.checkpoints.directory || []).find((c) => c.type === selType && String(c.id) === String(selId));
+        if (found) {
+          const typeInp = document.getElementById('page-ct-cp-type');
+          const idInp = document.getElementById('page-ct-cp-id');
+          const timeInp = document.getElementById('page-ct-input');
+          const nameEl = document.getElementById('page-ct-target-name');
+          const badgeEl = document.getElementById('page-ct-target-type');
+          if (typeInp) typeInp.value = found.type;
+          if (idInp) idInp.value = found.id;
+          if (timeInp) timeInp.value = found.call_time || '08:00';
+          if (nameEl) nameEl.textContent = found.name;
+          if (badgeEl) {
+            const isStock = found.type === 'stock_warehouse';
+            badgeEl.textContent = isStock ? 'Stock Warehouse' : 'Event Venue';
+            badgeEl.className = `status-badge ${isStock ? 'status-badge-green-sm' : 'status-badge-purple-sm'}`;
+          }
+        }
+      });
+    }
+    document.querySelectorAll('.js-page-calltime-preset').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-time');
+        const inp = document.getElementById('page-ct-input');
+        if (inp && t) inp.value = t;
+      });
+    });
+    document.querySelectorAll('.js-page-extend-calltime').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!canCurrentUserSetCallTime()) {
+          showToast('Access Restricted: Setting Call Times requires Tech Lead, Stock Manager, or Administrator privileges.');
+          return;
+        }
+        const mins = parseInt(btn.getAttribute('data-mins'), 10) || 15;
+        const cpType = document.getElementById('page-ct-cp-type')?.value || state.checkpointType;
+        const cpId = document.getElementById('page-ct-cp-id')?.value || state.checkpointId;
+        updateCheckpointCallTime({ cpType, cpId, extendMinutes: mins });
+      });
+    });
+    const pageCtResetBtn = document.getElementById('page-ct-reset-default-btn');
+    if (pageCtResetBtn) {
+      pageCtResetBtn.addEventListener('click', () => {
+        if (!canCurrentUserSetCallTime()) {
+          showToast('Access Restricted: Setting Call Times requires Tech Lead, Stock Manager, or Administrator privileges.');
+          return;
+        }
+        const cpType = document.getElementById('page-ct-cp-type')?.value || state.checkpointType;
+        const cpId = document.getElementById('page-ct-cp-id')?.value || state.checkpointId;
+        updateCheckpointCallTime({ cpType, cpId, resetToDefault: true });
+      });
+    }
+    const pageCallTimeForm = document.getElementById('page-call-time-form');
+    if (pageCallTimeForm) {
+      pageCallTimeForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!canCurrentUserSetCallTime()) {
+          showToast('Access Restricted: Setting Call Times requires Tech Lead, Stock Manager, or Administrator privileges.');
+          return;
+        }
+        const cpType = document.getElementById('page-ct-cp-type')?.value || state.checkpointType;
+        const cpId = document.getElementById('page-ct-cp-id')?.value || state.checkpointId;
+        const callTime = document.getElementById('page-ct-input')?.value || '08:00';
+        await updateCheckpointCallTime({ cpType, cpId, callTime });
+      });
+    }
+    const pageCtRowsEl = document.getElementById('page-calltime-schedule-rows');
+    if (pageCtRowsEl) {
+      pageCtRowsEl.addEventListener('click', (e) => {
+        const loadBtn = e.target.closest('.js-page-ct-load');
+        if (loadBtn && pageCtSelectEl) {
+          const cpKey = loadBtn.getAttribute('data-cp-key');
+          if (cpKey) {
+            pageCtSelectEl.value = cpKey;
+            pageCtSelectEl.dispatchEvent(new Event('change'));
+          }
+          return;
+        }
+        const extBtn = e.target.closest('.js-page-ct-row-extend');
+        if (extBtn) {
+          if (!canCurrentUserSetCallTime()) {
+            showToast('Access Restricted: Setting Call Times requires Tech Lead, Stock Manager, or Administrator privileges.');
+            return;
+          }
+          const cpType = extBtn.getAttribute('data-cp-type');
+          const cpId = extBtn.getAttribute('data-cp-id');
+          const mins = parseInt(extBtn.getAttribute('data-mins'), 10) || 15;
+          updateCheckpointCallTime({ cpType, cpId, extendMinutes: mins });
+        }
       });
     }
 
@@ -10803,23 +12337,7 @@
         if (countBadge) countBadge.textContent = '0 Assigned';
       });
     }
-    const resetLogsHandler = async () => {
-      if (!isCurrentUserAdmin()) {
-        showToast('Permission Denied: Only System Administrators can reset attendance logs.');
-        return;
-      }
-      const { confirmed, password: confirmPassword } = await showConfirmModal({
-        title: 'Reset User Activity Timeline',
-        message: 'Are you sure you want to reset the User Activity Timeline and gate scans?\nAll activity logs will be cleared and crew set to Not Checked In (0 on-site).',
-        confirmText: 'Reset All Logs',
-        tone: 'danger',
-        requirePassword: true,
-        passwordLabel: 'Administrator Password',
-        passwordPlaceholder: 'Enter your Admin password to confirm...',
-      });
-      if (!confirmed) {
-        return;
-      }
+    async function executeResetTodayScans(confirmPassword) {
       try {
         const res = await fetch('api.php?action=reset_today_scans', {
           method: 'POST',
@@ -10838,16 +12356,69 @@
           renderAll();
           playKioskChime('approve');
           showToast("User Activity Timeline logs and gate scans have been completely reset.");
-        } else {
-          showToast('Failed to reset logs: ' + ((data && data.error) || 'Server error'));
+          return { ok: true };
         }
+        return { ok: false, error: (data && data.error) || 'Server error' };
       } catch (err) {
         console.error('Reset logs error:', err);
-        showToast('Error resetting logs: ' + err.message);
+        return { ok: false, error: err.message };
+      }
+    }
+
+    const resetLogsHandler = async () => {
+      if (!isCurrentUserAdmin()) {
+        showToast('Permission Denied: Only System Administrators can reset attendance logs.');
+        return;
+      }
+      const { confirmed, password: confirmPassword } = await showConfirmModal({
+        title: 'Reset User Activity Timeline',
+        message: 'Are you sure you want to reset the User Activity Timeline and gate scans?\nAll activity logs will be cleared and crew set to Not Checked In (0 on-site).',
+        confirmText: 'Reset All Logs',
+        tone: 'danger',
+        requirePassword: true,
+        passwordLabel: 'Administrator Password',
+        passwordPlaceholder: 'Enter your Admin password to confirm...',
+      });
+      if (!confirmed) {
+        return;
+      }
+      const result = await executeResetTodayScans(confirmPassword);
+      if (!result.ok) {
+        showToast('Failed to reset logs: ' + result.error);
       }
     };
 
-    ['reset-demo-db-btn', 'sidebar-reset-demo-btn', 'users-matrix-reset-logs-btn', 'timeline-clear-btn'].forEach((id) => {
+    const pageResetScansForm = document.getElementById('page-reset-scans-form');
+    if (pageResetScansForm) {
+      pageResetScansForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!isCurrentUserAdmin()) {
+          showToast('Permission Denied: Only System Administrators can reset attendance logs.');
+          return;
+        }
+        const pwdInp = document.getElementById('page-reset-password-input');
+        const errEl = document.getElementById('page-reset-scans-error');
+        const btn = document.getElementById('page-reset-scans-submit-btn');
+        const password = pwdInp ? pwdInp.value : '';
+        if (errEl) {
+          errEl.style.display = 'none';
+          errEl.textContent = '';
+        }
+        if (btn) btn.disabled = true;
+        const result = await executeResetTodayScans(password);
+        if (btn) btn.disabled = false;
+        if (result.ok) {
+          pageResetScansForm.reset();
+        } else if (errEl) {
+          errEl.textContent = result.error || 'Failed to reset today’s scans.';
+          errEl.style.display = 'block';
+        }
+      });
+    }
+
+    triggerResetTodayScans = resetLogsHandler;
+
+    ['reset-demo-db-btn', 'users-matrix-reset-logs-btn', 'timeline-clear-btn'].forEach((id) => {
       const btn = document.getElementById(id);
       if (btn) {
         btn.addEventListener('click', resetLogsHandler);
@@ -11628,9 +13199,9 @@
     return cp ? String(cp.controller_name || cp.lead_name || '').trim().toLowerCase() : '';
   }
 
-  function syncShiftControllersForCheckpoint(cpVal) {
-    const repSel = document.getElementById('sr-replacement-select');
-    const outSel = document.getElementById('sr-outgoing-select');
+  function syncShiftControllersForCheckpoint(cpVal, repSelId = 'sr-replacement-select', outSelId = 'sr-outgoing-select') {
+    const repSel = document.getElementById(repSelId);
+    const outSel = document.getElementById(outSelId);
     if (!repSel || !outSel) return;
 
     const [cpType, cpId] = (cpVal || `${state.checkpointType}:${state.checkpointId}`).split(':');
@@ -11721,35 +13292,15 @@
 
   function renderShiftRequestModal() {
     const cpSel = document.getElementById('sr-checkpoint-select');
-    const repSel = document.getElementById('sr-replacement-select');
-    const outSel = document.getElementById('sr-outgoing-select');
     const listEl = document.getElementById('shift-request-list');
     const pillEl = document.getElementById('sr-pending-summary-pill');
 
     if (cpSel) {
-      const whs = state.checkpoints.stock_warehouses || [];
-      const evs = state.checkpoints.event_venues || [];
-      const curVal = `${state.checkpointType}:${state.checkpointId}`;
-      const opts = [];
-      if (whs.length > 0) {
-        opts.push('<optgroup label="Facility Gates">');
-        whs.forEach((w) => opts.push(`<option value="stock_warehouse:${escapeHtml(String(w.id))}">${escapeHtml(w.name)}</option>`));
-        opts.push('</optgroup>');
-      }
-      if (evs.length > 0) {
-        opts.push('<optgroup label="Event Venues">');
-        evs.forEach((v) => opts.push(`<option value="event_venue:${escapeHtml(String(v.id))}">${escapeHtml(v.name)}</option>`));
-        opts.push('</optgroup>');
-      }
-      cpSel.innerHTML = opts.join('');
-      if (cpSel.querySelector(`option[value="${curVal}"]`)) {
-        cpSel.value = curVal;
-      }
+      cpSel.innerHTML = buildCheckpointSelectOptionsHtml(`${state.checkpointType}:${state.checkpointId}`);
     }
 
     syncShiftControllersForCheckpoint(cpSel ? cpSel.value : `${state.checkpointType}:${state.checkpointId}`);
 
-    const canApprove = canCurrentUserApproveShiftRequests();
     const reqs = state.shiftRequests || [];
     const pendingCount = reqs.filter((r) => r.status === 'pending').length;
     if (pillEl) {
@@ -11757,42 +13308,7 @@
     }
 
     if (!listEl) return;
-    if (reqs.length === 0) {
-      listEl.innerHTML = '<div style="padding: 16px; text-align: center; font-size: 12px; color: var(--text-muted); border: 1px dashed var(--border-color); border-radius: 8px;">No Gate Controller relief or assignment requests yet.</div>';
-      return;
-    }
-
-    listEl.innerHTML = reqs.map((r) => {
-      const st = String(r.status || 'pending').toLowerCase();
-      const badgeCls = st === 'approved' ? 'status-badge-green-sm' : (st === 'rejected' ? 'status-badge-red-sm' : 'status-badge-amber-sm');
-      const winText = (r.shift_start || r.shift_end)
-        ? `Window: ${escapeHtml(r.shift_start || 'Now')} -> ${escapeHtml(r.shift_end || 'Ongoing')}`
-        : 'Ongoing / Immediate';
-      const actionBtns = (st === 'pending' && canApprove)
-        ? `<div style="display: flex; gap: 6px; margin-top: 8px;">
-            <button type="button" class="btn btn-primary-32 js-review-shift-btn" data-req-id="${r.id}" data-decision="approved" style="background: #16a34a; border-color: #15803d;">Approve</button>
-            <button type="button" class="btn btn-secondary-32-sm js-review-shift-btn" data-req-id="${r.id}" data-decision="rejected" style="color: #dc2626; border-color: #fecaca;">Reject</button>
-          </div>`
-        : (st === 'pending'
-            ? '<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Requires Administrator or Site Manager approval</div>'
-            : `<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Reviewed by ${escapeHtml(r.reviewed_by_name || 'Supervisor')} ${r.reviewed_by_role ? '(' + escapeHtml(r.reviewed_by_role) + ')' : ''}</div>`);
-
-      return `
-        <div style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-white);">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-            <strong style="font-size: 12.5px; color: var(--text-primary);">${escapeHtml(r.checkpoint_name)} · ${escapeHtml(formatShiftReasonLabel(r.reason_type))}</strong>
-            <span class="status-badge ${badgeCls}">${escapeHtml(st.toUpperCase())}</span>
-          </div>
-          <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px;">
-            Incoming Controller: <strong>${escapeHtml(r.replacement_controller_name)}</strong>${r.outgoing_controller_name ? ` (Relieving: ${escapeHtml(r.outgoing_controller_name)})` : ''}
-          </div>
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
-            Requested by ${escapeHtml(r.requested_by_name)} · ${winText}${r.notes ? ' · ' + escapeHtml(r.notes) : ''}
-          </div>
-          ${actionBtns}
-        </div>
-      `;
-    }).join('');
+    listEl.innerHTML = buildShiftRequestListHtml(reqs, canCurrentUserApproveShiftRequests());
   }
 
   function openShiftRequestModal() {
@@ -11811,9 +13327,6 @@
     const termBtn = document.getElementById('terminal-shift-relief-btn');
     if (termBtn) termBtn.addEventListener('click', openShiftRequestModal);
 
-    const sideBtn = document.getElementById('sidebar-shift-relief-btn');
-    if (sideBtn) sideBtn.addEventListener('click', openShiftRequestModal);
-
     const closeBtn = document.getElementById('close-shift-request-modal');
     if (closeBtn) closeBtn.addEventListener('click', closeShiftRequestModal);
 
@@ -11826,87 +13339,135 @@
     const srCpSel = document.getElementById('sr-checkpoint-select');
     if (srCpSel) {
       srCpSel.addEventListener('change', () => {
-        syncShiftControllersForCheckpoint(srCpSel.value);
+        syncShiftControllersForCheckpoint(srCpSel.value, 'sr-replacement-select', 'sr-outgoing-select');
       });
+    }
+
+    const pageSrCpSel = document.getElementById('page-sr-checkpoint-select');
+    if (pageSrCpSel) {
+      pageSrCpSel.addEventListener('change', () => {
+        syncShiftControllersForCheckpoint(pageSrCpSel.value, 'page-sr-replacement-select', 'page-sr-outgoing-select');
+      });
+    }
+
+    const pageSrFilterSel = document.getElementById('page-sr-filter-status');
+    if (pageSrFilterSel) {
+      pageSrFilterSel.addEventListener('change', (e) => {
+        state.srFilterStatus = e.target.value;
+        renderShiftReliefPage();
+      });
+    }
+
+    async function handleShiftRequestFormSubmit(formEl, ids) {
+      const btn = document.getElementById(ids.submitBtn);
+      if (btn) btn.disabled = true;
+      const cpVal = document.getElementById(ids.cpSelect)?.value || '';
+      const [cpType, cpId] = cpVal.includes(':') ? cpVal.split(':') : ['stock_warehouse', '1'];
+      try {
+        const res = await fetch('api.php?action=request_controller_shift', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'request_controller_shift',
+            checkpoint_type: cpType,
+            checkpoint_id: cpId,
+            replacement_controller_id: Number(document.getElementById(ids.repSelect)?.value || 0),
+            outgoing_controller_id: Number(document.getElementById(ids.outSelect)?.value || 0),
+            reason_type: document.getElementById(ids.reasonSelect)?.value || 'shift_swap',
+            shift_start: document.getElementById(ids.startInput)?.value || '',
+            shift_end: document.getElementById(ids.endInput)?.value || '',
+            notes: document.getElementById(ids.notesInput)?.value || '',
+          }),
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          applyBootstrapPayload(data, true);
+          renderAll();
+          renderShiftRequestModal();
+          formEl.reset();
+          showToast(data.message || 'Shift relief request submitted.');
+        } else {
+          showToast(data.error || 'Failed to submit shift relief request.');
+        }
+      } catch (err) {
+        showToast('Error communicating with server.');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     const srForm = document.getElementById('shift-request-form');
     if (srForm) {
       srForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const btn = document.getElementById('sr-submit-btn');
-        if (btn) btn.disabled = true;
-        const cpVal = document.getElementById('sr-checkpoint-select')?.value || '';
-        const [cpType, cpId] = cpVal.includes(':') ? cpVal.split(':') : ['stock_warehouse', '1'];
-        try {
-          const res = await fetch('api.php?action=request_controller_shift', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'request_controller_shift',
-              checkpoint_type: cpType,
-              checkpoint_id: cpId,
-              replacement_controller_id: Number(document.getElementById('sr-replacement-select')?.value || 0),
-              outgoing_controller_id: Number(document.getElementById('sr-outgoing-select')?.value || 0),
-              reason_type: document.getElementById('sr-reason-select')?.value || 'shift_swap',
-              shift_start: document.getElementById('sr-shift-start')?.value || '',
-              shift_end: document.getElementById('sr-shift-end')?.value || '',
-              notes: document.getElementById('sr-notes')?.value || '',
-            }),
-          });
-          const data = await res.json();
-          if (data && data.ok) {
-            applyBootstrapPayload(data, true);
-            renderAll();
-            renderShiftRequestModal();
-            srForm.reset();
-            showToast(data.message || 'Shift relief request submitted.');
-          } else {
-            showToast(data.error || 'Failed to submit shift relief request.');
-          }
-        } catch (err) {
-          showToast('Error communicating with server.');
-        } finally {
-          if (btn) btn.disabled = false;
-        }
+        await handleShiftRequestFormSubmit(srForm, {
+          submitBtn: 'sr-submit-btn',
+          cpSelect: 'sr-checkpoint-select',
+          repSelect: 'sr-replacement-select',
+          outSelect: 'sr-outgoing-select',
+          reasonSelect: 'sr-reason-select',
+          startInput: 'sr-shift-start',
+          endInput: 'sr-shift-end',
+          notesInput: 'sr-notes',
+        });
       });
     }
 
-    const listEl = document.getElementById('shift-request-list');
-    if (listEl) {
-      listEl.addEventListener('click', async (e) => {
-        const revBtn = e.target.closest('.js-review-shift-btn');
-        if (!revBtn) return;
-        const reqId = Number(revBtn.getAttribute('data-req-id') || 0);
-        const decision = revBtn.getAttribute('data-decision') || '';
-        if (!reqId || !decision) return;
-        revBtn.disabled = true;
-        try {
-          const res = await fetch('api.php?action=review_controller_shift', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'review_controller_shift',
-              request_id: reqId,
-              decision: decision,
-            }),
-          });
-          const data = await res.json();
-          if (data && data.ok) {
-            applyBootstrapPayload(data, true);
-            renderAll();
-            renderShiftRequestModal();
-            showToast(data.message || `Request #${reqId} ${decision}.`);
-          } else {
-            showToast(data.error || 'Permission denied or review failed.');
-          }
-        } catch (err) {
-          showToast('Error communicating with server.');
-        } finally {
-          revBtn.disabled = false;
-        }
+    const pageSrForm = document.getElementById('page-shift-request-form');
+    if (pageSrForm) {
+      pageSrForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await handleShiftRequestFormSubmit(pageSrForm, {
+          submitBtn: 'page-sr-submit-btn',
+          cpSelect: 'page-sr-checkpoint-select',
+          repSelect: 'page-sr-replacement-select',
+          outSelect: 'page-sr-outgoing-select',
+          reasonSelect: 'page-sr-reason-select',
+          startInput: 'page-sr-shift-start',
+          endInput: 'page-sr-shift-end',
+          notesInput: 'page-sr-notes',
+        });
       });
     }
+
+    async function handleShiftReviewListClick(e) {
+      const revBtn = e.target.closest('.js-review-shift-btn');
+      if (!revBtn) return;
+      const reqId = Number(revBtn.getAttribute('data-req-id') || 0);
+      const decision = revBtn.getAttribute('data-decision') || '';
+      if (!reqId || !decision) return;
+      revBtn.disabled = true;
+      try {
+        const res = await fetch('api.php?action=review_controller_shift', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'review_controller_shift',
+            request_id: reqId,
+            decision: decision,
+          }),
+        });
+        const data = await res.json();
+        if (data && data.ok) {
+          applyBootstrapPayload(data, true);
+          renderAll();
+          renderShiftRequestModal();
+          showToast(data.message || `Request #${reqId} ${decision}.`);
+        } else {
+          showToast(data.error || 'Permission denied or review failed.');
+        }
+      } catch (err) {
+        showToast('Error communicating with server.');
+      } finally {
+        revBtn.disabled = false;
+      }
+    }
+
+    const listEl = document.getElementById('shift-request-list');
+    if (listEl) listEl.addEventListener('click', handleShiftReviewListClick);
+
+    const pageListEl = document.getElementById('page-shift-request-list');
+    if (pageListEl) pageListEl.addEventListener('click', handleShiftReviewListClick);
   }
 
   async function fetchAttendanceReport(range = state.timelineRange || 'today') {
@@ -12067,9 +13628,12 @@
 <head>
   <meta charset="UTF-8" />
   <title>aBility Client Shift Sign-Off Report</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 28px; font-size: 12px; }
+    body { font-family: "Marvel", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 28px; font-size: 12px; }
     .hdr { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #312e81; padding-bottom: 14px; margin-bottom: 18px; }
     .brand { font-size: 20px; font-weight: 800; color: #1e1b4b; letter-spacing: -0.3px; }
     .sub { font-size: 11px; color: #475569; margin-top: 3px; }

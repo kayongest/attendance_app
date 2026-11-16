@@ -15,9 +15,9 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&family=Share+Tech&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261115_v9" />
+  <link rel="stylesheet" href="styles.css?v=20261116_v3" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -89,6 +89,12 @@
         </button>
       </nav>
 
+      <!-- Admin shortcut when Main Navigation bar is disabled -->
+      <button type="button" class="sidebar-nav-disabled-notice" id="sidebar-nav-disabled-notice" style="display: none;" title="Main Navigation is currently disabled. Click to manage or re-enable.">
+        <span>Main Nav Disabled</span>
+        <span style="text-decoration: underline;">Manage ↗</span>
+      </button>
+
       <!-- Workspace Navigation (Checkpoint Controls) -->
       <nav class="nav-group-workspace" id="sidebar-checkpoint-controls" aria-label="Workspace navigation" data-node-id="2:3304">
         <span class="nav-section-label" data-node-id="2:3306">CHECKPOINT CONTROLS</span>
@@ -116,6 +122,12 @@
           <span class="nav-item-label">Reset Today’s Scans</span>
         </button>
       </nav>
+
+      <!-- Admin shortcut when Checkpoint Controls bar is disabled -->
+      <button type="button" class="sidebar-nav-disabled-notice" id="sidebar-workspace-disabled-notice" style="display: none;" title="Checkpoint Controls are currently disabled. Click to manage or re-enable.">
+        <span>Checkpoint Controls Off</span>
+        <span style="text-decoration: underline;">Manage ↗</span>
+      </button>
 
       <div class="sidebar-spacer" data-node-id="2:3316"></div>
 
@@ -1990,6 +2002,10 @@
                 <img src="assets/plus-white.svg" alt="" class="svg-icon" />
                 <span>+ Add Department</span>
               </button>
+              <button type="button" class="btn btn-primary-38 js-open-create-nav-btn" id="open-add-nav-top-btn" style="display: none; background: #4f46e5; border-color: #4f46e5; color: #fff;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add Nav Item</span>
+              </button>
             </div>
           </div>
 
@@ -2022,6 +2038,10 @@
             <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-departments" data-view="departments">
               <img src="assets/nav-integrations.svg" alt="" class="svg-icon" />
               <span>Departments CRUD (<span id="pill-depts-count">14</span>)</span>
+            </button>
+            <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-navigation" data-view="navigation">
+              <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
+              <span>Navigation Menu CRUD (<span id="pill-nav-count">13</span>)</span>
             </button>
           </div>
         </div><!-- End overview-top-block -->
@@ -2227,7 +2247,7 @@
           <div class="overview-top-block" style="margin-bottom: 16px;">
             <div class="page-intro" style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px;">
               <div class="page-intro-heading">
-                <h2 class="page-title" style="font-family: 'Share Tech', sans-serif; font-size: 26px; margin: 0 0 4px; font-weight: 700; letter-spacing: -0.01em;">Security Clearance Matrix</h2>
+                <h2 class="page-title" style="font-family: 'Marvel', sans-serif; font-size: 26px; margin: 0 0 4px; font-weight: 700; letter-spacing: -0.01em;">Security Clearance Matrix</h2>
                 <p class="page-subtitle" style="margin: 0; font-size: 12px; color: var(--text-secondary);">
                   Active security clearance tier specifications, gate perimeter policies, and physical checkpoint authorizations.
                 </p>
@@ -2345,6 +2365,800 @@
             </div>
           </section>
         </div><!-- End #departments-view-container -->
+
+        <!-- TAB 5: NAVIGATION MENU ENABLE/DISABLE & CRUD VIEW CONTAINER -->
+        <div id="navigation-view-container" style="display: none; margin-top: 14px;">
+          <!-- Master Enable / Disable Controls for Main Nav & Checkpoint Controls -->
+          <div class="nav-master-control-card">
+            <div style="display: flex; flex-direction: column; gap: 14px; flex: 1 1 420px;">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <label class="nav-toggle-switch" title="Enable or Disable the entire Main Navigation sidebar group">
+                  <input type="checkbox" id="nav-main-group-toggle" checked />
+                  <span class="nav-toggle-slider"></span>
+                </label>
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <strong style="font-size: 14.5px; color: var(--text-primary);">Main Sidebar Navigation (&lt;nav class="nav-group"&gt;)</strong>
+                    <span class="status-badge status-badge-green-sm" id="nav-main-group-status-badge">Enabled</span>
+                  </div>
+                  <p style="margin: 2px 0 0; font-size: 11.5px; color: var(--text-secondary);">
+                    Show or hide the primary navigation links (Gate Dashboard, Venues, Users, Badges, Terminals, etc.).
+                  </p>
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 14px; padding-top: 12px; border-top: 1px dashed var(--border-color);">
+                <label class="nav-toggle-switch" title="Enable or Disable the entire Checkpoint Controls sidebar group">
+                  <input type="checkbox" id="nav-workspace-group-toggle" checked />
+                  <span class="nav-toggle-slider"></span>
+                </label>
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <strong style="font-size: 14.5px; color: var(--text-primary);">Checkpoint Controls (&lt;nav class="nav-group-workspace" id="sidebar-checkpoint-controls"&gt;)</strong>
+                    <span class="status-badge status-badge-green-sm" id="nav-workspace-group-status-badge">Enabled</span>
+                  </div>
+                  <p style="margin: 2px 0 0; font-size: 11.5px; color: var(--text-secondary);">
+                    Show or hide the Checkpoint Controls group (Shift Relief &amp; Swaps, Set Call Time, Roll-Call, Station Lock, Reset Scans).
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary-38" id="nav-reset-defaults-btn" title="Restore all default Main Navigation and Checkpoint Controls items and enable both groups">
+                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                <span>Restore Defaults</span>
+              </button>
+              <button type="button" class="btn btn-primary-38 js-open-create-nav-btn" style="background: #4f46e5; border-color: #4f46e5; color: #fff;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add Nav Item</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Top Metrics Cards -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Total Nav Items</span>
+                <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="nav-kpi-total">13</span>
+              <span class="metric-context">Main Nav + Checkpoint Controls</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Enabled Items</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="nav-kpi-enabled">13</span>
+              <span class="metric-context">Active in Sidebar</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Disabled Items</span>
+                <img src="assets/lock.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="nav-kpi-disabled">0</span>
+              <span class="metric-context">Hidden from Sidebar</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Custom Items</span>
+                <img src="assets/sparkles.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="nav-kpi-custom">0</span>
+              <span class="metric-context">Administrator-Created Links</span>
+            </div>
+          </div>
+
+          <!-- Navigation Items Directory Table Card -->
+          <section class="directory-card" style="margin-top: 20px;">
+            <div class="directory-header">
+              <div class="directory-heading">
+                <div class="directory-title-row">
+                  <h2 class="directory-title-18">Sidebar Navigation Elements (Main Nav &amp; Checkpoint Controls)</h2>
+                  <span class="status-badge status-badge-blue-sm" id="nav-items-badge-count">13 Items</span>
+                </div>
+                <p class="directory-desc">
+                  Enable, disable, reorder, edit, or delete navigation buttons inside both Main Navigation and Checkpoint Controls, or add custom items with role-based visibility.
+                </p>
+              </div>
+            </div>
+
+            <!-- Navigation Table Tools -->
+            <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <label class="table-search-box" for="nav-search-input" style="flex: 1 1 240px; min-width: 220px;">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input type="text" id="nav-search-input" class="table-search-input" placeholder="Search navigation items by label, key, group, target, or role..." />
+              </label>
+
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <select id="nav-filter-group" class="scan-mode-select" style="min-width: 170px;" aria-label="Filter Navigation Group">
+                  <option value="all">All Sidebar Groups</option>
+                  <option value="main">Main Navigation</option>
+                  <option value="workspace">Checkpoint Controls</option>
+                </select>
+                <select id="nav-filter-status" class="scan-mode-select" style="min-width: 140px;" aria-label="Filter Navigation Status">
+                  <option value="all">All Statuses</option>
+                  <option value="enabled">Enabled Only</option>
+                  <option value="disabled">Disabled Only</option>
+                </select>
+                <button type="button" class="btn btn-primary-38 js-open-create-nav-btn" style="background: #4f46e5; border-color: #4f46e5; color: #fff;">
+                  <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                  <span>+ Add Nav Item</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Navigation Table Container -->
+            <div class="users-table-wrap" style="overflow-x: auto; width: 100%; margin-top: 14px;">
+              <div style="min-width: 980px;">
+                <div class="data-table-header">
+                  <div style="width: 55px;"><span class="th-label">Order</span></div>
+                  <div style="width: 125px;"><span class="th-label">Sidebar Group</span></div>
+                  <div style="width: 220px;"><span class="th-label">Navigation Item</span></div>
+                  <div style="width: 155px;"><span class="th-label">Target / Action</span></div>
+                  <div style="flex: 1 0 180px; min-width: 0;"><span class="th-label">Allowed Roles</span></div>
+                  <div style="width: 100px; text-align: center;"><span class="th-label">Badge</span></div>
+                  <div style="width: 90px; text-align: center;"><span class="th-label">Enabled</span></div>
+                  <div style="width: 130px; text-align: right;"><span class="th-label">Actions</span></div>
+                </div>
+
+                <div id="navigation-table-rows"></div>
+              </div>
+            </div>
+          </section>
+        </div><!-- End #navigation-view-container -->
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 8: VENUE SECURITY PORTAL                                    -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-venue-security">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Venue Security Portal</h1>
+              <p class="page-subtitle">
+                Dedicated security operations hub for live Event Venues — inspect active venue call times, assigned controllers &amp; crew, and launch any venue’s Gate Kiosk.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" data-action="go-events">
+                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
+                <span>Manage Venues</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" id="vs-launch-first-kiosk-btn">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+                <span>Launch Venue Gate Kiosk</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Event Venues</span>
+                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="vs-kpi-venues">0</span>
+              <span class="metric-context">Registered Event Checkpoints</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Venue Crew On-Site</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="vs-kpi-onsite">0</span>
+              <span class="metric-context">Checked-In at Venues Now</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Assigned Controllers</span>
+                <img src="assets/nav-team-members.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="vs-kpi-controllers">0</span>
+              <span class="metric-context">Active Venue Operators</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Active Venue Call Time</span>
+                <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="vs-kpi-calltime">08:00</span>
+              <span class="metric-context" id="vs-kpi-calltime-cp">Primary Event Venue</span>
+            </div>
+          </div>
+        </div>
+
+        <section class="directory-card">
+          <div class="directory-header">
+            <div class="directory-heading">
+              <div class="directory-title-row">
+                <h2 class="directory-title-18">Event Venue Security Stations</h2>
+                <span class="status-badge status-badge-purple-sm" id="vs-stations-count-badge">0 Venues</span>
+              </div>
+              <p class="directory-desc">
+                Select any Event Venue below to launch its live Gate Kiosk scanner (#pane-kiosk) or inspect its assigned leads and schedule.
+              </p>
+            </div>
+          </div>
+          <div id="vs-venues-grid" class="dedicated-page-grid-3" style="padding: 18px 20px;"></div>
+        </section>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 9: SHIFT RELIEF & SWAPS (DEDICATED PAGE)                    -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-shift-relief">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Shift Relief &amp; Swaps</h1>
+              <p class="page-subtitle">
+                Manage Gate Controller assignments, sick leave coverage, shift swaps, high-volume backups, and supervisor approvals across all terminals.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" data-action="go-kiosk">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+                <span>Open Terminal Kiosk</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Pending Approvals</span>
+                <img src="assets/metric-clock-3.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-sr-kpi-pending">0</span>
+              <span class="metric-context">Awaiting Admin / Site Mgr Review</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Approved Handovers</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-sr-kpi-approved">0</span>
+              <span class="metric-context">Completed Relief Requests</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Gate Controllers</span>
+                <img src="assets/nav-team-members.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-sr-kpi-controllers">0</span>
+              <span class="metric-context">Eligible Terminal Operators</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Total Checkpoints</span>
+                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-sr-kpi-checkpoints">0</span>
+              <span class="metric-context">Facility Gates &amp; Venues</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dedicated-page-grid-2">
+          <!-- Request Form Card -->
+          <section class="directory-card" style="padding: 20px;">
+            <div style="margin-bottom: 14px;">
+              <h2 class="directory-title-18" style="margin: 0;">Submit Assignment / Shift Relief Request</h2>
+              <p class="directory-desc" style="margin-top: 4px;">
+                Gate Controllers remain locked to one terminal. All relief handovers require Administrator or Site Manager approval.
+              </p>
+            </div>
+            <form id="page-shift-request-form">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div class="form-field">
+                  <label class="form-label" for="page-sr-checkpoint-select">Target Gate / Venue Checkpoint *</label>
+                  <select id="page-sr-checkpoint-select" class="form-input" required></select>
+                </div>
+                <div class="form-field">
+                  <label class="form-label" for="page-sr-reason-select">Relief Reason / Shift Type *</label>
+                  <select id="page-sr-reason-select" class="form-input" required>
+                    <option value="sick_leave">Sick Leave Replacement</option>
+                    <option value="shift_swap">Shift Swap / Handover</option>
+                    <option value="high_volume">High Workload Venue Backup</option>
+                    <option value="night_shift">Night Shift Coverage</option>
+                    <option value="new_assignment">New Terminal Assignment</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div class="form-field">
+                  <label class="form-label" for="page-sr-replacement-select">Incoming / Assigned Gate Controller *</label>
+                  <select id="page-sr-replacement-select" class="form-input" required></select>
+                </div>
+                <div class="form-field">
+                  <label class="form-label" for="page-sr-outgoing-select">Outgoing Controller (Optional)</label>
+                  <select id="page-sr-outgoing-select" class="form-input">
+                    <option value="0">-- Auto-detect / Keep existing --</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div class="form-field">
+                  <label class="form-label" for="page-sr-shift-start">Shift Start (Optional)</label>
+                  <input type="datetime-local" id="page-sr-shift-start" class="form-input" />
+                </div>
+                <div class="form-field">
+                  <label class="form-label" for="page-sr-shift-end">Shift End / Auto-Expiry (Optional)</label>
+                  <input type="datetime-local" id="page-sr-shift-end" class="form-input" />
+                </div>
+              </div>
+
+              <div class="form-field" style="margin-bottom: 14px;">
+                <label class="form-label" for="page-sr-notes">Operational Notes</label>
+                <input type="text" id="page-sr-notes" class="form-input" placeholder="e.g. Covering night load-out shift at KCC due to high volume or medical leave" />
+              </div>
+
+              <div style="display: flex; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary-38" id="page-sr-submit-btn">Submit Relief Request</button>
+              </div>
+            </form>
+          </section>
+
+          <!-- Approval Queue Card -->
+          <section class="directory-card" style="padding: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+              <div>
+                <h2 class="directory-title-18" style="margin: 0;">Shift Relief &amp; Swap Queue</h2>
+                <p class="directory-desc" style="margin-top: 2px;">Review, approve, or reject controller shift transfers.</p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <select id="page-sr-filter-status" class="scan-mode-select" style="min-width: 130px;">
+                  <option value="all">All Requests</option>
+                  <option value="pending">Pending Only</option>
+                  <option value="approved">Approved Only</option>
+                  <option value="rejected">Rejected Only</option>
+                </select>
+                <span class="status-badge status-badge-amber-sm" id="page-sr-pending-summary-pill">0 Pending</span>
+              </div>
+            </div>
+            <div id="page-shift-request-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 460px; overflow-y: auto;"></div>
+          </section>
+        </div>
+
+        <!-- Assigned Terminal Controllers Overview -->
+        <section class="directory-card" style="margin-top: 20px;">
+          <div class="directory-header">
+            <div class="directory-heading">
+              <div class="directory-title-row">
+                <h2 class="directory-title-18">Live Gate Controller Terminal Roster</h2>
+                <span class="status-badge status-badge-blue-sm" id="page-sr-roster-count">0 Checkpoints</span>
+              </div>
+              <p class="directory-desc">Active Gate Controller assignments across every Facility Gate and Event Venue.</p>
+            </div>
+          </div>
+          <div id="page-sr-assignments-list" style="padding: 16px 20px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px;"></div>
+        </section>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 10: SET CALL TIME (DEDICATED PAGE)                          -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-calltime">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Set Call Time</h1>
+              <p class="page-subtitle">
+                Configure scheduled call times (24h CAT · Kigali), apply quick production delay extensions, and audit all checkpoint punctuality schedules.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" data-action="go-kiosk">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+                <span>Open Terminal Kiosk</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Active Station Call Time</span>
+                <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-ct-kpi-active">08:00</span>
+              <span class="metric-context" id="page-ct-kpi-active-name">Active Checkpoint</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Checkpoints Configured</span>
+                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-ct-kpi-total">0</span>
+              <span class="metric-context">Venues &amp; Facility Gates</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Earliest Call Time</span>
+                <img src="assets/metric-clock-3.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-ct-kpi-earliest">08:00</span>
+              <span class="metric-context">First Daily Shift</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Grace Window</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30">15m</span>
+              <span class="metric-context">On-Time Arrival Allowance</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dedicated-page-grid-2">
+          <!-- Call-Time Studio Form -->
+          <section class="directory-card" style="padding: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+              <div>
+                <h2 class="directory-title-18" style="margin: 0;">Call-Time Schedule Studio</h2>
+                <p class="directory-desc" style="margin-top: 2px;">Editing schedule for <strong id="page-ct-target-name">Active Checkpoint</strong></p>
+              </div>
+              <span class="status-badge status-badge-purple-sm" id="page-ct-target-type">Checkpoint</span>
+            </div>
+
+            <form id="page-call-time-form" style="margin-top: 14px;">
+              <input type="hidden" id="page-ct-cp-type" value="event_venue" />
+              <input type="hidden" id="page-ct-cp-id" value="" />
+
+              <div class="form-field" style="margin-bottom: 14px;">
+                <label class="form-label" for="page-ct-cp-select">Target Venue or Stock Warehouse</label>
+                <select id="page-ct-cp-select" class="form-input" style="height: 42px; font-weight: 600;"></select>
+              </div>
+
+              <div class="form-field" style="margin-bottom: 14px;">
+                <label class="form-label" for="page-ct-input">Scheduled Call Time (24h CAT · Kigali)</label>
+                <input type="time" id="page-ct-input" class="form-input" style="font-size: 18px; font-weight: 700; font-family: 'Marvel', monospace; height: 44px; padding: 0 12px;" value="08:00" required />
+              </div>
+
+              <div style="margin-bottom: 14px;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 6px;">
+                  ⚡ Shift Extensions (Production Delays):
+                </span>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                  <button type="button" class="btn btn-secondary-32-sm js-page-extend-calltime" data-mins="15">+15m</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-extend-calltime" data-mins="30">+30m</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-extend-calltime" data-mins="45">+45m</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-extend-calltime" data-mins="60">+1 Hour</button>
+                </div>
+              </div>
+
+              <div style="margin-bottom: 18px;">
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px;">Quick Presets:</span>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                  <button type="button" class="btn btn-secondary-32-sm js-page-calltime-preset" data-time="06:30">06:30 AM</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-calltime-preset" data-time="07:00">07:00 AM</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-calltime-preset" data-time="07:30">07:30 AM</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-calltime-preset" data-time="08:00">08:00 AM</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-calltime-preset" data-time="08:30">08:30 AM</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-calltime-preset" data-time="09:00">09:00 AM</button>
+                  <button type="button" class="btn btn-secondary-32-sm js-page-calltime-preset" data-time="14:00">02:00 PM</button>
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <button type="button" class="btn btn-secondary-38" id="page-ct-reset-default-btn" style="color: #b45309; border-color: #fde68a; background-color: #fffbeb;">
+                  ↺ Reset to 08:00 AM
+                </button>
+                <button type="submit" class="btn btn-primary-38" id="page-ct-save-btn">Save Call Time</button>
+              </div>
+            </form>
+          </section>
+
+          <!-- All Checkpoints Call-Time Table -->
+          <section class="directory-card" style="padding: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <div>
+                <h2 class="directory-title-18" style="margin: 0;">All Checkpoints Call-Time Schedule</h2>
+                <p class="directory-desc" style="margin-top: 2px;">Click Edit on any gate or venue to load it into the studio, or extend directly.</p>
+              </div>
+              <span class="status-badge status-badge-blue-sm" id="page-ct-list-count">0 Sites</span>
+            </div>
+            <div id="page-calltime-schedule-rows" style="display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto;"></div>
+          </section>
+        </div>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 11: ON-SITE ROLL-CALL (DEDICATED PAGE)                      -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-rollcall">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">On-Site Roll-Call</h1>
+              <p class="page-subtitle">
+                Live muster directory of every staff member currently checked in on-site without a recorded check-out timestamp.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" id="page-rc-refresh-btn">
+                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                <span>Refresh Roll-Call</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" data-action="go-kiosk">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+                <span>Open Gate Kiosk</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Total On-Site Now</span>
+                <img src="assets/nav-team-members.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30 js-stat-onsite" id="page-rc-kpi-total">0</span>
+              <span class="metric-context">Checked-In Personnel</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">At Facility Gates</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-rc-kpi-stock">0</span>
+              <span class="metric-context">Warehouse Checkpoints</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">At Event Venues</span>
+                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-rc-kpi-venues">0</span>
+              <span class="metric-context">Live Event Sites</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Occupied Sites</span>
+                <img src="assets/metric-clock-3.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-rc-kpi-sites">0</span>
+              <span class="metric-context">Checkpoints With Active Crew</span>
+            </div>
+          </div>
+        </div>
+
+        <section class="directory-card">
+          <div class="directory-header">
+            <div class="directory-heading">
+              <div class="directory-title-row">
+                <h2 class="directory-title-18">Live On-Site Crew Muster List</h2>
+                <span class="status-badge status-badge-green-sm"><span class="js-stat-onsite">0</span> On-Site Now</span>
+              </div>
+              <p class="directory-desc">Filter on-site personnel by checkpoint or trigger an immediate supervisor check-out.</p>
+            </div>
+          </div>
+
+          <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <label class="table-search-box" for="page-rc-search-input" style="flex: 1 1 240px;">
+              <img src="assets/search-table.svg" alt="" class="svg-icon" />
+              <input type="text" id="page-rc-search-input" class="table-search-input" placeholder="Search by staff name, badge code, role, department, or checkpoint..." />
+            </label>
+            <select id="page-rc-cp-filter" class="scan-mode-select" style="min-width: 200px;">
+              <option value="all">All Checkpoints</option>
+            </select>
+          </div>
+
+          <div id="page-rollcall-list" style="padding: 16px 20px; display: flex; flex-direction: column; gap: 10px;"></div>
+        </section>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 12: STATION LOCK (PIN) (DEDICATED PAGE)                     -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-station-lock">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Station Lock &amp; Terminal PINs</h1>
+              <p class="page-subtitle">
+                Lock or unlock terminals to a dedicated checkpoint using its PIN, and rotate Facility Gate &amp; Event Venue PINs.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" data-action="go-kiosk">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+                <span>Open Terminal Kiosk</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="page-station-lock-banner" class="station-lock-banner is-unlocked">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <strong style="font-size: 15px; color: var(--text-primary);" id="page-sl-status-title">Multi-Checkpoint Mode (Unlocked)</strong>
+                <span class="status-badge status-badge-green-sm" id="page-sl-status-badge">UNLOCKED</span>
+              </div>
+              <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-secondary);" id="page-sl-status-desc">
+                Active checkpoint: <strong id="page-sl-active-cp-label">Checkpoint</strong>
+              </p>
+            </div>
+            <span class="status-badge status-badge-blue-sm" id="page-sl-screen-lock-badge">Terminal Screen: Unlocked</span>
+          </div>
+        </div>
+
+        <div class="dedicated-page-grid-2">
+          <!-- Toggle Station Lock Card -->
+          <section class="directory-card" style="padding: 20px;">
+            <h2 class="directory-title-18" style="margin: 0 0 6px;">Toggle Station Lock</h2>
+            <p class="directory-desc" style="margin-bottom: 14px;">
+              Verify the dedicated PIN for <strong id="page-sl-form-cp-name">Active Checkpoint</strong> to lock or unlock checkpoint switching across this browser station.
+            </p>
+            <form id="page-station-lock-form">
+              <div class="form-field" style="margin-bottom: 14px;">
+                <label class="form-label" for="page-station-pin-input">Checkpoint / Warehouse PIN *</label>
+                <input type="password" id="page-station-pin-input" class="form-input" placeholder="Enter dedicated checkpoint PIN..." autocomplete="off" required />
+              </div>
+              <div style="display: flex; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary-38" id="page-confirm-station-lock-btn">Toggle Station Lock</button>
+              </div>
+            </form>
+          </section>
+
+          <!-- Site PINs Rotation & Registry Card -->
+          <section class="directory-card" style="padding: 20px;">
+            <h2 class="directory-title-18" style="margin: 0 0 6px;">Site Terminal PINs (Gates &amp; Venues)</h2>
+            <p class="directory-desc" style="margin-bottom: 12px;">
+              Inspect or rotate dedicated lock-screen and station-lock PINs for each checkpoint.
+            </p>
+            <div id="page-warehouse-pin-list" class="warehouse-pin-list" style="max-height: 250px; overflow-y: auto; margin-bottom: 14px;"></div>
+
+            <form id="page-warehouse-pin-form" style="padding-top: 14px; border-top: 1px solid var(--border-color);">
+              <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-bottom: 12px;">
+                <div class="form-field">
+                  <label class="form-label" for="page-wh-pin-select">Checkpoint Terminal</label>
+                  <select id="page-wh-pin-select" class="form-input" required></select>
+                </div>
+                <div class="form-field">
+                  <label class="form-label" for="page-wh-pin-value">Dedicated PIN (4–12 chars)</label>
+                  <input type="text" id="page-wh-pin-value" class="form-input" placeholder="e.g. 247365" minlength="4" maxlength="12" autocomplete="off" required />
+                </div>
+              </div>
+              <div style="display: flex; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary-38" id="page-save-warehouse-pin-btn">Save Checkpoint PIN</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 13: RESET TODAY'S SCANS (DEDICATED PAGE)                    -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-reset-scans">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Reset Today’s Scans</h1>
+              <p class="page-subtitle">
+                Administrator-only operational audit and reset workspace to clear daily gate logs and return personnel status to Not Checked In.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" data-action="go-overview">
+                <img src="assets/nav-overview-inactive.svg" alt="" class="svg-icon" />
+                <span>Back to Gate Dashboard</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Timeline Events Today</span>
+                <img src="assets/nav-analytics.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-reset-kpi-events">0</span>
+              <span class="metric-context">Recorded Gate Activity Entries</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Currently On-Site</span>
+                <img src="assets/nav-team-members.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30 js-stat-onsite" id="page-reset-kpi-onsite">0</span>
+              <span class="metric-context">Will Be Reset to 0</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Total Registered Crew</span>
+                <img src="assets/nav-attendees-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-reset-kpi-crew">0</span>
+              <span class="metric-context">Profiles Preserved</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Required Privilege</span>
+                <img src="assets/lock.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" style="font-size: 20px;">Admin</span>
+              <span class="metric-context">Password Confirmation Mandatory</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dedicated-page-grid-2">
+          <section class="directory-card" style="padding: 20px;">
+            <h2 class="directory-title-18" style="margin: 0 0 6px;">What Resetting Clears vs. Preserves</h2>
+            <p class="directory-desc" style="margin-bottom: 14px;">Review scope before executing a daily scan reset.</p>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-secondary);">
+              <div style="padding: 12px; border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.25); background: rgba(220, 38, 38, 0.04);">
+                <strong style="color: #dc2626; display: block; margin-bottom: 4px;">Cleared Today:</strong>
+                All User Activity Timeline scan events and daily gate check-in / check-out statuses across stations (active on-site counter returns to 0).
+              </div>
+              <div style="padding: 12px; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.25); background: rgba(16, 185, 129, 0.04);">
+                <strong style="color: #059669; display: block; margin-bottom: 4px;">Safely Preserved:</strong>
+                All user accounts, roles, departments, event venues, facility gates, terminal PINs, call times, shift relief logs, and navigation settings remain untouched.
+              </div>
+            </div>
+          </section>
+
+          <section class="danger-zone-card">
+            <h2 class="directory-title-18" style="margin: 0 0 6px; color: #dc2626;">Administrator Reset Authorization</h2>
+            <p class="directory-desc" style="margin-bottom: 14px;">
+              Enter your Administrator password below to confirm clearing today’s gate scans and activity timeline.
+            </p>
+            <form id="page-reset-scans-form">
+              <div class="form-field" style="margin-bottom: 12px;">
+                <label class="form-label" for="page-reset-password-input">Administrator Password *</label>
+                <input type="password" id="page-reset-password-input" class="form-input" placeholder="Enter your Admin password to authorize..." autocomplete="current-password" required />
+              </div>
+              <div class="form-field" style="margin-bottom: 16px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; color: var(--text-primary);">
+                  <input type="checkbox" id="page-reset-confirm-check" required />
+                  <span>I understand today’s gate scans and activity timeline logs will be cleared.</span>
+                </label>
+              </div>
+              <div id="page-reset-scans-error" style="display: none; font-size: 12px; color: #dc2626; font-weight: 600; margin-bottom: 10px;"></div>
+              <div style="display: flex; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary-38 btn-confirm-danger" id="page-reset-scans-submit-btn">Reset Today’s Scans &amp; Logs</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 14: DYNAMIC CUSTOM NAVIGATION PAGE                          -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-custom-nav-page">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title" id="custom-nav-page-title">Custom Navigation Page</h1>
+              <p class="page-subtitle" id="custom-nav-page-subtitle">
+                Dedicated workspace view for custom Administrator-created navigation item.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" id="custom-nav-manage-btn" style="display: none;">
+                <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
+                <span>Configure in Nav CRUD</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" data-action="go-overview">
+                <img src="assets/nav-overview-inactive.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+                <span>Gate Dashboard</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <section class="directory-card" style="padding: 22px;">
+          <div id="custom-nav-page-body"></div>
+        </section>
       </main>
     </div>
   </div>
@@ -2561,7 +3375,7 @@
               </div>
               <div class="kiosk-sub-panel-body">
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                  <input type="password" id="kiosk-override-pin" class="form-input kiosk-override-input" placeholder="Enter Supervisor PIN (e.g. 1234)" style="flex: 1 1 170px; height: 36px; font-size: 12px;" />
+                  <input type="password" id="kiosk-override-pin" class="form-input kiosk-override-input" placeholder="Supervisor Password or Terminal PIN" style="flex: 1 1 170px; height: 36px; font-size: 12px;" />
                   <select id="kiosk-override-reason-select" class="form-input kiosk-override-select" style="flex: 2 1 200px; height: 36px; font-size: 12px;">
                     <option value="Traffic / Transit Disruption">Traffic / Transit Disruption</option>
                     <option value="Emergency Stage Reassignment">Emergency Stage Reassignment</option>
@@ -3082,7 +3896,7 @@
             type="time"
             id="call-time-input"
             class="form-input"
-            style="font-size: 16px; font-weight: 700; font-family: 'Share Tech', monospace; height: 42px; padding: 0 12px;"
+            style="font-size: 16px; font-weight: 700; font-family: 'Marvel', monospace; height: 42px; padding: 0 12px;"
             required
             value="08:00"
           />
@@ -3822,7 +4636,7 @@
   <div class="modal-backdrop" id="dept-crud-modal" aria-hidden="true" style="display: none;">
     <div class="modal-card" style="width: 500px; max-width: 95vw;" role="dialog" aria-labelledby="dept-crud-modal-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-        <h3 class="modal-title" id="dept-crud-modal-title" style="font-family: 'Share Tech', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Add New Department</h3>
+        <h3 class="modal-title" id="dept-crud-modal-title" style="font-family: 'Marvel', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Add New Department</h3>
         <span class="status-badge status-badge-blue-sm" id="dept-crud-modal-tag">Department</span>
       </div>
       <form id="dept-crud-form">
@@ -3850,6 +4664,150 @@
         <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
           <button type="button" class="btn btn-secondary-38 js-close-dept-crud-modal">Cancel</button>
           <button type="submit" class="btn btn-primary-38" id="dept-crud-submit-btn" style="background: #0284c7; border-color: #0284c7; color: #fff;">Save Department</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE / EDIT NAVIGATION ITEM (MAIN NAVIGATION CRUD)           -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="nav-item-crud-modal" aria-hidden="true" style="display: none;">
+    <div class="modal-card" style="width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-labelledby="nav-crud-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <h3 class="modal-title" id="nav-crud-modal-title" style="font-family: 'Marvel', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Add Navigation Item</h3>
+        <span class="status-badge status-badge-blue-sm" id="nav-crud-modal-tag">Main Nav</span>
+      </div>
+      <form id="nav-item-crud-form">
+        <input type="hidden" id="nav-crud-id" value="0" />
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="nav-crud-group">Sidebar Group *</label>
+          <select id="nav-crud-group" class="form-input">
+            <option value="main">Main Navigation (&lt;nav class="nav-group"&gt;)</option>
+            <option value="workspace">Checkpoint Controls (&lt;nav class="nav-group-workspace"&gt;)</option>
+          </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 180px; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="nav-crud-label">Display Label *</label>
+            <input type="text" id="nav-crud-label" class="form-input" placeholder="e.g. Gate Dashboard" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="nav-crud-order">Sort Order</label>
+            <input type="number" id="nav-crud-order" class="form-input" value="9" min="1" max="999" required />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="nav-crud-key">Navigation Key *</label>
+            <input type="text" id="nav-crud-key" class="form-input" placeholder="e.g. overview or custom_reports" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="nav-crud-target">Target Screen / Page / Action *</label>
+            <select id="nav-crud-target" class="form-input">
+              <optgroup label="Main Screens &amp; Portals">
+                <option value="overview">Gate Dashboard (overview)</option>
+                <option value="events">Venues &amp; Facility Gates (events)</option>
+                <option value="users">Users &amp; Roles (users)</option>
+                <option value="attendees">ID Badges &amp; Kiosk (attendees)</option>
+                <option value="terminals">Terminals (terminals)</option>
+                <option value="venue-security">Venue Security Portal (venue-security)</option>
+                <option value="stock-manager">Facilities &amp; Gates (stock-manager)</option>
+                <option value="access-matrix">Clearance Matrix (access-matrix)</option>
+                <option value="analytics">Analytics &amp; Matrix (analytics)</option>
+              </optgroup>
+              <optgroup label="Checkpoint Controls Pages">
+                <option value="shift-relief">Shift Relief &amp; Swaps Page (shift-relief)</option>
+                <option value="calltime">Set Call Time Page (calltime)</option>
+                <option value="rollcall">On-Site Roll-Call Page (rollcall)</option>
+                <option value="station-lock">Station Lock (PIN) Page (station-lock)</option>
+                <option value="reset-scans">Reset Today's Scans Page (reset-scans)</option>
+              </optgroup>
+              <optgroup label="Quick Modal Triggers (Optional)">
+                <option value="action:shift-relief">Shift Relief &amp; Swaps Modal</option>
+                <option value="action:calltime">Set Call Time Modal</option>
+                <option value="action:rollcall">On-Site Roll-Call Modal</option>
+                <option value="action:station-lock">Station Lock (PIN) Modal</option>
+                <option value="action:reset-scans">Reset Today's Scans Confirm Modal</option>
+              </optgroup>
+              <option value="custom">Custom Page Slug / External URL</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field" id="nav-crud-custom-url-wrap" style="display: none; margin-bottom: 12px;">
+          <label class="form-label" for="nav-crud-custom-url">Custom Page Slug (e.g. briefings) or URL / Hash Link</label>
+          <input type="text" id="nav-crud-custom-url" class="form-input" placeholder="briefings or https://example.com or howto_client_guide.html" />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="nav-crud-icon">Sidebar Icon</label>
+            <select id="nav-crud-icon" class="form-input">
+              <option value="assets/nav-overview-inactive.svg">Dashboard Grid (Overview)</option>
+              <option value="assets/nav-events-inactive.svg">Events / Venues Calendar</option>
+              <option value="assets/nav-team-members.svg">Team Members / Users</option>
+              <option value="assets/nav-attendees-inactive.svg">ID Badges / Attendees</option>
+              <option value="assets/scan-line-13.svg">Terminal Scanner</option>
+              <option value="assets/nav-campaigns.svg">Portal / Shield</option>
+              <option value="svg:warehouse">Warehouse Cube (Facilities)</option>
+              <option value="assets/nav-payments.svg">Clearance / Matrix Card</option>
+              <option value="assets/refresh-cw.svg">Refresh / Shift Relief</option>
+              <option value="assets/metric-calendar-clock.svg">Call-Time Clock</option>
+              <option value="assets/nav-analytics.svg">Analytics Chart</option>
+              <option value="assets/nav-integrations.svg">Integrations / Lock</option>
+              <option value="assets/nav-settings.svg">Settings / Reset Gear</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="nav-crud-badge-type">Count Badge</label>
+            <select id="nav-crud-badge-type" class="form-input">
+              <option value="none">None</option>
+              <option value="events">Events &amp; Venues Count</option>
+              <option value="users">Users Count</option>
+              <option value="stock">Facilities / Warehouses Count</option>
+              <option value="onsite">On-Site Personnel Count</option>
+              <option value="shift_relief">Pending Shift Relief Count</option>
+              <option value="calltime">Active Call-Time Pill</option>
+              <option value="custom">Custom Badge Text</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-field" id="nav-crud-badge-text-wrap" style="display: none; margin-bottom: 12px;">
+          <label class="form-label" for="nav-crud-badge-text">Custom Badge Text</label>
+          <input type="text" id="nav-crud-badge-text" class="form-input" maxlength="16" placeholder="e.g. NEW or 04" />
+        </div>
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Allowed Roles</span>
+            <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">
+              <input type="checkbox" id="nav-crud-roles-all" />
+              <span>All Roles</span>
+            </label>
+          </label>
+          <div class="nav-crud-roles-grid" id="nav-crud-roles-list">
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="admin,administrator" /> Administrator</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="manager,project_manager" /> Manager / PM</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="tech_lead,technical_lead" /> Technical Lead</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="stock_manager" /> Site Manager</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="stock_controller" /> Gate Controller</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="technician,sound_engineer,lighting_tech,video_director,stage_manager,rigging_lead,user,security,driver" /> Crew &amp; Technicians</label>
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+            <input type="checkbox" id="nav-crud-enabled" checked />
+            <span>Enabled (visible in Main Navigation sidebar)</span>
+          </label>
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary-38 js-close-nav-crud-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="nav-crud-submit-btn" style="background: #4f46e5; border-color: #4f46e5; color: #fff;">Save Nav Item</button>
         </div>
       </form>
     </div>
@@ -4159,6 +5117,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261115_v15"></script>
+  <script src="app.js?v=20261116_v6"></script>
 </body>
 </html>

@@ -634,6 +634,394 @@ function getDepartmentsList(PDO $pdo, array $crew = []): array
     return [];
 }
 
+function getDefaultNavigationItems(): array
+{
+    return [
+        [
+            'nav_group' => 'main',
+            'nav_key' => 'overview',
+            'label' => 'Gate Dashboard',
+            'nav_target' => 'overview',
+            'dom_id' => '',
+            'node_id' => '2:3285',
+            'icon' => 'assets/nav-overview-inactive.svg',
+            'active_icon' => 'assets/nav-overview-active.svg',
+            'icon_id' => 'nav-icon-overview',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,tech_lead,technical_lead,stock_manager',
+            'sort_order' => 1,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_key' => 'events',
+            'label' => 'Venues & Facility Gates',
+            'nav_target' => 'events',
+            'dom_id' => '',
+            'node_id' => '2:3288',
+            'icon' => 'assets/nav-events-inactive.svg',
+            'active_icon' => 'assets/nav-events-active.svg',
+            'icon_id' => 'nav-icon-events',
+            'badge_type' => 'events',
+            'badge_id' => 'sidebar-events-count',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager',
+            'sort_order' => 2,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_key' => 'users',
+            'label' => 'Users & Roles',
+            'nav_target' => 'users',
+            'dom_id' => 'nav-users-btn',
+            'node_id' => '',
+            'icon' => 'assets/nav-team-members.svg',
+            'active_icon' => '',
+            'icon_id' => 'nav-icon-users',
+            'badge_type' => 'users',
+            'badge_id' => 'sidebar-users-count',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager',
+            'sort_order' => 3,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_key' => 'attendees',
+            'label' => 'ID Badges & Kiosk',
+            'nav_target' => 'attendees',
+            'dom_id' => '',
+            'node_id' => '2:3292',
+            'icon' => 'assets/nav-attendees-inactive.svg',
+            'active_icon' => 'assets/nav-attendees-active.svg',
+            'icon_id' => 'nav-icon-attendees',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,stock_controller,technician,sound_engineer,lighting_tech,video_director,stage_manager,rigging_lead,user,security,driver',
+            'sort_order' => 4,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_key' => 'terminals',
+            'label' => 'Terminals',
+            'nav_target' => 'terminals',
+            'dom_id' => 'nav-terminals-btn',
+            'node_id' => '',
+            'icon' => 'assets/scan-line-13.svg',
+            'active_icon' => '',
+            'icon_id' => 'nav-icon-terminals',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'all',
+            'sort_order' => 5,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_key' => 'venue_security',
+            'label' => 'Venue Security Portal',
+            'nav_target' => 'venue-security',
+            'dom_id' => 'nav-venue-security-btn',
+            'node_id' => '2:3295',
+            'icon' => 'assets/nav-campaigns.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager',
+            'sort_order' => 6,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_key' => 'stock-manager',
+            'label' => 'Facilities & Gates',
+            'nav_target' => 'stock-manager',
+            'dom_id' => 'nav-stock-manager-btn',
+            'node_id' => '',
+            'icon' => 'svg:warehouse',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'stock',
+            'badge_id' => 'sidebar-stock-count',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,stock_manager,stock_controller',
+            'sort_order' => 7,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_key' => 'access_matrix',
+            'label' => 'Clearance Matrix',
+            'nav_target' => 'access-matrix',
+            'dom_id' => 'nav-access-matrix-btn',
+            'node_id' => '2:3301',
+            'icon' => 'assets/nav-payments.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator',
+            'sort_order' => 8,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'shift_relief',
+            'label' => 'Shift Relief & Swaps',
+            'nav_target' => 'shift-relief',
+            'dom_id' => 'sidebar-shift-relief-btn',
+            'node_id' => '',
+            'icon' => 'assets/refresh-cw.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'shift_relief',
+            'badge_id' => 'sidebar-shift-relief-badge',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,stock_controller',
+            'sort_order' => 1,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'set_calltime',
+            'label' => 'Set Call Time',
+            'nav_target' => 'calltime',
+            'dom_id' => 'sidebar-calltime-btn',
+            'node_id' => '',
+            'icon' => 'assets/metric-calendar-clock.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'calltime',
+            'badge_id' => 'sidebar-active-calltime-pill',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager',
+            'sort_order' => 2,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'onsite_rollcall',
+            'label' => 'On-Site Roll-Call',
+            'nav_target' => 'rollcall',
+            'dom_id' => 'sidebar-rollcall-btn',
+            'node_id' => '2:3307',
+            'icon' => 'assets/nav-team-members.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'onsite',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager',
+            'sort_order' => 3,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'station_lock',
+            'label' => 'Station Lock (PIN)',
+            'nav_target' => 'station-lock',
+            'dom_id' => 'sidebar-station-lock-btn',
+            'node_id' => '2:3310',
+            'icon' => 'assets/nav-integrations.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator',
+            'sort_order' => 4,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'reset_today_scans',
+            'label' => "Reset Today’s Scans",
+            'nav_target' => 'reset-scans',
+            'dom_id' => 'sidebar-reset-demo-btn',
+            'node_id' => '2:3313',
+            'icon' => 'assets/nav-settings.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator',
+            'sort_order' => 5,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+    ];
+}
+
+function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
+{
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `app_settings` (
+                `setting_key` VARCHAR(64) PRIMARY KEY,
+                `setting_value` TEXT DEFAULT NULL,
+                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+        if ($forceReset) {
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('main_nav_enabled', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('workspace_nav_enabled', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        } else {
+            $pdo->exec("INSERT IGNORE INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('main_nav_enabled', '1')");
+            $pdo->exec("INSERT IGNORE INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('workspace_nav_enabled', '1')");
+        }
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `navigation_items` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `nav_group` VARCHAR(32) NOT NULL DEFAULT 'main',
+                `nav_key` VARCHAR(64) NOT NULL UNIQUE,
+                `label` VARCHAR(120) NOT NULL,
+                `nav_target` VARCHAR(160) NOT NULL DEFAULT 'overview',
+                `dom_id` VARCHAR(80) DEFAULT NULL,
+                `node_id` VARCHAR(40) DEFAULT NULL,
+                `icon` VARCHAR(255) DEFAULT 'assets/nav-overview-inactive.svg',
+                `active_icon` VARCHAR(255) DEFAULT NULL,
+                `icon_id` VARCHAR(80) DEFAULT NULL,
+                `badge_type` VARCHAR(40) DEFAULT 'none',
+                `badge_id` VARCHAR(80) DEFAULT NULL,
+                `badge_text` VARCHAR(32) DEFAULT NULL,
+                `allowed_roles` TEXT DEFAULT NULL,
+                `sort_order` INT NOT NULL DEFAULT 10,
+                `is_enabled` TINYINT(1) NOT NULL DEFAULT 1,
+                `is_system` TINYINT(1) NOT NULL DEFAULT 0,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        $navCols = $pdo->query("SHOW COLUMNS FROM `navigation_items`")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('nav_group', $navCols, true)) {
+            $pdo->exec("ALTER TABLE `navigation_items` ADD `nav_group` VARCHAR(32) NOT NULL DEFAULT 'main' AFTER `id`");
+        }
+
+        if ($forceReset) {
+            $pdo->exec("DELETE FROM `navigation_items`");
+        }
+        $cnt = (int) $pdo->query("SELECT COUNT(*) FROM `navigation_items`")->fetchColumn();
+        $wsCnt = (int) $pdo->query("SELECT COUNT(*) FROM `navigation_items` WHERE `nav_group` = 'workspace'")->fetchColumn();
+        if ($cnt === 0 || ($wsCnt === 0 && !$forceReset)) {
+            $ins = $pdo->prepare("
+                INSERT IGNORE INTO `navigation_items`
+                (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            foreach (getDefaultNavigationItems() as $it) {
+                $grp = (string) ($it['nav_group'] ?? 'main');
+                if ($cnt > 0 && $grp !== 'workspace') {
+                    continue;
+                }
+                $ins->execute([
+                    $grp,
+                    $it['nav_key'],
+                    $it['label'],
+                    $it['nav_target'],
+                    $it['dom_id'],
+                    $it['node_id'],
+                    $it['icon'],
+                    $it['active_icon'],
+                    $it['icon_id'],
+                    $it['badge_type'],
+                    $it['badge_id'],
+                    $it['badge_text'],
+                    $it['allowed_roles'],
+                    $it['sort_order'],
+                    $it['is_enabled'],
+                    $it['is_system'],
+                ]);
+            }
+        }
+
+        // Upgrade legacy modal-only workspace targets on system items to their dedicated pages
+        $pageTargetUpgrades = [
+            'action:shift-relief' => 'shift-relief',
+            'action:calltime' => 'calltime',
+            'action:rollcall' => 'rollcall',
+            'action:station-lock' => 'station-lock',
+            'action:reset-scans' => 'reset-scans',
+        ];
+        $upStmt = $pdo->prepare("UPDATE `navigation_items` SET `nav_target` = ? WHERE `is_system` = 1 AND `nav_target` = ?");
+        foreach ($pageTargetUpgrades as $oldTgt => $newTgt) {
+            $upStmt->execute([$newTgt, $oldTgt]);
+        }
+    } catch (Throwable $e) {}
+}
+
+function getNavigationConfig(PDO $pdo): array
+{
+    ensureNavigationTables($pdo);
+    $mainNavEnabled = true;
+    $workspaceNavEnabled = true;
+    $items = [];
+    try {
+        $st = $pdo->query("SELECT `setting_key`, `setting_value` FROM `app_settings` WHERE `setting_key` IN ('main_nav_enabled', 'workspace_nav_enabled')");
+        while ($sRow = $st->fetch(PDO::FETCH_ASSOC)) {
+            if ($sRow['setting_key'] === 'main_nav_enabled') {
+                $mainNavEnabled = ((string) $sRow['setting_value'] !== '0');
+            } elseif ($sRow['setting_key'] === 'workspace_nav_enabled') {
+                $workspaceNavEnabled = ((string) $sRow['setting_value'] !== '0');
+            }
+        }
+
+        $rows = $pdo->query("SELECT * FROM `navigation_items` ORDER BY `nav_group` ASC, `sort_order` ASC, `id` ASC")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $r) {
+            $items[] = [
+                'id' => (int) ($r['id'] ?? 0),
+                'nav_group' => trim((string) ($r['nav_group'] ?? 'main')) === 'workspace' ? 'workspace' : 'main',
+                'nav_key' => trim((string) ($r['nav_key'] ?? '')),
+                'label' => trim((string) ($r['label'] ?? '')),
+                'nav_target' => trim((string) ($r['nav_target'] ?? 'overview')),
+                'dom_id' => trim((string) ($r['dom_id'] ?? '')),
+                'node_id' => trim((string) ($r['node_id'] ?? '')),
+                'icon' => trim((string) ($r['icon'] ?? 'assets/nav-overview-inactive.svg')),
+                'active_icon' => trim((string) ($r['active_icon'] ?? '')),
+                'icon_id' => trim((string) ($r['icon_id'] ?? '')),
+                'badge_type' => trim((string) ($r['badge_type'] ?? 'none')),
+                'badge_id' => trim((string) ($r['badge_id'] ?? '')),
+                'badge_text' => trim((string) ($r['badge_text'] ?? '')),
+                'allowed_roles' => trim((string) ($r['allowed_roles'] ?? 'all')),
+                'sort_order' => (int) ($r['sort_order'] ?? 10),
+                'is_enabled' => (int) ($r['is_enabled'] ?? 1),
+                'is_system' => (int) ($r['is_system'] ?? 0),
+            ];
+        }
+    } catch (Throwable $e) {}
+
+    if (empty($items)) {
+        $defaults = getDefaultNavigationItems();
+        foreach ($defaults as $idx => $d) {
+            $d['id'] = $idx + 1;
+            $d['nav_group'] = $d['nav_group'] ?? 'main';
+            $items[] = $d;
+        }
+    }
+
+    return [
+        'main_nav_enabled' => $mainNavEnabled,
+        'workspace_nav_enabled' => $workspaceNavEnabled,
+        'items' => $items,
+    ];
+}
+
 function getCallerUser(PDO $pdo): ?array
 {
     $authId = (int) ($_SESSION['auth_user_id'] ?? 0);
@@ -777,6 +1165,7 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
         case 'delete_role':
         case 'save_department':
         case 'delete_department':
+        case 'manage_navigation':
             if (!$isAdmin) {
                 return ['ok' => false, 'error' => 'Permission denied: This action requires Administrator privileges.'];
             }
@@ -828,7 +1217,7 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
         case 'save_event':
         case 'assign_event_crew':
             // Tech Lead, Project Manager, Admin, and Stock Manager (for warehouses)
-            if (!in_array($role, ['admin', 'manager', 'tech_lead', 'technical_lead', 'project_manager'], true)) {
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead', 'project_manager'], true)) {
                 if ($role === 'stock_manager' && ($context['checkpoint_type'] ?? '') === 'stock_warehouse') {
                     break;
                 }
@@ -1819,6 +2208,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'defaultVerification' => $defaultVerification,
         'roles' => getRolesList($pdo, $crew),
         'departments' => getDepartmentsList($pdo, $crew),
+        'navigationConfig' => getNavigationConfig($pdo),
     ];
 }
 
@@ -2599,23 +2989,75 @@ try {
             $noteText = "Gate Check-Out approved at {$cpName}";
             $allowed = true;
         } elseif ($decision === 'supervisor_override') {
-            // Verify supervisor authentication strictly via supervisor password or authenticated supervisor session
+            // Verify supervisor authentication via supervisor/admin password or (for authenticated supervisors) checkpoint PIN
             $authOk = false;
             $authSupervisorName = 'Supervisor';
             $caller = getCallerUser($pdo);
             $callerRole = strtolower(trim((string)($caller['role'] ?? '')));
-            $supervisorRoles = ['admin', 'manager', 'administrator', 'tech_lead', 'stock_manager'];
+            $supervisorRoles = ['admin', 'manager', 'administrator', 'tech_lead', 'technical_lead', 'stock_manager', 'project_manager'];
 
-            if ($supervisorId > 0 && $supervisorPin !== '') {
+            if ($supervisorPin !== '') {
+                // 1. Check explicitly targeted supervisor_id first, then authenticated caller if supervisor
+                $candidateIds = [];
+                if ($supervisorId > 0) {
+                    $candidateIds[] = $supervisorId;
+                }
+                if ($caller !== null && !empty($caller['id']) && !in_array((int)$caller['id'], $candidateIds, true)) {
+                    $candidateIds[] = (int)$caller['id'];
+                }
+
                 $chkSup = $pdo->prepare("SELECT `id`, `full_name`, `password_hash`, `role` FROM `users` WHERE `id` = ? AND `is_active` = 1");
-                $chkSup->execute([$supervisorId]);
-                $supRow = $chkSup->fetch(PDO::FETCH_ASSOC);
-                if ($supRow && in_array(strtolower((string)$supRow['role']), $supervisorRoles, true)) {
-                    $supHash = (string) ($supRow['password_hash'] ?? '');
-                    if ($supHash !== '' && password_verify($supervisorPin, $supHash)) {
+                foreach ($candidateIds as $candId) {
+                    $chkSup->execute([$candId]);
+                    $supRow = $chkSup->fetch(PDO::FETCH_ASSOC);
+                    if ($supRow && in_array(strtolower(trim((string)$supRow['role'])), $supervisorRoles, true)) {
+                        $supHash = (string) ($supRow['password_hash'] ?? '');
+                        if ($supHash !== '' && password_verify($supervisorPin, $supHash)) {
+                            $authOk = true;
+                            $overrideById = (int) $supRow['id'];
+                            $authSupervisorName = $supRow['full_name'] ?: 'Supervisor';
+                            break;
+                        }
+                    }
+                }
+
+                // 2. Allow any active Supervisor/Administrator password (UI has a single credential prompt with no user selector)
+                if (!$authOk) {
+                    $supStmt = $pdo->query("SELECT `id`, `full_name`, `password_hash`, `role` FROM `users` WHERE `is_active` = 1");
+                    while ($supRow = $supStmt->fetch(PDO::FETCH_ASSOC)) {
+                        if (!in_array(strtolower(trim((string)$supRow['role'])), $supervisorRoles, true)) {
+                            continue;
+                        }
+                        $supHash = (string) ($supRow['password_hash'] ?? '');
+                        if ($supHash !== '' && password_verify($supervisorPin, $supHash)) {
+                            $authOk = true;
+                            $overrideById = (int) $supRow['id'];
+                            $authSupervisorName = $supRow['full_name'] ?: 'Supervisor';
+                            break;
+                        }
+                    }
+                }
+
+                // 3. When caller is already an authenticated Supervisor/Administrator, also allow the checkpoint's configured Terminal PIN
+                if (!$authOk && $caller !== null && in_array($callerRole, $supervisorRoles, true)) {
+                    $expectedCpPin = '';
+                    try {
+                        if ($cpType === 'stock_warehouse') {
+                            $pinStmt = $pdo->prepare("SELECT `terminal_pin` FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+                            $pinStmt->execute([$cpId]);
+                            $expectedCpPin = trim((string) ($pinStmt->fetchColumn() ?: ''));
+                        } else {
+                            $rawCpId = (string) ($activeCp['raw_id'] ?? $cpId);
+                            $pinStmt = $pdo->prepare("SELECT `terminal_pin` FROM `events` WHERE `id` = ? LIMIT 1");
+                            $pinStmt->execute([$rawCpId]);
+                            $expectedCpPin = trim((string) ($pinStmt->fetchColumn() ?: ''));
+                        }
+                    } catch (Throwable $e) {}
+
+                    if ($expectedCpPin !== '' && verifyTerminalPinSecret($supervisorPin, $expectedCpPin)) {
                         $authOk = true;
-                        $overrideById = (int) $supRow['id'];
-                        $authSupervisorName = $supRow['full_name'];
+                        $overrideById = (int) $caller['id'];
+                        $authSupervisorName = (string) ($caller['full_name'] ?: 'Supervisor');
                     }
                 }
             } elseif ($caller !== null && in_array($callerRole, $supervisorRoles, true)) {
@@ -3503,13 +3945,18 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $upd->execute([$realEventId, $cpId]);
 
                 $crcVal = (string) (is_numeric($realEventId) ? (int)$realEventId : crc32($realEventId));
-                $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)");
+                $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL, `assignment_expires_at` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)");
                 $updUser->execute([$realEventId, $cpId, $crcVal]);
             } catch (Throwable $e) {}
         } elseif ($cpType === 'stock_warehouse') {
             try {
-                $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'stock_warehouse' AND `assigned_checkpoint_id` = ?");
-                $updUser->execute([$cpId]);
+                if (is_numeric($cpId)) {
+                    $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL, `assignment_expires_at` = NULL WHERE `assigned_checkpoint_type` = 'stock_warehouse' AND (`assigned_checkpoint_id` = ? OR CAST(`assigned_checkpoint_id` AS UNSIGNED) = ?)");
+                    $updUser->execute([$cpId, (int)$cpId]);
+                } else {
+                    $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL, `assignment_expires_at` = NULL WHERE `assigned_checkpoint_type` = 'stock_warehouse' AND `assigned_checkpoint_id` = ?");
+                    $updUser->execute([$cpId]);
+                }
             } catch (Throwable $e) {}
         }
 
@@ -3590,13 +4037,18 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                         }
                     }
                     $crcVal = (string) (is_numeric($realEventId) ? (int)$realEventId : crc32($realEventId));
-                    $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `id` = ? AND `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)");
+                    $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL, `assignment_expires_at` = NULL WHERE `id` = ? AND `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)");
                     $updUser->execute([$targetUid, $realEventId, $cpId, $crcVal]);
                 } catch (Throwable $e) {}
             } elseif ($cpType === 'stock_warehouse') {
                 try {
-                    $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `id` = ? AND `assigned_checkpoint_type` = 'stock_warehouse' AND `assigned_checkpoint_id` = ?");
-                    $updUser->execute([$targetUid, $cpId]);
+                    if (is_numeric($cpId)) {
+                        $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL, `assignment_expires_at` = NULL WHERE `id` = ? AND `assigned_checkpoint_type` = 'stock_warehouse' AND (`assigned_checkpoint_id` = ? OR CAST(`assigned_checkpoint_id` AS UNSIGNED) = ?)");
+                        $updUser->execute([$targetUid, $cpId, (int)$cpId]);
+                    } else {
+                        $updUser = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL, `assignment_expires_at` = NULL WHERE `id` = ? AND `assigned_checkpoint_type` = 'stock_warehouse' AND `assigned_checkpoint_id` = ?");
+                        $updUser->execute([$targetUid, $cpId]);
+                    }
                 } catch (Throwable $e) {}
             }
         }
@@ -4615,6 +5067,201 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             'ok' => true,
             'message' => "Department '{$deptName}' deleted successfully.",
             'departments' => $full['departments'],
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_navigation') {
+        echo json_encode([
+            'ok' => true,
+            'navigationConfig' => getNavigationConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'toggle_main_nav') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureNavigationTables($pdo);
+        $group = trim((string) ($_POST['group'] ?? $jsonBody['group'] ?? 'main'));
+        $settingKey = ($group === 'workspace') ? 'workspace_nav_enabled' : 'main_nav_enabled';
+        $enabledRaw = $_POST['enabled'] ?? $jsonBody['enabled'] ?? 1;
+        $enabledStr = ((int) $enabledRaw === 1 || $enabledRaw === true || $enabledRaw === 'true') ? '1' : '0';
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `setting_value` = ?")
+            ->execute([$settingKey, $enabledStr, $enabledStr]);
+
+        $navCfg = getNavigationConfig($pdo);
+        $labelTxt = ($group === 'workspace') ? 'Checkpoint Controls bar' : 'Main navigation bar';
+        echo json_encode([
+            'ok' => true,
+            'message' => $enabledStr === '1' ? "{$labelTxt} enabled." : "{$labelTxt} disabled.",
+            'navigationConfig' => $navCfg,
+        ]);
+        exit;
+    }
+
+    if ($action === 'save_nav_item') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureNavigationTables($pdo);
+
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $navGroup = trim((string) ($_POST['nav_group'] ?? $jsonBody['nav_group'] ?? 'main'));
+        $navGroup = ($navGroup === 'workspace') ? 'workspace' : 'main';
+        $label = trim((string) ($_POST['label'] ?? $jsonBody['label'] ?? ''));
+        $navKeyRaw = trim((string) ($_POST['nav_key'] ?? $jsonBody['nav_key'] ?? ''));
+        $navTarget = trim((string) ($_POST['nav_target'] ?? $jsonBody['nav_target'] ?? 'overview'));
+        $icon = trim((string) ($_POST['icon'] ?? $jsonBody['icon'] ?? 'assets/nav-overview-inactive.svg'));
+        $activeIcon = trim((string) ($_POST['active_icon'] ?? $jsonBody['active_icon'] ?? ''));
+        $badgeType = trim((string) ($_POST['badge_type'] ?? $jsonBody['badge_type'] ?? 'none'));
+        $badgeText = trim((string) ($_POST['badge_text'] ?? $jsonBody['badge_text'] ?? ''));
+        $allowedRoles = trim((string) ($_POST['allowed_roles'] ?? $jsonBody['allowed_roles'] ?? 'all'));
+        $sortOrder = (int) ($_POST['sort_order'] ?? $jsonBody['sort_order'] ?? 10);
+        $isEnabled = isset($_POST['is_enabled']) ? ((int) $_POST['is_enabled'] ? 1 : 0) : ((int) ($jsonBody['is_enabled'] ?? 1) ? 1 : 0);
+
+        if ($label === '') {
+            echo json_encode(['ok' => false, 'error' => 'Navigation item label is required.']);
+            exit;
+        }
+        if ($navTarget === '') {
+            echo json_encode(['ok' => false, 'error' => 'Navigation target screen or action is required.']);
+            exit;
+        }
+
+        $navKey = strtolower(preg_replace('/[^a-zA-Z0-9_-]/', '_', $navKeyRaw !== '' ? $navKeyRaw : $label));
+        $navKey = trim($navKey, '_');
+        if ($navKey === '') {
+            $navKey = 'nav_' . time();
+        }
+        if ($allowedRoles === '') {
+            $allowedRoles = 'all';
+        }
+
+        $badgeIdMap = [
+            'events' => 'sidebar-events-count',
+            'users' => 'sidebar-users-count',
+            'stock' => 'sidebar-stock-count',
+            'shift_relief' => 'sidebar-shift-relief-badge',
+            'calltime' => 'sidebar-active-calltime-pill',
+        ];
+        $badgeId = $badgeIdMap[$badgeType] ?? '';
+
+        if ($id > 0) {
+            $chk = $pdo->prepare("SELECT `id` FROM `navigation_items` WHERE `nav_key` = ? AND `id` != ?");
+            $chk->execute([$navKey, $id]);
+            if ($chk->fetch()) {
+                echo json_encode(['ok' => false, 'error' => "Navigation key '{$navKey}' is already used by another item."]);
+                exit;
+            }
+            $stmt = $pdo->prepare("
+                UPDATE `navigation_items`
+                SET `nav_group` = ?, `nav_key` = ?, `label` = ?, `nav_target` = ?, `icon` = ?, `active_icon` = ?, `badge_type` = ?, `badge_id` = ?, `badge_text` = ?, `allowed_roles` = ?, `sort_order` = ?, `is_enabled` = ?
+                WHERE `id` = ?
+            ");
+            $stmt->execute([$navGroup, $navKey, $label, $navTarget, $icon, $activeIcon, $badgeType, $badgeId, $badgeText, $allowedRoles, $sortOrder, $isEnabled, $id]);
+            $msg = "Navigation item '{$label}' updated.";
+        } else {
+            $chk = $pdo->prepare("SELECT `id` FROM `navigation_items` WHERE `nav_key` = ?");
+            $chk->execute([$navKey]);
+            if ($chk->fetch()) {
+                $navKey .= '_' . rand(10, 99);
+            }
+            $domId = 'nav-custom-' . $navKey;
+            $stmt = $pdo->prepare("
+                INSERT INTO `navigation_items`
+                (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
+                VALUES (?, ?, ?, ?, ?, '', ?, ?, '', ?, ?, ?, ?, ?, ?, 0)
+            ");
+            $stmt->execute([$navGroup, $navKey, $label, $navTarget, $domId, $icon, $activeIcon, $badgeType, $badgeId, $badgeText, $allowedRoles, $sortOrder, $isEnabled]);
+            $id = (int) $pdo->lastInsertId();
+            $msg = "Navigation item '{$label}' created.";
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => $msg,
+            'item_id' => $id,
+            'navigationConfig' => getNavigationConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'toggle_nav_item') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureNavigationTables($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $isEnabled = isset($_POST['is_enabled']) ? ((int) $_POST['is_enabled'] ? 1 : 0) : ((int) ($jsonBody['is_enabled'] ?? 1) ? 1 : 0);
+        $stmt = $pdo->prepare("SELECT `label` FROM `navigation_items` WHERE `id` = ?");
+        $stmt->execute([$id]);
+        $lbl = $stmt->fetchColumn();
+        if ($lbl === false) {
+            echo json_encode(['ok' => false, 'error' => 'Navigation item not found.']);
+            exit;
+        }
+        $pdo->prepare("UPDATE `navigation_items` SET `is_enabled` = ? WHERE `id` = ?")->execute([$isEnabled, $id]);
+        echo json_encode([
+            'ok' => true,
+            'message' => ($isEnabled ? "Enabled" : "Disabled") . " '{$lbl}'.",
+            'navigationConfig' => getNavigationConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_nav_item') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureNavigationTables($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $stmt = $pdo->prepare("SELECT `label` FROM `navigation_items` WHERE `id` = ?");
+        $stmt->execute([$id]);
+        $lbl = $stmt->fetchColumn();
+        if ($lbl === false) {
+            echo json_encode(['ok' => false, 'error' => 'Navigation item not found.']);
+            exit;
+        }
+        $pdo->prepare("DELETE FROM `navigation_items` WHERE `id` = ?")->execute([$id]);
+        echo json_encode([
+            'ok' => true,
+            'message' => "Deleted navigation item '{$lbl}'.",
+            'navigationConfig' => getNavigationConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'reset_navigation_defaults') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureNavigationTables($pdo, true);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Main navigation restored to default items and enabled.',
+            'navigationConfig' => getNavigationConfig($pdo),
         ]);
         exit;
     }
