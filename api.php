@@ -2,7 +2,7 @@
 /**
  * aBility Manager (id_badges.php#pane-kiosk) — Gate Terminal & Access Matrix API
  * Powers the 4-Tier Access Matrix (L1-L4), Dual Checkpoint Selector (Stock Warehouse vs Event Venue),
- * Paired Check-In / Check-Out State Machine, Linked Equipment Batches, and User Activity Timeline.
+ * Paired Check-In / Check-Out State Machine, Shift Relief Coordination, and User Activity Timeline.
  */
 
 declare(strict_types=1);
@@ -287,97 +287,6 @@ function evaluateCheckpointAccess(array $userBadgeRow, string $checkpointType, i
     ];
 }
 
-function getLinkedBatchesForUser(PDO $pdo, int $userId, string $fullName = '', string $username = ''): array
-{
-    $batches = [];
-    try {
-        $sql = "
-            SELECT
-                sm.`id`,
-                sm.`batch_number`,
-                sm.`movement_type`,
-                sm.`source_name`,
-                sm.`destination_name`,
-                sm.`destination_room`,
-                sm.`technician_id`,
-                sm.`submitted_by`,
-                sm.`stock_controller_name`,
-                sm.`status`,
-                sm.`approval_status`,
-                sm.`event_name`,
-                sm.`job_sheet`,
-                sm.`created_at`
-            FROM `stock_movements` sm
-            WHERE sm.`technician_id` = :uid
-               OR (sm.`submitted_by` IS NOT NULL AND sm.`submitted_by` != '' AND (LOWER(sm.`submitted_by`) = LOWER(:fname) OR LOWER(sm.`submitted_by`) = LOWER(:uname)))
-            ORDER BY sm.`id` DESC
-            LIMIT 5
-        ";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            ':uid' => $userId,
-            ':fname' => $fullName,
-            ':uname' => $username,
-        ]);
-        $rows = $stmt->fetchAll();
-
-        $itemStmt = $pdo->prepare("SELECT `item_name`, `quantity` FROM `batch_items` WHERE `batch_id` = ? LIMIT 10");
-        foreach ($rows as $r) {
-            $bid = (int) $r['id'];
-            $items = [];
-            try {
-                $itemStmt->execute([$bid]);
-                $items = $itemStmt->fetchAll();
-            } catch (Throwable $e) {
-                $items = [];
-            }
-            $batches[] = [
-                'id' => $bid,
-                'batch_number' => (string) ($r['batch_number'] ?? ('BATCH-' . $bid)),
-                'movement_type' => (string) ($r['movement_type'] ?? 'dispatch'),
-                'source_name' => (string) ($r['source_name'] ?? 'Ndera Warehouse'),
-                'destination_name' => (string) ($r['destination_name'] ?? 'Kigali Convention Centre'),
-                'destination_room' => (string) ($r['destination_room'] ?? 'Main Stage'),
-                'technician_id' => (int) ($r['technician_id'] ?? $userId),
-                'submitted_by' => (string) ($r['submitted_by'] ?? $fullName),
-                'stock_controller_name' => (string) ($r['stock_controller_name'] ?? 'Gate Controller'),
-                'status' => (string) ($r['status'] ?? $r['approval_status'] ?? 'approved'),
-                'event_name' => (string) ($r['event_name'] ?? 'World Bank Summit'),
-                'job_sheet' => (string) ($r['job_sheet'] ?? 'JS-2026-104'),
-                'created_at' => (string) ($r['created_at'] ?? date('Y-m-d H:i:s')),
-                'items' => $items,
-            ];
-        }
-    } catch (Throwable $e) {
-        // Fallback if stock_movements in ability_db has slightly different columns
-        try {
-            $stmt = $pdo->prepare("SELECT * FROM `stock_movements` WHERE `technician_id` = ? ORDER BY `id` DESC LIMIT 5");
-            $stmt->execute([$userId]);
-            foreach ($stmt->fetchAll() as $r) {
-                $batches[] = [
-                    'id' => (int) $r['id'],
-                    'batch_number' => (string) ($r['batch_number'] ?? ('BATCH-' . $r['id'])),
-                    'movement_type' => (string) ($r['movement_type'] ?? 'dispatch'),
-                    'source_name' => (string) ($r['source_name'] ?? 'Ndera Warehouse'),
-                    'destination_name' => (string) ($r['destination_name'] ?? 'Kigali Convention Centre'),
-                    'destination_room' => (string) ($r['destination_room'] ?? ''),
-                    'technician_id' => $userId,
-                    'submitted_by' => (string) ($r['submitted_by'] ?? $fullName),
-                    'stock_controller_name' => (string) ($r['stock_controller_name'] ?? 'Gate Controller'),
-                    'status' => (string) ($r['status'] ?? $r['approval_status'] ?? 'approved'),
-                    'event_name' => (string) ($r['event_name'] ?? 'Active Production'),
-                    'job_sheet' => (string) ($r['job_sheet'] ?? ''),
-                    'created_at' => (string) ($r['created_at'] ?? ''),
-                    'items' => [],
-                ];
-            }
-        } catch (Throwable $e2) {
-        }
-    }
-
-    return $batches;
-}
-
 function buildVerificationCardPayload(
     PDO $pdo,
     array $crewMember,
@@ -420,7 +329,6 @@ function buildVerificationCardPayload(
         'scanned_at' => $overrideScanResult['scanned_at'] ?? date('H:i:s'),
         'check_in_time' => $checkInFull,
         'check_out_time' => $checkOutFull,
-        'linked_batches' => $crewMember['linked_batches'] ?? [],
         'badge' => [
             'user_id' => (int) $crewMember['id'],
             'full_name' => (string) $crewMember['full_name'],
@@ -487,7 +395,7 @@ function ensureRolesTable(PDO $pdo): void
             $seedRoles = [
                 ['admin', 'Administrator', 'Administrator', 'L4_ALL_ACCESS', 'Executive', 'Full operational control, security matrix management, user provision and badge issuance.', 1],
                 ['stock_manager', 'Stock Logistics Manager', 'Stock Logistics Manager', 'L4_ALL_ACCESS', 'Warehouse', 'Oversees warehouse hubs, inventory movement, and logistics personnel onboarding.', 1],
-                ['stock_controller', 'Stock Controller', 'Stock Controller', 'L3_STOCK_WAREHOUSE', 'Warehouse', 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', 1],
+                ['stock_controller', 'Stock Controller', 'Stock Controller', 'L3_STOCK_WAREHOUSE', 'Warehouse', 'Gate terminal scanning (#pane-kiosk), facility gate custody, and shift relief coordination.', 1],
                 ['tech_lead', 'Technical Lead', 'Technical Lead', 'L4_ALL_ACCESS', 'Production', 'Supervises audio, video, lighting and rigging operations across all checkpoints.', 1],
                 ['technician', 'Stage & Audio Technician', 'Stage & Audio Technician', 'L2_TECH_STAGE', 'Audio', 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 1],
                 ['sound_engineer', 'Lead Sound Engineer', 'Lead Sound Engineer', 'L2_TECH_STAGE', 'Audio', 'Lead acoustic calibration and sound engineering for live events and concert tours.', 0],
@@ -497,7 +405,7 @@ function ensureRolesTable(PDO $pdo): void
                 ['rigging_lead', 'Rigging Lead', 'Rigging Lead', 'L2_TECH_STAGE', 'Rigging', 'Motors, truss rigging, load calculations and safety cable inspections overhead.', 0],
                 ['user', 'Venue Crew', 'Venue Crew', 'L1_VENUE_BASIC', 'Production', 'General event venue operations and support staff. Stock warehouse access restricted.', 0],
                 ['security', 'Security Officer', 'Security Officer', 'L1_VENUE_BASIC', 'Security', 'Front of house and gate security perimeter verification.', 0],
-                ['driver', 'Logistics Driver', 'Logistics Driver', 'L1_VENUE_BASIC', 'Logistics', 'Equipment transport, loading bay check-in, and transit logistics.', 0],
+                ['driver', 'Logistics Driver', 'Logistics Driver', 'L1_VENUE_BASIC', 'Logistics', 'Cross-facility crew shuttle, loading bay check-in, and transit logistics.', 0],
             ];
             $ins = $pdo->prepare("INSERT INTO `roles` (`role_key`, `role_name`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
             foreach ($seedRoles as $sr) {
@@ -558,7 +466,7 @@ function getRolesList(PDO $pdo, array $crew = []): array
     if (empty($roles)) {
         $defaultKeys = [
             ['id' => 1, 'role_key' => 'admin', 'title' => 'Administrator', 'clearance_level' => 'L4_ALL_ACCESS', 'department' => 'Executive', 'description' => 'Full operational control, security matrix management, user provision and badge issuance.', 'is_system' => 1, 'is_active' => 1],
-            ['id' => 2, 'role_key' => 'stock_controller', 'title' => 'Stock Controller', 'clearance_level' => 'L3_STOCK_WAREHOUSE', 'department' => 'Warehouse', 'description' => 'Gate terminal scanning (#pane-kiosk), equipment batch dispatch and return custody authorizations.', 'is_system' => 1, 'is_active' => 1],
+            ['id' => 2, 'role_key' => 'stock_controller', 'title' => 'Stock Controller', 'clearance_level' => 'L3_STOCK_WAREHOUSE', 'department' => 'Warehouse', 'description' => 'Gate terminal scanning (#pane-kiosk), facility gate custody, and shift relief coordination.', 'is_system' => 1, 'is_active' => 1],
             ['id' => 3, 'role_key' => 'tech_lead', 'title' => 'Technical Lead', 'clearance_level' => 'L4_ALL_ACCESS', 'department' => 'Production', 'description' => 'Supervises audio, video, lighting and rigging operations across all checkpoints.', 'is_system' => 1, 'is_active' => 1],
             ['id' => 4, 'role_key' => 'technician', 'title' => 'Stage & Audio Technician', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Audio', 'description' => 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 'is_system' => 1, 'is_active' => 1],
             ['id' => 5, 'role_key' => 'sound_engineer', 'title' => 'Lead Sound Engineer', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Audio', 'description' => 'Lead acoustic calibration and sound engineering for live events and concert tours.', 'is_system' => 0, 'is_active' => 1],
@@ -568,7 +476,7 @@ function getRolesList(PDO $pdo, array $crew = []): array
             ['id' => 9, 'role_key' => 'rigging_lead', 'title' => 'Rigging Lead', 'clearance_level' => 'L2_TECH_STAGE', 'department' => 'Rigging', 'description' => 'Motors, truss rigging, load calculations and safety cable inspections overhead.', 'is_system' => 0, 'is_active' => 1],
             ['id' => 10, 'role_key' => 'user', 'title' => 'Venue Crew', 'clearance_level' => 'L1_VENUE_BASIC', 'department' => 'Production', 'description' => 'General event venue operations and support staff. Stock warehouse access restricted.', 'is_system' => 0, 'is_active' => 1],
             ['id' => 11, 'role_key' => 'security', 'title' => 'Security Officer', 'clearance_level' => 'L1_VENUE_BASIC', 'department' => 'Security', 'description' => 'Front of house and gate security perimeter verification.', 'is_system' => 0, 'is_active' => 1],
-            ['id' => 12, 'role_key' => 'driver', 'title' => 'Logistics Driver', 'clearance_level' => 'L1_VENUE_BASIC', 'department' => 'Logistics', 'description' => 'Equipment transport, loading bay check-in, and transit logistics.', 'is_system' => 0, 'is_active' => 1],
+            ['id' => 12, 'role_key' => 'driver', 'title' => 'Logistics Driver', 'clearance_level' => 'L1_VENUE_BASIC', 'department' => 'Logistics', 'description' => 'Cross-facility crew shuttle, loading bay check-in, and transit logistics.', 'is_system' => 0, 'is_active' => 1],
         ];
         foreach ($defaultKeys as $dk) {
             $tier = normalizeClearanceTier($dk['clearance_level'], $dk['role_key']);
@@ -1896,8 +1804,6 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $uDaily = $userDailyMap[$uid] ?? null;
         $dailyState = $uDaily['state'] ?? 'ready';
 
-        $linkedBatches = getLinkedBatchesForUser($pdo, $uid, $fullName, $username);
-
         $assignedCpObj = findCheckpointRecord(
             $stockWarehouses,
             $eventVenues,
@@ -1952,7 +1858,6 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'is_active' => (int) ($ur['is_active'] ?? 1),
             'allowed_stock_ids' => json_decode((string) ($ur['allowed_stock_ids'] ?? '[]'), true) ?: [],
             'allowed_event_ids' => json_decode((string) ($ur['allowed_event_ids'] ?? '[]'), true) ?: [],
-            'linked_batches' => $linkedBatches,
         ];
 
         $crew[] = $member;
@@ -2002,48 +1907,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     }
     unset($ev);
 
-    // 6. Load All Equipment Batches (`stock_movements`)
-    $allBatches = [];
-    try {
-        $bRows = $pdo->query("SELECT * FROM `stock_movements` ORDER BY `id` DESC LIMIT 50")->fetchAll();
-        $itemStmt = $pdo->prepare("SELECT `id`, `item_name`, `quantity`, `serial_number`, `status` FROM `batch_items` WHERE `batch_id` = ? ORDER BY `id` ASC LIMIT 50");
-        foreach ($bRows as $br) {
-            $bid = (int) $br['id'];
-            $techId = (int) ($br['technician_id'] ?? 0);
-            $techMember = $crewById[$techId] ?? null;
-            $items = [];
-            try {
-                $itemStmt->execute([$bid]);
-                $items = $itemStmt->fetchAll();
-            } catch (Throwable $e) {
-                $items = [];
-            }
-            $allBatches[] = [
-                'id' => $bid,
-                'batch_number' => (string) ($br['batch_number'] ?? ('BATCH-' . $bid)),
-                'movement_type' => (string) ($br['movement_type'] ?? 'stock_to_venue_room'),
-                'source_name' => (string) ($br['source_name'] ?? 'Ndera Warehouse'),
-                'destination_name' => (string) ($br['destination_name'] ?? 'Kigali Convention Centre'),
-                'destination_room' => (string) ($br['destination_room'] ?? 'Main Auditorium'),
-                'technician_id' => $techId,
-                'technician_name' => $techMember ? $techMember['full_name'] : (string) ($br['submitted_by'] ?: 'Unassigned Crew'),
-                'technician_badge' => $techMember ? $techMember['badge_code'] : 'REW-BADGE-0006',
-                'technician_clearance' => $techMember ? $techMember['clearance_code'] : 'L2',
-                'stock_controller_id' => (int) ($br['stock_controller_id'] ?? 0),
-                'stock_controller_name' => (string) ($br['stock_controller_name'] ?: 'Gate Controller'),
-                'submitted_by' => (string) ($br['submitted_by'] ?? ''),
-                'notes' => (string) ($br['notes'] ?? ''),
-                'status' => strtolower((string) ($br['status'] ?? $br['approval_status'] ?? 'approved')),
-                'event_name' => (string) ($br['event_name'] ?: 'World Bank Summit'),
-                'job_sheet' => (string) ($br['job_sheet'] ?: 'JS-2026-104'),
-                'created_at' => (string) ($br['created_at'] ?: date('Y-m-d H:i:s')),
-                'items' => $items,
-            ];
-        }
-    } catch (Throwable $e) {
-    }
-
-    // 7. Build User Activity Timeline (from `attendance_logs` newest first)
+    // 6. Build User Activity Timeline (from `attendance_logs` newest first)
     $timelineRows = $pdo->query("SELECT * FROM `attendance_logs` ORDER BY `scanned_at` DESC, `id` DESC LIMIT 60")->fetchAll();
     $activityTimeline = [];
     foreach ($timelineRows as $tr) {
@@ -2109,19 +1973,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         ];
     }
 
-    // 8. Build Default Verification Deck Payload (Prefer Eric `id=6` or first technician with a linked batch)
-    $featuredMember = $crewById[6] ?? null;
-    if (!$featuredMember) {
-        foreach ($crew as $cm) {
-            if (!empty($cm['linked_batches'])) {
-                $featuredMember = $cm;
-                break;
-            }
-        }
-    }
-    if (!$featuredMember && !empty($crew)) {
-        $featuredMember = $crew[0];
-    }
+    // 7. Build Default Verification Deck Payload (Prefer Eric `id=6` or first crew member)
+    $featuredMember = $crewById[6] ?? ($crew[0] ?? null);
 
     $defaultVerification = $featuredMember
         ? buildVerificationCardPayload($pdo, $featuredMember, $activeCpType, $activeCpId, $activeCpName)
@@ -2246,7 +2099,6 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'crew' => $crew,
         'hourlyTraffic' => array_values($hourlyBuckets),
         'activityTimeline' => $activityTimeline,
-        'batches' => $allBatches,
         'shiftRequests' => $shiftRequests,
         'pendingShiftRequestCount' => $pendingShiftRequestCount,
         'defaultVerification' => $defaultVerification,
@@ -3279,181 +3131,12 @@ try {
         exit;
     }
 
-    if ($action === 'approve_batch') {
-        requireAuthorizedCaller(
-            $pdo,
-            ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'],
-            'Permission denied: Approving stock batches requires Site Operations, Site Manager, or Administrator privileges.'
-        );
-        $batchId = (int) ($_POST['batch_id'] ?? $jsonBody['batch_id'] ?? 0);
-        $newStatus = trim((string) ($_POST['status'] ?? $jsonBody['status'] ?? 'approved'));
-        if ($batchId > 0) {
-            try {
-                $upd = $pdo->prepare("UPDATE `stock_movements` SET `status` = ?, `approval_status` = ? WHERE `id` = ?");
-                $upd->execute([$newStatus, $newStatus, $batchId]);
-            } catch (Throwable $e) {
-                $upd = $pdo->prepare("UPDATE `stock_movements` SET `status` = ? WHERE `id` = ?");
-                $upd->execute([$newStatus, $batchId]);
-            }
-        }
-        echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
-        exit;
-    }
-
-    if ($action === 'save_batch') {
-        requireAuthorizedCaller(
-            $pdo,
-            ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'],
-            'Permission denied: Managing stock batches requires Site Operations, Site Manager, or Administrator privileges.'
-        );
-        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
-        $batchNumber = trim((string) ($_POST['batch_number'] ?? $jsonBody['batch_number'] ?? ''));
-        if ($batchNumber === '') {
-            $batchNumber = 'BATCH-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
-        }
-        $techId = (int) ($_POST['technician_id'] ?? $jsonBody['technician_id'] ?? 0);
-        $submittedBy = trim((string) ($_POST['submitted_by'] ?? $jsonBody['submitted_by'] ?? ''));
-        $controllerId = (int) ($_POST['stock_controller_id'] ?? $jsonBody['stock_controller_id'] ?? 0);
-        $controllerName = trim((string) ($_POST['stock_controller_name'] ?? $jsonBody['stock_controller_name'] ?? 'Gate Controller'));
-        $movementType = trim((string) ($_POST['movement_type'] ?? $jsonBody['movement_type'] ?? 'stock_to_venue_room'));
-        $sourceName = trim((string) ($_POST['source_name'] ?? $jsonBody['source_name'] ?? 'Ndera Warehouse'));
-        $destinationName = trim((string) ($_POST['destination_name'] ?? $jsonBody['destination_name'] ?? 'Kigali Convention Centre'));
-        $destinationRoom = trim((string) ($_POST['destination_room'] ?? $jsonBody['destination_room'] ?? 'Main Stage'));
-        $eventName = trim((string) ($_POST['event_name'] ?? $jsonBody['event_name'] ?? 'Production Event'));
-        $jobSheet = trim((string) ($_POST['job_sheet'] ?? $jsonBody['job_sheet'] ?? 'JS-' . date('Ymd')));
-        $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
-        $status = strtolower(trim((string) ($_POST['status'] ?? $jsonBody['status'] ?? 'pending')));
-        if (!in_array($status, ['pending', 'approved', 'in_transit', 'completed', 'rejected'], true)) {
-            $status = 'pending';
-        }
-
-        if ($techId > 0 && $submittedBy === '') {
-            $uStmt = $pdo->prepare("SELECT `username`, `full_name` FROM `users` WHERE `id` = ?");
-            $uStmt->execute([$techId]);
-            $uRow = $uStmt->fetch();
-            if ($uRow) {
-                $submittedBy = (string) ($uRow['full_name'] ?: $uRow['username']);
-            }
-        }
-
-        if ($id > 0) {
-            $upd = $pdo->prepare("
-                UPDATE `stock_movements`
-                SET `batch_number` = ?,
-                    `technician_id` = ?,
-                    `submitted_by` = ?,
-                    `stock_controller_id` = ?,
-                    `stock_controller_name` = ?,
-                    `movement_type` = ?,
-                    `source_name` = ?,
-                    `destination_name` = ?,
-                    `destination_room` = ?,
-                    `event_name` = ?,
-                    `job_sheet` = ?,
-                    `notes` = ?,
-                    `status` = ?,
-                    `approval_status` = ?,
-                    `updated_at` = NOW()
-                WHERE `id` = ?
-            ");
-            $upd->execute([
-                $batchNumber, $techId, $submittedBy, $controllerId, $controllerName,
-                $movementType, $sourceName, $destinationName, $destinationRoom,
-                $eventName, $jobSheet, $notes, $status, $status, $id
-            ]);
-            $batchId = $id;
-        } else {
-            $ins = $pdo->prepare("
-                INSERT INTO `stock_movements` (
-                    `batch_number`, `technician_id`, `submitted_by`, `stock_controller_id`,
-                    `stock_controller_name`, `movement_type`, `source_name`, `destination_name`,
-                    `destination_room`, `event_name`, `job_sheet`, `notes`, `status`,
-                    `approval_status`, `created_at`
-                ) VALUES (
-                    ?, ?, ?, ?,
-                    ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?,
-                    ?, NOW()
-                )
-            ");
-            $ins->execute([
-                $batchNumber, $techId, $submittedBy, $controllerId,
-                $controllerName, $movementType, $sourceName, $destinationName,
-                $destinationRoom, $eventName, $jobSheet, $notes, $status,
-                $status
-            ]);
-            $batchId = (int) $pdo->lastInsertId();
-        }
-
-        $rawItems = $_POST['items'] ?? $jsonBody['items'] ?? null;
-        if (is_string($rawItems)) {
-            $decoded = json_decode($rawItems, true);
-            if (is_array($decoded)) $rawItems = $decoded;
-        }
-        if (is_array($rawItems)) {
-            $delItems = $pdo->prepare("DELETE FROM `batch_items` WHERE `batch_id` = ?");
-            $delItems->execute([$batchId]);
-
-            $insItem = $pdo->prepare("
-                INSERT INTO `batch_items` (`batch_id`, `item_name`, `quantity`, `serial_number`, `status`, `item_status`, `created_at`)
-                VALUES (?, ?, ?, ?, ?, ?, NOW())
-            ");
-            foreach ($rawItems as $item) {
-                $iName = trim((string) ($item['item_name'] ?? ''));
-                if ($iName === '') continue;
-                $iQty = max(1, (int) ($item['quantity'] ?? 1));
-                $iSerial = trim((string) ($item['serial_number'] ?? ''));
-                $iStatus = trim((string) ($item['status'] ?? $status));
-                $insItem->execute([$batchId, $iName, $iQty, $iSerial, $iStatus, $iStatus]);
-            }
-        }
-
-        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+    if (in_array($action, ['approve_batch', 'save_batch', 'delete_batch', 'get_batch'], true)) {
+        http_response_code(410);
         echo json_encode([
-            'ok' => true,
-            'message' => 'Equipment batch ' . ($id > 0 ? 'updated' : 'created') . ' successfully.',
-            'batch_id' => $batchId,
-            'batches' => $full['batches'],
-            'full' => $full,
+            'ok' => false,
+            'error' => 'Equipment batch workflows have been omitted in Attendance-Only Deployment.',
         ]);
-        exit;
-    }
-
-    if ($action === 'delete_batch') {
-        requireAuthorizedCaller(
-            $pdo,
-            ['admin', 'manager', 'administrator', 'stock_manager'],
-            'Permission denied: Deleting stock batches requires Site Manager or Administrator privileges.'
-        );
-        $batchId = (int) ($_POST['batch_id'] ?? $jsonBody['batch_id'] ?? $_POST['id'] ?? $jsonBody['id'] ?? 0);
-        if ($batchId > 0) {
-            $pdo->prepare("DELETE FROM `batch_items` WHERE `batch_id` = ?")->execute([$batchId]);
-            $pdo->prepare("DELETE FROM `stock_movements` WHERE `id` = ?")->execute([$batchId]);
-        }
-        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
-        echo json_encode([
-            'ok' => true,
-            'message' => 'Equipment batch deleted successfully.',
-            'batches' => $full['batches'],
-            'full' => $full,
-        ]);
-        exit;
-    }
-
-    if ($action === 'get_batch') {
-        $batchId = (int) ($_GET['id'] ?? $_POST['batch_id'] ?? $jsonBody['batch_id'] ?? 0);
-        $stmt = $pdo->prepare("SELECT * FROM `stock_movements` WHERE `id` = ?");
-        $stmt->execute([$batchId]);
-        $batch = $stmt->fetch();
-        if (!$batch) {
-            echo json_encode(['ok' => false, 'error' => 'Batch not found.']);
-            exit;
-        }
-        $itemStmt = $pdo->prepare("SELECT `id`, `item_name`, `quantity`, `serial_number`, `status` FROM `batch_items` WHERE `batch_id` = ? ORDER BY `id` ASC");
-        $itemStmt->execute([$batchId]);
-        $items = $itemStmt->fetchAll();
-        $batch['items'] = $items;
-        echo json_encode(['ok' => true, 'batch' => $batch]);
         exit;
     }
 
@@ -4225,19 +3908,12 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
     }
 
     if ($action === 'list_stock_manager') {
-        // 1. Fetch Warehouses
+        // Fetch Warehouses / Facility Gates
         $whRows = $pdo->query("SELECT * FROM `stock_locations` ORDER BY `id` ASC")->fetchAll();
         $warehouses = [];
         foreach ($whRows as $wr) {
             $wid = (int) $wr['id'];
-            $locName = (string) ($wr['name'] ?? 'Warehouse');
-            $itemCount = 0;
-            try {
-                $cntStmt = $pdo->prepare("SELECT COUNT(*) FROM `items` WHERE `stock_location` = ? OR `stock_location` = ?");
-                $cntStmt->execute([$locName, (string) ($wr['code'] ?? '')]);
-                $itemCount = (int) $cntStmt->fetchColumn();
-            } catch (Throwable $e) {}
-
+            $locName = (string) ($wr['name'] ?? 'Facility Gate');
             $warehouses[] = [
                 'id' => $wid,
                 'name' => $locName,
@@ -4253,56 +3929,15 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'controller_email' => (string) ($wr['controller_email'] ?? ''),
                 'is_active' => (int) ($wr['is_active'] ?? 1),
                 'image' => resolveProfileImageUrl($wr['image'] ?? null),
-                'item_count' => $itemCount,
                 'terminal_pin' => resolveWarehouseTerminalPin($wr),
             ];
-        }
-
-        // 2. Fetch Stock Items
-        $items = [];
-        try {
-            $itemRows = $pdo->query("SELECT * FROM `items` ORDER BY `id` DESC LIMIT 200")->fetchAll();
-            foreach ($itemRows as $ir) {
-                $items[] = [
-                    'id' => (int) $ir['id'],
-                    'item_name' => (string) ($ir['item_name'] ?? 'Equipment Item'),
-                    'serial_number' => (string) ($ir['serial_number'] ?? 'N/A'),
-                    'category' => (string) ($ir['category'] ?? 'General'),
-                    'brand' => (string) ($ir['brand'] ?? ''),
-                    'model' => (string) ($ir['model'] ?? ''),
-                    'department' => (string) ($ir['department'] ?? 'Warehouse'),
-                    'stock_location' => (string) ($ir['stock_location'] ?? 'Ndera Warehouse'),
-                    'quantity' => (int) ($ir['quantity'] ?? 1),
-                    'condition' => (string) ($ir['condition'] ?? 'good'),
-                    'status' => (string) ($ir['status'] ?? 'available'),
-                    'notes' => (string) ($ir['notes'] ?? ''),
-                    'image' => resolveProfileImageUrl($ir['image'] ?? null),
-                    'created_at' => (string) ($ir['created_at'] ?? ''),
-                ];
-            }
-        } catch (Throwable $e) {}
-
-        // 3. Categories & Stats
-        $rawCats = array_values(array_unique(array_filter(array_column($items, 'category'))));
-        $categories = !empty($rawCats) ? $rawCats : ['Audio', 'Video', 'Lighting', 'Rigging', 'Power', 'General'];
-
-        $totalAvailable = 0;
-        foreach ($items as $it) {
-            if ($it['status'] === 'available') {
-                $totalAvailable += (int) $it['quantity'];
-            }
         }
 
         echo json_encode([
             'ok' => true,
             'warehouses' => $warehouses,
-            'stock_items' => $items,
-            'categories' => $categories,
             'stats' => [
                 'total_warehouses' => count($warehouses),
-                'total_items' => count($items),
-                'available_count' => $totalAvailable,
-                'in_use_count' => max(0, count($items) - $totalAvailable),
             ],
         ]);
         exit;
@@ -4627,222 +4262,12 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         exit;
     }
 
-    if ($action === 'save_stock_item') {
-        requireAuthorizedCaller(
-            $pdo,
-            ['admin', 'manager', 'administrator', 'stock_manager'],
-            'Permission denied: Managing equipment items requires Site Manager or Administrator privileges.'
-        );
-        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
-        $itemName = trim((string) ($_POST['item_name'] ?? $jsonBody['item_name'] ?? ''));
-        $serialNumber = trim((string) ($_POST['serial_number'] ?? $jsonBody['serial_number'] ?? ''));
-        $category = trim((string) ($_POST['category'] ?? $jsonBody['category'] ?? 'General'));
-        $brand = trim((string) ($_POST['brand'] ?? $jsonBody['brand'] ?? ''));
-        $model = trim((string) ($_POST['model'] ?? $jsonBody['model'] ?? ''));
-        $department = trim((string) ($_POST['department'] ?? $jsonBody['department'] ?? 'Warehouse'));
-        $stockLocation = trim((string) ($_POST['stock_location'] ?? $jsonBody['stock_location'] ?? 'Ndera Warehouse'));
-        $quantity = (int) ($_POST['quantity'] ?? $jsonBody['quantity'] ?? 1);
-        $condition = trim((string) ($_POST['condition'] ?? $jsonBody['condition'] ?? 'good'));
-        $status = trim((string) ($_POST['status'] ?? $jsonBody['status'] ?? 'available'));
-        $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
-
-        if ($itemName === '') {
-            echo json_encode(['ok' => false, 'error' => 'Item name is required']);
-            exit;
-        }
-
-        if ($serialNumber === '') {
-            $serialNumber = 'SN-' . strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $category), 0, 3) ?: 'GEN') . '-' . date('ymd') . '-' . rand(100, 999);
-        }
-
-        // Handle Image Upload
-        $uploadedImagePath = null;
-        if (!empty($_FILES['image']['tmp_name']) && is_uploaded_file($_FILES['image']['tmp_name'])) {
-            $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
-            if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
-                $dir = __DIR__ . '/uploads/items';
-                if (!is_dir($dir)) mkdir($dir, 0777, true);
-                $fileName = 'item_' . time() . '_' . substr(md5(uniqid()), 0, 8) . '.' . $ext;
-                $dest = $dir . '/' . $fileName;
-                if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
-                    $uploadedImagePath = 'uploads/items/' . $fileName;
-                }
-            }
-        }
-
-        // Check whether image sync to identical items is active (default true)
-        $syncIdentical = !isset($_POST['sync_identical']) || $_POST['sync_identical'] === '1' || $_POST['sync_identical'] === 'true';
-
-        $syncedCount = 0;
-
-        if ($id > 0) {
-            // If no new image was uploaded in this request, preserve existing image or inherit from identical sibling
-            if (!$uploadedImagePath) {
-                $chk = $pdo->prepare("SELECT `image` FROM `items` WHERE `id` = ?");
-                $chk->execute([$id]);
-                $uploadedImagePath = $chk->fetchColumn() ?: null;
-            }
-
-            // If item has no image at all, check if an identical unit already has an image
-            if (!$uploadedImagePath) {
-                $findSibling = $pdo->prepare("
-                    SELECT `image` FROM `items`
-                    WHERE `id` != ?
-                      AND `image` IS NOT NULL AND `image` != ''
-                      AND TRIM(LOWER(`item_name`)) = TRIM(LOWER(?))
-                      AND (? = '' OR `model` IS NULL OR `model` = '' OR TRIM(LOWER(`model`)) = TRIM(LOWER(?)))
-                      AND (? = '' OR `brand` IS NULL OR `brand` = '' OR TRIM(LOWER(`brand`)) = TRIM(LOWER(?)))
-                    ORDER BY `id` DESC LIMIT 1
-                ");
-                $findSibling->execute([$id, $itemName, $model, $model, $brand, $brand]);
-                $inherited = $findSibling->fetchColumn();
-                if ($inherited) {
-                    $uploadedImagePath = $inherited;
-                }
-            }
-
-            $stmt = $pdo->prepare("
-                UPDATE `items`
-                SET `item_name` = ?, `serial_number` = ?, `category` = ?, `brand` = ?, `model` = ?, `department` = ?,
-                    `stock_location` = ?, `quantity` = ?, `condition` = ?, `status` = ?, `notes` = ?, `image` = ?
-                WHERE `id` = ?
-            ");
-            $stmt->execute([$itemName, $serialNumber, $category, $brand, $model, $department, $stockLocation, $quantity, $condition, $status, $notes, $uploadedImagePath, $id]);
-        } else {
-            // If creating a new item without photo, check if an identical unit already has one
-            if (!$uploadedImagePath) {
-                $findSibling = $pdo->prepare("
-                    SELECT `image` FROM `items`
-                    WHERE `image` IS NOT NULL AND `image` != ''
-                      AND TRIM(LOWER(`item_name`)) = TRIM(LOWER(?))
-                      AND (? = '' OR `model` IS NULL OR `model` = '' OR TRIM(LOWER(`model`)) = TRIM(LOWER(?)))
-                      AND (? = '' OR `brand` IS NULL OR `brand` = '' OR TRIM(LOWER(`brand`)) = TRIM(LOWER(?)))
-                    ORDER BY `id` DESC LIMIT 1
-                ");
-                $findSibling->execute([$itemName, $model, $model, $brand, $brand]);
-                $inherited = $findSibling->fetchColumn();
-                if ($inherited) {
-                    $uploadedImagePath = $inherited;
-                }
-            }
-
-            $stmt = $pdo->prepare("
-                INSERT INTO `items`
-                (`item_name`, `serial_number`, `category`, `brand`, `model`, `department`, `stock_location`, `quantity`, `condition`, `status`, `notes`, `image`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([$itemName, $serialNumber, $category, $brand, $model, $department, $stockLocation, $quantity, $condition, $status, $notes, $uploadedImagePath]);
-            $id = (int) $pdo->lastInsertId();
-        }
-
-        // SYNC IMAGE TO ALL IDENTICAL EQUIPMENT UNITS
-        if ($uploadedImagePath && $syncIdentical) {
-            $syncStmt = $pdo->prepare("
-                UPDATE `items`
-                SET `image` = ?
-                WHERE `id` != ?
-                  AND TRIM(LOWER(`item_name`)) = TRIM(LOWER(?))
-                  AND (? = '' OR `model` IS NULL OR `model` = '' OR TRIM(LOWER(`model`)) = TRIM(LOWER(?)))
-                  AND (? = '' OR `brand` IS NULL OR `brand` = '' OR TRIM(LOWER(`brand`)) = TRIM(LOWER(?)))
-            ");
-            $syncStmt->execute([
-                $uploadedImagePath,
-                $id,
-                $itemName,
-                $model,
-                $model,
-                $brand,
-                $brand,
-            ]);
-            $syncedCount = $syncStmt->rowCount();
-        }
-
-        $msg = 'Stock item saved successfully';
-        if ($syncedCount > 0) {
-            $msg = "Stock item saved and photo synced to {$syncedCount} identical equipment units ({$itemName})";
-        }
-
+    if (in_array($action, ['save_stock_item', 'sync_all_stock_images', 'delete_stock_item'], true)) {
+        http_response_code(410);
         echo json_encode([
-            'ok' => true,
-            'message' => $msg,
-            'item_id' => $id,
-            'synced_count' => $syncedCount,
-            'image' => $uploadedImagePath,
+            'ok' => false,
+            'error' => 'Equipment inventory endpoints have been omitted in Attendance-Only Deployment.',
         ]);
-        exit;
-    }
-
-    if ($action === 'sync_all_stock_images') {
-        requireAuthorizedCaller(
-            $pdo,
-            ['admin', 'manager', 'administrator', 'stock_manager'],
-            'Permission denied: Syncing equipment photos requires Site Manager or Administrator privileges.'
-        );
-        // Collect latest image per identical equipment group (item_name, brand, model)
-        $stmt = $pdo->query("
-            SELECT `item_name`, `brand`, `model`, `image`, MAX(`id`) as latest_id
-            FROM `items`
-            WHERE `image` IS NOT NULL AND `image` != ''
-            GROUP BY `item_name`, `brand`, `model`, `image`
-            ORDER BY latest_id DESC
-        ");
-        $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $totalSynced = 0;
-        $updatedGroups = 0;
-        $seen = [];
-
-        foreach ($groups as $g) {
-            $key = strtolower(trim($g['item_name'])) . '||' . strtolower(trim((string)$g['brand'])) . '||' . strtolower(trim((string)$g['model']));
-            if (isset($seen[$key])) continue;
-            $seen[$key] = true;
-
-            $img = $g['image'];
-            $syncStmt = $pdo->prepare("
-                UPDATE `items`
-                SET `image` = ?
-                WHERE (`image` IS NULL OR `image` = '' OR `image` != ?)
-                  AND TRIM(LOWER(`item_name`)) = TRIM(LOWER(?))
-                  AND (? = '' OR `model` IS NULL OR `model` = '' OR TRIM(LOWER(`model`)) = TRIM(LOWER(?)))
-                  AND (? = '' OR `brand` IS NULL OR `brand` = '' OR TRIM(LOWER(`brand`)) = TRIM(LOWER(?)))
-            ");
-            $syncStmt->execute([
-                $img,
-                $img,
-                $g['item_name'],
-                $g['model'] ?? '',
-                $g['model'] ?? '',
-                $g['brand'] ?? '',
-                $g['brand'] ?? '',
-            ]);
-            $cnt = $syncStmt->rowCount();
-            if ($cnt > 0) {
-                $totalSynced += $cnt;
-                $updatedGroups++;
-            }
-        }
-
-        echo json_encode([
-            'ok' => true,
-            'message' => "Synced equipment photos across {$updatedGroups} groups ({$totalSynced} units updated)",
-            'total_synced' => $totalSynced,
-            'updated_groups' => $updatedGroups,
-        ]);
-        exit;
-    }
-
-    if ($action === 'delete_stock_item') {
-        requireAuthorizedCaller(
-            $pdo,
-            ['admin', 'manager', 'administrator', 'stock_manager'],
-            'Permission denied: Deleting equipment items requires Site Manager or Administrator privileges.'
-        );
-        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
-        if ($id > 0) {
-            $del = $pdo->prepare("DELETE FROM `items` WHERE `id` = ?");
-            $del->execute([$id]);
-        }
-        echo json_encode(['ok' => true, 'message' => 'Stock item deleted']);
         exit;
     }
 

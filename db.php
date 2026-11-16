@@ -318,65 +318,7 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("ALTER TABLE `attendance_logs` MODIFY COLUMN `punctuality_status` VARCHAR(50) NOT NULL DEFAULT 'on_time'");
     } catch (Throwable $e) {}
 
-    // 6. Ensure `stock_movements` and `batch_items` exist
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS `stock_movements` (
-            `id` INT AUTO_INCREMENT PRIMARY KEY,
-            `batch_number` VARCHAR(64) NOT NULL,
-            `movement_type` VARCHAR(32) DEFAULT 'dispatch',
-            `source_name` VARCHAR(120) DEFAULT 'Ndera Warehouse',
-            `destination_name` VARCHAR(120) DEFAULT 'Kigali Convention Centre',
-            `destination_room` VARCHAR(120) DEFAULT 'Main Auditorium',
-            `technician_id` INT DEFAULT NULL,
-            `submitted_by` VARCHAR(120) DEFAULT NULL,
-            `stock_controller_name` VARCHAR(120) DEFAULT 'Niyonase Prince',
-            `status` VARCHAR(32) DEFAULT 'approved',
-            `approval_status` VARCHAR(32) DEFAULT 'approved',
-            `event_name` VARCHAR(160) DEFAULT 'World Bank Summit',
-            `job_sheet` VARCHAR(64) DEFAULT 'JS-2026-104',
-            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS `batch_items` (
-            `id` INT AUTO_INCREMENT PRIMARY KEY,
-            `batch_id` INT NOT NULL,
-            `item_name` VARCHAR(160) DEFAULT 'L-Acoustics Kara II Line Array',
-            `quantity` INT NOT NULL DEFAULT 4
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
-    // 7. Ensure `items` table exists
-    $pdo->exec("
-        CREATE TABLE IF NOT EXISTS `items` (
-            `id` INT AUTO_INCREMENT PRIMARY KEY,
-            `item_name` VARCHAR(255) NOT NULL,
-            `serial_number` VARCHAR(100) NOT NULL UNIQUE,
-            `category` VARCHAR(100) DEFAULT 'General',
-            `brand` VARCHAR(100) DEFAULT NULL,
-            `model` VARCHAR(100) DEFAULT NULL,
-            `department` VARCHAR(50) DEFAULT 'Warehouse',
-            `description` TEXT DEFAULT NULL,
-            `specifications` TEXT DEFAULT NULL,
-            `brand_model` VARCHAR(255) DEFAULT NULL,
-            `condition` VARCHAR(20) DEFAULT 'good',
-            `stock_location` VARCHAR(255) DEFAULT 'Ndera Warehouse',
-            `storage_location` VARCHAR(255) DEFAULT NULL,
-            `notes` TEXT DEFAULT NULL,
-            `quantity` INT DEFAULT 1,
-            `status` VARCHAR(20) DEFAULT 'available',
-            `image` VARCHAR(500) DEFAULT NULL,
-            `qr_code` VARCHAR(500) DEFAULT NULL,
-            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-            `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            `tags` VARCHAR(500) DEFAULT NULL,
-            `last_scanned` TIMESTAMP NULL DEFAULT NULL,
-            `current_location` VARCHAR(255) DEFAULT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
-    // 8. Ensure `access_clearance_levels` table exists
+    // 6. Ensure `access_clearance_levels` table exists
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `access_clearance_levels` (
             `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -582,26 +524,6 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             date('Y-01-01'),
             date('Y-12-31', strtotime('+1 year')),
         ]);
-    }
-
-    // Ensure sample linked equipment batches exist in `stock_movements`
-    $batchCount = (int) $pdo->query("SELECT COUNT(*) FROM `stock_movements`")->fetchColumn();
-    if ($batchCount === 0) {
-        $pdo->exec("
-            INSERT INTO `stock_movements`
-              (`id`, `batch_number`, `movement_type`, `source_name`, `destination_name`, `destination_room`, `technician_id`, `submitted_by`, `stock_controller_name`, `status`, `approval_status`, `event_name`, `job_sheet`)
-            VALUES
-              (14, 'BATCH-20261104-73E3EB', 'dispatch', 'Ndera Warehouse', 'Kigali Convention Centre', 'Main Auditorium', 9, 'Eric Havugimana', 'Niyonase Prince', 'approved', 'approved', 'World Bank Summit', 'JS-2026-104'),
-              (15, 'BATCH-20261107-91A4FC', 'dispatch', 'BK Arena Stock', 'BK Arena Main Stage', 'FOH Rigging Grid', 6, 'Patrick NYIRIMBIBI', 'Niyonase Prince', 'approved', 'approved', 'Move Afrika Tour', 'JS-2026-108'),
-              (16, 'BATCH-20261107-44C8BD', 'return', 'Intare Conference Arena', 'Ndera Warehouse', 'Bay B2', 22, 'Hirwa Jean de Dieu', 'Niyonase Prince', 'pending', 'pending', 'African Leadership Forum', 'JS-2026-112')
-        ");
-        $pdo->exec("
-            INSERT IGNORE INTO `batch_items` (`batch_id`, `item_name`, `quantity`) VALUES
-              (14, 'Chain Master D8+ 1T Hoist & Controller', 6),
-              (14, 'Prolyte H40V Truss 3m Box Section', 12),
-              (15, 'Brompton Tessera SX40 LED Processor', 2),
-              (16, 'DiGiCo Quantum 338 Digital Console', 1)
-        ");
     }
 
     if ($forceReset) {

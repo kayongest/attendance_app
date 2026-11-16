@@ -59,12 +59,8 @@
     timelineReportSummary: null,
     timelineReportLabel: '',
     timelineReportLoading: false,
-    batches: [],
     shiftRequests: [],
     pendingShiftRequestCount: 0,
-    batchesSearch: '',
-    batchesFilterStatus: 'all',
-    batchesFilterMovement: 'all',
     roles: [],
     usersViewMode: 'personnel',
     rolesSearch: '',
@@ -121,17 +117,12 @@
     usersPage: 1,
     usersPerPage: 5,
 
-    // Stocks & Warehouses CRUD Manager
+    // Facilities & Checkpoints CRUD Manager
     stockManager: {
       activeTab: 'warehouses',
       warehouses: [],
-      items: [],
-      categories: [],
       stats: {
         total_warehouses: 0,
-        total_items: 0,
-        available_count: 0,
-        in_use_count: 0,
       },
       whSearch: '',
       whPage: 1,
@@ -139,11 +130,6 @@
       evSearch: '',
       evPage: 1,
       evPerPage: 5,
-      itemSearch: '',
-      categoryFilter: 'all',
-      locationFilter: 'all',
-      itemPage: 1,
-      itemPerPage: 10,
     },
 
     // User Activity Timeline pagination (5 items per page)
@@ -157,9 +143,6 @@
     overviewPerPage: 5,
     directoryPage: 1,
     directoryPerPage: 5,
-
-    // Currently inspected batch in modal
-    inspectedBatchId: null,
 
     // Current Operator Session & Alerts
     currentUser: null,
@@ -236,7 +219,6 @@
     state.crew = Array.isArray(data.crew) ? data.crew : [];
     state.hourlyTraffic = Array.isArray(data.hourlyTraffic) ? data.hourlyTraffic : [];
     state.activityTimeline = Array.isArray(data.activityTimeline) ? data.activityTimeline : [];
-    state.batches = Array.isArray(data.batches) ? data.batches : [];
     state.shiftRequests = Array.isArray(data.shiftRequests) ? data.shiftRequests : [];
     state.pendingShiftRequestCount = Number(data.pendingShiftRequestCount ?? state.shiftRequests.filter((r) => r.status === 'pending').length);
     if (Array.isArray(data.read_notif_ids)) {
@@ -258,7 +240,7 @@
         { id: 9, role_key: 'rigging_lead', title: 'Rigging Lead', clearance_level: 'L2_TECH_STAGE', clearance_code: 'L2', clearance_title: 'Level 2 - Technical & Stage', clearance_color: '#3b82f6', department: 'Rigging', description: 'Motors, truss rigging, load calculations and safety cable inspections overhead.', is_system: 0, is_active: 1, staff_count: 1 },
         { id: 10, role_key: 'user', title: 'Venue Crew', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Production', description: 'General event venue operations and support staff. Stock warehouse access restricted.', is_system: 0, is_active: 1, staff_count: 1 },
         { id: 11, role_key: 'security', title: 'Security Officer', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Security', description: 'Front of house and gate security perimeter verification.', is_system: 0, is_active: 1, staff_count: 1 },
-        { id: 12, role_key: 'driver', title: 'Logistics Driver', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Logistics', description: 'Equipment transport, loading bay check-in, and transit logistics.', is_system: 0, is_active: 1, staff_count: 1 },
+        { id: 12, role_key: 'driver', title: 'Logistics Driver', clearance_level: 'L1_VENUE_BASIC', clearance_code: 'L1', clearance_title: 'Level 1 - Venue Basic', clearance_color: '#64748b', department: 'Logistics', description: 'Cross-facility crew shuttle, loading bay check-in, and transit logistics.', is_system: 0, is_active: 1, staff_count: 1 },
       ];
     }
 
@@ -367,7 +349,6 @@
       is_transit_transfer: isCrossFacilityUnsigned,
       transit_from: isCrossFacilityUnsigned ? (member.last_checkpoint_name || 'Stock Warehouse') : null,
       transit_to: isCrossFacilityUnsigned ? cp.name : null,
-      linked_batches: member.linked_batches || [],
       badge: {
         user_id: member.id,
         full_name: member.full_name,
@@ -2311,21 +2292,6 @@
     if (spName) spName.textContent = state.activeCheckpoint.name;
     if (spLoc) spLoc.textContent = `${state.activeCheckpoint.location || 'Kigali'} · ${state.activeCheckpoint.lead_label || ''}`;
     if (spRule) spRule.textContent = state.activeCheckpoint.min_clearance || '4-Tier Access Matrix Active';
-
-    // Update Featured Equipment Batch Card on Screen 2 from state.batches[0]
-    if (state.batches && state.batches.length > 0) {
-      const fb = state.batches[0];
-      const bCodeEl = document.getElementById('spotlight-batch-code');
-      const bStatEl = document.getElementById('spotlight-batch-status');
-      const bRouteEl = document.getElementById('spotlight-batch-route');
-      const bTechEl = document.getElementById('spotlight-batch-tech');
-      const bCtrlEl = document.getElementById('spotlight-batch-controller');
-      if (bCodeEl) bCodeEl.textContent = fb.batch_number;
-      if (bStatEl) bStatEl.textContent = fb.status.toUpperCase();
-      if (bRouteEl) bRouteEl.textContent = `${fb.source_name} → ${fb.destination_name}`;
-      if (bTechEl) bTechEl.textContent = `${fb.technician_name} (${fb.technician_badge} · ${fb.technician_clearance})`;
-      if (bCtrlEl) bCtrlEl.textContent = `Controller: ${fb.stock_controller_name}`;
-    }
   }
 
   function updateKioskQuickbar() {
@@ -2852,12 +2818,6 @@
     }
     if (outIndicator) {
       outIndicator.classList.toggle('out-active', Boolean(v.check_out_time));
-    }
-
-    // Linked Stock Batch Custody Bar is intentionally disabled for attendance-only focus
-    const batchBar = document.getElementById('kiosk-batch-bar');
-    if (batchBar) {
-      batchBar.style.display = 'none';
     }
 
     // Phase 1: Call-Time & Live Punctuality Delta Strip
@@ -3936,7 +3896,7 @@
           if (data && data.ok) {
             applyBootstrapPayload(data);
             playKioskChime('approve');
-            showToast(`✓ Dispatched ${u.name} to ${venue} (In Transit)`);
+            showToast(`✓ Deployed ${u.name} to ${venue} (In Transit)`);
             renderAll();
             renderOptionBMap();
             focusOptionBUser(uid);
@@ -4615,9 +4575,6 @@
     document.querySelectorAll('#events-venue-kpi').forEach((el) => {
       el.textContent = String(venuesCount).padStart(2, '0');
     });
-    document.querySelectorAll('#events-batches-kpi').forEach((el) => {
-      el.textContent = String(state.batches.length).padStart(2, '0');
-    });
 
     const sidebarCount = document.getElementById('sidebar-events-count');
     const dirBadge = document.getElementById('events-directory-badge');
@@ -4954,101 +4911,7 @@
     // 1. 4-Tier Matrix Overview Cards
     renderClearanceMatrixCards();
 
-    // 2. Equipment Batches Custody Table
-    populateBatchCrudDropdowns();
-    const batchesRowsEl = document.getElementById('batches-table-rows');
-    const batchesBadge = document.getElementById('batches-count-badge');
-
-    let batches = Array.isArray(state.batches) ? state.batches : [];
-    if (state.batchesSearch) {
-      const q = state.batchesSearch.toLowerCase().trim();
-      batches = batches.filter(
-        (b) =>
-          (b.batch_number || '').toLowerCase().includes(q) ||
-          (b.job_sheet || '').toLowerCase().includes(q) ||
-          (b.event_name || '').toLowerCase().includes(q) ||
-          (b.technician_name || '').toLowerCase().includes(q) ||
-          (b.source_name || '').toLowerCase().includes(q) ||
-          (b.destination_name || '').toLowerCase().includes(q) ||
-          (b.destination_room || '').toLowerCase().includes(q)
-      );
-    }
-    if (state.batchesFilterStatus && state.batchesFilterStatus !== 'all') {
-      batches = batches.filter((b) => (b.status || '').toLowerCase() === state.batchesFilterStatus.toLowerCase());
-    }
-    if (state.batchesFilterMovement && state.batchesFilterMovement !== 'all') {
-      batches = batches.filter((b) => (b.movement_type || '').toLowerCase() === state.batchesFilterMovement.toLowerCase());
-    }
-
-    if (batchesBadge) batchesBadge.textContent = String(batches.length).padStart(2, '0');
-
-    if (batchesRowsEl) {
-      if (batches.length === 0) {
-        batchesRowsEl.innerHTML = `
-          <div style="padding: 32px 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
-            <div style="font-size: 24px; margin-bottom: 6px;">📦</div>
-            <strong>No equipment batches found</strong>
-            <p style="margin-top: 4px; font-size: 11px;">Try adjusting search terms or click "+ Create Equipment Batch" above.</p>
-          </div>
-        `;
-      } else {
-        batchesRowsEl.innerHTML = batches
-          .map((b) => {
-            const isApproved = b.status === 'approved';
-            const statusBadge =
-              b.status === 'approved' ? 'status-badge-green-sm' :
-              b.status === 'pending' ? 'status-badge-amber-sm' :
-              b.status === 'in_transit' ? 'status-badge-blue-sm' :
-              b.status === 'completed' ? 'status-badge-purple-sm' : 'status-badge-amber-sm';
-
-            const itemsCount = Array.isArray(b.items) ? b.items.length : 0;
-
-            return `
-              <div class="tier-table-row" style="height: 68px;">
-                <div style="width: 210px; display: flex; flex-direction: column; gap: 3px;">
-                  <span class="badge-code-primary">${escapeHtml(b.batch_number)}</span>
-                  <span style="font-size: 10px; color: var(--text-secondary);">Job Sheet: ${escapeHtml(b.job_sheet)} · ${escapeHtml(b.event_name)}</span>
-                </div>
-                <div style="width: 220px; display: flex; flex-direction: column; gap: 3px;">
-                  <span style="font-size: 11px; font-weight: 600;">${escapeHtml(b.source_name)} &rarr; ${escapeHtml(b.destination_name)}</span>
-                  <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(b.destination_room || 'Main Stage')} (${escapeHtml(b.movement_type)})</span>
-                </div>
-                <div style="width: 190px; display: flex; flex-direction: column; gap: 3px;">
-                  <span style="font-size: 11px; font-weight: 600;">${escapeHtml(b.technician_name)}</span>
-                  <span style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(b.technician_badge)} · Tier ${escapeHtml(b.technician_clearance)}</span>
-                </div>
-                <div style="width: 130px; font-size: 11px;">
-                  ${escapeHtml(b.stock_controller_name)}
-                </div>
-                <div style="width: 110px;">
-                  <span class="status-badge ${statusBadge}">
-                    ${escapeHtml(b.status.toUpperCase())}
-                  </span>
-                </div>
-                <div style="flex: 1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                  <button type="button" class="btn btn-secondary-32-sm js-open-batch-modal" data-batch-id="${b.id}" title="Inspect Manifest (${itemsCount} items)">
-                    Inspect (${itemsCount})
-                  </button>
-                  <button type="button" class="btn btn-secondary-32-sm js-edit-batch" data-batch-id="${b.id}" title="Edit Equipment Batch">
-                    ✏️ Edit
-                  </button>
-                  ${
-                    !isApproved
-                      ? `<button type="button" class="btn btn-primary-32-sm js-approve-batch-btn" data-batch-id="${b.id}" style="background:#16a34a; font-size:11px; padding:0 8px; height:28px;" title="Verify & Approve Batch">Approve</button>`
-                      : ''
-                  }
-                  <button type="button" class="btn btn-secondary-32-sm js-delete-batch" data-batch-id="${b.id}" data-batch-num="${escapeHtml(b.batch_number)}" style="color: #dc2626; padding:0 8px; height:28px;" title="Delete Batch">
-                    🗑️
-                  </button>
-                </div>
-              </div>
-            `;
-          })
-          .join('');
-      }
-    }
-
-    // 3. 4-Tier Access Matrix Crew Assignment Rows
+    // 2. 4-Tier Access Matrix Crew Assignment Rows
     const matrixRowsEl = document.getElementById('matrix-config-rows');
     if (matrixRowsEl) {
       matrixRowsEl.innerHTML = state.crew
@@ -5451,176 +5314,6 @@
     `).join('');
   }
 
-  function openBatchModal(batchId) {
-    const batch = state.batches.find((b) => Number(b.id) === Number(batchId)) || state.batches[0];
-    if (!batch) return;
-    state.inspectedBatchId = batch.id;
-
-    const modal = document.getElementById('batch-custody-modal');
-    const statusEl = document.getElementById('batch-modal-status');
-    const bodyEl = document.getElementById('batch-modal-body');
-    const approveBtn = document.getElementById('approve-batch-modal-btn');
-
-    if (statusEl) {
-      statusEl.textContent = batch.status.toUpperCase();
-      statusEl.className = `status-badge ${batch.status === 'approved' ? 'status-badge-green-md' : 'status-badge-amber-md'}`;
-    }
-
-    const itemsHtml =
-      Array.isArray(batch.items) && batch.items.length > 0
-        ? batch.items
-            .map(
-              (it) =>
-                `<div style="display:flex; justify-content:space-between; padding:6px 10px; background:var(--bg-canvas); border-radius:6px; border:1px solid var(--border-color);">
-                  <span>${escapeHtml(it.item_name)}</span>
-                  <strong>Qty: ${it.quantity}</strong>
-                </div>`
-            )
-            .join('')
-        : `<div style="padding:8px; color:var(--text-secondary);">Standard Production Rigging & Audio Package</div>`;
-
-    if (bodyEl) {
-      bodyEl.innerHTML = `
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px; background:var(--bg-canvas); border-radius:8px; border:1px solid var(--border-color);">
-          <div><strong>Batch Number:</strong> <span class="badge-code-primary">${escapeHtml(batch.batch_number)}</span></div>
-          <div><strong>Job Sheet:</strong> ${escapeHtml(batch.job_sheet)}</div>
-          <div><strong>Origin Warehouse:</strong> ${escapeHtml(batch.source_name)}</div>
-          <div><strong>Destination Venue:</strong> ${escapeHtml(batch.destination_name)} (${escapeHtml(batch.destination_room)})</div>
-          <div><strong>Assigned Technician:</strong> ${escapeHtml(batch.technician_name)} (${escapeHtml(batch.technician_badge)})</div>
-          <div><strong>Stock Controller:</strong> ${escapeHtml(batch.stock_controller_name)}</div>
-        </div>
-        <div style="font-weight:600; margin-top:4px;">Equipment Manifest Items:</div>
-        <div style="display:flex; flex-direction:column; gap:6px;">${itemsHtml}</div>
-      `;
-    }
-
-    if (approveBtn) {
-      approveBtn.style.display = batch.status === 'approved' ? 'none' : 'inline-flex';
-    }
-
-    if (modal) modal.classList.add('open');
-  }
-
-  function populateBatchCrudDropdowns() {
-    const techSelect = document.getElementById('batch-crud-tech');
-    if (techSelect && state.crew.length > 0) {
-      const currentVal = techSelect.value;
-      techSelect.innerHTML = state.crew
-        .map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)} (${escapeHtml(c.badge_code)} · ${escapeHtml(c.clearance_code)})</option>`)
-        .join('');
-      if (currentVal) techSelect.value = currentVal;
-    }
-
-    const ctrlSelect = document.getElementById('batch-crud-controller');
-    if (ctrlSelect) {
-      const currentVal = ctrlSelect.value;
-      const controllers = state.crew.filter((c) =>
-        ['stock_controller', 'stock_manager', 'admin', 'manager'].includes((c.role || '').toLowerCase()) ||
-        (c.clearance_code === 'L3' || c.clearance_code === 'L4')
-      );
-      const list = controllers.length > 0 ? controllers : state.crew;
-      ctrlSelect.innerHTML = list
-        .map((c) => `<option value="${c.id}" data-name="${escapeHtml(c.full_name)}">${escapeHtml(c.full_name)} (${escapeHtml(c.role_display)})</option>`)
-        .join('');
-      if (currentVal) ctrlSelect.value = currentVal;
-    }
-  }
-
-  function addBatchCrudItemRow(name = '', qty = 1, serial = '') {
-    const container = document.getElementById('batch-crud-items-container');
-    if (!container) return;
-    const row = document.createElement('div');
-    row.className = 'batch-item-row';
-    row.style.cssText = 'display: flex; gap: 6px; align-items: center; margin-bottom: 4px;';
-    row.innerHTML = `
-      <input type="text" class="form-input js-batch-item-name" placeholder="Item name (e.g. Flight Case A)" value="${escapeHtml(name)}" required style="flex: 2; height: 30px; font-size: 11px;" />
-      <input type="number" class="form-input js-batch-item-qty" placeholder="Qty" value="${qty || 1}" min="1" required style="width: 60px; height: 30px; font-size: 11px;" />
-      <input type="text" class="form-input js-batch-item-serial" placeholder="Serial / Asset #" value="${escapeHtml(serial || '')}" style="flex: 1.5; height: 30px; font-size: 11px;" />
-      <button type="button" class="btn-ghost-sm js-remove-batch-item" style="color: #dc2626; padding: 2px 6px; cursor: pointer; border: none; background: transparent; font-weight: bold;" title="Remove Item">✕</button>
-    `;
-    container.appendChild(row);
-  }
-
-  function openBatchCrudModal(batch = null) {
-    populateBatchCrudDropdowns();
-    const modal = document.getElementById('batch-crud-modal');
-    if (!modal) return;
-
-    const titleEl = document.getElementById('batch-crud-modal-title');
-    const idInput = document.getElementById('batch-crud-id');
-    const numInput = document.getElementById('batch-crud-num');
-    const jobsheetInput = document.getElementById('batch-crud-jobsheet');
-    const eventInput = document.getElementById('batch-crud-event');
-    const movementSelect = document.getElementById('batch-crud-movement');
-    const sourceInput = document.getElementById('batch-crud-source');
-    const destInput = document.getElementById('batch-crud-destination');
-    const roomInput = document.getElementById('batch-crud-room');
-    const statusSelect = document.getElementById('batch-crud-status');
-    const techSelect = document.getElementById('batch-crud-tech');
-    const ctrlSelect = document.getElementById('batch-crud-controller');
-    const notesInput = document.getElementById('batch-crud-notes');
-    const itemsContainer = document.getElementById('batch-crud-items-container');
-
-    if (itemsContainer) itemsContainer.innerHTML = '';
-
-    const todayDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const randCode = Math.random().toString(16).substring(2, 8).toUpperCase();
-
-    if (batch) {
-      if (titleEl) titleEl.textContent = `Edit Equipment Batch (${batch.batch_number})`;
-      if (idInput) idInput.value = batch.id;
-      if (numInput) numInput.value = batch.batch_number || '';
-      if (jobsheetInput) jobsheetInput.value = batch.job_sheet || '';
-      if (eventInput) eventInput.value = batch.event_name || '';
-      if (movementSelect) movementSelect.value = batch.movement_type || 'stock_to_venue_room';
-      if (sourceInput) sourceInput.value = batch.source_name || '';
-      if (destInput) destInput.value = batch.destination_name || '';
-      if (roomInput) roomInput.value = batch.destination_room || '';
-      if (statusSelect) statusSelect.value = batch.status || 'pending';
-      if (techSelect && batch.technician_id) techSelect.value = batch.technician_id;
-      if (ctrlSelect) {
-        if (batch.stock_controller_id) ctrlSelect.value = batch.stock_controller_id;
-        else {
-          const opt = Array.from(ctrlSelect.options).find(
-            (o) => (o.getAttribute('data-name') || '').toLowerCase() === (batch.stock_controller_name || '').toLowerCase()
-          );
-          if (opt) opt.selected = true;
-        }
-      }
-      if (notesInput) notesInput.value = batch.notes || '';
-
-      if (Array.isArray(batch.items) && batch.items.length > 0) {
-        batch.items.forEach((it) => addBatchCrudItemRow(it.item_name, it.quantity, it.serial_number));
-      } else {
-        addBatchCrudItemRow('Standard Equipment Package', 1, '');
-      }
-    } else {
-      if (titleEl) titleEl.textContent = 'Create Equipment Batch';
-      if (idInput) idInput.value = 0;
-      if (numInput) numInput.value = `BATCH-${todayDateStr}-${randCode}`;
-      if (jobsheetInput) jobsheetInput.value = `JS-${todayDateStr}-01`;
-      if (eventInput) eventInput.value = state.activeCheckpoint ? state.activeCheckpoint.name : 'Production Event';
-      if (movementSelect) movementSelect.value = 'stock_to_venue_room';
-      if (sourceInput) sourceInput.value = 'Ndera Central Warehouse';
-      if (destInput) destInput.value = 'Kigali Convention Centre';
-      if (roomInput) roomInput.value = 'Main Stage (MH1)';
-      if (statusSelect) statusSelect.value = 'pending';
-      if (techSelect && state.crew.length > 0) techSelect.value = state.selectedCrewId || state.crew[0].id;
-      if (ctrlSelect && ctrlSelect.options.length > 0) ctrlSelect.selectedIndex = 0;
-      if (notesInput) notesInput.value = '';
-
-      addBatchCrudItemRow('Flight Case A', 1, `FC-${randCode}`);
-      addBatchCrudItemRow('Microphone Shure Wireless', 2, `SHUR-${randCode}`);
-    }
-
-    modal.classList.add('open');
-  }
-
-  function closeBatchCrudModal() {
-    const modal = document.getElementById('batch-crud-modal');
-    if (modal) modal.classList.remove('open');
-  }
-
   function populateClearanceDropdowns() {
     const userClrSelect = document.getElementById('user-modal-clearance');
     const roleClrSelect = document.getElementById('role-modal-tier-select');
@@ -5933,13 +5626,8 @@
       if (!data || !data.ok) return;
 
       state.stockManager.warehouses = Array.isArray(data.warehouses) ? data.warehouses : [];
-      state.stockManager.items = Array.isArray(data.stock_items) ? data.stock_items : [];
-      state.stockManager.categories = Array.isArray(data.categories) ? data.categories : [];
       state.stockManager.stats = data.stats || {
         total_warehouses: state.stockManager.warehouses.length,
-        total_items: state.stockManager.items.length,
-        available_count: 0,
-        in_use_count: 0,
       };
 
       // Update sidebar badge
@@ -5949,15 +5637,9 @@
         sideBadge.textContent = whCount;
       }
 
-      // Update top KPI cards
+      // Update top KPI card if present
       const elWh = document.getElementById('sm-stat-warehouses');
-      const elIt = document.getElementById('sm-stat-items');
-      const elAv = document.getElementById('sm-stat-available');
-      const elIn = document.getElementById('sm-stat-inuse');
       if (elWh) elWh.textContent = state.stockManager.stats.total_warehouses;
-      if (elIt) elIt.textContent = state.stockManager.stats.total_items;
-      if (elAv) elAv.textContent = state.stockManager.stats.available_count;
-      if (elIn) elIn.textContent = state.stockManager.stats.in_use_count;
 
       renderStockManager();
     } catch (err) {
@@ -6081,9 +5763,9 @@
   }
 
   function renderStockManager() {
-    const activeTab = state.stockManager.activeTab || 'warehouses';
-    const isWh = activeTab === 'warehouses';
+    const activeTab = state.stockManager.activeTab === 'events' ? 'events' : 'warehouses';
     const isEvents = activeTab === 'events';
+    const isWh = !isEvents;
 
     // Update segmented tab buttons
     document.querySelectorAll('.js-sm-tab-btn').forEach((btn) => {
@@ -6094,7 +5776,7 @@
     // Update active view badge & tab count numbers
     const activeBadge = document.getElementById('sm-active-view-badge');
     if (activeBadge) {
-      activeBadge.textContent = isEvents ? 'Event Venues' : (isWh ? 'Facility Gates' : 'Inventory');
+      activeBadge.textContent = isEvents ? 'Event Venues' : 'Facility Gates';
       activeBadge.className = isEvents ? 'status-badge status-badge-green-sm' : 'status-badge status-badge-purple-sm';
     }
 
@@ -6109,55 +5791,19 @@
 
     const whTabCount = document.getElementById('sm-tab-wh-count');
     const evTabCount = document.getElementById('sm-tab-ev-count');
-    const itemTabCount = document.getElementById('sm-tab-item-count');
     if (whTabCount) whTabCount.textContent = String(whCountNum).padStart(2, '0');
     if (evTabCount) evTabCount.textContent = String(evCountNum).padStart(2, '0');
-    if (itemTabCount) itemTabCount.textContent = String(state.stockManager.items.length).padStart(2, '0');
 
     const whSection = document.getElementById('sm-pane-warehouses');
     const evSection = document.getElementById('sm-pane-events');
-    const itemsSection = document.getElementById('sm-pane-items');
 
     if (whSection) whSection.style.display = isWh ? 'block' : 'none';
     if (evSection) evSection.style.display = isEvents ? 'block' : 'none';
-    if (itemsSection) itemsSection.style.display = (!isWh && !isEvents) ? 'block' : 'none';
 
-    if (isWh) {
-      renderWarehousesGrid();
-    } else if (isEvents) {
+    if (isEvents) {
       renderStockManagerEventsGrid();
     } else {
-      renderStockItemsTable();
-    }
-
-    // Populate category dropdown
-    const catSelect = document.getElementById('sm-category-filter');
-    if (catSelect && catSelect.children.length <= 1) {
-      const currentCat = state.stockManager.categoryFilter;
-      catSelect.innerHTML =
-        `<option value="all">All Categories</option>` +
-        state.stockManager.categories
-          .map((c) => `<option value="${escapeHtml(c)}" ${currentCat === c ? 'selected' : ''}>${escapeHtml(c)}</option>`)
-          .join('');
-    }
-
-    // Populate location dropdown in stock item filters
-    const locFilter = document.getElementById('sm-location-filter');
-    if (locFilter && locFilter.children.length <= 1) {
-      const currentLoc = state.stockManager.locationFilter;
-      locFilter.innerHTML =
-        `<option value="all">All Warehouses</option>` +
-        state.stockManager.warehouses
-          .map((w) => `<option value="${escapeHtml(w.name)}" ${currentLoc === w.name ? 'selected' : ''}>${escapeHtml(w.name)}</option>`)
-          .join('');
-    }
-
-    // Populate warehouse dropdown in stock item form
-    const formWhSelect = document.getElementById('item-modal-warehouse');
-    if (formWhSelect) {
-      formWhSelect.innerHTML = state.stockManager.warehouses
-        .map((w) => `<option value="${escapeHtml(w.name)}">${escapeHtml(w.name)} (${escapeHtml(w.code)})</option>`)
-        .join('');
+      renderWarehousesGrid();
     }
   }
 
@@ -6382,171 +6028,6 @@
     return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
   }
 
-  function renderStockItemsTable() {
-    const rowsEl = document.getElementById('sm-items-rows');
-    const footerEl = document.getElementById('sm-results-footer');
-    const pageControlsEl = document.getElementById('sm-page-controls');
-    if (!rowsEl) return;
-
-    const q = (state.stockManager.itemSearch || '').toLowerCase().trim();
-    const cat = state.stockManager.categoryFilter;
-    const loc = state.stockManager.locationFilter;
-
-    const list = state.stockManager.items.filter((it) => {
-      if (cat !== 'all' && it.category !== cat) return false;
-      if (loc !== 'all' && it.stock_location !== loc) return false;
-      if (!q) return true;
-      return (
-        (it.item_name || '').toLowerCase().includes(q) ||
-        (it.serial_number || '').toLowerCase().includes(q) ||
-        (it.brand || '').toLowerCase().includes(q) ||
-        (it.model || '').toLowerCase().includes(q) ||
-        (it.notes || '').toLowerCase().includes(q)
-      );
-    });
-
-    const totalItems = list.length;
-    const perPageVal = state.stockManager.itemPerPage;
-    const isAll = perPageVal === 'all';
-    const perPage = isAll ? (totalItems || 1) : Number(perPageVal || 10);
-    const totalPages = isAll ? 1 : Math.max(1, Math.ceil(totalItems / perPage));
-
-    if (state.stockManager.itemPage > totalPages) state.stockManager.itemPage = totalPages;
-    if (state.stockManager.itemPage < 1) state.stockManager.itemPage = 1;
-
-    const startIdx = isAll ? 0 : (state.stockManager.itemPage - 1) * perPage;
-    const endIdx = isAll ? totalItems : Math.min(startIdx + perPage, totalItems);
-    const pagedList = isAll ? list : list.slice(startIdx, endIdx);
-
-    if (footerEl) {
-      if (totalItems === 0) {
-        footerEl.textContent = 'Showing 0 equipment items';
-      } else if (isAll) {
-        footerEl.textContent = `Showing all ${totalItems} of ${state.stockManager.items.length} inventory equipment items`;
-      } else {
-        footerEl.textContent = `Showing ${startIdx + 1}–${endIdx} of ${totalItems} inventory equipment items (Page ${state.stockManager.itemPage} of ${totalPages})`;
-      }
-    }
-
-    if (list.length === 0) {
-      if (pageControlsEl) pageControlsEl.innerHTML = '';
-      rowsEl.innerHTML = `
-        <div style="padding: 40px 20px; text-align: center; background: var(--bg-surface);">
-          <div style="font-size: 32px; margin-bottom: 8px;">📦</div>
-          <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">No Equipment Items Found</h4>
-          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
-            ${q || cat !== 'all' || loc !== 'all' ? 'Try adjusting your search terms or filters.' : 'Add your first piece of stock inventory.'}
-          </p>
-          <button type="button" class="btn btn-primary-38 js-trigger-add-item">
-            <img src="assets/plus-white.svg" alt="" class="svg-icon" />
-            <span>+ Add Stock Item</span>
-          </button>
-        </div>
-      `;
-      return;
-    }
-
-    const condBadges = {
-      good: '<span class="status-badge status-badge-green-sm">Good</span>',
-      fair: '<span class="status-badge status-badge-blue-sm">Fair</span>',
-      maintenance: '<span class="status-badge status-badge-amber-sm">Repair</span>',
-      damaged: '<span class="status-badge status-badge-red-sm">Damaged</span>',
-    };
-
-    const statusBadges = {
-      available: '<span class="status-badge status-badge-green-sm">Available</span>',
-      in_use: '<span class="status-badge status-badge-amber-sm">In Use</span>',
-      maintenance: '<span class="status-badge status-badge-red-sm">Maintenance</span>',
-    };
-
-    rowsEl.innerHTML = pagedList
-      .map((it) => {
-        const thumbHtml = it.image
-          ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.item_name)}" class="stock-thumb-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" /><span class="stock-thumb-placeholder" style="display:none;">📦</span>`
-          : `<span class="stock-thumb-placeholder">📦</span>`;
-
-        return `
-        <div class="stock-item-row" data-item-id="${it.id}">
-          <div class="stock-item-identity">
-            <div class="stock-thumb-wrap">
-              ${thumbHtml}
-            </div>
-            <div class="stock-name-stack">
-              <span class="stock-item-title" title="${escapeHtml(it.item_name)}">${escapeHtml(it.item_name)}</span>
-              <span class="stock-item-notes">${escapeHtml(it.notes || 'No notes specified')}</span>
-            </div>
-          </div>
-          <div style="width: 170px; display: flex; flex-direction: column; gap: 2px;">
-            <span class="badge-code-primary">${escapeHtml(it.serial_number)}</span>
-            <span style="font-size: 11px; color: var(--text-secondary);">${escapeHtml(it.brand || '')} ${escapeHtml(it.model || '')}</span>
-          </div>
-          <div style="width: 140px; display: flex; flex-direction: column; gap: 2px;">
-            <span style="font-size: 12px; font-weight: 600;">${escapeHtml(it.category)}</span>
-            <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(it.department || 'Warehouse')}</span>
-          </div>
-          <div style="width: 160px; display: flex; align-items: center; gap: 6px;">
-            <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="opacity: 0.6;" />
-            <span style="font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              ${escapeHtml(it.stock_location)}
-            </span>
-          </div>
-          <div style="width: 110px; display: flex; flex-direction: column; gap: 3px;">
-            <span style="font-size: 12px; font-weight: 700;">Qty: ${it.quantity}</span>
-            <div>${condBadges[it.condition] || condBadges.good}</div>
-          </div>
-          <div style="width: 110px;">
-            ${statusBadges[it.status] || statusBadges.available}
-          </div>
-          <div style="width: 100px; display: flex; justify-content: flex-end; gap: 6px;">
-            <button type="button" class="btn btn-secondary-32-sm js-edit-item-btn" data-item-id="${it.id}">
-              Edit
-            </button>
-            <button type="button" class="btn btn-secondary-32-sm js-delete-record-btn" data-del-type="item" data-del-id="${it.id}" data-del-name="${escapeHtml(it.item_name)}" style="color: #dc2626;">
-              Delete
-            </button>
-          </div>
-        </div>
-      `;
-      })
-      .join('');
-
-    // Render pagination controls
-    if (pageControlsEl) {
-      if (totalPages <= 1) {
-        pageControlsEl.innerHTML = '';
-      } else {
-        const curPage = state.stockManager.itemPage;
-        let controlsHtml = `
-          <button type="button" class="btn btn-secondary-32-sm js-sm-items-prev-page" ${curPage <= 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} aria-label="Previous Page">
-            <span>&larr; Prev</span>
-          </button>
-        `;
-
-        const pages = getPaginationPageNumbers(curPage, totalPages);
-        pages.forEach((p) => {
-          if (p === '...') {
-            controlsHtml += `<span style="display: inline-flex; align-items: center; justify-content: center; width: 20px; color: var(--text-muted); font-size: 12px;">…</span>`;
-          } else {
-            const isActive = p === curPage;
-            controlsHtml += `
-              <button type="button" class="page-number-btn ${isActive ? 'active' : ''} js-sm-items-page-num" data-page="${p}" aria-label="Page ${p}">
-                ${p}
-              </button>
-            `;
-          }
-        });
-
-        controlsHtml += `
-          <button type="button" class="btn btn-secondary-32-sm js-sm-items-next-page" ${curPage >= totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} aria-label="Next Page">
-            <span>Next &rarr;</span>
-          </button>
-        `;
-
-        pageControlsEl.innerHTML = controlsHtml;
-      }
-    }
-  }
-
   function openWarehouseModal(warehouseId = null) {
     const modal = document.getElementById('warehouse-crud-modal');
     if (!modal) return;
@@ -6599,119 +6080,6 @@
       if (pinInput) pinInput.value = '';
     }
 
-    modal.classList.add('open');
-  }
-
-  function updateItemModalMatchCount() {
-    const nameInput = document.getElementById('item-modal-name');
-    const brandInput = document.getElementById('item-modal-brand');
-    const modelInput = document.getElementById('item-modal-model');
-    const idInput = document.getElementById('item-modal-id');
-    const badgeEl = document.getElementById('item-modal-match-count');
-    if (!nameInput || !badgeEl) return;
-
-    const curId = Number(idInput?.value || 0);
-    const name = (nameInput.value || '').trim().toLowerCase();
-    const brand = (brandInput?.value || '').trim().toLowerCase();
-    const model = (modelInput?.value || '').trim().toLowerCase();
-
-    if (!name) {
-      badgeEl.textContent = '0';
-      return;
-    }
-
-    const matches = (state.stockManager.items || []).filter((other) => {
-      if (Number(other.id) === curId) return false;
-      if ((other.item_name || '').trim().toLowerCase() !== name) return false;
-      if (model && other.model && other.model.trim().toLowerCase() !== model) return false;
-      if (brand && other.brand && other.brand.trim().toLowerCase() !== brand) return false;
-      return true;
-    });
-
-    badgeEl.textContent = String(matches.length);
-
-    // If current dropzone has no preview, but matching sibling has image, preview the shared image
-    const previewEl = document.getElementById('item-dropzone-preview');
-    const fileInput = document.getElementById('item-modal-image');
-    const hasManualFile = fileInput && fileInput.files && fileInput.files.length > 0;
-    const curHasImg = previewEl && previewEl.style.display !== 'none';
-    if (!curHasImg && !hasManualFile) {
-      const siblingWithImg = matches.find((m) => m.image && m.image.trim() !== '');
-      if (siblingWithImg) {
-        setDropzonePreview('item', siblingWithImg.image, `Shared photo from identical units (${siblingWithImg.serial_number || 'Stock Unit'})`);
-      }
-    }
-  }
-
-  function openStockItemModal(itemId = null) {
-    const modal = document.getElementById('stock-item-crud-modal');
-    if (!modal) return;
-    const form = document.getElementById('stock-item-crud-form');
-    if (form) form.reset();
-
-    const titleEl = document.getElementById('item-modal-title');
-    const idInput = document.getElementById('item-modal-id');
-    const nameInput = document.getElementById('item-modal-name');
-    const serialInput = document.getElementById('item-modal-serial');
-    const catSelect = document.getElementById('item-modal-category');
-    const brandInput = document.getElementById('item-modal-brand');
-    const modelInput = document.getElementById('item-modal-model');
-    const whSelect = document.getElementById('item-modal-warehouse');
-    const qtyInput = document.getElementById('item-modal-qty');
-    const condSelect = document.getElementById('item-modal-condition');
-    const statusSelect = document.getElementById('item-modal-status');
-    const notesInput = document.getElementById('item-modal-notes');
-
-    // Reset dropzone
-    resetDropzone('item');
-
-    // Populate warehouses in form select if needed
-    if (whSelect && state.stockManager.warehouses.length > 0) {
-      whSelect.innerHTML = state.stockManager.warehouses
-        .map((w) => `<option value="${escapeHtml(w.name)}">${escapeHtml(w.name)} (${escapeHtml(w.code)})</option>`)
-        .join('');
-    }
-
-    if (itemId) {
-      const it = state.stockManager.items.find((i) => Number(i.id) === Number(itemId));
-      if (it) {
-        if (titleEl) titleEl.textContent = 'Edit Stock Equipment Item';
-        if (idInput) idInput.value = it.id;
-        if (nameInput) nameInput.value = it.item_name || '';
-        if (serialInput) serialInput.value = it.serial_number || '';
-        if (catSelect) catSelect.value = it.category || 'Audio';
-        if (brandInput) brandInput.value = it.brand || '';
-        if (modelInput) modelInput.value = it.model || '';
-        if (whSelect) whSelect.value = it.stock_location || (state.stockManager.warehouses[0]?.name || '');
-        if (qtyInput) qtyInput.value = it.quantity || 1;
-        if (condSelect) condSelect.value = it.condition || 'good';
-        if (statusSelect) statusSelect.value = it.status || 'available';
-        if (notesInput) notesInput.value = it.notes || '';
-
-        if (it.image) {
-          setDropzonePreview('item', it.image, it.image.split('/').pop());
-        } else {
-          // Check sibling immediately
-          const siblingWithImg = state.stockManager.items.find((other) => {
-            if (Number(other.id) === Number(it.id)) return false;
-            if ((other.item_name || '').trim().toLowerCase() !== (it.item_name || '').trim().toLowerCase()) return false;
-            if (it.model && other.model && other.model.trim().toLowerCase() !== it.model.trim().toLowerCase()) return false;
-            return !!(other.image && other.image.trim());
-          });
-          if (siblingWithImg) {
-            setDropzonePreview('item', siblingWithImg.image, `Shared photo from identical units (${siblingWithImg.serial_number || 'Unit'})`);
-          }
-        }
-      }
-    } else {
-      if (titleEl) titleEl.textContent = 'Add New Stock Item';
-      if (idInput) idInput.value = '0';
-      if (qtyInput) qtyInput.value = 1;
-      if (condSelect) condSelect.value = 'good';
-      if (statusSelect) statusSelect.value = 'available';
-    }
-
-    updateItemModalMatchCount();
     modal.classList.add('open');
   }
 
@@ -7439,7 +6807,7 @@
             </div>
 
             <div style="flex: 1 0 240px; min-width: 0; color: var(--text-secondary); line-height: 1.4; padding-right: 10px;">
-              ${escapeHtml(d.description || 'General organizational division and equipment unit.')}
+              ${escapeHtml(d.description || 'General organizational division and operational unit.')}
             </div>
 
             <div style="width: 120px; text-align: center;">
@@ -8838,12 +8206,12 @@
     if (descEl) {
       const typeLabel =
         type === 'warehouse'
-          ? 'warehouse facility'
+          ? 'facility gate'
           : type === 'user'
           ? 'personnel record & badge credentials for'
           : type === 'clearance_tier'
           ? 'security clearance level'
-          : 'stock item';
+          : 'record';
       descEl.textContent = `Are you sure you want to delete ${typeLabel} "${name}"? This action will permanently remove it from MySQL.`;
     }
 
@@ -10062,14 +9430,7 @@
         return;
       }
 
-      // 7. Open Batch Modal button
-      const openBatchBtn = e.target.closest('.js-open-batch-modal');
-      if (openBatchBtn) {
-        openBatchModal(Number(openBatchBtn.getAttribute('data-batch-id')));
-        return;
-      }
-
-      // 8. Open Call Time modal from table row
+      // 7. Open Call Time modal from table row
       const callTimeRowBtn = e.target.closest('.js-open-row-calltime');
       if (callTimeRowBtn) {
         e.stopPropagation();
@@ -10081,7 +9442,7 @@
         return;
       }
 
-      // 8b. Open Event Assign Modal from table row
+      // 8. Open Event Assign Modal from table row
       const eventAssignBtn = e.target.closest('.js-open-event-assign-modal');
       if (eventAssignBtn) {
         e.stopPropagation();
@@ -10093,73 +9454,6 @@
         if (eventId) {
           openEventAssignModal(eventId);
         }
-        return;
-      }
-
-      // 8. Approve Batch button
-      const approveBatchBtn = e.target.closest('.js-approve-batch-btn');
-      if (approveBatchBtn) {
-        const bid = Number(approveBatchBtn.getAttribute('data-batch-id'));
-        await fetch('api.php?action=approve_batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'approve_batch', batch_id: bid, status: 'approved' }),
-        });
-        await fetchBootstrap(true);
-        showToast(`Batch #${bid} approved for warehouse dispatch`);
-        return;
-      }
-
-      // 8b. Edit Batch button
-      const editBatchBtn = e.target.closest('.js-edit-batch');
-      if (editBatchBtn) {
-        const bid = Number(editBatchBtn.getAttribute('data-batch-id'));
-        const batch = state.batches.find((b) => Number(b.id) === bid);
-        if (batch) openBatchCrudModal(batch);
-        return;
-      }
-
-      // 8c. Delete Batch button
-      const delBatchBtn = e.target.closest('.js-delete-batch');
-      if (delBatchBtn) {
-        const bid = Number(delBatchBtn.getAttribute('data-batch-id'));
-        const num = delBatchBtn.getAttribute('data-batch-num') || `Batch #${bid}`;
-        const { confirmed: doDel } = await showConfirmModal({
-          title: 'Delete Record',
-          message: `Are you sure you want to permanently delete "${num}"? All linked manifest items will also be removed.`,
-          confirmText: 'Delete Record',
-          tone: 'danger',
-        });
-        if (!doDel) return;
-
-        try {
-          const res = await fetch('api.php?action=delete_batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'delete_batch', id: bid }),
-          });
-          const d = await res.json();
-          if (d && d.ok) {
-            if (Array.isArray(d.batches)) state.batches = d.batches;
-            else state.batches = state.batches.filter((b) => Number(b.id) !== bid);
-            renderBatchesAndMatrixScreen();
-            showToast(d.message || `Batch "${num}" deleted successfully.`);
-          } else {
-            showToast(d.error || 'Failed to delete batch.');
-          }
-        } catch (err) {
-          state.batches = state.batches.filter((b) => Number(b.id) !== bid);
-          renderBatchesAndMatrixScreen();
-          showToast(`Batch "${num}" deleted.`);
-        }
-        return;
-      }
-
-      // 8d. Remove item row in Batch CRUD Modal
-      const remItemBtn = e.target.closest('.js-remove-batch-item');
-      if (remItemBtn) {
-        const row = remItemBtn.closest('.batch-item-row');
-        if (row) row.remove();
         return;
       }
 
@@ -10191,21 +9485,7 @@
         return;
       }
 
-      // 12. Stock Manager: Edit Item
-      const editItemBtn = e.target.closest('.js-edit-item-btn');
-      if (editItemBtn) {
-        openStockItemModal(Number(editItemBtn.getAttribute('data-item-id')));
-        return;
-      }
-
-      // 13. Stock Manager: Add Item shortcut
-      const trigAddItem = e.target.closest('.js-trigger-add-item');
-      if (trigAddItem) {
-        openStockItemModal();
-        return;
-      }
-
-      // 14. Stock Manager: Delete Record
+      // 12. Facilities Manager: Delete Record
       const delBtn = e.target.closest('.js-delete-record-btn');
       if (delBtn) {
         openDeleteModal(
@@ -10253,35 +9533,6 @@
       if (userNumBtn) {
         state.usersPage = Number(userNumBtn.getAttribute('data-page'));
         renderUsersScreen();
-        return;
-      }
-
-      // 20. Stock Items Pagination: Prev
-      const smPrevBtn = e.target.closest('.js-sm-items-prev-page');
-      if (smPrevBtn && !smPrevBtn.hasAttribute('disabled')) {
-        if (state.stockManager.itemPage > 1) {
-          state.stockManager.itemPage--;
-          renderStockItemsTable();
-        }
-        return;
-      }
-
-      // 21. Stock Items Pagination: Next
-      const smNextBtn = e.target.closest('.js-sm-items-next-page');
-      if (smNextBtn && !smNextBtn.hasAttribute('disabled')) {
-        state.stockManager.itemPage++;
-        renderStockItemsTable();
-        return;
-      }
-
-      // 22. Stock Items Pagination: Page Num
-      const smPageBtn = e.target.closest('.js-sm-items-page-num');
-      if (smPageBtn) {
-        const targetPage = Number(smPageBtn.getAttribute('data-page'));
-        if (targetPage && targetPage !== state.stockManager.itemPage) {
-          state.stockManager.itemPage = targetPage;
-          renderStockItemsTable();
-        }
         return;
       }
     });
@@ -11391,12 +10642,12 @@
         const targetVal = document.getElementById('alloc-target-facility')?.value || 'event_venue:1';
         const [cpType, cpId] = targetVal.split(':');
         const dispatchType = document.getElementById('alloc-dispatch-type')?.value || 'immediate_dispatch';
-        const notes = document.getElementById('alloc-notes')?.value || 'Live dispatch via Map Radar';
+        const notes = document.getElementById('alloc-notes')?.value || 'Live deployment via Map Radar';
         const submitBtn = document.getElementById('submit-alloc-btn');
 
         if (submitBtn) {
           submitBtn.disabled = true;
-          submitBtn.innerHTML = `<span>Dispatching ${userIds.length} Crew...</span>`;
+          submitBtn.innerHTML = `<span>Deploying ${userIds.length} Crew...</span>`;
         }
 
         try {
@@ -11428,7 +10679,7 @@
         } finally {
           if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.innerHTML = `<span>Confirm Allocation &amp; Dispatch →</span>`;
+            submitBtn.innerHTML = `<span>Confirm Allocation &amp; Deployment →</span>`;
           }
         }
       });
@@ -11929,154 +11180,6 @@
         } finally {
           btn.disabled = false;
         }
-      });
-    }
-
-    // Modals: Batch Custody Modal
-    const batchModal = document.getElementById('batch-custody-modal');
-    const closeBatch = document.getElementById('close-batch-modal');
-    if (closeBatch && batchModal) {
-      closeBatch.addEventListener('click', () => batchModal.classList.remove('open'));
-    }
-    const approveModalBtn = document.getElementById('approve-batch-modal-btn');
-    if (approveModalBtn && batchModal) {
-      approveModalBtn.addEventListener('click', async () => {
-        if (!state.inspectedBatchId) return;
-        await fetch('api.php?action=approve_batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'approve_batch',
-            batch_id: state.inspectedBatchId,
-            status: 'approved',
-          }),
-        });
-        batchModal.classList.remove('open');
-        await fetchBootstrap(true);
-        showToast(`Batch #${state.inspectedBatchId} approved`);
-      });
-    }
-
-    // Batch CRUD Modal triggers & submission
-    const openCreateBatchBtn = document.getElementById('open-create-batch-btn');
-    if (openCreateBatchBtn) {
-      openCreateBatchBtn.addEventListener('click', () => openBatchCrudModal(null));
-    }
-    const addBatchItemBtn = document.getElementById('batch-crud-add-item-btn');
-    if (addBatchItemBtn) {
-      addBatchItemBtn.addEventListener('click', () => addBatchCrudItemRow('', 1, ''));
-    }
-    document.querySelectorAll('.js-close-batch-crud-modal').forEach((btn) => {
-      btn.addEventListener('click', closeBatchCrudModal);
-    });
-
-    const batchCrudForm = document.getElementById('batch-crud-form');
-    if (batchCrudForm) {
-      batchCrudForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const submitBtn = document.getElementById('batch-crud-submit-btn');
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.textContent = 'Saving Batch...';
-        }
-
-        const id = Number(document.getElementById('batch-crud-id').value || 0);
-        const batch_number = document.getElementById('batch-crud-num').value.trim();
-        const job_sheet = document.getElementById('batch-crud-jobsheet').value.trim();
-        const event_name = document.getElementById('batch-crud-event').value.trim();
-        const movement_type = document.getElementById('batch-crud-movement').value;
-        const source_name = document.getElementById('batch-crud-source').value.trim();
-        const destination_name = document.getElementById('batch-crud-destination').value.trim();
-        const destination_room = document.getElementById('batch-crud-room').value.trim();
-        const status = document.getElementById('batch-crud-status').value;
-        const techSelect = document.getElementById('batch-crud-tech');
-        const technician_id = Number(techSelect ? techSelect.value : 0);
-        const ctrlSelect = document.getElementById('batch-crud-controller');
-        const stock_controller_id = Number(ctrlSelect ? ctrlSelect.value : 0);
-        const stock_controller_name = ctrlSelect && ctrlSelect.selectedOptions[0]
-          ? ctrlSelect.selectedOptions[0].getAttribute('data-name') || ctrlSelect.selectedOptions[0].text
-          : '';
-        const notes = document.getElementById('batch-crud-notes').value.trim();
-
-        // Extract manifest items
-        const itemRows = document.querySelectorAll('#batch-crud-items-container .batch-item-row');
-        const items = [];
-        itemRows.forEach((row) => {
-          const nameInp = row.querySelector('.js-batch-item-name');
-          const qtyInp = row.querySelector('.js-batch-item-qty');
-          const serialInp = row.querySelector('.js-batch-item-serial');
-          const item_name = nameInp ? nameInp.value.trim() : '';
-          const quantity = qtyInp ? Number(qtyInp.value || 1) : 1;
-          const serial_number = serialInp ? serialInp.value.trim() : '';
-          if (item_name) {
-            items.push({ item_name, quantity, serial_number, status });
-          }
-        });
-
-        try {
-          const res = await fetch('api.php?action=save_batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'save_batch',
-              id,
-              batch_number,
-              job_sheet,
-              event_name,
-              movement_type,
-              source_name,
-              destination_name,
-              destination_room,
-              status,
-              technician_id,
-              stock_controller_id,
-              stock_controller_name,
-              notes,
-              items,
-            }),
-          });
-          const data = await res.json();
-          if (data && data.ok) {
-            if (Array.isArray(data.batches)) state.batches = data.batches;
-            closeBatchCrudModal();
-            renderBatchesAndMatrixScreen();
-            showToast(data.message || `Equipment batch "${batch_number}" saved!`);
-          } else {
-            showToast(data.error || 'Failed to save equipment batch.');
-          }
-        } catch (err) {
-          console.error(err);
-          showToast('Batch saved (Offline fallback)');
-          closeBatchCrudModal();
-        } finally {
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Save Equipment Batch';
-          }
-        }
-      });
-    }
-
-    // Batches Table Search & Filters
-    const batchesSearchInp = document.getElementById('batches-search-input');
-    if (batchesSearchInp) {
-      batchesSearchInp.addEventListener('input', (e) => {
-        state.batchesSearch = e.target.value;
-        renderBatchesAndMatrixScreen();
-      });
-    }
-    const batchesFilterStatus = document.getElementById('batches-filter-status');
-    if (batchesFilterStatus) {
-      batchesFilterStatus.addEventListener('change', (e) => {
-        state.batchesFilterStatus = e.target.value;
-        renderBatchesAndMatrixScreen();
-      });
-    }
-    const batchesFilterMovement = document.getElementById('batches-filter-movement');
-    if (batchesFilterMovement) {
-      batchesFilterMovement.addEventListener('change', (e) => {
-        state.batchesFilterMovement = e.target.value;
-        renderBatchesAndMatrixScreen();
       });
     }
 
@@ -13387,7 +12490,6 @@
         'Punctuality Status',
         'Duration On-Site',
         'Attendance Mode',
-        'Equipment Custody Batches',
         'Operational Notes'
       ];
 
@@ -13397,12 +12499,9 @@
           : (c.daily_state === 'checked_out' ? 'Checked Out' : 'Not Arrived');
         const punctuality = c.punctuality || (c.punctuality_code ? c.punctuality_code.toUpperCase().replace('_', ' ') : 'ON TIME');
         const duration = formatOnSiteDuration(c.check_in_time, c.check_out_time);
-        const batches = Array.isArray(c.equipment_batches) && c.equipment_batches.length > 0
-          ? c.equipment_batches.map((b) => (typeof b === 'object' ? b.batch_number : b)).join('; ')
-          : 'None';
         const facType = c.last_checkpoint_type === 'stock_warehouse'
-          ? 'Stock Warehouse'
-          : (c.last_checkpoint_type === 'event_venue' ? 'Event Venue' : ((state.activeCheckpoint && state.activeCheckpoint.type === 'stock_warehouse') ? 'Stock Warehouse' : 'Event Venue'));
+          ? 'Facility Gate'
+          : (c.last_checkpoint_type === 'event_venue' ? 'Event Venue' : ((state.activeCheckpoint && state.activeCheckpoint.type === 'stock_warehouse') ? 'Facility Gate' : 'Event Venue'));
         const recordedLocation = c.last_checkpoint_name || venueName;
         const isTransitTransfer = Boolean(
           c.is_transit_transfer ||
@@ -13430,7 +12529,6 @@
           `"${punctuality}"`,
           `"${duration}"`,
           `"${attendanceMode}"`,
-          `"${batches.replace(/"/g, '""')}"`,
           `"${notes.replace(/"/g, '""')}"`,
         ];
       });
@@ -13576,61 +12674,15 @@
       });
     }
 
-    const itemSearch = document.getElementById('sm-item-search-input');
-    if (itemSearch) {
-      itemSearch.addEventListener('input', (e) => {
-        state.stockManager.itemSearch = e.target.value;
-        state.stockManager.itemPage = 1;
-        renderStockItemsTable();
-      });
-    }
-
-    const catFilter = document.getElementById('sm-category-filter');
-    if (catFilter) {
-      catFilter.addEventListener('change', (e) => {
-        state.stockManager.categoryFilter = e.target.value;
-        state.stockManager.itemPage = 1;
-        renderStockItemsTable();
-      });
-    }
-
-    const locFilter = document.getElementById('sm-location-filter');
-    if (locFilter) {
-      locFilter.addEventListener('change', (e) => {
-        state.stockManager.locationFilter = e.target.value;
-        state.stockManager.itemPage = 1;
-        renderStockItemsTable();
-      });
-    }
-
-    const smPageSizeFilter = document.getElementById('sm-page-size-filter');
-    if (smPageSizeFilter) {
-      smPageSizeFilter.addEventListener('change', (e) => {
-        state.stockManager.itemPerPage = e.target.value === 'all' ? 'all' : Number(e.target.value);
-        state.stockManager.itemPage = 1;
-        renderStockItemsTable();
-      });
-    }
-
     // Modal open buttons
     const addWhBtn = document.getElementById('open-add-warehouse-btn');
     if (addWhBtn) addWhBtn.addEventListener('click', () => openWarehouseModal());
-
-    const addItemBtn = document.getElementById('open-add-stock-btn');
-    if (addItemBtn) addItemBtn.addEventListener('click', () => openStockItemModal());
 
     // Modal close buttons
     const closeWhBtn = document.getElementById('close-wh-modal');
     if (closeWhBtn) {
       closeWhBtn.addEventListener('click', () => {
         document.getElementById('warehouse-crud-modal')?.classList.remove('open');
-      });
-    }
-
-    const closeItemBtn = document.getElementById('close-item-modal');
-    if (closeItemBtn) {
-      closeItemBtn.addEventListener('click', () => {
-        document.getElementById('stock-item-crud-modal')?.classList.remove('open');
       });
     }
 
@@ -13643,7 +12695,6 @@
 
     // Initialize dropzones
     setupDropzoneEvents('wh');
-    setupDropzoneEvents('item');
     setupDropzoneEvents('user');
     setupDropzoneEvents('venue');
 
@@ -13832,90 +12883,6 @@
       });
     }
 
-    // Stock Item CRUD Form Submit
-    const itemForm = document.getElementById('stock-item-crud-form');
-    if (itemForm) {
-      itemForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const saveBtn = document.getElementById('save-item-btn');
-        if (saveBtn) saveBtn.disabled = true;
-
-        const cat = document.getElementById('item-modal-category').value;
-        const fd = new FormData();
-        fd.append('id', document.getElementById('item-modal-id').value);
-        fd.append('item_name', document.getElementById('item-modal-name').value);
-        fd.append('serial_number', document.getElementById('item-modal-serial').value);
-        fd.append('category', cat);
-        fd.append('brand', document.getElementById('item-modal-brand').value);
-        fd.append('model', document.getElementById('item-modal-model').value);
-        fd.append('department', cat);
-        fd.append('stock_location', document.getElementById('item-modal-warehouse').value);
-        fd.append('quantity', document.getElementById('item-modal-qty').value);
-        fd.append('condition', document.getElementById('item-modal-condition').value);
-        fd.append('status', document.getElementById('item-modal-status').value);
-        fd.append('notes', document.getElementById('item-modal-notes').value);
-
-        const syncCheck = document.getElementById('item-modal-sync-identical');
-        fd.append('sync_identical', syncCheck && syncCheck.checked ? '1' : '0');
-
-        const fileInput = document.getElementById('item-modal-image');
-        if (fileInput && fileInput.files && fileInput.files[0]) {
-          fd.append('image', fileInput.files[0]);
-        }
-
-        try {
-          const res = await fetch('api.php?action=save_stock_item', {
-            method: 'POST',
-            body: fd,
-          });
-          const data = await res.json();
-          if (data && data.ok) {
-            showToast(data.message || 'Stock item saved successfully');
-            document.getElementById('stock-item-crud-modal')?.classList.remove('open');
-            await loadStockManagerData();
-          } else {
-            showToast(data.error || 'Failed to save stock item');
-          }
-        } catch (err) {
-          showToast('Error communicating with server');
-        } finally {
-          if (saveBtn) saveBtn.disabled = false;
-        }
-      });
-    }
-
-    // Dynamic match count update when typing item name, brand, model in modal
-    ['item-modal-name', 'item-modal-brand', 'item-modal-model'].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener('input', () => updateItemModalMatchCount());
-    });
-
-    // Sync all identical images across inventory
-    const syncAllImagesBtn = document.getElementById('sm-sync-all-images-btn');
-    if (syncAllImagesBtn) {
-      syncAllImagesBtn.addEventListener('click', async () => {
-        syncAllImagesBtn.disabled = true;
-        const icon = syncAllImagesBtn.querySelector('img');
-        if (icon) icon.style.animation = 'spin 0.8s linear infinite';
-
-        try {
-          const res = await fetch('api.php?action=sync_all_stock_images');
-          const data = await res.json();
-          if (data && data.ok) {
-            showToast(data.message || 'Photos synced across matching equipment groups');
-            await loadStockManagerData();
-          } else {
-            showToast(data.error || 'Failed to sync images');
-          }
-        } catch (err) {
-          showToast('Error communicating with server');
-        } finally {
-          syncAllImagesBtn.disabled = false;
-          if (icon) icon.style.animation = '';
-        }
-      });
-    }
-
     // Delete Confirmation Button
     const confirmDelBtn = document.getElementById('confirm-delete-btn');
     if (confirmDelBtn) {
@@ -13924,10 +12891,11 @@
         const id = document.getElementById('delete-target-id').value;
         if (!id) return;
 
-        let action = 'delete_stock_item';
+        let action = '';
         if (type === 'warehouse') action = 'delete_warehouse';
         else if (type === 'user') action = 'delete_user';
         else if (type === 'clearance_tier') action = 'delete_clearance_tier';
+        if (!action) return;
         confirmDelBtn.disabled = true;
 
         try {

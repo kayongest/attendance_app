@@ -98,27 +98,3 @@ CREATE TABLE IF NOT EXISTS `attendance_logs` (
     `notes` VARCHAR(255) DEFAULT NULL,
     `scanned_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS `stock_movements` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `batch_number` VARCHAR(64) NOT NULL,
-    `movement_type` VARCHAR(32) DEFAULT 'dispatch',
-    `source_name` VARCHAR(120) DEFAULT 'Ndera Warehouse',
-    `destination_name` VARCHAR(120) DEFAULT 'Kigali Convention Centre',
-    `destination_room` VARCHAR(120) DEFAULT 'Main Auditorium',
-    `technician_id` INT DEFAULT NULL,
-    `submitted_by` VARCHAR(120) DEFAULT NULL,
-    `stock_controller_name` VARCHAR(120) DEFAULT 'Mirene',
-    `status` VARCHAR(32) DEFAULT 'approved',
-    `approval_status` VARCHAR(32) DEFAULT 'approved',
-    `event_name` VARCHAR(160) DEFAULT 'World Bank Summit',
-    `job_sheet` VARCHAR(64) DEFAULT 'JS-2026-104',
-    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS `batch_items` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `batch_id` INT NOT NULL,
-    `item_name` VARCHAR(160) DEFAULT 'L-Acoustics Kara II Line Array',
-    `quantity` INT NOT NULL DEFAULT 4
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

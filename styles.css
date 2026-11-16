@@ -3759,49 +3759,6 @@ body[data-user-role="technical_lead"] #overview-allocation-card #overview-traffi
   font-family: var(--font-mono);
 }
 
-/* Linked Stock Batch Custody Bar (Permanently disabled for attendance-only focus) */
-.kiosk-batch-custody-bar,
-#kiosk-batch-bar {
-  display: none !important;
-}
-
-.kiosk-batch-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #93c5fd;
-  font-weight: 600;
-  flex-wrap: wrap;
-}
-
-.kiosk-batch-code {
-  font-family: var(--font-mono);
-  font-weight: 800;
-  background-color: rgba(59, 130, 246, 0.3);
-  padding: 2px 7px;
-  border-radius: 4px;
-  color: #bfdbfe;
-}
-
-.kiosk-batch-link-btn {
-  font-size: 11px;
-  font-weight: 700;
-  color: #38bdf8;
-  white-space: nowrap;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background-color: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(56, 189, 248, 0.4);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.kiosk-batch-link-btn:hover {
-  background-color: #0284c7;
-  color: #ffffff;
-}
-
 /* Dark Navy Footer Bar */
 .kiosk-card-footer {
   background: rgba(8, 14, 28, 0.75);
@@ -6278,31 +6235,6 @@ html.theme-transitioning *::after {
   color: var(--text-secondary);
 }
 
-[data-theme="dark"] .kiosk-batch-custody-bar {
-  background-color: rgba(59, 130, 246, 0.12);
-  border-color: rgba(59, 130, 246, 0.28);
-}
-
-[data-theme="dark"] .kiosk-batch-info {
-  color: #93c5fd;
-}
-
-[data-theme="dark"] .kiosk-batch-code {
-  background-color: rgba(59, 130, 246, 0.22);
-  color: #bfdbfe;
-}
-
-[data-theme="dark"] .kiosk-batch-link-btn {
-  background-color: var(--bg-surface);
-  border-color: rgba(96, 165, 250, 0.35);
-  color: #93c5fd;
-}
-
-[data-theme="dark"] .kiosk-batch-link-btn:hover {
-  background-color: #2563eb;
-  color: #ffffff;
-}
-
 [data-theme="dark"] .kiosk-card-footer {
   background-color: var(--bg-subtle);
   border-top-color: var(--border-color);
@@ -7149,12 +7081,6 @@ html.theme-transitioning *::after {
 [data-theme="light"] .kiosk-sub-panel.decline-panel select:focus {
   border-color: #dc2626;
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
-}
-
-/* Light Mode Linked Stock Batch Custody Bar */
-:root:not([data-theme="dark"]) .kiosk-batch-custody-bar,
-[data-theme="light"] .kiosk-batch-custody-bar {
-  display: none !important;
 }
 
 /* Light Mode Card Footer Bar */
