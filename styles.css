@@ -1420,11 +1420,6 @@ body[data-user-role="technical_lead"] #overview-allocation-card .map-radar-pulse
   display: none !important;
 }
 
-body[data-user-role="tech_lead"] #overview-allocation-card #overview-traffic-chart-view,
-body[data-user-role="technical_lead"] #overview-allocation-card #overview-traffic-chart-view {
-  display: block !important;
-}
-
 /* Attendance Insights Card (Overview Screen) */
 .insights-card {
   flex: 1 0 0;
@@ -9915,6 +9910,220 @@ html.theme-transitioning *::after {
   border-radius: 12px;
   background: var(--surface-white);
   padding: 20px;
+}
+
+/* Currently On-Site (COS) Tab inside Overview Allocation Card */
+.map-view-switcher {
+  flex-wrap: wrap;
+}
+
+.cos-view-body {
+  width: 100%;
+}
+
+.cos-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.cos-panel-head {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cos-panel-tools {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cos-role-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cos-role-pill {
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cos-role-pill:hover {
+  border-color: var(--brand-primary);
+  color: var(--text-primary);
+}
+
+.cos-role-pill.active {
+  background: #7147eb;
+  border-color: #7147eb;
+  color: #ffffff;
+}
+
+.cos-search-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1 1 280px;
+  justify-content: flex-end;
+}
+
+.cos-ctrl-input {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  outline: none;
+  max-width: 100%;
+}
+
+.cos-ctrl-input:focus {
+  border-color: #7147eb;
+}
+
+.cos-cards-grid {
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+  gap: 12px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.cos-person-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cos-person-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cos-avatar {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #134c80, #7147eb);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.cos-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+}
+
+.cos-person-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cos-person-role-line {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.cos-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.cos-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.cos-badge-supervisor { background: #fef3c7; color: #b45309; }
+.cos-badge-controller { background: #ede9fe; color: #6d28d9; }
+.cos-badge-technician { background: #dbeafe; color: #1d4ed8; }
+.cos-badge-crew { background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-secondary); }
+.cos-badge-onsite { background: #dcfce7; color: #15803d; }
+.cos-badge-cp { background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary); }
+
+[data-theme="dark"] .cos-badge-supervisor { background: rgba(217, 119, 6, 0.22); color: #fbbf24; }
+[data-theme="dark"] .cos-badge-controller { background: rgba(139, 92, 246, 0.22); color: #c4b5fd; }
+[data-theme="dark"] .cos-badge-technician { background: rgba(37, 99, 235, 0.22); color: #93c5fd; }
+[data-theme="dark"] .cos-badge-onsite { background: rgba(22, 163, 74, 0.22); color: #4ade80; }
+
+.cos-person-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+  flex-wrap: wrap;
+}
+
+.cos-tel-link {
+  color: #7147eb;
+  font-weight: 600;
+  text-decoration: none;
+}
+[data-theme="dark"] .cos-tel-link {
+  color: #a78bfa;
+}
+.cos-tel-link:hover {
+  text-decoration: underline;
+}
+
+.cos-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 26px 16px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
 }
 
 

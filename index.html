@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261117_v1" />
+  <link rel="stylesheet" href="styles.css?v=20261117_v2" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -675,6 +675,9 @@
                   <button type="button" class="btn-toggle-view" data-view="chart" id="toggle-view-chart" title="Switch to Hourly Traffic Chart">
                     <span>📊 Traffic</span>
                   </button>
+                  <button type="button" class="btn-toggle-view" data-view="cos" id="toggle-view-cos" title="View Currently On-Site Crew (COS)">
+                    <span>🟢 Currently On-Site (COS)</span>
+                  </button>
                 </div>
                 <button type="button" class="btn btn-secondary-32-sm btn-collapse-opt-a" id="toggle-option-a-collapse" title="Collapse / Expand Option A Map Stage" style="height: 30px; padding: 0 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
                   <span class="collapse-icon">▲</span>
@@ -889,6 +892,37 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- VIEW 4: CURRENTLY ON-SITE (COS) TAB -->
+            <div class="cos-view-body" id="overview-cos-view" style="display: none;">
+              <section class="cos-panel">
+                <div class="cos-panel-head">
+                  <div>
+                    <h2 style="font-size: 16px; font-weight: 800; margin: 0;">Currently On-Site (<span id="overview-cos-filtered-count">0</span>)</h2>
+                    <div style="font-size: 12px; color: var(--text-secondary);">Personnel who have checked in at a facility gate or event venue without checking out.</div>
+                  </div>
+                </div>
+
+                <div class="cos-panel-tools">
+                  <div class="cos-role-pills" id="overview-cos-role-pills">
+                    <button type="button" class="cos-role-pill active" data-role-cat="all">All</button>
+                    <button type="button" class="cos-role-pill" data-role-cat="supervisor">Stock Mgr &amp; Supervisors</button>
+                    <button type="button" class="cos-role-pill" data-role-cat="controller">Gate Controllers</button>
+                    <button type="button" class="cos-role-pill" data-role-cat="technician">Technicians</button>
+                    <button type="button" class="cos-role-pill" data-role-cat="crew">Other Crew</button>
+                  </div>
+
+                  <div class="cos-search-controls">
+                    <select id="overview-cos-cp-filter" class="cos-ctrl-input" aria-label="Filter by checkpoint">
+                      <option value="all">All Checkpoints (0 On-Site)</option>
+                    </select>
+                    <input type="text" id="overview-cos-search-input" class="cos-ctrl-input" placeholder="Search name, role, checkpoint, phone..." style="min-width: 210px;" />
+                  </div>
+                </div>
+
+                <div id="overview-cos-roster-grid" class="cos-cards-grid"></div>
+              </section>
             </div>
           </div>
           </div>
@@ -5012,6 +5046,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261117_v5"></script>
+  <script src="app.js?v=20261117_v6"></script>
 </body>
 </html>

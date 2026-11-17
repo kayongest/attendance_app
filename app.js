@@ -49,6 +49,9 @@
       deniedScansToday: 1,
     },
     rollCallList: [],
+    cosRoleFilter: 'all',
+    cosCpFilter: 'all',
+    cosSearch: '',
     crew: [],
     hourlyTraffic: [],
     activityTimeline: [],
@@ -1384,8 +1387,13 @@
     renderHourlyTrafficChart();
     if (state.mapViewMode === 'option-b') {
       renderOptionBMap();
+    } else if (state.mapViewMode === 'cos') {
+      renderOverviewCosView();
     } else {
       renderAllocationMap();
+    }
+    if (state.mapViewMode !== 'cos') {
+      renderOverviewCosView();
     }
     renderActivityTimeline();
     renderTechLeadRosterCard();
@@ -1866,6 +1874,7 @@
       const btnOptA = document.getElementById('toggle-view-option-a') || document.getElementById('toggle-view-map');
       const btnOptB = document.getElementById('toggle-view-option-b');
       const btnChart = document.getElementById('toggle-view-chart');
+      const btnCos = document.getElementById('toggle-view-cos');
 
       if (cardTitle) {
         cardTitle.textContent = isTech
@@ -1881,8 +1890,9 @@
       if (btnOptA) btnOptA.style.display = isTech ? 'none' : '';
       if (btnOptB) btnOptB.style.display = isTech ? 'none' : '';
       if (btnChart) btnChart.style.display = '';
+      if (btnCos) btnCos.style.display = '';
 
-      if (isTech) {
+      if (isTech && state.mapViewMode !== 'cos') {
         setAllocationMapView('chart');
       }
     }
@@ -3605,29 +3615,138 @@
     }
   }
 
+  function renderOverviewCosView() {
+    const grid = document.getElementById('overview-cos-roster-grid');
+    if (!grid) return;
+
+    const list = Array.isArray(state.rollCallList) ? state.rollCallList : [];
+    const cps = Array.isArray(state.checkpoints?.directory) ? state.checkpoints.directory : [];
+
+    const cpCounts = {};
+    list.forEach((r) => {
+      if (r.checkpoint_name) {
+        cpCounts[r.checkpoint_name] = (cpCounts[r.checkpoint_name] || 0) + 1;
+      }
+    });
+
+    const cpSel = document.getElementById('overview-cos-cp-filter');
+    if (cpSel) {
+      const prev = state.cosCpFilter || cpSel.value || 'all';
+      const cpNames = Array.from(new Set([
+        ...cps.map((c) => c.name).filter(Boolean),
+        ...list.map((r) => r.checkpoint_name).filter(Boolean),
+      ]));
+      cpSel.innerHTML = `<option value="all">All Checkpoints (${list.length} On-Site)</option>` +
+        cpNames.map((n) => {
+          const cnt = cpCounts[n] || 0;
+          return `<option value="${escapeHtml(n)}">${escapeHtml(n)}${cnt > 0 ? ` (${cnt})` : ''}</option>`;
+        }).join('');
+      if (cpNames.includes(prev)) {
+        cpSel.value = prev;
+        state.cosCpFilter = prev;
+      } else {
+        cpSel.value = 'all';
+        state.cosCpFilter = 'all';
+      }
+    }
+
+    const activeRoleCat = state.cosRoleFilter || 'all';
+    document.querySelectorAll('#overview-cos-role-pills .cos-role-pill').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-role-cat') === activeRoleCat);
+    });
+
+    const activeCp = state.cosCpFilter || 'all';
+    const q = (state.cosSearch || '').trim().toLowerCase();
+
+    const filtered = list.filter((r) => {
+      const cat = r.role_category || resolveRollCallRoleCategory(r);
+      if (activeRoleCat !== 'all' && cat !== activeRoleCat) return false;
+      if (activeCp !== 'all' && String(r.checkpoint_name || '') !== activeCp) return false;
+      if (q) {
+        const hay = `${r.full_name || ''} ${r.role_display || ''} ${r.department || ''} ${r.checkpoint_name || ''} ${r.badge_code || ''} ${r.phone || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const countEl = document.getElementById('overview-cos-filtered-count');
+    if (countEl) {
+      countEl.textContent = String(filtered.length);
+    }
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `<div class="cos-empty-state">${
+        list.length === 0
+          ? 'No personnel are currently checked in on-site right now.'
+          : 'No on-site personnel match your selected checkpoint, role, or search filter.'
+      }</div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered.map((r) => {
+      const cat = r.role_category || resolveRollCallRoleCategory(r);
+      const roleClass = cat === 'supervisor'
+        ? 'cos-badge-supervisor'
+        : (cat === 'controller'
+          ? 'cos-badge-controller'
+          : (cat === 'technician' ? 'cos-badge-technician' : 'cos-badge-crew'));
+      const initials = escapeHtml(r.initials || 'U');
+      const avatarInner = r.profile_image_url
+        ? `<span>${initials}</span><img src="${escapeHtml(r.profile_image_url)}" alt="${escapeHtml(r.full_name)}" onerror="this.remove();" />`
+        : initials;
+      const phoneStr = r.phone ? String(r.phone).trim() : '';
+      const telClean = phoneStr.replace(/[^+\d]/g, '');
+
+      return `
+        <article class="cos-person-card">
+          <div class="cos-person-top">
+            <div class="cos-avatar">${avatarInner}</div>
+            <div style="min-width: 0; flex: 1;">
+              <div class="cos-person-name">${escapeHtml(r.full_name)}</div>
+              <div class="cos-person-role-line">${escapeHtml(r.department || 'Operations')} · ${escapeHtml(r.clearance_code || 'L2')}</div>
+            </div>
+          </div>
+          <div class="cos-badges-row">
+            <span class="cos-badge ${roleClass}">${escapeHtml(r.role_display || 'Crew')}</span>
+            <span class="cos-badge cos-badge-onsite">On-Site</span>
+            <span class="cos-badge cos-badge-cp">${escapeHtml(r.checkpoint_name)}</span>
+          </div>
+          <div class="cos-person-meta">
+            <span>Checked In: <strong>${escapeHtml(r.check_in_time || '--')}</strong></span>
+            ${phoneStr ? `<a href="tel:${escapeHtml(telClean)}" class="cos-tel-link">${escapeHtml(phoneStr)}</a>` : '<span>No phone listed</span>'}
+          </div>
+        </article>
+      `;
+    }).join('');
+  }
+
   function setAllocationMapView(viewMode) {
     const rawRole = (state.currentUser?.role || '').toLowerCase();
     const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isCurrentUserAdmin();
-    if (isTech) {
+    if (isTech && viewMode !== 'cos' && viewMode !== 'chart') {
       viewMode = 'chart';
     }
     state.mapViewMode = viewMode;
     const mapView = document.getElementById('overview-map-view');
     const liveMapPanel = document.getElementById('live-map-panel');
     const chartView = document.getElementById('overview-traffic-chart-view');
+    const cosView = document.getElementById('overview-cos-view');
     const btnOptA = document.getElementById('toggle-view-option-a') || document.getElementById('toggle-view-map');
     const btnOptB = document.getElementById('toggle-view-option-b');
     const btnChart = document.getElementById('toggle-view-chart');
+    const btnCos = document.getElementById('toggle-view-cos');
     const collapseBtn = document.getElementById('toggle-option-a-collapse');
     const filterSelect = document.getElementById('overview-map-filter');
 
     if (mapView) mapView.style.display = 'none';
     if (liveMapPanel) liveMapPanel.style.display = 'none';
     if (chartView) chartView.style.display = 'none';
+    if (cosView) cosView.style.display = 'none';
 
     if (btnOptA) btnOptA.classList.remove('active');
     if (btnOptB) btnOptB.classList.remove('active');
     if (btnChart) btnChart.classList.remove('active');
+    if (btnCos) btnCos.classList.remove('active');
 
     if (viewMode === 'option-a' || viewMode === 'map') {
       state.mapViewMode = 'option-a';
@@ -3643,6 +3762,13 @@
       if (collapseBtn) collapseBtn.style.display = 'none';
       if (filterSelect) filterSelect.style.display = 'none';
       renderOptionBMap();
+    } else if (viewMode === 'cos') {
+      state.mapViewMode = 'cos';
+      if (cosView) cosView.style.display = 'block';
+      if (btnCos) btnCos.classList.add('active');
+      if (collapseBtn) collapseBtn.style.display = 'none';
+      if (filterSelect) filterSelect.style.display = 'none';
+      renderOverviewCosView();
     } else {
       state.mapViewMode = 'chart';
       if (chartView) chartView.style.display = 'block';
@@ -10823,10 +10949,11 @@
       });
     }
 
-    // Real-Time Facility & Personnel Allocation Map: View Switcher (Option A, Option B, Chart)
+    // Real-Time Facility & Personnel Allocation Map: View Switcher (Option A, Option B, Chart, COS)
     const btnToggleOptA = document.getElementById('toggle-view-option-a') || document.getElementById('toggle-view-map');
     const btnToggleOptB = document.getElementById('toggle-view-option-b');
     const btnToggleChart = document.getElementById('toggle-view-chart');
+    const btnToggleCos = document.getElementById('toggle-view-cos');
     const btnCollapseOptA = document.getElementById('toggle-option-a-collapse');
 
     if (btnToggleOptA) {
@@ -10838,8 +10965,35 @@
     if (btnToggleChart) {
       btnToggleChart.addEventListener('click', () => setAllocationMapView('chart'));
     }
+    if (btnToggleCos) {
+      btnToggleCos.addEventListener('click', () => setAllocationMapView('cos'));
+    }
     if (btnCollapseOptA) {
       btnCollapseOptA.addEventListener('click', toggleOptionACollapse);
+    }
+
+    const cosRolePills = document.getElementById('overview-cos-role-pills');
+    if (cosRolePills) {
+      cosRolePills.addEventListener('click', (e) => {
+        const pill = e.target.closest('.cos-role-pill');
+        if (!pill) return;
+        state.cosRoleFilter = pill.getAttribute('data-role-cat') || 'all';
+        renderOverviewCosView();
+      });
+    }
+    const cosCpFilterSel = document.getElementById('overview-cos-cp-filter');
+    if (cosCpFilterSel) {
+      cosCpFilterSel.addEventListener('change', (e) => {
+        state.cosCpFilter = e.target.value || 'all';
+        renderOverviewCosView();
+      });
+    }
+    const cosSearchInp = document.getElementById('overview-cos-search-input');
+    if (cosSearchInp) {
+      cosSearchInp.addEventListener('input', (e) => {
+        state.cosSearch = e.target.value || '';
+        renderOverviewCosView();
+      });
     }
 
     // Initialize Option B Timeline Feed Integration & Allocation Bar
