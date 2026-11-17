@@ -84,6 +84,7 @@
     srFilterStatus: 'all',
     rollCallSearch: '',
     rollCallCpFilter: 'all',
+    rollCallRoleFilter: 'all',
     vsSearch: '',
     vsPage: 1,
     vsPerPage: 10,
@@ -1578,17 +1579,17 @@
       return ['overview', 'events', 'users', 'attendees', 'terminals', 'venue-security', 'shift-relief', 'calltime', 'rollcall'].includes(screenKey);
     }
     if (isStockCtrl) {
-      return ['terminals', 'attendees', 'analytics', 'stock-manager', 'shift-relief'].includes(screenKey);
+      return ['terminals', 'attendees', 'analytics', 'stock-manager', 'shift-relief', 'rollcall'].includes(screenKey);
     }
     if (isTech) {
-      // Tech Lead is strictly scoped to Gate Dashboard (overview) & Terminal (terminals)
-      return screenKey === 'overview' || screenKey === 'terminals';
+      // Tech Lead: Gate Dashboard, Terminal, and On-Site Roll-Call
+      return ['overview', 'terminals', 'rollcall'].includes(screenKey);
     }
     if (isStockMgr) {
       return ['overview', 'events', 'attendees', 'terminals', 'analytics', 'stock-manager', 'shift-relief', 'calltime', 'rollcall'].includes(screenKey);
     }
     // Field Crew / Technicians / Drivers / Decorators / Standard crew:
-    return screenKey === 'attendees' || screenKey === 'terminals';
+    return ['attendees', 'terminals', 'rollcall'].includes(screenKey);
   }
 
   function canCurrentUserAddUser() {
@@ -1726,24 +1727,22 @@
     const btnRollCall = document.getElementById('sidebar-rollcall-btn');
     const btnStationLock = document.getElementById('sidebar-station-lock-btn');
     const btnResetDemo = document.getElementById('sidebar-reset-demo-btn');
+    const btnOnsiteShare = document.getElementById('sidebar-onsite-share-btn');
 
     if (cpNav && !hasWorkspaceNavConfig) {
-      if (isFieldCrew || isTech) {
-        // Entire checkpoint controls group hidden for Field Crew & Tech Lead
-        cpNav.style.display = 'none';
-      } else {
-        cpNav.style.display = 'flex';
-        // Shift Relief & Swaps: Admin, Manager, Stock Manager, Stock Controller
-        setVis(btnShiftRelief, isAdmin || isManager || isStockMgr || isStockCtrl);
-        // Set Call Time: Admin, Manager, Stock Manager
-        setVis(btnCallTime, isAdmin || isManager || isStockMgr);
-        // On-Site Roll-Call: Admin, Manager, Stock Manager
-        setVis(btnRollCall, isAdmin || isManager || isStockMgr);
-        // Station Lock PIN: Admin ONLY
-        setVis(btnStationLock, isAdmin);
-        // Reset Today's Scans: Admin ONLY
-        setVis(btnResetDemo, isAdmin);
-      }
+      cpNav.style.display = 'flex';
+      // Shift Relief & Swaps: Admin, Manager, Stock Manager, Stock Controller
+      setVis(btnShiftRelief, isAdmin || isManager || isStockMgr || isStockCtrl);
+      // Set Call Time: Admin, Manager, Stock Manager
+      setVis(btnCallTime, isAdmin || isManager || isStockMgr);
+      // On-Site Roll-Call: Read-only directory visible to all authenticated personnel
+      setVis(btnRollCall, true);
+      // Station Lock PIN: Admin ONLY
+      setVis(btnStationLock, isAdmin);
+      // Reset Today's Scans: Admin ONLY
+      setVis(btnResetDemo, isAdmin);
+      // Share Technician On-Site Link: Admin ONLY
+      setVis(btnOnsiteShare, isAdmin);
     }
     if (btnResetDemo && !isAdmin) {
       btnResetDemo.style.display = 'none';
@@ -7218,7 +7217,7 @@
       'overview', 'events', 'users', 'attendees', 'terminals', 'venue-security',
       'stock-manager', 'access-matrix', 'analytics',
       'shift-relief', 'calltime', 'rollcall', 'station-lock', 'reset-scans',
-      'action:shift-relief', 'action:calltime', 'action:rollcall', 'action:station-lock', 'action:reset-scans',
+      'action:shift-relief', 'action:calltime', 'action:rollcall', 'action:station-lock', 'action:reset-scans', 'action:onsite-share',
     ];
 
     if (item) {
@@ -7364,33 +7363,62 @@
     }).join('');
   }
 
+  function resolveRollCallRoleCategory(rc) {
+    if (rc && rc.role_category) return rc.role_category;
+    const r = String((rc && rc.role) || (rc && rc.role_display) || '').toLowerCase();
+    if (r.includes('stock_manager') || r.includes('site manager') || r.includes('admin') || r.includes('project_manager') || r.includes('tech_lead') || r.includes('technical lead') || r === 'manager') {
+      return 'supervisor';
+    }
+    if (r.includes('stock_controller') || r.includes('gate controller')) {
+      return 'controller';
+    }
+    if (r.includes('technician') || r.includes('sound') || r.includes('lighting') || r.includes('video') || r.includes('stage') || r.includes('rigging')) {
+      return 'technician';
+    }
+    return 'crew';
+  }
+
   function buildRollCallListHtml(list, emptyText = 'No crew members are currently checked in on-site.') {
     if (!Array.isArray(list) || list.length === 0) {
       return `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-secondary); border: 1px dashed var(--border-color); border-radius: 8px;">${escapeHtml(emptyText)}</div>`;
     }
-    return list.map((rc) => `
+    const rawRole = String(state.currentUser?.role || '').toLowerCase();
+    const canManageCheckout = isCurrentUserAdmin() || isCurrentUserStockManager() || rawRole === 'manager' || rawRole === 'project_manager';
+
+    return list.map((rc) => {
+      const cat = resolveRollCallRoleCategory(rc);
+      const catBadgeClass = cat === 'supervisor'
+        ? 'status-badge-amber-sm'
+        : (cat === 'controller' ? 'status-badge-purple-sm' : (cat === 'technician' ? 'status-badge-blue-sm' : 'status-badge-neutral-sm'));
+      const phoneStr = rc.phone ? String(rc.phone).trim() : '';
+      const telHref = phoneStr ? `tel:${escapeHtml(phoneStr.replace(/[^+\d]/g, ''))}` : '';
+      const actionHtml = canManageCheckout
+        ? `<button type="button" class="gate-btn gate-btn-checkout js-rollcall-checkout-btn" data-badge="${escapeHtml(rc.badge_code)}">Checkout Now</button>`
+        : `<span class="status-badge status-badge-green-sm">On-Site ✓</span>`;
+
+      return `
       <div class="timeline-event-card" style="align-items: center;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <div class="avatar-circle avatar-jl">${escapeHtml(rc.initials)}</div>
           <div style="display: flex; flex-direction: column; gap: 2px;">
             <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
               <span style="font-size: 12px; font-weight: 700;">${escapeHtml(rc.full_name)}</span>
+              <span class="status-badge ${catBadgeClass}">${escapeHtml(rc.role_display)}</span>
               <span class="tier-code-badge tier-code-${escapeHtml(rc.clearance_code)}">${escapeHtml(rc.clearance_code)}</span>
               <span class="badge-code-primary">${escapeHtml(rc.badge_code)}</span>
             </div>
             <span style="font-size: 11px; color: var(--text-secondary);">
-              ${escapeHtml(rc.role_display)} (${escapeHtml(rc.department)}) · At <strong>${escapeHtml(rc.checkpoint_name)}</strong>
+              ${escapeHtml(rc.department)} · At <strong>${escapeHtml(rc.checkpoint_name)}</strong>${phoneStr ? ` · <a href="${telHref}" style="color: var(--brand-primary); text-decoration: none; font-weight: 600;">${escapeHtml(phoneStr)}</a>` : ''}
             </span>
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span class="ts-mini-pill in">In: ${escapeHtml(rc.check_in_time)}</span>
-          <button type="button" class="gate-btn gate-btn-checkout js-rollcall-checkout-btn" data-badge="${escapeHtml(rc.badge_code)}">
-            Checkout Now
-          </button>
+          ${actionHtml}
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 
   function renderVenueSecurityPage() {
@@ -7782,6 +7810,33 @@
     if (elVenues) elVenues.textContent = String(venueOnsite.length);
     if (elSites) elSites.textContent = String(occupiedSites.size);
 
+    const canSharePortal = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserTechLead();
+    const shareBtn = document.getElementById('page-rc-share-btn');
+    if (shareBtn) shareBtn.style.display = canSharePortal ? 'inline-flex' : 'none';
+
+    const kioskBtn = document.getElementById('page-rc-open-kiosk-btn');
+    if (kioskBtn) kioskBtn.style.display = isCurrentUserTechnician() ? 'none' : 'inline-flex';
+
+    // Update role category filter counts
+    const roleCounts = { all: rcList.length, supervisor: 0, controller: 0, technician: 0, crew: 0 };
+    rcList.forEach((rc) => {
+      const cat = resolveRollCallRoleCategory(rc);
+      if (Object.prototype.hasOwnProperty.call(roleCounts, cat)) {
+        roleCounts[cat] += 1;
+      } else {
+        roleCounts.crew += 1;
+      }
+    });
+    Object.keys(roleCounts).forEach((k) => {
+      const el = document.getElementById(`rc-tab-count-${k}`);
+      if (el) el.textContent = String(roleCounts[k]);
+    });
+
+    const activeRoleCat = state.rollCallRoleFilter || 'all';
+    document.querySelectorAll('#page-rc-role-pills .js-rc-role-tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-role-cat') === activeRoleCat);
+    });
+
     const cpFilterEl = document.getElementById('page-rc-cp-filter');
     if (cpFilterEl) {
       const prev = state.rollCallCpFilter || cpFilterEl.value || 'all';
@@ -7796,9 +7851,10 @@
     const q = (state.rollCallSearch || '').trim().toLowerCase();
     const cpFilter = state.rollCallCpFilter || 'all';
     const filtered = rcList.filter((rc) => {
+      if (activeRoleCat !== 'all' && resolveRollCallRoleCategory(rc) !== activeRoleCat) return false;
       if (cpFilter !== 'all' && String(rc.checkpoint_name || '') !== cpFilter) return false;
       if (q) {
-        const hay = `${rc.full_name} ${rc.badge_code} ${rc.role_display} ${rc.department} ${rc.checkpoint_name}`.toLowerCase();
+        const hay = `${rc.full_name} ${rc.badge_code} ${rc.role_display} ${rc.department} ${rc.checkpoint_name} ${rc.phone || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -7806,7 +7862,7 @@
 
     const listEl = document.getElementById('page-rollcall-list');
     if (listEl) {
-      listEl.innerHTML = buildRollCallListHtml(filtered, rcList.length === 0 ? 'No crew members are currently checked in on-site.' : 'No on-site personnel match your search filter.');
+      listEl.innerHTML = buildRollCallListHtml(filtered, rcList.length === 0 ? 'No crew members are currently checked in on-site.' : 'No on-site personnel match your selected role, checkpoint, or search filter.');
     }
   }
 
@@ -8360,10 +8416,6 @@
       }
 
       if (action === 'action:rollcall' || action === 'rollcall') {
-        if (isCurrentUserStockController() || isCurrentUserTechnician()) {
-          showToast('Access Restricted: Roll-Call inspection requires Supervisor or Administrator privileges.');
-          return;
-        }
         renderRollCallModalList();
         const rcModal = document.getElementById('rollcall-modal');
         if (rcModal) rcModal.classList.add('open');
@@ -8395,6 +8447,17 @@
       if (action === 'action:reset-scans' || action === 'reset-scans') {
         if (typeof triggerResetTodayScans === 'function') {
           triggerResetTodayScans();
+        }
+        return;
+      }
+
+      if (action === 'action:onsite-share' || action === 'onsite-share') {
+        if (!isCurrentUserAdmin() && !isCurrentUserStockManager() && !isCurrentUserTechLead()) {
+          showToast('Access Restricted: Managing Technician On-Site links requires Administrator or Supervisor privileges.');
+          return;
+        }
+        if (typeof openOnsiteShareModal === 'function') {
+          openOnsiteShareModal();
         }
         return;
       }
@@ -10473,6 +10536,199 @@
         await fetchBootstrap(false);
         renderRollCallPage();
         showToast('On-Site Roll-Call refreshed.');
+      });
+    }
+
+    document.querySelectorAll('#page-rc-role-pills .js-rc-role-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.rollCallRoleFilter = btn.getAttribute('data-role-cat') || 'all';
+        renderRollCallPage();
+      });
+    });
+
+    // Share Technician On-Site Link & Password Modal
+    const onsiteShareModal = document.getElementById('onsite-share-modal');
+    const pageRcShareBtn = document.getElementById('page-rc-share-btn');
+    const onsiteUrlInp = document.getElementById('onsite-share-url-input');
+    const onsiteEnabledCb = document.getElementById('onsite-share-enabled-cb');
+    const onsitePwdInp = document.getElementById('onsite-share-pwd-input');
+    const onsitePwdHint = document.getElementById('onsite-share-pwd-hint');
+    const onsiteStatusPill = document.getElementById('onsite-share-status-pill');
+    const onsiteInviteBox = document.getElementById('onsite-share-invite-box');
+    const onsiteInviteText = document.getElementById('onsite-share-invite-text');
+    const onsiteAdminCtrls = document.getElementById('onsite-share-admin-controls');
+    const onsiteSaveBtn = document.getElementById('onsite-share-save-btn');
+    const onsiteRevokeBtn = document.getElementById('onsite-revoke-sessions-btn');
+
+    function buildOnsiteShareUrl(sharePath = 'onsite.php') {
+      return new URL(sharePath, window.location.href).href;
+    }
+
+    function updateOnsiteInvitePreview(url, password = '') {
+      if (!onsiteInviteBox || !onsiteInviteText) return;
+      if (!password) {
+        onsiteInviteBox.style.display = 'none';
+        return;
+      }
+      onsiteInviteText.textContent =
+        `aBility Live On-Site Crew Link (View Stock Managers, Controllers & Technicians on site):\n` +
+        `Link: ${url}\n` +
+        `Password: ${password}`;
+      onsiteInviteBox.style.display = 'block';
+    }
+
+    function syncOnsiteShareStatusBadge(enabled) {
+      if (!onsiteStatusPill) return;
+      onsiteStatusPill.textContent = enabled ? 'Active' : 'Disabled';
+      onsiteStatusPill.className = enabled ? 'status-badge status-badge-green-sm' : 'status-badge status-badge-red-sm';
+    }
+
+    async function openOnsiteShareModal() {
+      if (!onsiteShareModal) return;
+      if (onsitePwdInp) onsitePwdInp.value = '';
+      updateOnsiteInvitePreview('', '');
+      const fallbackUrl = buildOnsiteShareUrl('onsite.php');
+      if (onsiteUrlInp) onsiteUrlInp.value = fallbackUrl;
+      onsiteShareModal.classList.add('open');
+
+      try {
+        const res = await fetch('api.php?action=get_onsite_share_config');
+        const data = await res.json();
+        if (res.ok && data && data.ok) {
+          const shareUrl = buildOnsiteShareUrl(data.share_path || 'onsite.php');
+          if (onsiteUrlInp) onsiteUrlInp.value = shareUrl;
+          if (onsiteEnabledCb) onsiteEnabledCb.checked = Boolean(data.enabled);
+          syncOnsiteShareStatusBadge(Boolean(data.enabled));
+
+          const canManage = Boolean(data.can_manage);
+          if (onsiteAdminCtrls) onsiteAdminCtrls.style.opacity = canManage ? '1' : '0.85';
+          if (onsiteEnabledCb) onsiteEnabledCb.disabled = !canManage;
+          if (onsitePwdInp) onsitePwdInp.disabled = !canManage;
+          if (onsiteSaveBtn) onsiteSaveBtn.style.display = canManage ? 'inline-flex' : 'none';
+          if (onsiteRevokeBtn) onsiteRevokeBtn.style.display = canManage ? 'inline-flex' : 'none';
+          const genBtn = document.getElementById('onsite-gen-pwd-btn');
+          if (genBtn) genBtn.style.display = canManage ? 'inline-flex' : 'none';
+
+          if (data.is_default_password && data.default_password_preview) {
+            if (onsitePwdHint) {
+              onsitePwdHint.textContent = `Current active passcode: "${data.default_password_preview}" (you can customize or generate a new one anytime).`;
+            }
+            updateOnsiteInvitePreview(shareUrl, data.default_password_preview);
+          } else if (onsitePwdHint) {
+            onsitePwdHint.textContent = 'Custom hashed passcode is active. Enter a new passcode or click Generate to rotate and copy.';
+          }
+        } else {
+          showToast((data && data.error) || 'Could not load share configuration.');
+        }
+      } catch (err) {
+        showToast('Network error loading share settings.');
+      }
+    }
+
+    if (pageRcShareBtn) {
+      pageRcShareBtn.addEventListener('click', openOnsiteShareModal);
+    }
+
+    document.querySelectorAll('.js-close-onsite-share-modal').forEach((btn) => {
+      btn.addEventListener('click', () => onsiteShareModal?.classList.remove('open'));
+    });
+
+    const copyUrlBtn = document.getElementById('onsite-copy-url-btn');
+    if (copyUrlBtn) {
+      copyUrlBtn.addEventListener('click', async () => {
+        const val = onsiteUrlInp?.value || buildOnsiteShareUrl('onsite.php');
+        try {
+          await navigator.clipboard.writeText(val);
+          showToast('On-Site Link copied to clipboard!');
+        } catch (_) {
+          if (onsiteUrlInp) { onsiteUrlInp.select(); document.execCommand('copy'); }
+          showToast('On-Site Link copied!');
+        }
+      });
+    }
+
+    const genPwdBtn = document.getElementById('onsite-gen-pwd-btn');
+    if (genPwdBtn) {
+      genPwdBtn.addEventListener('click', () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = 'Crew-';
+        for (let i = 0; i < 6; i += 1) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        if (onsitePwdInp) {
+          onsitePwdInp.value = code;
+          onsitePwdInp.focus();
+        }
+      });
+    }
+
+    const copyInviteBtn = document.getElementById('onsite-copy-invite-btn');
+    if (copyInviteBtn) {
+      copyInviteBtn.addEventListener('click', async () => {
+        const msg = onsiteInviteText?.textContent || '';
+        if (!msg) return;
+        try {
+          await navigator.clipboard.writeText(msg);
+          showToast('Shareable link & password copied for crew!');
+        } catch (_) {
+          showToast('Copy failed — select and copy text manually.');
+        }
+      });
+    }
+
+    if (onsiteSaveBtn) {
+      onsiteSaveBtn.addEventListener('click', async () => {
+        const newPwd = (onsitePwdInp?.value || '').trim();
+        const enabled = onsiteEnabledCb ? onsiteEnabledCb.checked : true;
+        onsiteSaveBtn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=save_onsite_share_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled, password: newPwd }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            syncOnsiteShareStatusBadge(Boolean(data.enabled));
+            const shareUrl = buildOnsiteShareUrl(data.share_path || 'onsite.php');
+            if (newPwd) {
+              updateOnsiteInvitePreview(shareUrl, newPwd);
+              if (onsitePwdHint) {
+                onsitePwdHint.textContent = 'New passcode saved! Use "Copy Link + Password" above to send it to technicians.';
+              }
+            }
+            showToast(data.message || 'Technician link settings saved.');
+          } else {
+            showToast((data && data.error) || 'Failed to save share settings.');
+          }
+        } catch (err) {
+          showToast('Network error saving share settings.');
+        } finally {
+          onsiteSaveBtn.disabled = false;
+        }
+      });
+    }
+
+    if (onsiteRevokeBtn) {
+      onsiteRevokeBtn.addEventListener('click', async () => {
+        onsiteRevokeBtn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=save_onsite_share_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ revoke_sessions: true }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            showToast(data.message || 'Active viewer sessions revoked.');
+          } else {
+            showToast((data && data.error) || 'Failed to revoke sessions.');
+          }
+        } catch (err) {
+          showToast('Network error revoking sessions.');
+        } finally {
+          onsiteRevokeBtn.disabled = false;
+        }
       });
     }
 
@@ -14130,11 +14386,15 @@
     initTourControls();
     if (window.location.hash === '#pane-kiosk') {
       switchScreen('terminals', 'pane-kiosk');
+    } else if (window.location.hash === '#rollcall') {
+      switchScreen('rollcall');
     }
     await fetchBootstrap(false);
     syncOfflineScans(false);
     startLiveGateSync();
-    if (isCurrentUserStockController()) {
+    if (window.location.hash === '#rollcall' && isScreenPermittedForCurrentUser('rollcall')) {
+      switchScreen('rollcall');
+    } else if (isCurrentUserStockController()) {
       switchScreen('terminals', 'pane-kiosk');
       applyNavigationRestrictions();
     }

@@ -121,6 +121,10 @@
           <img src="assets/nav-settings.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Reset Today’s Scans</span>
         </button>
+        <button type="button" class="nav-item" id="sidebar-onsite-share-btn" data-nav-action="action:onsite-share" title="Share Technician On-Site Link &amp; Password (Admin)" style="display: none;">
+          <img src="assets/key-round-13.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Share On-Site Link</span>
+        </button>
       </nav>
 
       <!-- Admin shortcut when Checkpoint Controls bar is disabled -->
@@ -2728,11 +2732,14 @@
               </p>
             </div>
             <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" id="page-rc-share-btn" style="display: none;">
+                <span>🔗 Share Technician Link &amp; Password</span>
+              </button>
               <button type="button" class="btn btn-secondary-38" id="page-rc-refresh-btn">
                 <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
                 <span>Refresh Roll-Call</span>
               </button>
-              <button type="button" class="btn btn-primary-38" data-action="go-kiosk">
+              <button type="button" class="btn btn-primary-38" id="page-rc-open-kiosk-btn" data-action="go-kiosk">
                 <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
                 <span>Open Gate Kiosk</span>
               </button>
@@ -2782,8 +2789,31 @@
                 <h2 class="directory-title-18">Live On-Site Crew Muster List</h2>
                 <span class="status-badge status-badge-green-sm"><span class="js-stat-onsite">0</span> On-Site Now</span>
               </div>
-              <p class="directory-desc">Filter on-site personnel by checkpoint or trigger an immediate supervisor check-out.</p>
+              <p class="directory-desc" id="page-rc-desc">View everyone currently checked in on site by role (Stock Managers, Gate Controllers, Tech Leads, Technicians) or checkpoint.</p>
             </div>
+          </div>
+
+          <div class="status-tabs" id="page-rc-role-pills" style="padding: 0 20px; border-bottom: 1px solid var(--border-color); display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="status-tab active js-rc-role-tab" data-role-cat="all">
+              <span class="status-tab-label">All On-Site</span>
+              <span class="status-tab-count" id="rc-tab-count-all">0</span>
+            </button>
+            <button type="button" class="status-tab js-rc-role-tab" data-role-cat="supervisor">
+              <span class="status-tab-label">Stock Mgr &amp; Supervisors</span>
+              <span class="status-tab-count" id="rc-tab-count-supervisor">0</span>
+            </button>
+            <button type="button" class="status-tab js-rc-role-tab" data-role-cat="controller">
+              <span class="status-tab-label">Gate Controllers</span>
+              <span class="status-tab-count" id="rc-tab-count-controller">0</span>
+            </button>
+            <button type="button" class="status-tab js-rc-role-tab" data-role-cat="technician">
+              <span class="status-tab-label">Technicians</span>
+              <span class="status-tab-count" id="rc-tab-count-technician">0</span>
+            </button>
+            <button type="button" class="status-tab js-rc-role-tab" data-role-cat="crew">
+              <span class="status-tab-label">Other Crew</span>
+              <span class="status-tab-count" id="rc-tab-count-crew">0</span>
+            </button>
           </div>
 
           <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
@@ -4326,6 +4356,7 @@
                 <option value="action:rollcall">On-Site Roll-Call Modal</option>
                 <option value="action:station-lock">Station Lock (PIN) Modal</option>
                 <option value="action:reset-scans">Reset Today's Scans Confirm Modal</option>
+                <option value="action:onsite-share">Share Technician On-Site Link Modal</option>
               </optgroup>
               <option value="custom">Custom Page Slug / External URL</option>
             </select>
@@ -4353,6 +4384,7 @@
               <option value="assets/metric-calendar-clock.svg">Call-Time Clock</option>
               <option value="assets/nav-analytics.svg">Analytics Chart</option>
               <option value="assets/nav-integrations.svg">Integrations / Lock</option>
+              <option value="assets/key-round-13.svg">Key / Shared Access Link</option>
               <option value="assets/nav-settings.svg">Settings / Reset Gear</option>
             </select>
           </div>
@@ -4856,6 +4888,66 @@
     </div>
   </div>
 
+  <!-- Modal: Share Technician On-Site Link & Password -->
+  <div class="modal-backdrop" id="onsite-share-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 540px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="onsite-share-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <h3 class="modal-title" id="onsite-share-modal-title" style="margin: 0;">Share Technician On-Site Link</h3>
+        <span class="status-badge status-badge-green-sm" id="onsite-share-status-pill">Active</span>
+      </div>
+      <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px;">
+        Share this read-only link and shared passcode with technicians so they can check who is currently on site (Stock Managers, Gate Controllers, Tech Leads, and fellow technicians).
+      </p>
+
+      <div class="form-field" style="margin-bottom: 12px;">
+        <label class="form-label" for="onsite-share-url-input">Shareable On-Site Roster URL</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="onsite-share-url-input" class="form-input" readonly style="font-family: monospace; font-size: 12px;" />
+          <button type="button" class="btn btn-secondary-38" id="onsite-copy-url-btn" style="white-space: nowrap;">Copy Link</button>
+          <a href="onsite.php" target="_blank" rel="noopener" class="btn btn-secondary-38" style="text-decoration: none; white-space: nowrap;">Open ↗</a>
+        </div>
+      </div>
+
+      <div id="onsite-share-admin-controls">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 12px;">
+          <div>
+            <div style="font-size: 12.5px; font-weight: 700;">Enable Shared Technician Link</div>
+            <div style="font-size: 11px; color: var(--text-secondary);">Turn off anytime to lock out the shared link.</div>
+          </div>
+          <label class="nav-toggle-switch">
+            <input type="checkbox" id="onsite-share-enabled-cb" checked />
+            <span class="nav-toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 10px;">
+          <label class="form-label" for="onsite-share-pwd-input">Shared Technician Password</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="onsite-share-pwd-input" class="form-input" placeholder="Enter new passcode (min 6 chars) or click Generate..." autocomplete="off" />
+            <button type="button" class="btn btn-secondary-38" id="onsite-gen-pwd-btn" style="white-space: nowrap;">Generate</button>
+          </div>
+          <div id="onsite-share-pwd-hint" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;"></div>
+        </div>
+
+        <div id="onsite-share-invite-box" style="display: none; padding: 10px 12px; background: var(--bg-subtle); border: 1px dashed var(--border-color); border-radius: 8px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-primary);">Ready-to-Share Crew Message</span>
+            <button type="button" class="btn btn-secondary-32-sm" id="onsite-copy-invite-btn">Copy Link + Password</button>
+          </div>
+          <pre id="onsite-share-invite-text" style="margin: 0; font-size: 11px; white-space: pre-wrap; color: var(--text-secondary); font-family: inherit;"></pre>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary-38" id="onsite-revoke-sessions-btn" style="color: #dc2626;">Revoke Active Viewers</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-secondary-38 js-close-onsite-share-modal">Close</button>
+          <button type="button" class="btn btn-primary-38" id="onsite-share-save-btn">Save Password &amp; Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Reusable App Confirm Modal (Replaces native browser confirm/prompt) -->
   <div class="modal-backdrop" id="app-confirm-modal" aria-hidden="true">
     <div class="modal-card" style="width: 420px; max-width: 94vw;" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title">
@@ -4884,6 +4976,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261116_v14"></script>
+  <script src="app.js?v=20261117_v2"></script>
 </body>
 </html>

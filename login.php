@@ -937,6 +937,10 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
         </label>
 
         <button type="submit" class="btn-submit-pill" id="signin-submit-btn">SIGN IN</button>
+        <div style="margin-top: 14px; font-size: 12px; color: var(--text-sub);">
+          Need to check who's on site?
+          <a href="onsite.php" style="color: var(--brand-purple); font-weight: 700; text-decoration: none; margin-left: 4px;">Open Technician On-Site Link →</a>
+        </div>
       </form>
     </div>
 

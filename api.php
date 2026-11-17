@@ -731,7 +731,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'onsite',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager',
+            'allowed_roles' => 'all',
             'sort_order' => 3,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -769,6 +769,24 @@ function getDefaultNavigationItems(): array
             'badge_text' => '',
             'allowed_roles' => 'admin,administrator',
             'sort_order' => 5,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'share_onsite_link',
+            'label' => 'Share On-Site Link',
+            'nav_target' => 'action:onsite-share',
+            'dom_id' => 'sidebar-onsite-share-btn',
+            'node_id' => '',
+            'icon' => 'assets/key-round-13.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator',
+            'sort_order' => 6,
             'is_enabled' => 1,
             'is_system' => 1,
         ],
@@ -871,7 +889,107 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
         foreach ($pageTargetUpgrades as $oldTgt => $newTgt) {
             $upStmt->execute([$newTgt, $oldTgt]);
         }
+
+        // One-time migration: enable read-only On-Site Roll-Call access for technicians and field crew
+        $migChk = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_onsite_tech_v1' LIMIT 1");
+        $migChk->execute();
+        if (!$migChk->fetchColumn()) {
+            $pdo->prepare("UPDATE `navigation_items` SET `allowed_roles` = 'all' WHERE `nav_key` = 'onsite_rollcall' AND `is_system` = 1")->execute();
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_onsite_tech_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+
+        // One-time migration: add Admin "Share On-Site Link" item to Checkpoint Controls sidebar
+        $migShare = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_share_onsite_v1' LIMIT 1");
+        $migShare->execute();
+        if (!$migShare->fetchColumn()) {
+            $pdo->prepare("
+                INSERT IGNORE INTO `navigation_items`
+                (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
+                VALUES ('workspace', 'share_onsite_link', 'Share On-Site Link', 'action:onsite-share', 'sidebar-onsite-share-btn', '', 'assets/key-round-13.svg', '', '', 'none', '', '', 'admin,administrator', 6, 1, 1)
+            ")->execute();
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_share_onsite_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
     } catch (Throwable $e) {}
+}
+
+function classifyRollCallRoleCategory(string $roleKey): string
+{
+    $r = strtolower(trim($roleKey));
+    if (in_array($r, ['stock_manager', 'admin', 'administrator', 'manager', 'project_manager', 'tech_lead', 'technical_lead'], true)) {
+        return 'supervisor';
+    }
+    if ($r === 'stock_controller') {
+        return 'controller';
+    }
+    if (in_array($r, ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'stage_manager', 'rigging_lead'], true)) {
+        return 'technician';
+    }
+    return 'crew';
+}
+
+function getDefaultOnsiteTechnicianPassword(): string
+{
+    return 'TechSite@2026';
+}
+
+function ensureOnsiteShareSettings(PDO $pdo): array
+{
+    ensureNavigationTables($pdo);
+    $keys = ['onsite_share_enabled', 'onsite_share_password_hash', 'onsite_share_session_ver', 'onsite_share_is_default'];
+    $map = [];
+    try {
+        $inPlaceholders = implode(',', array_fill(0, count($keys), '?'));
+        $st = $pdo->prepare("SELECT `setting_key`, `setting_value` FROM `app_settings` WHERE `setting_key` IN ({$inPlaceholders})");
+        $st->execute($keys);
+        while ($row = $st->fetch(PDO::FETCH_ASSOC)) {
+            $map[$row['setting_key']] = (string) ($row['setting_value'] ?? '');
+        }
+
+        if (!isset($map['onsite_share_enabled'])) {
+            $pdo->prepare("INSERT IGNORE INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_enabled', '1')")->execute();
+            $map['onsite_share_enabled'] = '1';
+        }
+        if (empty($map['onsite_share_password_hash'])) {
+            $defaultHash = password_hash(getDefaultOnsiteTechnicianPassword(), PASSWORD_DEFAULT);
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_password_hash', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
+                ->execute([$defaultHash]);
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_is_default', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")
+                ->execute();
+            $map['onsite_share_password_hash'] = $defaultHash;
+            $map['onsite_share_is_default'] = '1';
+        }
+        if (empty($map['onsite_share_session_ver'])) {
+            $pdo->prepare("INSERT IGNORE INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_session_ver', '1')")->execute();
+            $map['onsite_share_session_ver'] = '1';
+        }
+        if (!isset($map['onsite_share_is_default'])) {
+            $map['onsite_share_is_default'] = '0';
+        }
+    } catch (Throwable $e) {
+        $map['onsite_share_enabled'] = $map['onsite_share_enabled'] ?? '1';
+        $map['onsite_share_session_ver'] = $map['onsite_share_session_ver'] ?? '1';
+        $map['onsite_share_is_default'] = $map['onsite_share_is_default'] ?? '0';
+    }
+
+    return [
+        'enabled' => ($map['onsite_share_enabled'] ?? '1') === '1',
+        'password_hash' => (string) ($map['onsite_share_password_hash'] ?? ''),
+        'session_ver' => max(1, (int) ($map['onsite_share_session_ver'] ?? 1)),
+        'is_default' => ($map['onsite_share_is_default'] ?? '0') === '1',
+    ];
+}
+
+function isOnsiteViewerSessionAuthorized(PDO $pdo): bool
+{
+    if (empty($_SESSION['onsite_viewer_authorized'])) {
+        return false;
+    }
+    $cfg = ensureOnsiteShareSettings($pdo);
+    if (!$cfg['enabled']) {
+        return false;
+    }
+    $sessVer = (int) ($_SESSION['onsite_viewer_ver'] ?? 0);
+    return $sessVer === $cfg['session_ver'];
 }
 
 function getNavigationConfig(PDO $pdo): array
@@ -1867,8 +1985,11 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             $rollCallList[] = [
                 'user_id' => $uid,
                 'full_name' => $fullName,
+                'role' => $role,
+                'role_category' => classifyRollCallRoleCategory($role),
                 'role_display' => $member['role_display'],
                 'department' => $dept,
+                'phone' => $member['phone'],
                 'badge_code' => $rewBadge,
                 'staff_code' => $staffCode,
                 'clearance_code' => $tier['code'],
@@ -2175,7 +2296,7 @@ try {
     $reqCpId = (int) ($_GET['checkpoint_id'] ?? $_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? 1);
 
     // P0 Security Gate: Require active authenticated session for all protected endpoints
-    $publicActions = ['login', 'logout', 'auth_status', 'get_current_user'];
+    $publicActions = ['login', 'logout', 'auth_status', 'get_current_user', 'onsite_portal_login', 'onsite_portal_logout', 'onsite_public_feed'];
     if (!in_array($action, $publicActions, true) && empty($_SESSION['auth_user_id'])) {
         http_response_code(401);
         echo json_encode([
@@ -2190,7 +2311,7 @@ try {
     if (
         strtoupper((string) $method) === 'POST'
         && !empty($_SESSION['auth_user_id'])
-        && !in_array($action, ['login', 'logout'], true)
+        && !in_array($action, ['login', 'logout', 'onsite_portal_login', 'onsite_portal_logout'], true)
         && !validateCsrfForAuthenticatedPost($jsonBody)
     ) {
         http_response_code(403);
@@ -2203,6 +2324,184 @@ try {
 
     if ($action === 'bootstrap') {
         echo json_encode(buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId));
+        exit;
+    }
+
+    if ($action === 'onsite_portal_login') {
+        $cfg = ensureOnsiteShareSettings($pdo);
+        if (!$cfg['enabled']) {
+            http_response_code(403);
+            echo json_encode([
+                'ok' => false,
+                'error' => 'The shared Technician On-Site link is currently disabled by an Administrator.',
+            ]);
+            exit;
+        }
+        $clientIp = trim((string) ($_SERVER['REMOTE_ADDR'] ?? 'local'));
+        $rateKey = 'onsite_portal:' . sha1(strtolower($clientIp));
+        $rateCheck = checkSecurityRateLimit($pdo, $rateKey, 5, 600);
+        if (!$rateCheck['allowed']) {
+            http_response_code(429);
+            echo json_encode([
+                'ok' => false,
+                'error' => "Too many failed attempts. Please wait {$rateCheck['retry_after']}s and try again.",
+            ]);
+            exit;
+        }
+
+        $password = (string) ($_POST['password'] ?? $jsonBody['password'] ?? '');
+        if ($password === '') {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Please enter the shared technician access password.']);
+            exit;
+        }
+        if ($cfg['password_hash'] === '' || !password_verify($password, $cfg['password_hash'])) {
+            recordFailedRateLimit($pdo, $rateKey, 5, 600, 60);
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Incorrect shared technician password.']);
+            exit;
+        }
+
+        clearSecurityRateLimit($pdo, $rateKey);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_regenerate_id(true);
+        }
+        $_SESSION['onsite_viewer_authorized'] = true;
+        $_SESSION['onsite_viewer_ver'] = (int) $cfg['session_ver'];
+        echo json_encode(['ok' => true, 'authorized' => true]);
+        exit;
+    }
+
+    if ($action === 'onsite_portal_logout') {
+        unset($_SESSION['onsite_viewer_authorized'], $_SESSION['onsite_viewer_ver']);
+        echo json_encode(['ok' => true, 'authorized' => false]);
+        exit;
+    }
+
+    if ($action === 'onsite_public_feed') {
+        $cfg = ensureOnsiteShareSettings($pdo);
+        $hasSharedViewer = isOnsiteViewerSessionAuthorized($pdo);
+        $hasOperatorSession = !empty($_SESSION['auth_user_id']);
+        if (!$hasSharedViewer && !$hasOperatorSession) {
+            http_response_code(401);
+            echo json_encode([
+                'ok' => false,
+                'authorized' => false,
+                'enabled' => (bool) $cfg['enabled'],
+                'error' => 'Technician access password required to view who is on site.',
+            ]);
+            exit;
+        }
+        if ($hasSharedViewer && !$cfg['enabled'] && !$hasOperatorSession) {
+            http_response_code(403);
+            echo json_encode([
+                'ok' => false,
+                'authorized' => false,
+                'enabled' => false,
+                'error' => 'Shared link has been disabled by Administrator.',
+            ]);
+            exit;
+        }
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        $rc = $full['rollCallList'] ?? [];
+        $cpSummaries = [];
+        foreach (($full['checkpoints']['directory'] ?? []) as $cp) {
+            $cpSummaries[] = [
+                'type' => (string) ($cp['type'] ?? 'event_venue'),
+                'id' => (int) ($cp['id'] ?? 0),
+                'name' => (string) ($cp['name'] ?? ''),
+                'location' => (string) ($cp['location'] ?? ''),
+                'call_time' => (string) ($cp['call_time'] ?? '08:00'),
+                'on_site_now' => (int) ($cp['on_site_now'] ?? 0),
+            ];
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'authorized' => true,
+            'enabled' => (bool) $cfg['enabled'],
+            'generated_at' => date('h:i:s A'),
+            'rollCallList' => $rc,
+            'checkpoints' => $cpSummaries,
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_onsite_share_config') {
+        $caller = requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'administrator', 'manager', 'project_manager', 'stock_manager', 'tech_lead', 'technical_lead'],
+            'Permission denied: Viewing technician on-site share settings requires Supervisor or Administrator privileges.'
+        );
+        $cfg = ensureOnsiteShareSettings($pdo);
+        $cRole = strtolower(trim((string) ($caller['role'] ?? '')));
+        $canManage = in_array($cRole, ['admin', 'administrator', 'manager', 'stock_manager'], true);
+        echo json_encode([
+            'ok' => true,
+            'enabled' => (bool) $cfg['enabled'],
+            'session_ver' => (int) $cfg['session_ver'],
+            'is_default_password' => (bool) $cfg['is_default'],
+            'default_password_preview' => $cfg['is_default'] ? getDefaultOnsiteTechnicianPassword() : null,
+            'can_manage' => $canManage,
+            'share_path' => 'onsite.php',
+        ]);
+        exit;
+    }
+
+    if ($action === 'save_onsite_share_config') {
+        requireAuthorizedCaller(
+            $pdo,
+            ['admin', 'administrator', 'manager', 'stock_manager'],
+            'Permission denied: Updating the technician on-site link or password requires Site Manager or Administrator privileges.'
+        );
+        $cfg = ensureOnsiteShareSettings($pdo);
+        $enabledInput = $_POST['enabled'] ?? $jsonBody['enabled'] ?? null;
+        $newPassword = trim((string) ($_POST['password'] ?? $jsonBody['password'] ?? ''));
+        $revokeSessions = !empty($_POST['revoke_sessions']) || !empty($jsonBody['revoke_sessions']);
+
+        $newEnabled = $cfg['enabled'];
+        if ($enabledInput !== null) {
+            $newEnabled = ($enabledInput === true || $enabledInput === 1 || $enabledInput === '1' || $enabledInput === 'true');
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_enabled', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
+                ->execute([$newEnabled ? '1' : '0']);
+        }
+
+        $nextVer = $cfg['session_ver'];
+        $passwordUpdated = false;
+        if ($newPassword !== '') {
+            if (strlen($newPassword) < 6) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Shared technician password must be at least 6 characters.']);
+                exit;
+            }
+            $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_password_hash', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
+                ->execute([$hash]);
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_is_default', '0') ON DUPLICATE KEY UPDATE `setting_value` = '0'")
+                ->execute();
+            $passwordUpdated = true;
+            $revokeSessions = true;
+        }
+
+        if ($revokeSessions) {
+            $nextVer = $cfg['session_ver'] + 1;
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_session_ver', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
+                ->execute([(string) $nextVer]);
+        }
+
+        $updatedCfg = ensureOnsiteShareSettings($pdo);
+        echo json_encode([
+            'ok' => true,
+            'message' => $passwordUpdated
+                ? 'Technician portal password updated and active viewer sessions rotated.'
+                : ($revokeSessions ? 'All active technician viewer sessions revoked.' : 'Technician on-site link settings saved.'),
+            'enabled' => (bool) $updatedCfg['enabled'],
+            'session_ver' => (int) $updatedCfg['session_ver'],
+            'is_default_password' => (bool) $updatedCfg['is_default'],
+            'default_password_preview' => $updatedCfg['is_default'] ? getDefaultOnsiteTechnicianPassword() : null,
+            'share_path' => 'onsite.php',
+        ]);
         exit;
     }
 

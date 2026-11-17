@@ -421,19 +421,6 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("UPDATE `events` SET `lat` = -1.9489, `lng` = 30.0628, `map_x` = 16.0, `map_y` = 66.0 WHERE `lat` IS NULL AND (`title` LIKE '%Marriott%' OR `location` LIKE '%Marriott%')");
     } catch (Throwable $e) {}
 
-    // Seed items if empty
-    $itemCount = (int) $pdo->query("SELECT COUNT(*) FROM `items`")->fetchColumn();
-    if ($itemCount === 0) {
-        $pdo->exec("
-            INSERT INTO `items` (`item_name`, `serial_number`, `category`, `brand`, `model`, `department`, `stock_location`, `quantity`, `status`, `condition`, `image`) VALUES
-            ('Soundcraft Vi3000 Digital Console', 'SN-AUD-VI3000-01', 'Audio', 'Soundcraft', 'Vi3000', 'Audio', 'Ndera Warehouse', 1, 'available', 'good', NULL),
-            ('L-Acoustics Kara II Line Array (Pair)', 'SN-AUD-KARA-08', 'Audio', 'L-Acoustics', 'Kara II', 'Audio', 'Ndera Warehouse', 4, 'available', 'good', NULL),
-            ('Robe Pointe 280W Beam Moving Head', 'SN-LGT-PNT-14', 'Lighting', 'Robe', 'Pointe 280W', 'Lighting', 'BK Arena Stock', 8, 'available', 'good', NULL),
-            ('Blackmagic URSA Broadcast G2 4K', 'SN-VID-URSA-02', 'Video', 'Blackmagic', 'URSA G2', 'Video', 'KCC Stock', 2, 'available', 'good', NULL),
-            ('Prolyte H40V Heavy Duty Truss 3m', 'SN-RIG-TRUSS-40', 'Rigging', 'Prolyte', 'H40V-3M', 'Rigging', 'Ndera Warehouse', 16, 'available', 'good', NULL)
-        ");
-    }
-
     // Seed stock_locations if empty
     $stockCount = (int) $pdo->query("SELECT COUNT(*) FROM `stock_locations`")->fetchColumn();
     if ($stockCount === 0 || $forceReset) {
