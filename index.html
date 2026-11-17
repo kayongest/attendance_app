@@ -666,24 +666,26 @@
 
               <div class="map-header-controls">
                 <div class="map-view-switcher" id="overview-map-switcher">
-                  <button type="button" class="btn-toggle-view active" data-view="option-a" id="toggle-view-option-a" title="Option A: Tactical Facility Radar & Corridor">
+                  <!-- Option A & Option B disabled for now
+                  <button type="button" class="btn-toggle-view" data-view="option-a" id="toggle-view-option-a" title="Option A: Tactical Facility Radar & Corridor">
                     <span>🗺️ Option A (Radar)</span>
                   </button>
                   <button type="button" class="btn-toggle-view" data-view="option-b" id="toggle-view-option-b" title="Option B: Live Personnel Map (Timeline Synced)">
                     <span>📍 Option B (Live Map)</span>
                   </button>
-                  <button type="button" class="btn-toggle-view" data-view="chart" id="toggle-view-chart" title="Switch to Hourly Traffic Chart">
+                  -->
+                  <button type="button" class="btn-toggle-view active" data-view="chart" id="toggle-view-chart" title="Switch to Hourly Traffic Chart">
                     <span>📊 Traffic</span>
                   </button>
                   <button type="button" class="btn-toggle-view" data-view="cos" id="toggle-view-cos" title="View Currently On-Site Crew (COS)">
                     <span>🟢 Currently On-Site (COS)</span>
                   </button>
                 </div>
-                <button type="button" class="btn btn-secondary-32-sm btn-collapse-opt-a" id="toggle-option-a-collapse" title="Collapse / Expand Option A Map Stage" style="height: 30px; padding: 0 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                <button type="button" class="btn btn-secondary-32-sm btn-collapse-opt-a" id="toggle-option-a-collapse" title="Collapse / Expand Option A Map Stage" style="height: 30px; padding: 0 10px; font-size: 11px; display: none; align-items: center; gap: 4px;">
                   <span class="collapse-icon">▲</span>
                   <span class="collapse-label">Collapse Active</span>
                 </button>
-                <select id="overview-map-filter" class="form-input map-filter-select" aria-label="Filter Map Checkpoints">
+                <select id="overview-map-filter" class="form-input map-filter-select" aria-label="Filter Map Checkpoints" style="display: none;">
                   <option value="all">All Facilities (8)</option>
                   <option value="event_venue">Venues Only (4)</option>
                   <option value="stock_warehouse">Warehouses Only (4)</option>
@@ -693,7 +695,7 @@
             </div>
 
             <!-- VIEW 1: REAL-TIME ALLOCATION MAP CONTAINER -->
-            <div class="map-view-body" id="overview-map-view">
+            <div class="map-view-body" id="overview-map-view" style="display: none;">
               <!-- Live Metrics Strip -->
               <div class="map-quick-metrics">
                 <div class="map-metric-pill">
@@ -839,7 +841,7 @@
             </div>
 
             <!-- VIEW 2: HOURLY TRAFFIC CHART (Preserved with quick toggle) -->
-            <div class="traffic-chart-view" id="overview-traffic-chart-view" style="display: none;">
+            <div class="traffic-chart-view" id="overview-traffic-chart-view" style="display: block;">
               <div class="chart-legend" data-node-id="2:3459" style="gap: 12px; margin-bottom: 12px; display: flex; justify-content: flex-end;">
                 <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px;">
                   <span style="width: 9px; height: 9px; border-radius: 2px; background: #2563eb; display: inline-block;"></span>
@@ -5046,6 +5048,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261117_v6"></script>
+  <script src="app.js?v=20261117_v7"></script>
 </body>
 </html>

@@ -110,7 +110,7 @@
 
     // Facility & Personnel Allocation Map
     selectedMapCheckpoint: { type: 'event_venue', id: 1 },
-    mapViewMode: 'map',
+    mapViewMode: 'chart',
     mapFilter: 'all',
 
     // Users & Roles CRUD Manager
@@ -1385,16 +1385,7 @@
     renderCheckpointSelectors();
     renderVerificationDeck();
     renderHourlyTrafficChart();
-    if (state.mapViewMode === 'option-b') {
-      renderOptionBMap();
-    } else if (state.mapViewMode === 'cos') {
-      renderOverviewCosView();
-    } else {
-      renderAllocationMap();
-    }
-    if (state.mapViewMode !== 'cos') {
-      renderOverviewCosView();
-    }
+    renderOverviewCosView();
     renderActivityTimeline();
     renderTechLeadRosterCard();
     renderCrewDigitalPassCard();
@@ -1877,22 +1868,18 @@
       const btnCos = document.getElementById('toggle-view-cos');
 
       if (cardTitle) {
-        cardTitle.textContent = isTech
-          ? 'Hourly Venue vs. Facility Gate Traffic'
-          : 'Real-Time Personnel & Facility Allocation Map';
+        cardTitle.textContent = 'Hourly Traffic & Currently On-Site Crew';
       }
       if (cardSubtitle) {
-        cardSubtitle.textContent = isTech
-          ? 'Live check-in volume across Kigali event venues and facility gates for today’s call-time window.'
-          : 'Real-time geographic tracking & instant crew attendance across Kigali venues and facility hubs.';
+        cardSubtitle.textContent = 'Live check-in volume across Kigali event venues and facility gates, paired with active Currently On-Site (COS) roster.';
       }
-      if (radarBadge) radarBadge.style.display = isTech ? 'none' : '';
-      if (btnOptA) btnOptA.style.display = isTech ? 'none' : '';
-      if (btnOptB) btnOptB.style.display = isTech ? 'none' : '';
+      if (radarBadge) radarBadge.style.display = 'none';
+      if (btnOptA) btnOptA.style.display = 'none';
+      if (btnOptB) btnOptB.style.display = 'none';
       if (btnChart) btnChart.style.display = '';
       if (btnCos) btnCos.style.display = '';
 
-      if (isTech && state.mapViewMode !== 'cos') {
+      if (state.mapViewMode !== 'cos' && state.mapViewMode !== 'chart') {
         setAllocationMapView('chart');
       }
     }
@@ -3721,9 +3708,8 @@
   }
 
   function setAllocationMapView(viewMode) {
-    const rawRole = (state.currentUser?.role || '').toLowerCase();
-    const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isCurrentUserAdmin();
-    if (isTech && viewMode !== 'cos' && viewMode !== 'chart') {
+    // Option A (Radar) and Option B (Live Map) disabled for now; only Traffic Chart and COS remain active
+    if (viewMode !== 'cos' && viewMode !== 'chart') {
       viewMode = 'chart';
     }
     state.mapViewMode = viewMode;
@@ -3748,21 +3734,7 @@
     if (btnChart) btnChart.classList.remove('active');
     if (btnCos) btnCos.classList.remove('active');
 
-    if (viewMode === 'option-a' || viewMode === 'map') {
-      state.mapViewMode = 'option-a';
-      if (mapView) mapView.style.display = 'block';
-      if (btnOptA) btnOptA.classList.add('active');
-      if (collapseBtn) collapseBtn.style.display = 'inline-flex';
-      if (filterSelect) filterSelect.style.display = 'inline-block';
-      renderAllocationMap();
-    } else if (viewMode === 'option-b') {
-      state.mapViewMode = 'option-b';
-      if (liveMapPanel) liveMapPanel.style.display = 'flex';
-      if (btnOptB) btnOptB.classList.add('active');
-      if (collapseBtn) collapseBtn.style.display = 'none';
-      if (filterSelect) filterSelect.style.display = 'none';
-      renderOptionBMap();
-    } else if (viewMode === 'cos') {
+    if (viewMode === 'cos') {
       state.mapViewMode = 'cos';
       if (cosView) cosView.style.display = 'block';
       if (btnCos) btnCos.classList.add('active');
