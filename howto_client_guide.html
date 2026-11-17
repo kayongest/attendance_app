@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>aBilityTech — Client How-To Guide | aBility Attendance &amp; Access Manager</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 16mm 14mm 16mm 14mm;
+    @top-left {
+      content: "aBility Attendance & Access Manager — Client How-To Guide";
+      font-size: 7.8pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #64748b;
+    }
+    @top-right {
+      content: "aBilityTech • Client Operational Manual";
+      font-size: 7.8pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #7147eb;
+      font-weight: 700;
+    }
+    @bottom-left {
+      content: "Watermark: aBilityTech • Confidential Client Distribution";
+      font-size: 7.5pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #64748b;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #0f172a;
+      font-weight: 700;
+    }
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
+    background: #ffffff;
+    line-height: 1.46;
+    font-size: 9pt;
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* REPEATING ABILITYTECH WATERMARK ON EVERY PAGE */
+  .watermark-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .watermark-tile-grid {
+    position: absolute;
+    inset: -35%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 36px;
+    align-items: center;
+    justify-items: center;
+    transform: rotate(-30deg);
+  }
+
+  .watermark-stamp {
+    font-size: 26pt;
+    font-weight: 900;
+    letter-spacing: 2.5px;
+    color: rgba(113, 71, 235, 0.085);
+    user-select: none;
+    white-space: nowrap;
+    text-transform: none;
+  }
+
+  .watermark-center-hero {
+    position: relative;
+    transform: rotate(-30deg);
+    text-align: center;
+    border: 2px dashed rgba(113, 71, 235, 0.14);
+    border-radius: 16px;
+    padding: 14px 34px;
+    background: rgba(255, 255, 255, 0.01);
+  }
+
+  .watermark-center-brand {
+    font-size: 46pt;
+    font-weight: 900;
+    letter-spacing: 3px;
+    color: rgba(15, 23, 42, 0.075);
+    line-height: 1;
+  }
+
+  .watermark-center-brand span {
+    color: rgba(113, 71, 235, 0.12);
+  }
+
+  .watermark-center-sub {
+    margin-top: 6px;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: rgba(15, 23, 42, 0.09);
+  }
+
+  @media screen {
+    body {
+      background: #f1f5f9;
+      padding: 24px 0;
+    }
+    .page {
+      width: 210mm;
+      min-height: 277mm;
+      margin: 0 auto 20px auto;
+      background: #ffffff;
+      padding: 16mm 14mm;
+      box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+      border-radius: 6px;
+    }
+  }
+
+  .page {
+    page-break-after: always;
+    position: relative;
+    z-index: 1;
+  }
+  .page:last-child {
+    page-break-after: avoid;
+  }
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+
+  /* COVER STYLING */
+  .cover-container {
+    min-height: 245mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .cover-brand-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .brand-lockup {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand-name {
+    font-size: 14pt;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.3px;
+  }
+  .brand-name span {
+    color: #7147eb;
+  }
+  .cover-badge-top {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 8pt;
+    font-weight: 700;
+    color: #5b21b6;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+  .cover-title {
+    font-size: 26pt;
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1.15;
+    margin: 14px 0 10px 0;
+    letter-spacing: -0.7px;
+  }
+  .cover-subtitle {
+    font-size: 11.5pt;
+    font-weight: 500;
+    color: #475569;
+    line-height: 1.5;
+    max-width: 660px;
+    margin: 0 0 22px 0;
+  }
+  .cover-divider {
+    height: 4px;
+    background: linear-gradient(90deg, #7147eb, #2563eb, #16a34a, #d97706);
+    border-radius: 2px;
+    margin-bottom: 24px;
+  }
+
+  .cover-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 13px;
+    margin-bottom: 22px;
+  }
+  .cover-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 15px;
+  }
+  .cover-card-num {
+    display: inline-block;
+    font-size: 7.5pt;
+    font-weight: 800;
+    color: #7147eb;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 4px;
+  }
+  .cover-card h4 {
+    margin: 0 0 5px 0;
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .cover-card p {
+    margin: 0;
+    font-size: 8.3pt;
+    color: #64748b;
+    line-height: 1.42;
+  }
+
+  .toc-box {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .toc-title {
+    font-size: 8.5pt;
+    font-weight: 800;
+    color: #0f172a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .toc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 18px;
+    font-size: 8.3pt;
+    color: #334155;
+  }
+  .toc-item strong {
+    color: #7147eb;
+    margin-right: 4px;
+  }
+
+  .cover-footer {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 8.2pt;
+    color: #64748b;
+  }
+  .cover-footer strong {
+    color: #0f172a;
+  }
+
+  /* HEADINGS */
+  h1 {
+    font-size: 15.5pt;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 10px 0;
+    letter-spacing: -0.4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header-decor {
+    display: inline-block;
+    width: 6px;
+    height: 18px;
+    border-radius: 3px;
+    background: #7147eb;
+    flex-shrink: 0;
+  }
+  h2 {
+    font-size: 11.2pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 14px 0 6px 0;
+    letter-spacing: -0.2px;
+    border-bottom: 1.5px solid #e2e8f0;
+    padding-bottom: 4px;
+  }
+  h3 {
+    font-size: 9.6pt;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 10px 0 4px 0;
+  }
+  p {
+    margin: 0 0 8px 0;
+    color: #334155;
+    font-size: 8.8pt;
+  }
+  ul, ol {
+    margin: 4px 0 10px 0;
+    padding-left: 18px;
+    color: #334155;
+    font-size: 8.6pt;
+  }
+  li {
+    margin-bottom: 4px;
+  }
+
+  code, .ui-pill {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 8pt;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: #0f172a;
+  }
+  .ui-btn {
+    display: inline-block;
+    font-size: 7.8pt;
+    font-weight: 700;
+    background: #f5f3ff;
+    color: #5b21b6;
+    border: 1px solid #ddd6fe;
+    border-radius: 4px;
+    padding: 1px 6px;
+  }
+  kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 7.6pt;
+    font-weight: 700;
+    background: #0f172a;
+    color: #ffffff;
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  /* CALLOUTS */
+  .callout-box {
+    border-radius: 8px;
+    padding: 10px 13px;
+    margin: 9px 0;
+    border-left: 4px solid #7147eb;
+    background: #f5f3ff;
+    font-size: 8.4pt;
+    color: #1e293b;
+  }
+  .callout-box.blue {
+    border-left-color: #2563eb;
+    background: #eff6ff;
+  }
+  .callout-box.amber {
+    border-left-color: #d97706;
+    background: #fffbeb;
+  }
+  .callout-box.green {
+    border-left-color: #16a34a;
+    background: #f0fdf4;
+  }
+  .callout-box.red {
+    border-left-color: #dc2626;
+    background: #fef2f2;
+  }
+  .callout-title {
+    font-weight: 700;
+    font-size: 8.7pt;
+    margin-bottom: 3px;
+    color: #0f172a;
+  }
+
+  /* STEPS LIST */
+  .step-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 0 12px 0;
+  }
+  .step-card {
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 9px 12px;
+    background: #ffffff;
+  }
+  .step-circle {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: #7147eb;
+    color: #ffffff;
+    font-size: 8.5pt;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .step-body > strong {
+    display: block;
+    font-size: 9pt;
+    color: #0f172a;
+    margin-bottom: 2px;
+  }
+  .step-body p {
+    margin: 0;
+    font-size: 8.3pt;
+    color: #475569;
+  }
+
+  /* TABLES */
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 12px 0;
+    font-size: 8.1pt;
+  }
+  table.data-table th {
+    background: #0f172a;
+    color: #ffffff;
+    font-weight: 600;
+    text-align: left;
+    padding: 6px 9px;
+    font-size: 7.8pt;
+    letter-spacing: 0.3px;
+    border: 1px solid #0f172a;
+  }
+  table.data-table td {
+    padding: 6px 9px;
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+    color: #334155;
+  }
+  table.data-table tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  /* BADGES */
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 7.3pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+    white-space: nowrap;
+  }
+  .badge-green { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .badge-blue { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  .badge-amber { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .badge-red { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .badge-purple { background: #ede9fe; color: #5b21b6; border: 1px solid #ddd6fe; }
+
+  .two-col-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 8px 0 12px 0;
+  }
+  .mini-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #f8fafc;
+  }
+  .mini-card h4 {
+    margin: 0 0 4px 0;
+    font-size: 8.8pt;
+    color: #0f172a;
+  }
+  .mini-card p {
+    margin: 0;
+    font-size: 8pt;
+    color: #475569;
+  }
+</style>
+</head>
+<body>
+
+<!-- PERSISTENT WATERMARK LAYER (REPEATS ACROSS EVERY PRINTED PAGE) -->
+<div class="watermark-layer" aria-hidden="true">
+  <div class="watermark-tile-grid">
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+    <div class="watermark-stamp">aBilityTech</div>
+  </div>
+  <div class="watermark-center-hero">
+    <div class="watermark-center-brand">aBility<span>Tech</span></div>
+    <div class="watermark-center-sub">Client Distribution Copy</div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 1: COVER PAGE                                                     -->
+<!-- ====================================================================== -->
+<div class="page">
+  <div class="cover-container">
+    <div>
+      <div class="cover-brand-row">
+        <div class="brand-lockup">
+          <svg width="32" height="32" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="28" height="28" rx="7" fill="#7147EB"/>
+            <rect x="5" y="6.5" width="4" height="15" rx="2" fill="white"/>
+            <rect x="12" y="3.5" width="4" height="21" rx="2" fill="white"/>
+            <circle cx="21" cy="14" r="2" fill="white"/>
+          </svg>
+          <div class="brand-name">aBility<span>Tech</span></div>
+        </div>
+        <span class="cover-badge-top">Client Operational How-To Guide</span>
+      </div>
+
+      <h1 class="cover-title" style="display: block;">
+        How to Use the aBility Attendance &amp; Access Manager
+      </h1>
+      <p class="cover-subtitle">
+        A practical, step-by-step client guide covering sign-in, PIN-locked Gate Terminals, camera QR &amp; badge scanning, call-time punctuality, offline resilience, live roll-call, night-shift reporting, and shift relief approvals.
+      </p>
+
+      <div class="cover-divider"></div>
+
+      <div class="cover-grid">
+        <div class="cover-card">
+          <span class="cover-card-num">01 • Access &amp; Roles</span>
+          <h4>Role-Based Workspaces</h4>
+          <p>How Administrators, Site Managers, Technical Leads, and Gate Controllers navigate their tailored tools and clearance tiers.</p>
+        </div>
+        <div class="cover-card">
+          <span class="cover-card-num">02 • Frontline Scanning</span>
+          <h4>Gate Terminal &amp; Camera QR</h4>
+          <p>Unlock terminals with dedicated site PINs, scan via USB reader or tablet camera, and verify crew photos and equipment batches.</p>
+        </div>
+        <div class="cover-card">
+          <span class="cover-card-num">03 • Punctuality &amp; Safety</span>
+          <h4>Call-Times &amp; Live Roll-Call</h4>
+          <p>Adjust shift call-times on the fly, track Early / On-Time / Late arrivals, and pull instant on-site evacuation rosters.</p>
+        </div>
+        <div class="cover-card">
+          <span class="cover-card-num">04 • Continuity &amp; Reports</span>
+          <h4>Offline Queue &amp; Shift Exports</h4>
+          <p>Keep scanning even when venue Wi-Fi drops, manage Gate Controller shift relief, and export Night-Shift CSV or print sheets.</p>
+        </div>
+      </div>
+
+      <div class="toc-box">
+        <div class="toc-title">Inside This Guide</div>
+        <div class="toc-grid">
+          <div class="toc-item"><strong>1.</strong> Signing In &amp; Navigating the Workspace</div>
+          <div class="toc-item"><strong>5.</strong> Offline Scan Queue &amp; Night-Shift Reports</div>
+          <div class="toc-item"><strong>2.</strong> Operating the Gate Terminal (#pane-kiosk)</div>
+          <div class="toc-item"><strong>6.</strong> Users, Badges, Gates &amp; Shift Relief</div>
+          <div class="toc-item"><strong>3.</strong> Call-Times, Punctuality &amp; Access Rules</div>
+          <div class="toc-item"><strong>7.</strong> Quick Reference &amp; Troubleshooting</div>
+          <div class="toc-item"><strong>4.</strong> Live Dashboard, Map &amp; On-Site Roll-Call</div>
+          <div class="toc-item"><strong>—</strong> Interactive In-App Tour via Help (?)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <div>
+        <strong>Prepared By:</strong> aBilityTech Operations &amp; Delivery Team<br>
+        <strong>Platform:</strong> aBility Attendance &amp; Access Manager
+      </div>
+      <div style="text-align: right;">
+        <strong>Document Type:</strong> Client How-To Guide<br>
+        <strong>Watermark:</strong> aBilityTech • Verified Client Copy
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 2: SIGNING IN, WORKSPACE & ROLE SCOPE                             -->
+<!-- ====================================================================== -->
+<div class="page">
+  <h1><span class="header-decor"></span>1. Getting Started &amp; Signing In</h1>
+  <p>
+    Every team member signs into the portal using credentials issued by your organization's Administrator or Site Manager. The interface automatically adapts to your assigned role so frontline operators stay focused while managers retain full oversight.
+  </p>
+
+  <div class="step-cards">
+    <div class="step-card">
+      <div class="step-circle">1</div>
+      <div class="step-body">
+        <strong>Open the Portal &amp; Sign In</strong>
+        <p>Navigate to your deployment URL (<code>login.php</code>), enter your username or email and password, and submit to launch the active workspace (<code>index.php</code>).</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">2</div>
+      <div class="step-body">
+        <strong>Use the Top Bar Utilities Anytime</strong>
+        <p>Use <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> for quick staff/badge search, click the <strong>Theme Toggle</strong> (<kbd>Alt+T</kbd>) to switch between Light and Dark mode, open <strong>Gate Activity Alerts</strong> (bell icon) for real-time notifications, or click your profile avatar to inspect your badge or switch operators.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">3</div>
+      <div class="step-body">
+        <strong>Launch the Built-In Interactive Guided Tour</strong>
+        <p>Click the <strong>Help (?)</strong> icon in the top-right bar and select <span class="ui-btn">Interactive Guided Tour</span> to run a live spotlight walkthrough of either the Gate Dashboard or the Gate Terminal.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Who Sees What? (Role-Based Workspace Scope)</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 24%;">Role</th>
+        <th style="width: 34%;">Primary Screens</th>
+        <th style="width: 42%;">Key Capabilities</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Administrator / Director</strong></td>
+        <td>All Screens (Dashboard, Venues, Users &amp; Roles, Badges, Terminals, Facilities, Matrix)</td>
+        <td>Full system configuration, user &amp; clearance tier management (<code>L1–L4</code>), site PIN configuration, shift relief approvals, exports, and <span class="ui-btn">Reset Today’s Scans</span>.</td>
+      </tr>
+      <tr>
+        <td><strong>Site / Stock Manager</strong></td>
+        <td>Dashboard, Facilities &amp; Gates, Users (L1–L3 Scope), Terminals, Shift Relief</td>
+        <td>Manage facility gates and operating hours, onboard facility crew (<code>L1–L2</code>) and Gate Controllers (<code>L3</code>), view site PINs, and approve shift relief requests.</td>
+      </tr>
+      <tr>
+        <td><strong>Technical Lead / PM</strong></td>
+        <td>Dashboard, Venues &amp; Checkpoints, Users (Crew Scope), Terminals</td>
+        <td>Adjust event/venue call-times, monitor live roll-call, inspect late arrivals, and coordinate technical crew coverage.</td>
+      </tr>
+      <tr>
+        <td><strong>Gate Controller</strong><br><small style="color:#64748b;">(Tier L3 Operator)</small></td>
+        <td><strong>Terminals</strong> (<code>#pane-kiosk</code>) &amp; <strong>Staff ID Badges</strong></td>
+        <td>Locked to their assigned gate checkpoint for distraction-free badge scanning, photo verification, camera QR scanning, and submitting shift relief requests.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout-box">
+    <div class="callout-title">First-Time Operator Tip</div>
+    If you are signed in as a <strong>Gate Controller</strong>, the system automatically routes you directly to your assigned Gate Terminal so you do not have to search through administrative menus during busy crew check-in rushes.
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 3: OPERATING THE GATE TERMINAL (#pane-kiosk)                      -->
+<!-- ====================================================================== -->
+<div class="page">
+  <h1><span class="header-decor"></span>2. Operating the Gate Terminal (<code>#pane-kiosk</code>)</h1>
+  <p>
+    The <strong>Terminals</strong> screen is the frontline check-in/check-out station used at warehouses, loading bays, and event venue doors. Every terminal opens in a secure locked state until unlocked with the checkpoint's dedicated PIN.
+  </p>
+
+  <h2>Step-by-Step: Unlocking &amp; Scanning Crew</h2>
+  <div class="step-cards">
+    <div class="step-card">
+      <div class="step-circle">1</div>
+      <div class="step-body">
+        <strong>Unlock the Terminal Screen</strong>
+        <p>On entry, the terminal displays <em>Terminal Screen Locked</em> with the active facility name. Enter the checkpoint's dedicated <strong>Site Terminal PIN</strong> (provided by your Administrator or Site Manager) and click <span class="ui-btn">Unlock Terminal</span>.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">2</div>
+      <div class="step-body">
+        <strong>Verify Checkpoint &amp; Scan Mode</strong>
+        <p>Confirm the selected type (<strong>Stock Warehouse</strong> or <strong>Event Venue</strong>) and target checkpoint. Keep <strong>Scan Mode</strong> on <code>Auto (Smart Check-In / Check-Out)</code> for normal operations, or switch to <code>Force Check-In Only</code>, <code>Force Check-Out Only</code>, or <code>Verify Access Only</code> when needed.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">3</div>
+      <div class="step-body">
+        <strong>Scan a Staff Badge (3 Ways)</strong>
+        <p>
+          <strong>A. USB Barcode / RFID Scanner:</strong> Press <kbd>/</kbd> to focus the input field, scan the card, and press <kbd>Enter</kbd>.<br>
+          <strong>B. Tablet / Phone Camera:</strong> Click <span class="ui-btn">Camera Scan</span>, align the staff QR code or barcode inside the green reticle frame, and use <span class="ui-btn">Flip Camera</span> to switch front/rear lenses.<br>
+          <strong>C. Manual Entry:</strong> Type the badge code (e.g., <code>REW-BADGE-0006</code>, <code>ABL-006</code>) or staff name and click <span class="ui-btn">Verify &amp; Record</span>.
+        </p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">4</div>
+      <div class="step-body">
+        <strong>Confirm Visual Photo &amp; Equipment Custody</strong>
+        <p>The Verification Modal displays the person's headshot, full name, clearance badge, punctuality result, and any linked equipment batches. Visually match the face to the person at the gate to prevent buddy-punching.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">5</div>
+      <div class="step-body">
+        <strong>Lock the Terminal When Stepping Away</strong>
+        <p>Click <span class="ui-btn">Lock Screen</span> in the terminal header whenever leaving a kiosk unattended. Scanning and checkpoint switching stay disabled until the Site PIN is entered again.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col-grid avoid-break">
+    <div class="mini-card">
+      <h4>Managing Site Terminal PINs</h4>
+      <p>Administrators and Site Managers can click <span class="ui-btn">Site PINs</span> on the terminal header (or configure PINs when editing a Facility Gate) to inspect or update each checkpoint's dedicated unlock PIN.</p>
+    </div>
+    <div class="mini-card">
+      <h4>Anti-Passback Protection</h4>
+      <p>In <code>Auto</code> mode, a checked-in badge toggles cleanly to <code>Checked Out</code> on the next scan. In <code>Force Check-In</code>, attempting to check in an already checked-in badge is blocked to stop card hand-backs.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 4: CALL-TIME RULES, PUNCTUALITY & CLEARANCE MATRIX                -->
+<!-- ====================================================================== -->
+<div class="page">
+  <h1><span class="header-decor"></span>3. Call-Times, Punctuality &amp; Access Rules</h1>
+  <p>
+    Every scan is automatically evaluated against two live engines: <strong>Security Clearance Rules</strong> (whether the badge tier is authorized at that checkpoint) and <strong>Call-Time Punctuality</strong> (whether the crew member arrived on schedule).
+  </p>
+
+  <h2>How to Set or Extend Call-Time During Live Operations</h2>
+  <ul>
+    <li><strong>Quick Extensions on the Gate Terminal:</strong> In the <em>Active Shift Call-Time</em> bar above the scanner, click <span class="ui-btn">+15m</span>, <span class="ui-btn">+30m</span>, or <span class="ui-btn">+1h</span> to extend the shift call-time immediately, or click <span class="ui-btn">Reset</span> to return to the baseline schedule.</li>
+    <li><strong>Full Call-Time Configuration:</strong> Click <span class="ui-btn">Edit</span> on the quickbar or select <span class="ui-btn">Set Call Time</span> in the left sidebar to choose any checkpoint and enter an exact time. All subsequent scans evaluate against the updated time (with a standard <strong>15-minute grace window</strong>).</li>
+  </ul>
+
+  <h2>Understanding Scan &amp; Punctuality Statuses</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 22%;">Status</th>
+        <th style="width: 38%;">When It Triggers</th>
+        <th style="width: 40%;">What the Gate Operator Should Do</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-green">Early / On-Time</span></td>
+        <td>Badge checks in before Call-Time or within the +15-minute grace period.</td>
+        <td>Verify photo match and admit immediately. Shift clock starts cleanly.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-amber">Late Arrival</span></td>
+        <td>Badge scans after the Call-Time + 15-minute grace window expires.</td>
+        <td>Confirm whether the late arrival has supervisor authorization or log the variance per site policy.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-blue">Checked Out</span></td>
+        <td>Second scan at shift end (or in <code>Force Check-Out</code> mode).</td>
+        <td>Confirm any assigned equipment batches are accounted for before departure.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-red">Access Denied</span></td>
+        <td>Inactive/suspended badge, closed facility hours, or insufficient clearance tier for that checkpoint.</td>
+        <td>Do <strong>not</strong> admit. Check the denial reason displayed on-screen and escalate to the Site Manager or Admin.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4-Tier Physical Clearance Overview</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 14%;">Tier</th>
+        <th style="width: 26%;">Role Group</th>
+        <th style="width: 60%;">Default Checkpoint Access</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-green">Level 1</span></td>
+        <td><strong>Venue Crew</strong></td>
+        <td>Standard crew access for assigned Event Venues and general operational support during scheduled call-times.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-blue">Level 2</span></td>
+        <td><strong>Technical &amp; Stage</strong></td>
+        <td>Audio, lighting, video, and stage technicians with access to Event Venues, FOH/Backstage, and designated Stock dispatch gates.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-amber">Level 3</span></td>
+        <td><strong>Stock &amp; Gate Control</strong></td>
+        <td>Warehouse controllers and logistics operators with full access to Stock Warehouses, loading bays, and assigned venues.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-red">Level 4</span></td>
+        <td><strong>Executive / All-Access</strong></td>
+        <td>Unrestricted 24/7 entry across all Stock Warehouses, production vaults, backstage zones, and Event Venues.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 5: LIVE DASHBOARD, ALLOCATION MAP & ROLL-CALL                     -->
+<!-- ====================================================================== -->
+<div class="page">
+  <h1><span class="header-decor"></span>4. Live Dashboard, Allocation Map &amp; Roll-Call</h1>
+  <p>
+    Operations leads and Administrators use the <strong>Gate Dashboard</strong> (<code>Gate Operations &amp; Access Matrix</code>) to monitor real-time headcount, inspect gate traffic, and verify who is physically inside every venue or facility.
+  </p>
+
+  <h2>Using the Live Dashboard</h2>
+  <ol>
+    <li><strong>Monitor the 4 Live KPI Cards:</strong> Track <em>Active Badges</em>, <em>Currently On-Site</em>, <em>Daily Check-Ins</em>, and <em>Late / Denied Exceptions</em> in real time.</li>
+    <li><strong>Inspect the User Activity Timeline:</strong> Use the search box to find any technician, venue, or gate, and use the scope dropdown (<code>All Logs</code>, <code>Venues Only</code>, <code>Facility Gates Only</code>, <code>Access Granted</code>, <code>Access Denied</code>) to narrow down events.</li>
+    <li><strong>Open an Audit Record:</strong> Click any row in the User Activity Timeline to open the <strong>Gate Activity &amp; Transit Audit Record</strong> modal, where you can review scan timestamps, operator attribution, and any active transit workflow—and click history rows to switch between records.</li>
+  </ol>
+
+  <h2>Real-Time Personnel &amp; Facility Allocation Map</h2>
+  <p>
+    Positioned beside the Activity Timeline, the Allocation Map visualizes where crew members are currently checked in or in transit across active venues and logistics hubs:
+  </p>
+  <ul>
+    <li><strong>Switch Views:</strong> Toggle between the spatial <strong>Map</strong> layout and the <strong>Traffic</strong> view to inspect movement across checkpoints.</li>
+    <li><strong>Allocate &amp; Dispatch Personnel:</strong> Supervisors can click a facility/dispatch control to assign or dispatch crew members directly to a target checkpoint.</li>
+  </ul>
+
+  <h2>Emergency On-Site Crew Roll-Call</h2>
+  <div class="callout-box green avoid-break">
+    <div class="callout-title">How to Pull an Instant On-Site Headcount</div>
+    Click <span class="ui-btn">On-Site Roll-Call</span> in the left sidebar (or click the <strong>Currently On-Site</strong> KPI card, or select it from the <strong>Help (?)</strong> menu). The modal lists everyone currently checked inside the perimeter along with their checkpoint, role, and emergency contact details—ready for rapid muster verification during drills or incidents.
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 6: OFFLINE RESILIENCE & NIGHT-SHIFT REPORTING                     -->
+<!-- ====================================================================== -->
+<div class="page">
+  <h1><span class="header-decor"></span>5. Offline Scan Queue &amp; Night-Shift Reports</h1>
+  <p>
+    Live production environments—such as underground loading docks or outdoor festival grounds—can lose Wi-Fi or cellular signal. aBility Manager keeps gate operations running without data loss and supports overnight shift reporting.
+  </p>
+
+  <h2>How Offline Mode &amp; Sync Work</h2>
+  <div class="step-cards">
+    <div class="step-card">
+      <div class="step-circle">1</div>
+      <div class="step-body">
+        <strong>Automatic Offline Queueing</strong>
+        <p>If network connectivity drops, the Offline Sync Bar above the scanner switches to <strong>Offline Mode</strong>. Continue scanning badges normally—each scan is safely saved in the terminal's local queue with its exact local timestamp.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">2</div>
+      <div class="step-body">
+        <strong>Automatic or Manual Upload on Reconnect</strong>
+        <p>When internet returns, the terminal status flips back to <strong>Online</strong>. Pending scans sync automatically to the server, or you can click <span class="ui-btn">Sync Now</span> to flush the queue immediately while preserving original scan times.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout-box amber avoid-break">
+    <div class="callout-title">Important Offline Practice</div>
+    Do <strong>not</strong> clear your browser site data or private-browsing session while scans are still marked as pending sync. Wait until the pending count reaches <code>0</code> and shows synced.
+  </div>
+
+  <h2>Generating Night-Shift &amp; Multi-Day Attendance Reports</h2>
+  <p>
+    Above the User Activity Timeline on the Gate Dashboard, the <strong>Shift Report Toolbar</strong> lets supervisors filter and export attendance across day and overnight shifts:
+  </p>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 28%;">Report Window</th>
+        <th style="width: 72%;">When to Use &amp; How to Export</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Today (Live)</code></td>
+        <td>Default real-time view of all check-ins, check-outs, and denials for the current operational day.</td>
+      </tr>
+      <tr>
+        <td><code>Night Shift (18:00–09:00)</code></td>
+        <td>Captures overnight load-out, strike, and night-watch shifts spanning across midnight without splitting a shift into two separate days.</td>
+      </tr>
+      <tr>
+        <td><code>Last 7 Days</code></td>
+        <td>Weekly punctuality review across multi-day conferences, concerts, or warehouse build weeks.</td>
+      </tr>
+      <tr>
+        <td><code>Custom Dates</code></td>
+        <td>Pick exact <em>From</em> and <em>To</em> dates and click <span class="ui-btn">Apply</span> for event-specific payroll or client audits.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Once filtered, click <span class="ui-btn">Export CSV</span> to download a spreadsheet-ready file, or click <span class="ui-btn">Print</span> to generate a clean printable shift attendance sheet.
+  </p>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 7: USERS, BADGES, FACILITIES & SHIFT RELIEF WORKFLOWS             -->
+<!-- ====================================================================== -->
+<div class="page">
+  <h1><span class="header-decor"></span>6. Users, Badges, Gates &amp; Shift Relief</h1>
+
+  <h2>Managing Staff, Roles &amp; Clearance Matrix (<code>Users &amp; Roles</code>)</h2>
+  <ul>
+    <li><strong>Add a Team Member:</strong> Open <strong>Users &amp; Roles</strong> and click <span class="ui-btn">+ Add New User</span>. Fill in full name, department, role, clearance tier, badge code (e.g., <code>REW-BADGE-XXXX</code>), emergency contact, and upload a clear headshot for gate visual verification.</li>
+    <li><strong>Manage Roles, Tiers &amp; Departments:</strong> Switch sub-tabs between <em>Personnel Directory</em>, <em>Roles &amp; Clearance Matrix CRUD</em>, <em>Clearance Matrix</em>, and <em>Departments</em> to customize operational roles or export the full roster via <span class="ui-btn">Export Roster</span>.</li>
+  </ul>
+
+  <h2>Managing Facility Gates &amp; Event Venues</h2>
+  <ul>
+    <li><strong>Facility Gates (<code>Facilities &amp; Gates</code>):</strong> Administrators and Site Managers can click <span class="ui-btn">+ New Facility Gate</span> to register a warehouse or yard gate, set open/close hours, assign a controller contact, and set its dedicated <strong>Terminal PIN</strong>.</li>
+    <li><strong>Venues &amp; Checkpoints:</strong> View all active Venue and Facility gates, toggle <span class="ui-btn">Lock / Unlock Station</span>, or jump directly to the live scanner via <span class="ui-btn">Launch Gate Terminal</span>.</li>
+  </ul>
+
+  <h2>Shift Relief, Sick Leave &amp; Night-Shift Handovers</h2>
+  <p>
+    Because Gate Controllers are strictly locked to a single assigned terminal, any handover or temporary coverage goes through a tracked approval workflow:
+  </p>
+  <div class="step-cards">
+    <div class="step-card">
+      <div class="step-circle">1</div>
+      <div class="step-body">
+        <strong>Open the Shift Relief Modal</strong>
+        <p>Click <span class="ui-btn">Relief / Swap</span> on the Gate Terminal header, or click <span class="ui-btn">Shift Relief &amp; Swaps</span> in the left sidebar.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">2</div>
+      <div class="step-body">
+        <strong>Submit the Coverage Request</strong>
+        <p>Select the <strong>Target Gate / Venue Checkpoint</strong>, choose the <strong>Relief Reason</strong> (<em>Sick Leave Replacement</em>, <em>Shift Swap / Handover</em>, <em>High Workload Venue Backup</em>, <em>Night Shift Coverage</em>, or <em>New Terminal Assignment</em>), select the <strong>Incoming Gate Controller</strong>, optionally set start/end times and notes, and click <span class="ui-btn">Submit Relief Request</span>.</p>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-circle">3</div>
+      <div class="step-body">
+        <strong>Administrator / Site Manager Approval</strong>
+        <p>Approvers review the <em>Pending &amp; Recent Shift Relief Queue</em> (highlighted by the amber badge count in the sidebar) and approve or decline. Once approved, the incoming controller is immediately bound to that checkpoint.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- PAGE 8: QUICK REFERENCE & TROUBLESHOOTING                              -->
+<!-- ====================================================================== -->
+<div class="page">
+  <h1><span class="header-decor"></span>7. Quick Reference &amp; Troubleshooting</h1>
+
+  <h2>Keyboard Shortcuts &amp; Quick Controls</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 28%;">Shortcut / Button</th>
+        <th style="width: 72%;">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd></td>
+        <td>Focus the global topbar search bar to jump to staff members, badges, or checkpoints.</td>
+      </tr>
+      <tr>
+        <td><kbd>/</kbd> (on Terminals)</td>
+        <td>Focus the Gate Terminal barcode/badge input field immediately for scanning.</td>
+      </tr>
+      <tr>
+        <td><kbd>Enter</kbd></td>
+        <td>Submit the typed or scanned badge code for verification.</td>
+      </tr>
+      <tr>
+        <td><kbd>Alt+T</kbd></td>
+        <td>Toggle between Light Mode and Dark Mode across the entire app.</td>
+      </tr>
+      <tr>
+        <td><kbd>Esc</kbd></td>
+        <td>Close the currently open verification, audit, or management modal.</td>
+      </tr>
+      <tr>
+        <td><strong>Help (?) &rarr; Tour</strong></td>
+        <td>Replay the interactive Driver.js spotlight tour on any screen.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Common Gate Troubleshooting</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 30%;">Symptom</th>
+        <th style="width: 70%;">Recommended Resolution</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Terminal says "Screen Locked"</strong></td>
+        <td>Enter the checkpoint's dedicated Site PIN and click <span class="ui-btn">Unlock Terminal</span>. If forgotten, ask an Administrator or Site Manager to check <strong>Site PINs</strong>.</td>
+      </tr>
+      <tr>
+        <td><strong>Camera QR scanner won't start</strong></td>
+        <td>Ensure the terminal is unlocked first, allow camera permission in your browser prompt, and access the site over <code>HTTPS</code> or <code>localhost</code>. Use <span class="ui-btn">Flip Camera</span> if the wrong lens opens.</td>
+      </tr>
+      <tr>
+        <td><strong>Scan shows "Access Denied"</strong></td>
+        <td>Check the reason banner: the badge may belong to a clearance tier below the gate's requirement (e.g., <code>L1</code> at a warehouse), be outside operating hours, or be inactive. Contact the Site Manager before permitting entry.</td>
+      </tr>
+      <tr>
+        <td><strong>Internet dropped at the gate</strong></td>
+        <td>Keep scanning—the Offline Sync Bar automatically queues scans locally. Once signal returns, click <span class="ui-btn">Sync Now</span> and confirm the pending counter drops to <code>0</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Controller needs to cover a different gate</strong></td>
+        <td>Gate Controllers cannot switch gates manually. Submit a request via <span class="ui-btn">Relief / Swap</span> so an Administrator or Site Manager can approve the reassignment.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout-box blue" style="margin-top: 16px;">
+    <div class="callout-title">Need a Live Walkthrough?</div>
+    Click <strong>Help (?) &rarr; Interactive Guided Tour</strong> inside the aBility Attendance &amp; Access Manager at any time for an interactive on-screen walkthrough tailored to your active screen.
+  </div>
+
+  <div style="margin-top: 28px; padding-top: 12px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; font-size: 8.2pt; color: #64748b;">
+    <div>
+      <strong>Document Owner:</strong> aBilityTech Client Delivery &amp; Support<br>
+      <strong>System:</strong> aBility Attendance &amp; Access Manager
+    </div>
+    <div style="text-align: right;">
+      <strong>Watermark:</strong> aBilityTech<br>
+      <strong>Classification:</strong> Client Operational How-To Guide
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
