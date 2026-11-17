@@ -1741,8 +1741,8 @@
       setVis(btnStationLock, isAdmin);
       // Reset Today's Scans: Admin ONLY
       setVis(btnResetDemo, isAdmin);
-      // Share Technician On-Site Link: Admin ONLY
-      setVis(btnOnsiteShare, isAdmin);
+      // Unified Standalone Gates & On-Site Portal Links
+      setVis(btnOnsiteShare, isAdmin || isManager || isTech || isStockMgr || isStockCtrl);
     }
     if (btnResetDemo && !isAdmin) {
       btnResetDemo.style.display = 'none';
@@ -5866,6 +5866,20 @@
           ? `<span class="status-badge status-badge-green-sm">Active Operational</span>`
           : `<span class="status-badge status-badge-amber-sm">Inactive / Closed</span>`;
 
+        const wCode = String(w.code || '').toUpperCase().trim();
+        const wNameLower = String(w.name || '').toLowerCase();
+        let gateHref = `gate.php?wh_id=${encodeURIComponent(w.id)}`;
+        if (wCode === 'NDR-STK' || wNameLower.includes('ndera')) {
+          gateHref = 'ndera-gate.php';
+        } else if (wCode === 'BKA-STK' || wNameLower.includes('bk arena')) {
+          gateHref = 'bk-arena-gate.php';
+        } else if (wCode === 'KCC-STK' || wNameLower.includes('kcc') || wNameLower.includes('convention')) {
+          gateHref = 'kcc-gate.php';
+        }
+        const gatePillHtml = w.is_active
+          ? `<a href="${gateHref}" target="_blank" rel="noopener noreferrer" class="wh-stored-pill" style="text-decoration: none; color: #4f46e5; font-weight: 700;">Gate Terminal ↗</a>`
+          : `<span class="wh-stored-pill" style="opacity: 0.65;">Gate Offline</span>`;
+
         return `
         <div class="wh-card">
           <div class="wh-card-banner">
@@ -5894,7 +5908,7 @@
               </div>
             </div>
             <div class="wh-card-footer">
-              <span class="wh-stored-pill">${w.item_count} items stored</span>
+              ${gatePillHtml}
               <div style="display: flex; gap: 6px;">
                 <button type="button" class="btn btn-secondary-32-sm js-edit-wh-btn" data-wh-id="${w.id}">
                   Edit
@@ -8451,9 +8465,17 @@
         return;
       }
 
-      if (action === 'action:onsite-share' || action === 'onsite-share') {
-        if (!isCurrentUserAdmin() && !isCurrentUserStockManager() && !isCurrentUserTechLead()) {
-          showToast('Access Restricted: Managing Technician On-Site links requires Administrator or Supervisor privileges.');
+      if (action === 'action:onsite-share' || action === 'onsite-share' || action === 'action:standalone-portals') {
+        const rawRole = String(state.currentUser?.role || '').trim().toLowerCase();
+        const isAllowedPortalViewer =
+          isCurrentUserAdmin() ||
+          isCurrentUserStockManager() ||
+          isCurrentUserTechLead() ||
+          rawRole === 'manager' ||
+          rawRole === 'project_manager' ||
+          isCurrentUserStockController();
+        if (!isAllowedPortalViewer) {
+          showToast('Access Restricted: Opening standalone gate & on-site portals requires Controller, Supervisor, or Administrator privileges.');
           return;
         }
         if (typeof openOnsiteShareModal === 'function') {
@@ -10587,9 +10609,25 @@
       if (!onsiteShareModal) return;
       if (onsitePwdInp) onsitePwdInp.value = '';
       updateOnsiteInvitePreview('', '');
+
+      const gateNderaInp = document.getElementById('portal-ndera-url-input');
+      const gateBkInp = document.getElementById('portal-bk-url-input');
+      const gateKccInp = document.getElementById('portal-kcc-url-input');
+      if (gateNderaInp) gateNderaInp.value = buildOnsiteShareUrl('ndera-gate.php');
+      if (gateBkInp) gateBkInp.value = buildOnsiteShareUrl('bk-arena-gate.php');
+      if (gateKccInp) gateKccInp.value = buildOnsiteShareUrl('kcc-gate.php');
+
       const fallbackUrl = buildOnsiteShareUrl('onsite.php');
       if (onsiteUrlInp) onsiteUrlInp.value = fallbackUrl;
       onsiteShareModal.classList.add('open');
+
+      if (isCurrentUserStockController()) {
+        if (onsiteAdminCtrls) onsiteAdminCtrls.style.display = 'none';
+        if (onsiteSaveBtn) onsiteSaveBtn.style.display = 'none';
+        if (onsiteRevokeBtn) onsiteRevokeBtn.style.display = 'none';
+        return;
+      }
+      if (onsiteAdminCtrls) onsiteAdminCtrls.style.display = '';
 
       try {
         const res = await fetch('api.php?action=get_onsite_share_config');
@@ -10631,6 +10669,23 @@
 
     document.querySelectorAll('.js-close-onsite-share-modal').forEach((btn) => {
       btn.addEventListener('click', () => onsiteShareModal?.classList.remove('open'));
+    });
+
+    document.querySelectorAll('.js-copy-portal-url').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const targetId = btn.getAttribute('data-copy-target') || '';
+        const label = btn.getAttribute('data-copy-label') || 'Link';
+        const inp = targetId ? document.getElementById(targetId) : null;
+        const val = inp ? inp.value : '';
+        if (!val) return;
+        try {
+          await navigator.clipboard.writeText(val);
+          showToast(`${label} copied to clipboard!`);
+        } catch (_) {
+          if (inp) { inp.select(); document.execCommand('copy'); }
+          showToast(`${label} copied!`);
+        }
+      });
     });
 
     const copyUrlBtn = document.getElementById('onsite-copy-url-btn');

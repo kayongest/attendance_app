@@ -632,3 +632,54 @@ function seedUsersTableIfEmpty(PDO $pdo): void
         }
     } catch (Throwable $e) {}
 }
+
+function resolveWarehouseTerminalPin(array $row): string
+{
+    return trim((string) ($row['terminal_pin'] ?? ''));
+}
+
+function resolveStandaloneFacilityGate(PDO $pdo, string $siteKey = '', int $whId = 0): ?array
+{
+    $norm = strtolower(trim($siteKey));
+    if ($whId > 0) {
+        $st = $pdo->prepare("SELECT * FROM `stock_locations` WHERE `id` = ? AND `is_active` = 1 LIMIT 1");
+        $st->execute([$whId]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return $row;
+        }
+    }
+
+    if ($norm === 'ndera' || $norm === 'ndera-warehouse' || $norm === 'ndr') {
+        $st = $pdo->query("SELECT * FROM `stock_locations` WHERE `is_active` = 1 AND (UPPER(`code`) = 'NDR-STK' OR UPPER(`location_code`) = 'NDR' OR LOWER(`name`) LIKE '%ndera%') ORDER BY `id` ASC LIMIT 1");
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row) return $row;
+    } elseif ($norm === 'bk-arena' || $norm === 'bk_arena' || $norm === 'bkarena' || $norm === 'bka') {
+        $st = $pdo->query("SELECT * FROM `stock_locations` WHERE `is_active` = 1 AND (UPPER(`code`) = 'BKA-STK' OR UPPER(`location_code`) = 'BKA' OR LOWER(`name`) LIKE '%bk arena%') ORDER BY `id` ASC LIMIT 1");
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row) return $row;
+    } elseif ($norm === 'kcc' || $norm === 'kigali-convention-centre' || $norm === 'kcc-gate') {
+        $st = $pdo->query("SELECT * FROM `stock_locations` WHERE `is_active` = 1 AND (UPPER(`code`) = 'KCC-STK' OR UPPER(`location_code`) = 'KCC' OR LOWER(`name`) LIKE '%kcc%' OR LOWER(`name`) LIKE '%convention%') ORDER BY `id` ASC LIMIT 1");
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row) return $row;
+    }
+
+    return null;
+}
+
+function isStandaloneGateAuthorized(PDO $pdo, array $whRow): bool
+{
+    $wid = (int) ($whRow['id'] ?? 0);
+    if ($wid <= 0) {
+        return false;
+    }
+    $expectedPin = resolveWarehouseTerminalPin($whRow);
+    if ($expectedPin === '') {
+        return false;
+    }
+    $map = $_SESSION['standalone_gate_auth'] ?? [];
+    if (!is_array($map) || empty($map[$wid])) {
+        return false;
+    }
+    return hash_equals(sha1($expectedPin), (string) $map[$wid]);
+}

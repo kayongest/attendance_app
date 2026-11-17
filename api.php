@@ -774,18 +774,18 @@ function getDefaultNavigationItems(): array
         ],
         [
             'nav_group' => 'workspace',
-            'nav_key' => 'share_onsite_link',
-            'label' => 'Share On-Site Link',
+            'nav_key' => 'standalone_portals',
+            'label' => 'Gates & On-Site',
             'nav_target' => 'action:onsite-share',
             'dom_id' => 'sidebar-onsite-share-btn',
             'node_id' => '',
-            'icon' => 'assets/key-round-13.svg',
+            'icon' => 'assets/scan-line-13.svg',
             'active_icon' => '',
             'icon_id' => '',
-            'badge_type' => 'none',
+            'badge_type' => 'custom',
             'badge_id' => '',
-            'badge_text' => '',
-            'allowed_roles' => 'admin,administrator',
+            'badge_text' => '04',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,tech_lead,technical_lead,stock_controller',
             'sort_order' => 6,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -908,6 +908,53 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
                 VALUES ('workspace', 'share_onsite_link', 'Share On-Site Link', 'action:onsite-share', 'sidebar-onsite-share-btn', '', 'assets/key-round-13.svg', '', '', 'none', '', '', 'admin,administrator', 6, 1, 1)
             ")->execute();
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_share_onsite_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+
+        // One-time migration: add Ndera Warehouse, BK Arena, and KCC standalone gate links to Checkpoint Controls sidebar
+        $migGates = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_standalone_gates_v1' LIMIT 1");
+        $migGates->execute();
+        if (!$migGates->fetchColumn()) {
+            $gateRoles = 'admin,administrator,manager,project_manager,stock_manager,tech_lead,technical_lead,stock_controller';
+            $gateIns = $pdo->prepare("
+                INSERT IGNORE INTO `navigation_items`
+                (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
+                VALUES ('workspace', ?, ?, ?, ?, '', 'assets/scan-line-13.svg', '', '', 'none', '', '', ?, ?, 1, 1)
+            ");
+            foreach ([
+                ['gate_ndera', 'Ndera Warehouse Gate', 'ndera-gate.php', 'sidebar-gate-ndera-btn', $gateRoles, 7],
+                ['gate_bk_arena', 'BK Arena Gate', 'bk-arena-gate.php', 'sidebar-gate-bk-arena-btn', $gateRoles, 8],
+                ['gate_kcc', 'KCC Gate', 'kcc-gate.php', 'sidebar-gate-kcc-btn', $gateRoles, 9],
+            ] as $gateRow) {
+                $gateIns->execute($gateRow);
+            }
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_standalone_gates_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+
+        // One-time migration: consolidate 3 standalone gates + onsite.php share link into ONE sidebar nav-item
+        $migUnified = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_unified_portals_v1' LIMIT 1");
+        $migUnified->execute();
+        if (!$migUnified->fetchColumn()) {
+            $pdo->prepare("DELETE FROM `navigation_items` WHERE `is_system` = 1 AND `nav_key` IN ('gate_ndera', 'gate_bk_arena', 'gate_kcc')")->execute();
+            $unifiedRoles = 'admin,administrator,manager,project_manager,stock_manager,tech_lead,technical_lead,stock_controller';
+            $upStmtUnified = $pdo->prepare("
+                UPDATE `navigation_items`
+                SET `nav_key` = 'standalone_portals',
+                    `label` = 'Gates & On-Site',
+                    `nav_target` = 'action:onsite-share',
+                    `dom_id` = 'sidebar-onsite-share-btn',
+                    `icon` = 'assets/scan-line-13.svg',
+                    `badge_type` = 'custom',
+                    `badge_text` = '04',
+                    `allowed_roles` = ?
+                WHERE `nav_key` = 'share_onsite_link'
+            ");
+            $upStmtUnified->execute([$unifiedRoles]);
+            $pdo->prepare("
+                INSERT IGNORE INTO `navigation_items`
+                (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
+                VALUES ('workspace', 'standalone_portals', 'Gates & On-Site', 'action:onsite-share', 'sidebar-onsite-share-btn', '', 'assets/scan-line-13.svg', '', '', 'custom', '', '04', ?, 6, 1, 1)
+            ")->execute([$unifiedRoles]);
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_unified_portals_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
     } catch (Throwable $e) {}
 }
@@ -1355,11 +1402,6 @@ function verifyTerminalPinSecret(string $inputPin, string $storedSecret): bool
         return password_verify($candidate, $expected);
     }
     return hash_equals($expected, $candidate);
-}
-
-function resolveWarehouseTerminalPin(array $row): string
-{
-    return trim((string) ($row['terminal_pin'] ?? ''));
 }
 
 function getSessionCsrfToken(): string
@@ -2280,6 +2322,306 @@ function findCrewMemberByScanInput(array $crew, string $scanInput): ?array
     return null;
 }
 
+function executeGateScan(
+    PDO $pdo,
+    string $activeDb,
+    array $activeCp,
+    array $targetMember,
+    string $scanMode = 'auto',
+    int $scannedBy = 0,
+    ?int $effectiveTs = null,
+    bool $isOfflineSync = false
+): array {
+    $effectiveTs = $effectiveTs ?? time();
+    $effectiveScannedAtSql = date('Y-m-d H:i:s', $effectiveTs);
+    $effectiveDateStr = date('Y-m-d', $effectiveTs);
+
+    $cpType = (string) ($activeCp['type'] ?? 'stock_warehouse');
+    $cpId = (int) ($activeCp['id'] ?? 1);
+    $cpName = (string) ($activeCp['name'] ?? 'Facility Gate');
+    $callTime = (string) ($activeCp['call_time'] ?? '08:00');
+
+    $eval = evaluateCheckpointAccess($targetMember, $cpType, $cpId);
+    $allowed = (bool) $eval['allowed'];
+    $reason = (string) $eval['reason'];
+
+    $isCrossFacilityTransfer = false;
+    $prevFacilityName = null;
+
+    if (!$allowed) {
+        $resolvedAction = 'access_verify';
+        $accessStatus = 'denied';
+        $denialReason = $reason;
+    } else {
+        $accessStatus = 'granted';
+        $denialReason = null;
+
+        $isCurrentlyCheckedIn = ($targetMember['daily_state'] === 'checked_in');
+        $prevCpType = (string) ($targetMember['last_checkpoint_type'] ?? '');
+        $prevCpId = (int) ($targetMember['last_checkpoint_id'] ?? 0);
+        $prevCpName = (string) ($targetMember['last_checkpoint_name'] ?? '');
+
+        $isCrossFacilityTransfer = $isCurrentlyCheckedIn && (
+            ($prevCpType !== '' && $prevCpType !== $cpType) ||
+            ($prevCpId > 0 && $prevCpId !== $cpId)
+        );
+
+        if ($scanMode === 'check_out' && !$isCurrentlyCheckedIn) {
+            return [
+                'ok' => false,
+                'allowed' => false,
+                'error' => "{$targetMember['full_name']} is already checked out (not currently checked in).",
+            ];
+        }
+        if ($scanMode === 'check_in' && $isCurrentlyCheckedIn && !$isCrossFacilityTransfer) {
+            return [
+                'ok' => false,
+                'allowed' => false,
+                'error' => "{$targetMember['full_name']} is already checked in at {$cpName}.",
+            ];
+        }
+
+        if ($scanMode !== 'verify_only') {
+            $recentStmt = $pdo->prepare("
+                SELECT `scan_action`, `punctuality_status`, `notes`, `scanned_at`
+                FROM `attendance_logs`
+                WHERE `user_id` = ? AND `checkpoint_type` = ? AND `checkpoint_id` = ?
+                  AND `access_status` = 'granted'
+                  AND `scan_action` IN ('check_in', 'check_out')
+                  AND ABS(TIMESTAMPDIFF(SECOND, `scanned_at`, ?)) <= 5
+                ORDER BY `id` DESC
+                LIMIT 1
+            ");
+            $recentStmt->execute([(int) $targetMember['id'], $cpType, $cpId, $effectiveScannedAtSql]);
+            $recentScan = $recentStmt->fetch(PDO::FETCH_ASSOC);
+            if ($recentScan) {
+                $recentAction = (string) $recentScan['scan_action'];
+                $currentPayload = buildFullPayload($pdo, $activeDb, $cpType, $cpId);
+                $verification = buildVerificationCardPayload(
+                    $pdo,
+                    $targetMember,
+                    $cpType,
+                    $cpId,
+                    $cpName,
+                    [
+                        'allowed' => true,
+                        'reason' => ($recentAction === 'check_out' ? 'Already checked out' : 'Already checked in') . " at {$cpName} (recent scan preserved)",
+                        'action' => $recentAction,
+                        'punctuality' => (string) ($recentScan['punctuality_status'] ?? 'on_time'),
+                        'punctuality_label' => $recentAction === 'check_out' ? 'SHIFT CHECK-OUT' : ($targetMember['punctuality'] ?? 'ON TIME'),
+                        'scanned_at' => date('H:i:s', strtotime((string) $recentScan['scanned_at']) ?: $effectiveTs),
+                        'check_in_time' => $targetMember['check_in_full'] ?? null,
+                        'check_out_time' => $targetMember['check_out_full'] ?? null,
+                    ]
+                );
+                $verification['duplicate_prevented'] = true;
+                $verification['bootstrap'] = $currentPayload;
+                return $verification;
+            }
+        }
+
+        if ($isCrossFacilityTransfer) {
+            $prevFacilityName = $prevCpName ?: ($prevCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
+            $transitOutNotes = "Transit departure → Transferred to {$cpName}";
+
+            $transitOutStmt = $pdo->prepare("
+                INSERT INTO `attendance_logs`
+                  (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+                VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'on_time', ?, ?, ?)
+            ");
+            $transitOutStmt->execute([
+                (int) $targetMember['id'],
+                (string) $targetMember['badge_code'],
+                $prevCpType ?: ($cpType === 'event_venue' ? 'stock_warehouse' : 'event_venue'),
+                $prevCpId ?: 1,
+                $prevFacilityName,
+                $scannedBy,
+                $transitOutNotes,
+                $effectiveScannedAtSql,
+            ]);
+
+            $resolvedAction = 'check_in';
+            $reason = "Authorized for {$cpName} — Arrived on site from {$prevFacilityName}";
+        } elseif ($scanMode === 'verify_only') {
+            $resolvedAction = 'access_verify';
+        } elseif ($scanMode === 'check_in') {
+            $resolvedAction = 'check_in';
+        } elseif ($scanMode === 'check_out') {
+            $resolvedAction = 'check_out';
+        } else {
+            $resolvedAction = $isCurrentlyCheckedIn ? 'check_out' : 'check_in';
+        }
+    }
+
+    $scheduledTs = strtotime($effectiveDateStr . ' ' . $callTime . ':00') ?: strtotime($effectiveDateStr . ' 08:00:00');
+    if (!$allowed) {
+        $punctuality = 'n/a';
+        $punctualityLabel = 'ACCESS RESTRICTED';
+    } elseif ($resolvedAction === 'check_out') {
+        $punctuality = 'on_time';
+        $punctualityLabel = 'SHIFT CHECK-OUT';
+    } else {
+        $diffMinutes = ($effectiveTs - $scheduledTs) / 60;
+        if ($diffMinutes < -10) {
+            $punctuality = 'early';
+            $punctualityLabel = 'EARLY ARRIVAL';
+        } elseif ($diffMinutes <= 15) {
+            $punctuality = 'on_time';
+            $punctualityLabel = 'ON TIME';
+        } else {
+            $punctuality = 'late';
+            $punctualityLabel = 'LATE CALL-TIME';
+        }
+    }
+
+    $noteText = $allowed
+        ? ($isCrossFacilityTransfer
+            ? "Arrived on site from {$prevFacilityName}"
+            : ($resolvedAction === 'check_out'
+                ? "Gate Check-Out recorded at {$cpName}"
+                : ($resolvedAction === 'access_verify'
+                    ? "Clearance verified at {$cpName}"
+                    : "Gate Check-In recorded at {$cpName}")))
+        : "Denied at {$cpName}: {$reason}";
+    if ($isOfflineSync) {
+        $noteText .= ' [Synced Offline]';
+    }
+
+    $insStmt = $pdo->prepare("
+        INSERT INTO `attendance_logs`
+          (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+    $insStmt->execute([
+        (int) $targetMember['id'],
+        (string) $targetMember['badge_code'],
+        $cpType,
+        $cpId,
+        $cpName,
+        $resolvedAction,
+        $accessStatus,
+        $denialReason,
+        $punctuality,
+        $scannedBy,
+        $noteText,
+        $effectiveScannedAtSql,
+    ]);
+
+    $updatedPayload = buildFullPayload($pdo, $activeDb, $cpType, $cpId);
+    $updatedMember = findCrewMemberByScanInput($updatedPayload['crew'], (string) $targetMember['id']) ?? $targetMember;
+
+    $verification = buildVerificationCardPayload(
+        $pdo,
+        $updatedMember,
+        $cpType,
+        $cpId,
+        $cpName,
+        [
+            'allowed' => $allowed,
+            'reason' => $reason,
+            'action' => $resolvedAction,
+            'punctuality' => $punctuality,
+            'punctuality_label' => $punctualityLabel,
+            'scanned_at' => date('H:i:s', $effectiveTs),
+            'is_transit_transfer' => $isCrossFacilityTransfer,
+            'transit_from' => $isCrossFacilityTransfer ? $prevFacilityName : null,
+            'transit_to' => $isCrossFacilityTransfer ? $cpName : null,
+            'check_in_time' => $updatedMember['check_in_full'] ?? ($resolvedAction === 'check_in' ? date('h:i:s A', $effectiveTs) : null),
+            'check_out_time' => $updatedMember['check_out_full'] ?? ($resolvedAction === 'check_out' ? date('h:i:s A', $effectiveTs) : null),
+        ]
+    );
+
+    $verification['bootstrap'] = $updatedPayload;
+    return $verification;
+}
+
+function buildStandaloneGateFeedPayload(array $fullPayload, array $whRow): array
+{
+    $wid = (int) ($whRow['id'] ?? 1);
+    $gateMeta = null;
+    foreach (($fullPayload['checkpoints']['stock_warehouses'] ?? []) as $sw) {
+        if ((int) ($sw['id'] ?? 0) === $wid) {
+            $gateMeta = $sw;
+            break;
+        }
+    }
+    if (!$gateMeta) {
+        $gateMeta = [
+            'id' => $wid,
+            'type' => 'stock_warehouse',
+            'name' => (string) ($whRow['name'] ?? 'Facility Gate'),
+            'code' => (string) ($whRow['code'] ?? 'STK'),
+            'location' => (string) ($whRow['location'] ?? 'Kigali'),
+            'open_time' => substr((string) ($whRow['open_time'] ?? '08:00:00'), 0, 5),
+            'close_time' => substr((string) ($whRow['close_time'] ?? '18:00:00'), 0, 5),
+            'call_time' => substr((string) ($whRow['open_time'] ?? '08:00:00'), 0, 5),
+            'controller_name' => (string) ($whRow['controller_name'] ?? ''),
+            'on_site_now' => 0,
+            'checked_in_today' => 0,
+            'denied_today' => 0,
+        ];
+    }
+    unset($gateMeta['terminal_pin']);
+
+    $crew = [];
+    foreach (($fullPayload['crew'] ?? []) as $c) {
+        if ((int) ($c['is_active'] ?? 1) === 0) {
+            continue;
+        }
+        $crew[] = [
+            'id' => (int) ($c['id'] ?? 0),
+            'full_name' => (string) ($c['full_name'] ?? ''),
+            'username' => (string) ($c['username'] ?? ''),
+            'role' => (string) ($c['role'] ?? 'user'),
+            'role_display' => (string) ($c['role_display'] ?? ''),
+            'department' => (string) ($c['department'] ?? ''),
+            'phone' => (string) ($c['phone'] ?? ''),
+            'initials' => (string) ($c['initials'] ?? 'U'),
+            'profile_image_url' => $c['profile_image_url'] ?? null,
+            'badge_code' => (string) ($c['badge_code'] ?? ''),
+            'rfid_uid' => (string) ($c['rfid_uid'] ?? ''),
+            'clearance_code' => (string) ($c['clearance_code'] ?? 'L1'),
+            'clearance_color' => (string) ($c['clearance_color'] ?? '#64748b'),
+            'badge_status' => (string) ($c['badge_status'] ?? 'active'),
+            'stock_authorized' => (bool) ($c['stock_authorized'] ?? false),
+            'checkpoint_authorized' => (bool) ($c['checkpoint_authorized'] ?? false),
+            'checkpoint_auth_reason' => (string) ($c['checkpoint_auth_reason'] ?? ''),
+            'daily_state' => (string) ($c['daily_state'] ?? 'ready'),
+            'check_in_time' => $c['check_in_time'] ?? null,
+            'check_out_time' => $c['check_out_time'] ?? null,
+            'last_checkpoint_type' => $c['last_checkpoint_type'] ?? null,
+            'last_checkpoint_id' => $c['last_checkpoint_id'] ?? null,
+            'last_checkpoint_name' => $c['last_checkpoint_name'] ?? null,
+            'punctuality' => (string) ($c['punctuality'] ?? 'READY'),
+        ];
+    }
+
+    $recentLogs = [];
+    foreach (($fullPayload['activityTimeline'] ?? []) as $tl) {
+        if (($tl['checkpoint_type'] ?? '') === 'stock_warehouse' && (int) ($tl['checkpoint_id'] ?? 0) === $wid) {
+            $recentLogs[] = [
+                'id' => (int) ($tl['id'] ?? 0),
+                'full_name' => (string) ($tl['full_name'] ?? ''),
+                'badge_code' => (string) ($tl['badge_code'] ?? ''),
+                'clearance_code' => (string) ($tl['clearance_code'] ?? ''),
+                'action_title' => (string) ($tl['action_title'] ?? ''),
+                'access_status' => (string) ($tl['access_status'] ?? 'granted'),
+                'formatted_time' => (string) ($tl['formatted_time'] ?? ''),
+            ];
+            if (count($recentLogs) >= 8) break;
+        }
+    }
+
+    return [
+        'ok' => true,
+        'authorized' => true,
+        'generated_at' => date('h:i:s A'),
+        'gate' => $gateMeta,
+        'crew' => $crew,
+        'recentLogs' => $recentLogs,
+    ];
+}
+
 try {
     $activeDb = '';
     $pdo = getDbConnection($activeDb);
@@ -2296,7 +2638,19 @@ try {
     $reqCpId = (int) ($_GET['checkpoint_id'] ?? $_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? 1);
 
     // P0 Security Gate: Require active authenticated session for all protected endpoints
-    $publicActions = ['login', 'logout', 'auth_status', 'get_current_user', 'onsite_portal_login', 'onsite_portal_logout', 'onsite_public_feed'];
+    $publicActions = [
+        'login',
+        'logout',
+        'auth_status',
+        'get_current_user',
+        'onsite_portal_login',
+        'onsite_portal_logout',
+        'onsite_public_feed',
+        'standalone_gate_unlock',
+        'standalone_gate_lock',
+        'standalone_gate_feed',
+        'standalone_gate_scan',
+    ];
     if (!in_array($action, $publicActions, true) && empty($_SESSION['auth_user_id'])) {
         http_response_code(401);
         echo json_encode([
@@ -2311,7 +2665,7 @@ try {
     if (
         strtoupper((string) $method) === 'POST'
         && !empty($_SESSION['auth_user_id'])
-        && !in_array($action, ['login', 'logout', 'onsite_portal_login', 'onsite_portal_logout'], true)
+        && !in_array($action, ['login', 'logout', 'onsite_portal_login', 'onsite_portal_logout', 'standalone_gate_unlock', 'standalone_gate_lock'], true)
         && !validateCsrfForAuthenticatedPost($jsonBody)
     ) {
         http_response_code(403);
@@ -2425,6 +2779,199 @@ try {
             'rollCallList' => $rc,
             'checkpoints' => $cpSummaries,
         ]);
+        exit;
+    }
+
+    if ($action === 'standalone_gate_unlock') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $siteKey = trim((string) ($_POST['site_key'] ?? $jsonBody['site_key'] ?? $_GET['site_key'] ?? ''));
+        $whId = (int) ($_POST['wh_id'] ?? $jsonBody['wh_id'] ?? $_GET['wh_id'] ?? 0);
+        $pin = trim((string) ($_POST['pin'] ?? $jsonBody['pin'] ?? ''));
+
+        $whRow = resolveStandaloneFacilityGate($pdo, $siteKey, $whId);
+        if (!$whRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Facility gate terminal was not found or is inactive.']);
+            exit;
+        }
+        $wid = (int) $whRow['id'];
+        $expectedPin = resolveWarehouseTerminalPin($whRow);
+        if ($expectedPin === '') {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No Station Lock PIN is configured for this gate terminal.']);
+            exit;
+        }
+
+        $clientIp = trim((string) ($_SERVER['REMOTE_ADDR'] ?? 'local'));
+        $rateKey = 'standalone_gate:' . $wid . ':' . sha1(strtolower($clientIp));
+        $rateCheck = checkSecurityRateLimit($pdo, $rateKey, 5, 600);
+        if (!$rateCheck['allowed']) {
+            http_response_code(429);
+            echo json_encode([
+                'ok' => false,
+                'error' => "Too many failed PIN attempts. Wait {$rateCheck['retry_after']}s and try again.",
+            ]);
+            exit;
+        }
+
+        if ($pin === '') {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Enter the Gate Terminal PIN to unlock.']);
+            exit;
+        }
+        if (!verifyTerminalPinSecret($pin, $expectedPin)) {
+            recordFailedRateLimit($pdo, $rateKey, 5, 600, 60);
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => "Incorrect Gate PIN for {$whRow['name']}."]);
+            exit;
+        }
+
+        clearSecurityRateLimit($pdo, $rateKey);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_regenerate_id(true);
+        }
+        if (!isset($_SESSION['standalone_gate_auth']) || !is_array($_SESSION['standalone_gate_auth'])) {
+            $_SESSION['standalone_gate_auth'] = [];
+        }
+        $_SESSION['standalone_gate_auth'][$wid] = sha1($expectedPin);
+
+        echo json_encode([
+            'ok' => true,
+            'authorized' => true,
+            'csrf_token' => getSessionCsrfToken(),
+            'gate_id' => $wid,
+            'gate_name' => (string) ($whRow['name'] ?? 'Facility Gate'),
+        ]);
+        exit;
+    }
+
+    if ($action === 'standalone_gate_lock') {
+        $siteKey = trim((string) ($_POST['site_key'] ?? $jsonBody['site_key'] ?? $_GET['site_key'] ?? ''));
+        $whId = (int) ($_POST['wh_id'] ?? $jsonBody['wh_id'] ?? $_GET['wh_id'] ?? 0);
+        $whRow = resolveStandaloneFacilityGate($pdo, $siteKey, $whId);
+        if ($whRow && isset($_SESSION['standalone_gate_auth']) && is_array($_SESSION['standalone_gate_auth'])) {
+            unset($_SESSION['standalone_gate_auth'][(int) $whRow['id']]);
+        }
+        echo json_encode(['ok' => true, 'authorized' => false]);
+        exit;
+    }
+
+    if ($action === 'standalone_gate_feed') {
+        $siteKey = trim((string) ($_GET['site_key'] ?? $_POST['site_key'] ?? $jsonBody['site_key'] ?? ''));
+        $whId = (int) ($_GET['wh_id'] ?? $_POST['wh_id'] ?? $jsonBody['wh_id'] ?? 0);
+        $whRow = resolveStandaloneFacilityGate($pdo, $siteKey, $whId);
+        if (!$whRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'authorized' => false, 'error' => 'Facility gate location not found.']);
+            exit;
+        }
+        if (!isStandaloneGateAuthorized($pdo, $whRow)) {
+            http_response_code(401);
+            echo json_encode([
+                'ok' => false,
+                'authorized' => false,
+                'error' => "Enter Gate PIN to unlock {$whRow['name']}.",
+            ]);
+            exit;
+        }
+
+        $full = buildFullPayload($pdo, $activeDb, 'stock_warehouse', (int) $whRow['id']);
+        $feed = buildStandaloneGateFeedPayload($full, $whRow);
+        $feed['csrf_token'] = getSessionCsrfToken();
+        echo json_encode($feed);
+        exit;
+    }
+
+    if ($action === 'standalone_gate_scan') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'allowed' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        if (!validateCsrfForAuthenticatedPost($jsonBody)) {
+            http_response_code(403);
+            echo json_encode([
+                'ok' => false,
+                'allowed' => false,
+                'error' => 'Invalid or expired terminal token. Refresh the gate page and try again.',
+            ]);
+            exit;
+        }
+
+        $siteKey = trim((string) ($_POST['site_key'] ?? $jsonBody['site_key'] ?? $_GET['site_key'] ?? ''));
+        $whId = (int) ($_POST['wh_id'] ?? $jsonBody['wh_id'] ?? $_GET['wh_id'] ?? 0);
+        $whRow = resolveStandaloneFacilityGate($pdo, $siteKey, $whId);
+        if (!$whRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'allowed' => false, 'error' => 'Facility gate location not found.']);
+            exit;
+        }
+        if (!isStandaloneGateAuthorized($pdo, $whRow)) {
+            http_response_code(401);
+            echo json_encode([
+                'ok' => false,
+                'authorized' => false,
+                'allowed' => false,
+                'error' => "Gate session locked. Enter PIN to unlock {$whRow['name']}.",
+            ]);
+            exit;
+        }
+
+        $wid = (int) $whRow['id'];
+        $scanInput = trim((string) ($_POST['scan_input'] ?? $jsonBody['scan_input'] ?? ''));
+        $reqUserId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
+        $scanMode = strtolower(trim((string) ($_POST['scan_mode'] ?? $jsonBody['scan_mode'] ?? 'auto')));
+        if (!in_array($scanMode, ['auto', 'check_in', 'check_out', 'verify_only'], true)) {
+            $scanMode = 'auto';
+        }
+        $rawOfflineAt = trim((string) ($_POST['offline_scanned_at'] ?? $jsonBody['offline_scanned_at'] ?? ''));
+
+        $nowServerTs = time();
+        $effectiveTs = $nowServerTs;
+        $isOfflineSync = false;
+        if ($rawOfflineAt !== '') {
+            $parsedOfflineTs = strtotime($rawOfflineAt);
+            if ($parsedOfflineTs !== false && $parsedOfflineTs >= ($nowServerTs - 72 * 3600) && $parsedOfflineTs <= ($nowServerTs + 300)) {
+                $effectiveTs = min($parsedOfflineTs, $nowServerTs);
+                $isOfflineSync = true;
+            }
+        }
+
+        $currentPayload = buildFullPayload($pdo, $activeDb, 'stock_warehouse', $wid);
+        $activeCp = $currentPayload['activeCheckpoint'];
+        $lookupKey = $reqUserId > 0 ? (string) $reqUserId : $scanInput;
+        $targetMember = findCrewMemberByScanInput($currentPayload['crew'], $lookupKey);
+        if (!$targetMember) {
+            echo json_encode([
+                'ok' => false,
+                'allowed' => false,
+                'error' => "No staff badge or crew member matched '{$lookupKey}'. Try REW-BADGE-0006, RFID UID, or staff name.",
+                'reason' => "Unrecognized Badge Code ({$lookupKey})",
+            ]);
+            exit;
+        }
+
+        $scannedBy = !empty($_SESSION['auth_user_id']) ? (int) $_SESSION['auth_user_id'] : 1;
+        $result = executeGateScan(
+            $pdo,
+            $activeDb,
+            $activeCp,
+            $targetMember,
+            $scanMode,
+            $scannedBy,
+            $effectiveTs,
+            $isOfflineSync
+        );
+
+        if (isset($result['bootstrap']) && is_array($result['bootstrap'])) {
+            $result['feed'] = buildStandaloneGateFeedPayload($result['bootstrap'], $whRow);
+            unset($result['bootstrap']);
+        }
+        echo json_encode($result);
         exit;
     }
 
@@ -2862,8 +3409,6 @@ try {
                 $isOfflineSync = true;
             }
         }
-        $effectiveScannedAtSql = date('Y-m-d H:i:s', $effectiveTs);
-        $effectiveDateStr = date('Y-m-d', $effectiveTs);
 
         $lockCheck = assertControllerCheckpointLock($pdo, (string) $reqCpType, (string) $reqCpId);
         if (!$lockCheck['ok']) {
@@ -2874,11 +3419,6 @@ try {
 
         $currentPayload = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $activeCp = $currentPayload['activeCheckpoint'];
-        $cpType = (string) $activeCp['type'];
-        $cpId = (int) $activeCp['id'];
-        $cpName = (string) $activeCp['name'];
-        $callTime = (string) ($activeCp['call_time'] ?? '08:00');
-
         $targetMember = findCrewMemberByScanInput($currentPayload['crew'], $scanInput);
         if (!$targetMember) {
             echo json_encode([
@@ -2890,224 +3430,19 @@ try {
             exit;
         }
 
-        $eval = evaluateCheckpointAccess($targetMember, $cpType, $cpId);
-        $allowed = (bool) $eval['allowed'];
-        $reason = (string) $eval['reason'];
-
         $scannedBy = (int) ($caller['id'] ?? $_SESSION['auth_user_id'] ?? 1);
-
-        $isCrossFacilityTransfer = false;
-        $prevFacilityName = null;
-
-        // Determine scan_action
-        if (!$allowed) {
-            $resolvedAction = 'access_verify';
-            $accessStatus = 'denied';
-            $denialReason = $reason;
-        } else {
-            $accessStatus = 'granted';
-            $denialReason = null;
-
-            $isCurrentlyCheckedIn = ($targetMember['daily_state'] === 'checked_in');
-            $prevCpType = (string) ($targetMember['last_checkpoint_type'] ?? '');
-            $prevCpId = (int) ($targetMember['last_checkpoint_id'] ?? 0);
-            $prevCpName = (string) ($targetMember['last_checkpoint_name'] ?? '');
-
-            // Option B: Smart Cross-Facility Transit Transfer
-            // If technician is currently checked in at another facility (e.g. Ndera Warehouse) and scans at this facility (e.g. KCC),
-            // auto-checkout from previous facility with transit note, and check-in to current facility.
-            $isCrossFacilityTransfer = $isCurrentlyCheckedIn && (
-                ($prevCpType !== '' && $prevCpType !== $cpType) ||
-                ($prevCpId > 0 && $prevCpId !== $cpId)
-            );
-
-            // Prevent duplicate/invalid explicit check-in or check-out scans
-            if ($scanMode === 'check_out' && !$isCurrentlyCheckedIn) {
-                echo json_encode([
-                    'ok' => false,
-                    'allowed' => false,
-                    'error' => "{$targetMember['full_name']} is already checked out (not currently checked in).",
-                ]);
-                exit;
-            }
-            if ($scanMode === 'check_in' && $isCurrentlyCheckedIn && !$isCrossFacilityTransfer) {
-                echo json_encode([
-                    'ok' => false,
-                    'allowed' => false,
-                    'error' => "{$targetMember['full_name']} is already checked in at {$cpName}.",
-                ]);
-                exit;
-            }
-
-            // Debounce rapid repeat scans (< 5s) at the same checkpoint so hardware scanner bounces and offline sync retries don't create duplicate logs
-            if ($scanMode !== 'verify_only') {
-                $recentStmt = $pdo->prepare("
-                    SELECT `scan_action`, `punctuality_status`, `notes`, `scanned_at`
-                    FROM `attendance_logs`
-                    WHERE `user_id` = ? AND `checkpoint_type` = ? AND `checkpoint_id` = ?
-                      AND `access_status` = 'granted'
-                      AND `scan_action` IN ('check_in', 'check_out')
-                      AND ABS(TIMESTAMPDIFF(SECOND, `scanned_at`, ?)) <= 5
-                    ORDER BY `id` DESC
-                    LIMIT 1
-                ");
-                $recentStmt->execute([(int) $targetMember['id'], $cpType, $cpId, $effectiveScannedAtSql]);
-                $recentScan = $recentStmt->fetch(PDO::FETCH_ASSOC);
-                if ($recentScan) {
-                    $recentAction = (string) $recentScan['scan_action'];
-                    $verification = buildVerificationCardPayload(
-                        $pdo,
-                        $targetMember,
-                        $cpType,
-                        $cpId,
-                        $cpName,
-                        [
-                            'allowed' => true,
-                            'reason' => ($recentAction === 'check_out' ? 'Already checked out' : 'Already checked in') . " at {$cpName} (recent scan preserved)",
-                            'action' => $recentAction,
-                            'punctuality' => (string) ($recentScan['punctuality_status'] ?? 'on_time'),
-                            'punctuality_label' => $recentAction === 'check_out' ? 'SHIFT CHECK-OUT' : ($targetMember['punctuality'] ?? 'ON TIME'),
-                            'scanned_at' => date('H:i:s', strtotime((string) $recentScan['scanned_at']) ?: $effectiveTs),
-                            'check_in_time' => $targetMember['check_in_full'] ?? null,
-                            'check_out_time' => $targetMember['check_out_full'] ?? null,
-                        ]
-                    );
-                    $verification['duplicate_prevented'] = true;
-                    $verification['bootstrap'] = $currentPayload;
-                    echo json_encode($verification);
-                    exit;
-                }
-            }
-
-            if ($isCrossFacilityTransfer) {
-                $prevFacilityName = $prevCpName ?: ($prevCpType === 'stock_warehouse' ? 'Ndera Warehouse' : 'Kigali Convention Centre');
-                $transitOutNotes = "Transit departure → Transferred to {$cpName}";
-
-                // 1. Auto-log checkout at previous facility
-                $transitOutStmt = $pdo->prepare("
-                    INSERT INTO `attendance_logs`
-                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'on_time', ?, ?, ?)
-                ");
-                $transitOutStmt->execute([
-                    (int) $targetMember['id'],
-                    (string) $targetMember['badge_code'],
-                    $prevCpType ?: ($cpType === 'event_venue' ? 'stock_warehouse' : 'event_venue'),
-                    $prevCpId ?: 1,
-                    $prevFacilityName,
-                    $scannedBy,
-                    $transitOutNotes,
-                    $effectiveScannedAtSql,
-                ]);
-
-                // 2. Resolve current scan as check_in at the new facility
-                $resolvedAction = 'check_in';
-                $reason = "Authorized for {$cpName} — Arrived on site from {$prevFacilityName}";
-            } elseif ($scanMode === 'verify_only') {
-                $resolvedAction = 'access_verify';
-            } elseif ($scanMode === 'check_in') {
-                $resolvedAction = 'check_in';
-            } elseif ($scanMode === 'check_out') {
-                $resolvedAction = 'check_out';
-            } else {
-                // Auto Smart Check-In / Check-Out
-                $resolvedAction = $isCurrentlyCheckedIn ? 'check_out' : 'check_in';
-            }
-        }
-
-        // Calculate call-time punctuality against scan date
-        $scheduledTs = strtotime($effectiveDateStr . ' ' . $callTime . ':00') ?: strtotime($effectiveDateStr . ' 08:00:00');
-        if (!$allowed) {
-            $punctuality = 'n/a';
-            $punctualityLabel = 'ACCESS RESTRICTED';
-        } elseif ($resolvedAction === 'check_out') {
-            $punctuality = 'on_time';
-            $punctualityLabel = 'SHIFT CHECK-OUT';
-        } else {
-            $diffMinutes = ($effectiveTs - $scheduledTs) / 60;
-            if ($diffMinutes < -10) {
-                $punctuality = 'early';
-                $punctualityLabel = 'EARLY ARRIVAL';
-            } elseif ($diffMinutes <= 15) {
-                $punctuality = 'on_time';
-                $punctualityLabel = 'ON TIME';
-            } else {
-                $punctuality = 'late';
-                $punctualityLabel = 'LATE CALL-TIME';
-            }
-        }
-
-        $noteText = $allowed
-            ? ($isCrossFacilityTransfer
-                ? "Arrived on site from {$prevFacilityName}"
-                : ($resolvedAction === 'check_out'
-                    ? "Gate Check-Out recorded at {$cpName}"
-                    : ($resolvedAction === 'access_verify'
-                        ? "Clearance verified at {$cpName}"
-                        : "Gate Check-In recorded at {$cpName}")))
-            : "Denied at {$cpName}: {$reason}";
-        if ($isOfflineSync) {
-            $noteText .= ' [Synced Offline]';
-        }
-
-        $isAssignedToEvent = false;
-        $eventAssignedCount = 0;
-        if ($cpType === 'event_venue' && !empty($activeCp['assigned_technicians'])) {
-            $eventAssignedCount = (int) ($activeCp['assigned_count'] ?? count($activeCp['assigned_technicians']));
-            $isAssignedToEvent = in_array((int)$targetMember['id'], $activeCp['assigned_technicians'], true);
-        } else {
-            $isAssignedToEvent = true;
-        }
-
-        $scannedBy = !empty($_SESSION['auth_user_id']) ? (int) $_SESSION['auth_user_id'] : 1;
-
-        $insStmt = $pdo->prepare("
-            INSERT INTO `attendance_logs`
-              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-        $insStmt->execute([
-            (int) $targetMember['id'],
-            (string) $targetMember['badge_code'],
-            $cpType,
-            $cpId,
-            $cpName,
-            $resolvedAction,
-            $accessStatus,
-            $denialReason,
-            $punctuality,
-            $scannedBy,
-            $noteText,
-            $effectiveScannedAtSql,
-        ]);
-
-        // Rebuild full payload so all KPIs, crew states, and timeline reflect the new scan
-        $updatedPayload = buildFullPayload($pdo, $activeDb, $cpType, $cpId);
-        $updatedMember = findCrewMemberByScanInput($updatedPayload['crew'], (string) $targetMember['id']) ?? $targetMember;
-
-        $verification = buildVerificationCardPayload(
+        $result = executeGateScan(
             $pdo,
-            $updatedMember,
-            $cpType,
-            $cpId,
-            $cpName,
-            [
-                'allowed' => $allowed,
-                'reason' => $reason,
-                'action' => $resolvedAction,
-                'punctuality' => $punctuality,
-                'punctuality_label' => $punctualityLabel,
-                'scanned_at' => date('H:i:s', $effectiveTs),
-                'is_transit_transfer' => $isCrossFacilityTransfer,
-                'transit_from' => $isCrossFacilityTransfer ? $prevFacilityName : null,
-                'transit_to' => $isCrossFacilityTransfer ? $cpName : null,
-                'check_in_time' => $updatedMember['check_in_full'] ?? ($resolvedAction === 'check_in' ? date('h:i:s A', $effectiveTs) : null),
-                'check_out_time' => $updatedMember['check_out_full'] ?? ($resolvedAction === 'check_out' ? date('h:i:s A', $effectiveTs) : null),
-            ]
+            $activeDb,
+            $activeCp,
+            $targetMember,
+            $scanMode,
+            $scannedBy,
+            $effectiveTs,
+            $isOfflineSync
         );
 
-        $verification['bootstrap'] = $updatedPayload;
-        echo json_encode($verification);
+        echo json_encode($result);
         exit;
     }
 

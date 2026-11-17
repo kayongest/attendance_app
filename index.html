@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261116_v4" />
+  <link rel="stylesheet" href="styles.css?v=20261117_v1" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -121,9 +121,10 @@
           <img src="assets/nav-settings.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Reset Today’s Scans</span>
         </button>
-        <button type="button" class="nav-item" id="sidebar-onsite-share-btn" data-nav-action="action:onsite-share" title="Share Technician On-Site Link &amp; Password (Admin)" style="display: none;">
-          <img src="assets/key-round-13.svg" alt="" class="svg-icon" />
-          <span class="nav-item-label">Share On-Site Link</span>
+        <button type="button" class="nav-item" id="sidebar-onsite-share-btn" data-nav-action="action:onsite-share" title="Standalone Gates &amp; Live On-Site Portal Links">
+          <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Gates &amp; On-Site</span>
+          <span class="nav-item-count">04</span>
         </button>
       </nav>
 
@@ -229,13 +230,6 @@
                 <span class="topbar-dropdown-title">Terminal Controls &amp; Help</span>
               </div>
               <div class="topbar-dropdown-menu">
-                <button type="button" class="topbar-dropdown-item" id="topbar-menu-tour">
-                  <img src="assets/brand-mark.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
-                  <div class="item-content">
-                    <span class="item-title">Interactive Guided Tour</span>
-                    <span class="item-sub">Spotlight walkthrough of key workflows</span>
-                  </div>
-                </button>
                 <button type="button" class="topbar-dropdown-item js-open-rollcall-modal" id="topbar-menu-rollcall">
                   <img src="assets/metric-list-ordered.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
                   <div class="item-content">
@@ -360,6 +354,13 @@
               <p class="page-subtitle" data-node-id="2:3352">
                 Live Venue &amp; Facility Gate check-in/check-out attendance telemetry across Kigali production checkpoints.
               </p>
+              <button type="button" class="topbar-dropdown-item page-tour-btn" id="topbar-menu-tour">
+                <img src="assets/brand-mark.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
+                <div class="item-content">
+                  <span class="item-title">Interactive Guided Tour</span>
+                  <span class="item-sub">Spotlight walkthrough of key workflows</span>
+                </div>
+              </button>
             </div>
             <div class="page-actions">
               <button type="button" class="btn btn-secondary-38" id="overview-schedule-roster-btn" style="display: none;">
@@ -4356,7 +4357,7 @@
                 <option value="action:rollcall">On-Site Roll-Call Modal</option>
                 <option value="action:station-lock">Station Lock (PIN) Modal</option>
                 <option value="action:reset-scans">Reset Today's Scans Confirm Modal</option>
-                <option value="action:onsite-share">Share Technician On-Site Link Modal</option>
+                <option value="action:onsite-share">Gates &amp; On-Site Links Hub Modal</option>
               </optgroup>
               <option value="custom">Custom Page Slug / External URL</option>
             </select>
@@ -4888,19 +4889,54 @@
     </div>
   </div>
 
-  <!-- Modal: Share Technician On-Site Link & Password -->
+  <!-- Modal: Standalone Gates & Live On-Site Portal Links -->
   <div class="modal-backdrop" id="onsite-share-modal" aria-hidden="true">
-    <div class="modal-card" style="width: 540px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="onsite-share-modal-title">
+    <div class="modal-card" style="width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="onsite-share-modal-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-        <h3 class="modal-title" id="onsite-share-modal-title" style="margin: 0;">Share Technician On-Site Link</h3>
+        <h3 class="modal-title" id="onsite-share-modal-title" style="margin: 0;">Standalone Gates &amp; On-Site Links</h3>
         <span class="status-badge status-badge-green-sm" id="onsite-share-status-pill">Active</span>
       </div>
       <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px;">
-        Share this read-only link and shared passcode with technicians so they can check who is currently on site (Stock Managers, Gate Controllers, Tech Leads, and fellow technicians).
+        Launch or share direct location-locked gate terminals (<strong>Ndera Warehouse</strong>, <strong>BK Arena</strong>, <strong>KCC</strong>) and the read-only <strong>Live On-Site Portal</strong> (<code>onsite.php</code>).
       </p>
 
+      <!-- Standalone Facility Gate Terminals -->
+      <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; margin-bottom: 14px; background: var(--bg-subtle);">
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-secondary); margin-bottom: 10px;">
+          Standalone Facility Gate Terminals
+        </div>
+
+        <div class="form-field" style="margin-bottom: 10px;">
+          <label class="form-label" for="portal-ndera-url-input" style="font-size: 11.5px;"># Ndera Warehouse Gate</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="portal-ndera-url-input" class="form-input" readonly value="ndera-gate.php" style="font-family: monospace; font-size: 12px;" />
+            <button type="button" class="btn btn-secondary-38 js-copy-portal-url" data-copy-target="portal-ndera-url-input" data-copy-label="Ndera Warehouse Gate URL" style="white-space: nowrap;">Copy</button>
+            <a href="ndera-gate.php" target="_blank" rel="noopener" class="btn btn-secondary-38" style="text-decoration: none; white-space: nowrap;">Open ↗</a>
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 10px;">
+          <label class="form-label" for="portal-bk-url-input" style="font-size: 11.5px;"># BK Arena Gate</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="portal-bk-url-input" class="form-input" readonly value="bk-arena-gate.php" style="font-family: monospace; font-size: 12px;" />
+            <button type="button" class="btn btn-secondary-38 js-copy-portal-url" data-copy-target="portal-bk-url-input" data-copy-label="BK Arena Gate URL" style="white-space: nowrap;">Copy</button>
+            <a href="bk-arena-gate.php" target="_blank" rel="noopener" class="btn btn-secondary-38" style="text-decoration: none; white-space: nowrap;">Open ↗</a>
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 0;">
+          <label class="form-label" for="portal-kcc-url-input" style="font-size: 11.5px;"># KCC Gate</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="portal-kcc-url-input" class="form-input" readonly value="kcc-gate.php" style="font-family: monospace; font-size: 12px;" />
+            <button type="button" class="btn btn-secondary-38 js-copy-portal-url" data-copy-target="portal-kcc-url-input" data-copy-label="KCC Gate URL" style="white-space: nowrap;">Copy</button>
+            <a href="kcc-gate.php" target="_blank" rel="noopener" class="btn btn-secondary-38" style="text-decoration: none; white-space: nowrap;">Open ↗</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Read-Only Technician On-Site Roster Portal -->
       <div class="form-field" style="margin-bottom: 12px;">
-        <label class="form-label" for="onsite-share-url-input">Shareable On-Site Roster URL</label>
+        <label class="form-label" for="onsite-share-url-input">Shareable On-Site Crew Portal URL (onsite.php)</label>
         <div style="display: flex; gap: 8px;">
           <input type="text" id="onsite-share-url-input" class="form-input" readonly style="font-family: monospace; font-size: 12px;" />
           <button type="button" class="btn btn-secondary-38" id="onsite-copy-url-btn" style="white-space: nowrap;">Copy Link</button>
@@ -4976,6 +5012,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261117_v2"></script>
+  <script src="app.js?v=20261117_v5"></script>
 </body>
 </html>

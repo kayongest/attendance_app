@@ -714,6 +714,32 @@ button {
   gap: 7px;
 }
 
+.page-intro-heading .page-tour-btn {
+  width: fit-content;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 7px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background-color: var(--bg-surface);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.page-intro-heading .page-tour-btn:hover {
+  background-color: var(--bg-subtle);
+  border-color: var(--brand-primary);
+}
+
+[data-theme="dark"] .page-intro-heading .page-tour-btn {
+  background-color: var(--bg-surface);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .page-intro-heading .page-tour-btn:hover {
+  background-color: var(--bg-subtle);
+  border-color: var(--brand-primary);
+}
+
 .page-title {
   font-size: 30px;
   font-weight: 400;
