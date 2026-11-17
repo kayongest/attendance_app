@@ -103,6 +103,7 @@
     gateStateFilter: 'all',
 
     // Checkpoints directory filters & pagination (5 items per page)
+    eventsHubTab: 'directory',
     checkpointTab: 'all',
     checkpointSearch: '',
     checkpointPage: 1,
@@ -147,6 +148,11 @@
     overviewPerPage: 5,
     directoryPage: 1,
     directoryPerPage: 5,
+
+    // Standalone Gate Terminals & On-Site Portals CRUD
+    standalonePortals: [],
+    portalsTypeFilter: 'all',
+    portalsSearch: '',
 
     // Current Operator Session & Alerts
     currentUser: null,
@@ -250,6 +256,10 @@
 
     if (Array.isArray(data.departments)) {
       state.departments = data.departments;
+    }
+
+    if (Array.isArray(data.standalonePortals)) {
+      state.standalonePortals = data.standalonePortals;
     }
 
     if (data.navigationConfig && Array.isArray(data.navigationConfig.items)) {
@@ -1114,6 +1124,35 @@
     if (screenKey !== 'terminals') {
       stopCameraScanner();
     }
+
+    // Redirect merged routes cleanly into consolidated hubs before permission checks
+    if (screenKey === 'analytics' || screenKey === 'access-matrix') {
+      if (!isCurrentUserAdmin()) {
+        showToast('Access Restricted: Security Clearance Matrix requires Administrator privileges.');
+        if (isCurrentUserStockController() || isCurrentUserTechnician()) {
+          screenKey = 'terminals';
+          scrollToId = 'pane-kiosk';
+        } else {
+          screenKey = 'overview';
+        }
+      } else {
+        state.usersViewMode = 'matrix';
+        screenKey = 'users';
+      }
+    } else if (screenKey === 'stock-manager') {
+      state.eventsHubTab = 'warehouses';
+      screenKey = 'events';
+    } else if (screenKey === 'venue-security') {
+      if (!canCurrentUserAssignEvents() && !isCurrentUserAdmin()) {
+        showToast('Access Restricted: Event Venues CRUD is reserved for Operations Managers, Tech Leads, and Administrators.');
+        screenKey = isCurrentUserStockController() || isCurrentUserTechnician() ? 'terminals' : 'overview';
+        if (screenKey === 'terminals') scrollToId = 'pane-kiosk';
+      } else {
+        state.eventsHubTab = 'venues';
+        screenKey = 'events';
+      }
+    }
+
     if (!isScreenPermittedForCurrentUser(screenKey)) {
       const rawRole = (state.currentUser?.role || '').toLowerCase();
       const isStockCtrl = rawRole === 'stock_controller';
@@ -1128,7 +1167,7 @@
         showToast('Access Scoped: Tech Leads are scoped to Gate Dashboard & Terminal only.');
         screenKey = 'overview';
       } else if (isStockMgr) {
-        showToast('Access Restricted: Venue Security Portal is reserved for Technical Leads and Administrators.');
+        showToast('Access Restricted: Section requires Administrator privileges.');
         screenKey = 'overview';
       } else {
         showToast('Access Restricted: Crew members are scoped to Personal Badge & Gate Kiosk view.');
@@ -1137,7 +1176,7 @@
       }
     }
     const wasScreen = state.activeScreen;
-    const resolvedKey = screenKey === 'access-matrix' ? 'analytics' : screenKey;
+    const resolvedKey = screenKey;
     state.activeScreen = resolvedKey;
     if (resolvedKey === 'terminals' && wasScreen !== 'terminals') {
       state.terminalScreenLocked = true;
@@ -1154,14 +1193,12 @@
       users: document.getElementById('screen-users'),
       attendees: document.getElementById('screen-attendees'),
       terminals: document.getElementById('screen-terminals'),
-      analytics: document.getElementById('screen-analytics'),
-      'stock-manager': document.getElementById('screen-stock-manager'),
-      'venue-security': document.getElementById('screen-venue-security'),
       'shift-relief': document.getElementById('screen-shift-relief'),
       calltime: document.getElementById('screen-calltime'),
       rollcall: document.getElementById('screen-rollcall'),
       'station-lock': document.getElementById('screen-station-lock'),
       'reset-scans': document.getElementById('screen-reset-scans'),
+      'standalone-portals': document.getElementById('screen-standalone-portals'),
       'custom-nav-page': document.getElementById('screen-custom-nav-page'),
     };
     const activeDomKey = screens[resolvedKey] ? resolvedKey : 'custom-nav-page';
@@ -1174,7 +1211,7 @@
     // Update sidebar active state & icons across both Main Nav and Checkpoint Controls
     document.querySelectorAll('.sidebar .nav-item').forEach((btn) => {
       const target = btn.getAttribute('data-nav-target') || btn.getAttribute('data-nav-action');
-      const isMatch = target === screenKey || target === resolvedKey || (target === 'access-matrix' && resolvedKey === 'analytics');
+      const isMatch = target === screenKey || target === resolvedKey;
       btn.classList.toggle('active', isMatch);
       const img = btn.querySelector('img[data-inactive-icon]');
       if (img) {
@@ -1195,27 +1232,28 @@
     const matchedNavItem = (state.navigationConfig?.items || []).find((it) => String(it.nav_target) === String(screenKey));
     const pageTitles = {
       overview: 'Gate Operations Dashboard',
-      events: 'Venues & Stock Gates',
+      events: 'Checkpoints & Venues',
       users: 'Staff, Technicians & Role Management',
-      attendees: 'Staff ID Badges & Kiosk',
+      attendees: 'Staff ID Badges',
       terminals: 'Terminals (#pane-kiosk)',
-      analytics: 'Access Clearance Matrix',
-      'access-matrix': 'Access Clearance Matrix',
-      'stock-manager': 'Facilities & Gates Registry',
-      'venue-security': 'Venue Security Portal',
       'shift-relief': 'Shift Relief & Swaps',
       calltime: 'Set Call Time',
       rollcall: 'On-Site Roll-Call',
       'station-lock': 'Station Lock (PIN)',
       'reset-scans': 'Reset Today’s Scans',
+      'standalone-portals': 'Gates & On-Site Portals',
     };
     const bc = document.getElementById('breadcrumb-page');
     if (bc) {
       bc.textContent = pageTitles[screenKey] || pageTitles[resolvedKey] || (matchedNavItem ? matchedNavItem.label : 'Gate Dashboard');
     }
 
-    if (resolvedKey === 'stock-manager') {
+    if (resolvedKey === 'events') {
       loadStockManagerData();
+      switchEventsHubTab(state.eventsHubTab || 'directory');
+    }
+    if (resolvedKey === 'standalone-portals' && typeof loadOnsiteShareIntoPortalsPage === 'function') {
+      loadOnsiteShareIntoPortalsPage();
     }
     if (resolvedKey === 'users') {
       renderUsersScreen();
@@ -1395,8 +1433,10 @@
     renderRollCallModalList();
     renderUsersScreen();
     renderDedicatedNavPages();
-    if (state.activeScreen === 'stock-manager') {
-      renderStockManager();
+    renderStockManager();
+    renderVenueSecurityPage();
+    if (state.activeScreen === 'events') {
+      switchEventsHubTab(state.eventsHubTab || 'directory');
     }
     if (state.activeScreen === 'users') {
       switchUsersView(state.usersViewMode || 'personnel');
@@ -1556,13 +1596,13 @@
 
   function isScreenPermittedForCurrentUser(screenKey) {
     if (isCurrentUserAdmin()) return true;
+    const normalizedKey = (screenKey === 'stock-manager' || screenKey === 'venue-security') ? 'events' : screenKey;
+    if (normalizedKey === 'analytics' || normalizedKey === 'access-matrix') {
+      return false;
+    }
     const navItems = state.navigationConfig?.items || [];
     if (Array.isArray(navItems) && navItems.length > 0) {
-      const navMatch = navItems.find((it) =>
-        String(it.nav_target) === String(screenKey) ||
-        (screenKey === 'analytics' && String(it.nav_target) === 'access-matrix') ||
-        (screenKey === 'access-matrix' && String(it.nav_target) === 'analytics')
-      );
+      const navMatch = navItems.find((it) => String(it.nav_target) === String(normalizedKey));
       if (navMatch) {
         return isNavItemPermittedForCurrentUser(navMatch);
       }
@@ -1575,20 +1615,26 @@
     const isStockCtrl = (rawRole === 'stock_controller');
 
     if (isManager) {
-      return ['overview', 'events', 'users', 'attendees', 'terminals', 'venue-security', 'shift-relief', 'calltime', 'rollcall'].includes(screenKey);
+      return ['overview', 'events', 'users', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals'].includes(normalizedKey);
     }
     if (isStockCtrl) {
-      return ['terminals', 'attendees', 'analytics', 'stock-manager', 'shift-relief', 'rollcall'].includes(screenKey);
+      return ['events', 'terminals', 'attendees', 'shift-relief', 'rollcall', 'standalone-portals'].includes(normalizedKey);
     }
     if (isTech) {
-      // Tech Lead: Gate Dashboard, Terminal, and On-Site Roll-Call
-      return ['overview', 'terminals', 'rollcall'].includes(screenKey);
+      // Tech Lead: Gate Dashboard, Terminal, On-Site Roll-Call, and Portals
+      return ['overview', 'terminals', 'rollcall', 'standalone-portals'].includes(normalizedKey);
     }
     if (isStockMgr) {
-      return ['overview', 'events', 'attendees', 'terminals', 'analytics', 'stock-manager', 'shift-relief', 'calltime', 'rollcall'].includes(screenKey);
+      return ['overview', 'events', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals'].includes(normalizedKey);
     }
     // Field Crew / Technicians / Drivers / Decorators / Standard crew:
-    return ['attendees', 'terminals', 'rollcall'].includes(screenKey);
+    return ['attendees', 'terminals', 'rollcall'].includes(normalizedKey);
+  }
+
+  function canCurrentUserManageWarehouses() {
+    if (!state.currentUser) return false;
+    const rawRole = (state.currentUser.role || '').toLowerCase();
+    return isCurrentUserAdmin() || rawRole === 'manager' || isCurrentUserStockManager();
   }
 
   function canCurrentUserAddUser() {
@@ -1695,27 +1741,29 @@
     // 1. Main Navigation Items (Sidebar) — Re-render from navigationConfig + apply role & enable/disable rules
     renderMainNavigation();
 
-    // Sync any extra nav items if navigationConfig wasn't loaded yet
+    // Sync fallback nav items if navigationConfig wasn't loaded yet
     const navOverview = document.querySelector('.sidebar .nav-item[data-nav-target="overview"]');
     const navEvents = document.querySelector('.sidebar .nav-item[data-nav-target="events"]');
     const navUsers = document.getElementById('nav-users-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="users"]');
     const navAttendees = document.querySelector('.sidebar .nav-item[data-nav-target="attendees"]');
     const navTerminals = document.getElementById('nav-terminals-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="terminals"]');
-    const navVenueSec = document.getElementById('nav-venue-security-btn');
-    const navAnalytics = document.querySelector('.sidebar .nav-item[data-nav-target="analytics"]');
-    const navStockMgr = document.getElementById('nav-stock-manager-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="stock-manager"]');
-    const navMatrix = document.getElementById('nav-access-matrix-btn');
 
     if (!state.navigationConfig || !Array.isArray(state.navigationConfig.items) || state.navigationConfig.items.length === 0) {
       setVis(navOverview, isAdmin || isManager || isTech || isStockMgr);
-      setVis(navEvents, isAdmin || isManager || isStockMgr);
+      setVis(navEvents, isAdmin || isManager || isStockMgr || isStockCtrl);
       setVis(navUsers, isAdmin || isManager);
       setVis(navAttendees, !isTech);
       setVis(navTerminals, true);
-      setVis(navVenueSec, isAdmin || isManager);
-      setVis(navAnalytics, isAdmin || isStockMgr || isStockCtrl);
-      setVis(navStockMgr, isAdmin || isStockMgr || isStockCtrl);
-      setVis(navMatrix, isAdmin);
+    }
+
+    // Sub-tabs on Checkpoints & Venues Hub
+    const cpHubTabVenues = document.getElementById('cp-hub-tab-venues');
+    const cpHubTabWarehouses = document.getElementById('cp-hub-tab-warehouses');
+    const canSeeVenuesHub = isAdmin || isManager || isTech;
+    if (cpHubTabVenues) cpHubTabVenues.style.display = canSeeVenuesHub ? 'inline-flex' : 'none';
+    if (cpHubTabWarehouses) cpHubTabWarehouses.style.display = (isAdmin || isManager || isStockMgr || isStockCtrl) ? 'inline-flex' : 'none';
+    if (!canSeeVenuesHub && state.eventsHubTab === 'venues') {
+      state.eventsHubTab = 'directory';
     }
 
     // 2. Checkpoint Controls Navigation Group (fallback only if workspace items not in navigationConfig)
@@ -4655,6 +4703,50 @@
     });
   }
 
+  function switchEventsHubTab(tab = 'directory') {
+    const canSeeVenuesHub = isCurrentUserAdmin() || canCurrentUserAssignEvents();
+    const canSeeWhHub = isCurrentUserAdmin() || canCurrentUserManageWarehouses() || isCurrentUserStockController();
+    let safeTab = ['directory', 'warehouses', 'venues'].includes(tab) ? tab : 'directory';
+    if (safeTab === 'venues' && !canSeeVenuesHub) safeTab = 'directory';
+    if (safeTab === 'warehouses' && !canSeeWhHub) safeTab = 'directory';
+
+    state.eventsHubTab = safeTab;
+
+    document.querySelectorAll('.js-events-hub-tab').forEach((btn) => {
+      const btnTab = btn.getAttribute('data-cp-hub-tab');
+      const isActive = btnTab === safeTab;
+      btn.className = `btn ${isActive ? 'btn-primary-32' : 'btn-secondary-32'} js-events-hub-tab${isActive ? ' active-subtab' : ''}`;
+      const icon = btn.querySelector('img');
+      if (icon) icon.style.filter = isActive ? 'brightness(0) invert(1)' : 'none';
+    });
+
+    const dirPane = document.getElementById('events-hub-pane-directory');
+    const whPane = document.getElementById('events-hub-pane-warehouses');
+    const venPane = document.getElementById('events-hub-pane-venues');
+    if (dirPane) dirPane.style.display = safeTab === 'directory' ? 'block' : 'none';
+    if (whPane) whPane.style.display = safeTab === 'warehouses' ? 'block' : 'none';
+    if (venPane) venPane.style.display = safeTab === 'venues' ? 'block' : 'none';
+
+    const canManageWh = canCurrentUserManageWarehouses();
+    const canManageVenues = canCurrentUserAssignEvents();
+    const topAddWhBtn = document.getElementById('open-add-warehouse-btn');
+    const inlineAddWhBtn = document.getElementById('hub-add-wh-inline-btn');
+    const topAddVenueBtn = document.getElementById('vs-add-venue-btn');
+    const inlineAddVenueBtn = document.getElementById('hub-add-venue-inline-btn');
+    if (topAddWhBtn) topAddWhBtn.style.display = (safeTab === 'warehouses' && canManageWh) ? 'inline-flex' : 'none';
+    if (inlineAddWhBtn) inlineAddWhBtn.style.display = canManageWh ? 'inline-flex' : 'none';
+    if (topAddVenueBtn) topAddVenueBtn.style.display = (safeTab === 'venues' && canManageVenues) ? 'inline-flex' : 'none';
+    if (inlineAddVenueBtn) inlineAddVenueBtn.style.display = canManageVenues ? 'inline-flex' : 'none';
+
+    if (safeTab === 'warehouses') {
+      renderWarehousesGrid();
+    } else if (safeTab === 'venues') {
+      renderVenueSecurityPage();
+    } else {
+      renderCheckpointsDirectory();
+    }
+  }
+
   function renderCheckpointsDirectory() {
     const rowsEl = document.getElementById('events-table-rows');
     if (!rowsEl) return;
@@ -4662,6 +4754,13 @@
     const allCps = state.checkpoints.directory || [];
     const stocksCount = (state.checkpoints.stock_warehouses || []).length;
     const venuesCount = (state.checkpoints.event_venues || []).length;
+
+    const hubAllEl = document.getElementById('cp-hub-count-all');
+    const hubWhEl = document.getElementById('cp-hub-count-wh');
+    const hubVenEl = document.getElementById('cp-hub-count-venues');
+    if (hubAllEl) hubAllEl.textContent = String(allCps.length).padStart(2, '0');
+    if (hubWhEl) hubWhEl.textContent = String(stocksCount).padStart(2, '0');
+    if (hubVenEl) hubVenEl.textContent = String(venuesCount).padStart(2, '0');
 
     document.querySelectorAll('#events-total-kpi').forEach((el) => {
       el.textContent = String(allCps.length).padStart(2, '0');
@@ -4934,11 +5033,16 @@
   }
 
   function renderUsersMatrixScreen() {
-    renderClearanceMatrixCards();
+    renderBatchesAndMatrixScreen();
   }
 
   function switchUsersView(mode) {
-    state.usersViewMode = mode;
+    const isAdmin = isCurrentUserAdmin();
+    const safeMode = (!isAdmin && ['roles', 'matrix', 'departments', 'navigation'].includes(mode))
+      ? 'personnel'
+      : mode;
+    state.usersViewMode = safeMode;
+    mode = safeMode;
 
     const tabPersonnel = document.getElementById('view-tab-personnel');
     const tabRoles = document.getElementById('view-tab-roles');
@@ -5860,48 +5964,13 @@
   }
 
   function renderStockManager() {
-    const activeTab = state.stockManager.activeTab === 'events' ? 'events' : 'warehouses';
-    const isEvents = activeTab === 'events';
-    const isWh = !isEvents;
-
-    // Update segmented tab buttons
-    document.querySelectorAll('.js-sm-tab-btn').forEach((btn) => {
-      const tab = btn.getAttribute('data-tab') || btn.getAttribute('data-target-tab');
-      btn.classList.toggle('active', tab === activeTab);
-    });
-
-    // Update active view badge & tab count numbers
-    const activeBadge = document.getElementById('sm-active-view-badge');
-    if (activeBadge) {
-      activeBadge.textContent = isEvents ? 'Event Venues' : 'Facility Gates';
-      activeBadge.className = isEvents ? 'status-badge status-badge-green-sm' : 'status-badge status-badge-purple-sm';
-    }
-
     const whCountNum = state.stockManager.warehouses.length;
     const evCountNum = (state.checkpoints?.event_venues || []).length;
-    const smTotalKpi = document.getElementById('sm-total-cp-kpi');
-    const smGatesKpi = document.getElementById('sm-gates-kpi');
-    const smVenuesKpi = document.getElementById('sm-venues-kpi');
-    if (smTotalKpi) smTotalKpi.textContent = String(whCountNum + evCountNum).padStart(2, '0');
-    if (smGatesKpi) smGatesKpi.textContent = String(whCountNum).padStart(2, '0');
-    if (smVenuesKpi) smVenuesKpi.textContent = String(evCountNum).padStart(2, '0');
-
-    const whTabCount = document.getElementById('sm-tab-wh-count');
-    const evTabCount = document.getElementById('sm-tab-ev-count');
-    if (whTabCount) whTabCount.textContent = String(whCountNum).padStart(2, '0');
-    if (evTabCount) evTabCount.textContent = String(evCountNum).padStart(2, '0');
-
-    const whSection = document.getElementById('sm-pane-warehouses');
-    const evSection = document.getElementById('sm-pane-events');
-
-    if (whSection) whSection.style.display = isWh ? 'block' : 'none';
-    if (evSection) evSection.style.display = isEvents ? 'block' : 'none';
-
-    if (isEvents) {
-      renderStockManagerEventsGrid();
-    } else {
-      renderWarehousesGrid();
-    }
+    const hubWhCount = document.getElementById('cp-hub-count-wh');
+    const hubVenCount = document.getElementById('cp-hub-count-venues');
+    if (hubWhCount) hubWhCount.textContent = String(whCountNum).padStart(2, '0');
+    if (hubVenCount) hubVenCount.textContent = String(evCountNum).padStart(2, '0');
+    renderWarehousesGrid();
   }
 
   function renderWarehousesGrid() {
@@ -5934,17 +6003,20 @@
     });
 
     if (list.length === 0) {
+      const addEmptyBtnHtml = canCurrentUserManageWarehouses()
+        ? `<button type="button" class="btn btn-primary-38 js-trigger-add-wh">
+            <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+            <span>+ Add Facility Gate</span>
+          </button>`
+        : '';
       grid.innerHTML = `
         <div style="grid-column: 1 / -1; padding: 40px 20px; text-align: center; background: var(--bg-surface); border-radius: 8px; border: 1px dashed var(--border-color);">
           <div style="margin-bottom: 10px;"><img src="assets/warehouse-13.svg" alt="" class="svg-icon" style="width: 32px; height: 32px; opacity: 0.7;" /></div>
-          <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">No Warehouses Found</h4>
+          <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 4px;">No Facility Gates Found</h4>
           <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
-            ${q ? `No warehouses matching "${escapeHtml(q)}"` : 'Get started by creating your first warehouse facility.'}
+            ${q ? `No facility gates matching "${escapeHtml(q)}"` : 'Get started by creating your first facility gate.'}
           </p>
-          <button type="button" class="btn btn-primary-38 js-trigger-add-wh">
-            <img src="assets/plus-white.svg" alt="" class="svg-icon" />
-            <span>+ Add Warehouse Hub</span>
-          </button>
+          ${addEmptyBtnHtml}
         </div>
       `;
       return;
@@ -5952,6 +6024,7 @@
 
     const startIdx = ((state.stockManager.whPage || 1) - 1) * perPage;
     const pagedList = list.slice(startIdx, startIdx + perPage);
+    const canManageWh = canCurrentUserManageWarehouses();
 
     grid.innerHTML = pagedList
       .map((w) => {
@@ -6007,6 +6080,7 @@
             </div>
             <div class="wh-card-footer">
               ${gatePillHtml}
+              ${canManageWh ? `
               <div style="display: flex; gap: 6px;">
                 <button type="button" class="btn btn-secondary-32-sm js-edit-wh-btn" data-wh-id="${w.id}">
                   Edit
@@ -6014,7 +6088,7 @@
                 <button type="button" class="btn btn-secondary-32-sm js-delete-record-btn" data-del-type="warehouse" data-del-id="${w.id}" data-del-name="${escapeHtml(w.name)}" style="color: #dc2626; border-color: #fecaca;">
                   Delete
                 </button>
-              </div>
+              </div>` : ''}
             </div>
           </div>
         </div>
@@ -6140,6 +6214,10 @@
   }
 
   function openWarehouseModal(warehouseId = null) {
+    if (!canCurrentUserManageWarehouses()) {
+      showToast('Permission Denied: Facility Gate CRUD requires Site Manager, Operations Manager, or Administrator privileges.');
+      return;
+    }
     const modal = document.getElementById('warehouse-crud-modal');
     if (!modal) return;
     const form = document.getElementById('warehouse-crud-form');
@@ -7038,6 +7116,13 @@
         text: ct,
       };
     }
+    if (type === 'standalone_portals') {
+      const pCount = (state.standalonePortals && state.standalonePortals.length > 0) ? state.standalonePortals.length : 4;
+      return {
+        id: item.badge_id || 'sidebar-portals-count',
+        text: String(pCount).padStart(2, '0'),
+      };
+    }
     if (type === 'custom' && item.badge_text) {
       return {
         id: item.badge_id || '',
@@ -7082,7 +7167,11 @@
     const target = String(item.nav_target || 'overview');
     const isShortcut = target.startsWith('action:');
     const isCustomUrl = target.startsWith('http://') || target.startsWith('https://') || target.startsWith('#') || target.endsWith('.html') || target.endsWith('.php');
-    const isActive = !isShortcut && !isCustomUrl && (state.activeScreen === target || (target === 'access-matrix' && state.activeScreen === 'analytics'));
+    const isActive = !isShortcut && !isCustomUrl && (
+      state.activeScreen === target ||
+      (state.activeScreen === 'events' && (target === 'stock-manager' || target === 'venue-security')) ||
+      (state.activeScreen === 'users' && state.usersViewMode === 'matrix' && (target === 'access-matrix' || target === 'analytics'))
+    );
     const visible = isNavItemPermittedForCurrentUser(item);
     const idAttr = item.dom_id ? `id="${escapeHtml(item.dom_id)}"` : '';
     const nodeAttr = item.node_id ? `data-node-id="${escapeHtml(item.node_id)}"` : '';
@@ -7327,8 +7416,8 @@
 
     const knownTargets = [
       'overview', 'events', 'users', 'attendees', 'terminals', 'venue-security',
-      'stock-manager', 'access-matrix', 'analytics',
-      'shift-relief', 'calltime', 'rollcall', 'station-lock', 'reset-scans',
+      'stock-manager', 'access-matrix',
+      'shift-relief', 'calltime', 'rollcall', 'station-lock', 'reset-scans', 'standalone-portals',
       'action:shift-relief', 'action:calltime', 'action:rollcall', 'action:station-lock', 'action:reset-scans', 'action:onsite-share',
     ];
 
@@ -7549,7 +7638,9 @@
     const canManageVenues = canCurrentUserAssignEvents();
 
     const addVenueBtn = document.getElementById('vs-add-venue-btn');
-    if (addVenueBtn) addVenueBtn.style.display = canManageVenues ? 'inline-flex' : 'none';
+    const inlineVenueBtn = document.getElementById('hub-add-venue-inline-btn');
+    if (addVenueBtn) addVenueBtn.style.display = (canManageVenues && state.eventsHubTab === 'venues') ? 'inline-flex' : 'none';
+    if (inlineVenueBtn) inlineVenueBtn.style.display = canManageVenues ? 'inline-flex' : 'none';
 
     const elTotal = document.getElementById('vs-kpi-venues');
     const elOnsite = document.getElementById('vs-kpi-onsite');
@@ -8102,13 +8193,363 @@
     }
   }
 
+  function generateRandomDigitsPin(len = 6) {
+    const digits = '0123456789';
+    let out = '';
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      const buf = new Uint32Array(len);
+      window.crypto.getRandomValues(buf);
+      for (let i = 0; i < len; i += 1) {
+        const idx = i === 0 ? (1 + (buf[i] % 9)) : (buf[i] % 10);
+        out += digits.charAt(idx);
+      }
+      return out;
+    }
+    return String(100000 + Math.floor(Math.random() * 900000));
+  }
+
+  function generateRandomOnsitePassword() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = 'Crew-';
+    if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+      const buf = new Uint32Array(6);
+      window.crypto.getRandomValues(buf);
+      for (let i = 0; i < 6; i += 1) code += chars.charAt(buf[i] % chars.length);
+      return code;
+    }
+    for (let i = 0; i < 6; i += 1) code += chars.charAt(Math.floor(Math.random() * chars.length));
+    return code;
+  }
+
+  function showGeneratedPortalBanner(title, url, kindLabel, secret) {
+    const banner = document.getElementById('page-sp-generated-banner');
+    const titleEl = document.getElementById('page-sp-gen-title');
+    const textEl = document.getElementById('page-sp-gen-text');
+    const copyBtn = document.getElementById('page-sp-gen-copy-btn');
+    if (!banner || !textEl) return;
+    if (titleEl) titleEl.textContent = `New Access Credentials Generated — ${title}`;
+    const msg = `${title}\nLink: ${url}\n${kindLabel}: ${secret}`;
+    textEl.textContent = `Link: ${url}  ·  ${kindLabel}: ${secret}`;
+    if (copyBtn) {
+      copyBtn.setAttribute('data-copy-msg', msg);
+      copyBtn.textContent = `Copy Link + ${kindLabel}`;
+    }
+    banner.style.display = 'flex';
+  }
+
+  function canCurrentUserManagePortals() {
+    const rawRole = String(state.currentUser?.role || '').toLowerCase().trim();
+    return isCurrentUserAdmin() || isCurrentUserStockManager() || rawRole === 'manager';
+  }
+
+  function resolvePortalAbsoluteUrl(entryPath) {
+    try {
+      return new URL(String(entryPath || 'gate.php'), window.location.href).href;
+    } catch (_) {
+      return String(entryPath || '');
+    }
+  }
+
+  function renderStandalonePortalsPage() {
+    const list = Array.isArray(state.standalonePortals) ? state.standalonePortals : [];
+    const grid = document.getElementById('standalone-portals-grid');
+    if (!grid) return;
+
+    const canManage = canCurrentUserManagePortals();
+    const addBtn = document.getElementById('open-add-portal-btn');
+    if (addBtn) addBtn.style.display = canManage ? 'inline-flex' : 'none';
+
+    const gateCount = list.filter((p) => p.portal_type === 'facility_gate').length;
+    const bgCount = list.filter((p) => Boolean(p.background_image)).length;
+    const onsiteRow = list.find((p) => p.portal_key === 'onsite' || p.portal_type === 'onsite_portal');
+
+    const kpiTotal = document.getElementById('page-sp-kpi-total');
+    const kpiGates = document.getElementById('page-sp-kpi-gates');
+    const kpiBgs = document.getElementById('page-sp-kpi-bgs');
+    const kpiOnsite = document.getElementById('page-sp-kpi-onsite-status');
+    const sideCount = document.getElementById('sidebar-portals-count');
+    if (kpiTotal) kpiTotal.textContent = String(list.length);
+    if (kpiGates) kpiGates.textContent = String(gateCount);
+    if (kpiBgs) kpiBgs.textContent = String(bgCount);
+    if (kpiOnsite && onsiteRow) kpiOnsite.textContent = Number(onsiteRow.is_active) === 1 ? 'Active' : 'Paused';
+    if (sideCount) sideCount.textContent = String(list.length || 4).padStart(2, '0');
+
+    const onsiteCard = document.getElementById('page-sp-onsite-card');
+    if (onsiteCard) {
+      onsiteCard.style.display = isCurrentUserStockController() ? 'none' : 'block';
+    }
+    const pageSpUrlInp = document.getElementById('page-sp-onsite-url-input');
+    if (pageSpUrlInp) {
+      pageSpUrlInp.value = resolvePortalAbsoluteUrl('onsite.php');
+    }
+
+    const typeFilter = state.portalsTypeFilter || 'all';
+    const q = (state.portalsSearch || '').trim().toLowerCase();
+    const filtered = list.filter((p) => {
+      if (typeFilter !== 'all' && p.portal_type !== typeFilter) return false;
+      if (q) {
+        const hay = `${p.title} ${p.subtitle} ${p.portal_key} ${p.entry_url} ${p.wh_name || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--text-secondary); border: 1px dashed var(--border-color); border-radius: 12px;">
+        No standalone gates or portals match your filter.
+      </div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered.map((p) => {
+      const fullUrl = resolvePortalAbsoluteUrl(p.entry_url);
+      const isOnsite = p.portal_type === 'onsite_portal';
+      const isActive = Number(p.is_active) === 1;
+      const hasBg = Boolean(p.background_image);
+      const tintPct = Math.round(Number(p.overlay_opacity || 0.78) * 100);
+      const safeTitle = escapeHtml(p.title);
+      const safeSub = escapeHtml(p.subtitle || (isOnsite ? 'Read-Only Technician On-Site Directory' : `${p.wh_name || 'Facility Gate'} · ${p.wh_location || 'Kigali'}`));
+      const bannerBgHtml = hasBg
+        ? `<img src="${escapeHtml(p.background_image)}" alt="${safeTitle}" class="portal-crud-banner-img" />`
+        : '';
+
+      return `
+        <article class="portal-crud-card" data-portal-id="${p.id}">
+          <div class="portal-crud-banner${isOnsite ? ' is-onsite' : ''}">
+            ${bannerBgHtml}
+            <div class="portal-crud-banner-scrim"></div>
+            <div class="portal-crud-banner-top">
+              <span class="portal-bg-chip">${isOnsite ? 'On-Site Portal' : 'Facility Gate'}</span>
+              <span class="status-badge ${isActive ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${isActive ? 'Active' : 'Paused'}</span>
+            </div>
+            <div class="portal-crud-banner-bottom">
+              <span>${hasBg ? `Custom BG (${tintPct}% scrim)` : 'Default Backdrop'}</span>
+              <span>${p.wh_code ? escapeHtml(p.wh_code) : (isOnsite ? 'READ-ONLY' : 'GATE')}</span>
+            </div>
+          </div>
+
+          <div class="portal-crud-body">
+            <div class="portal-crud-title-row">
+              <div>
+                <h3 class="portal-crud-title">${safeTitle}</h3>
+                <div class="portal-crud-sub">${safeSub}</div>
+              </div>
+              ${!isOnsite ? `<span class="status-badge status-badge-purple-sm" style="white-space: nowrap;">${p.has_pin ? (p.terminal_pin ? `PIN: ${escapeHtml(p.terminal_pin)}` : 'PIN Protected') : 'No PIN'}</span>` : ''}
+            </div>
+
+            <div class="portal-url-row">
+              <input type="text" class="portal-url-input" readonly value="${escapeHtml(fullUrl)}" aria-label="${safeTitle} URL" />
+              <button type="button" class="btn btn-secondary-32-sm js-sp-copy-btn" data-url="${escapeHtml(fullUrl)}" data-label="${safeTitle}">Copy</button>
+              <a href="${escapeHtml(p.entry_url)}" target="_blank" rel="noopener" class="btn btn-secondary-32-sm" style="text-decoration: none; white-space: nowrap;">Open ↗</a>
+            </div>
+          </div>
+
+          <div class="portal-crud-footer">
+            <span style="font-size: 11px; color: var(--text-muted);">Key: <code>${escapeHtml(p.portal_key)}</code></span>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              ${canManage && !isOnsite && p.wh_id ? `<button type="button" class="btn btn-secondary-32-sm js-sp-gen-pin-btn" data-portal-id="${p.id}" data-wh-id="${p.wh_id}" data-portal-title="${safeTitle}" data-url="${escapeHtml(fullUrl)}" style="color: #059669; border-color: #a7f3d0;">Generate PIN</button>` : ''}
+              ${canManage && isOnsite ? `<button type="button" class="btn btn-secondary-32-sm js-sp-gen-onsite-btn" data-portal-id="${p.id}" data-portal-title="${safeTitle}" data-url="${escapeHtml(fullUrl)}" style="color: #059669; border-color: #a7f3d0;">Generate Pass</button>` : ''}
+              ${canManage ? `<button type="button" class="btn btn-secondary-32-sm js-sp-edit-btn" data-portal-id="${p.id}">Customize / Edit</button>` : ''}
+              ${canManage && hasBg ? `<button type="button" class="btn btn-secondary-32-sm js-sp-reset-bg-btn" data-portal-id="${p.id}" data-portal-title="${safeTitle}" style="color: #b45309;">Reset BG</button>` : ''}
+              ${canManage && Number(p.is_system) !== 1 ? `<button type="button" class="btn btn-secondary-32-sm js-sp-delete-btn" data-portal-id="${p.id}" data-portal-title="${safeTitle}" style="color: #dc2626; border-color: #fecaca;">Delete</button>` : ''}
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('');
+  }
+
+  async function loadOnsiteShareIntoPortalsPage() {
+    if (isCurrentUserStockController()) return;
+    const enabledCb = document.getElementById('page-sp-onsite-enabled-cb');
+    const pwdInp = document.getElementById('page-sp-onsite-pwd-input');
+    const pwdHint = document.getElementById('page-sp-onsite-pwd-hint');
+    const statusPill = document.getElementById('page-sp-onsite-pill');
+    const urlInp = document.getElementById('page-sp-onsite-url-input');
+    const invitePrev = document.getElementById('page-sp-onsite-invite-preview');
+    const saveBtn = document.getElementById('page-sp-onsite-save-btn');
+    const revokeBtn = document.getElementById('page-sp-onsite-revoke-btn');
+    const genBtn = document.getElementById('page-sp-onsite-gen-btn');
+    const kpiOnsite = document.getElementById('page-sp-kpi-onsite-status');
+
+    const fallbackUrl = resolvePortalAbsoluteUrl('onsite.php');
+    if (urlInp) urlInp.value = fallbackUrl;
+    if (pwdInp) pwdInp.value = '';
+
+    try {
+      const res = await fetch('api.php?action=get_onsite_share_config');
+      const data = await res.json();
+      if (!res.ok || !data || !data.ok) return;
+
+      const shareUrl = resolvePortalAbsoluteUrl(data.share_path || 'onsite.php');
+      const isEn = Boolean(data.enabled);
+      if (urlInp) urlInp.value = shareUrl;
+      if (enabledCb) enabledCb.checked = isEn;
+      if (statusPill) {
+        statusPill.textContent = isEn ? 'Active' : 'Disabled';
+        statusPill.className = isEn ? 'status-badge status-badge-green-sm' : 'status-badge status-badge-red-sm';
+      }
+      if (kpiOnsite) kpiOnsite.textContent = isEn ? 'Active' : 'Disabled';
+
+      const canManage = Boolean(data.can_manage);
+      if (enabledCb) enabledCb.disabled = !canManage;
+      if (pwdInp) pwdInp.disabled = !canManage;
+      if (saveBtn) saveBtn.style.display = canManage ? 'inline-flex' : 'none';
+      if (revokeBtn) revokeBtn.style.display = canManage ? 'inline-flex' : 'none';
+      if (genBtn) genBtn.style.display = canManage ? 'inline-flex' : 'none';
+
+      if (data.is_default_password && data.default_password_preview) {
+        if (pwdHint) pwdHint.textContent = `Current active passcode: "${data.default_password_preview}" (enter a custom password or Generate to change).`;
+        if (invitePrev) {
+          invitePrev.textContent = `aBility Live On-Site Crew Link:\nLink: ${shareUrl}\nPassword: ${data.default_password_preview}`;
+        }
+      } else {
+        if (pwdHint) pwdHint.textContent = 'Custom hashed passcode is active. Enter a new passcode or click Generate to rotate.';
+        if (invitePrev) invitePrev.textContent = `Link: ${shareUrl}\n(Custom technician password set by Administrator)`;
+      }
+    } catch (_) {}
+  }
+
+  function closePortalCrudModal() {
+    const modal = document.getElementById('portal-crud-modal');
+    if (modal) modal.classList.remove('open');
+  }
+
+  let selectedPortalBgFile = null;
+
+  function setPortalModalBgPreview(src, filename, isExisting = false) {
+    const promptEl = document.getElementById('portal-bg-prompt');
+    const prevWrap = document.getElementById('portal-bg-preview-wrap');
+    const prevImg = document.getElementById('portal-bg-preview-img');
+    const nameEl = document.getElementById('portal-bg-filename');
+    const resetBtn = document.getElementById('portal-bg-reset-btn');
+    if (src) {
+      if (prevImg) prevImg.src = src;
+      if (nameEl) nameEl.textContent = filename || 'portal-background.jpg';
+      if (promptEl) promptEl.style.display = 'none';
+      if (prevWrap) prevWrap.style.display = 'flex';
+      if (resetBtn) resetBtn.style.display = 'inline-block';
+    } else {
+      if (prevImg) prevImg.src = '';
+      if (promptEl) promptEl.style.display = 'block';
+      if (prevWrap) prevWrap.style.display = 'none';
+      if (resetBtn) resetBtn.style.display = isExisting ? 'inline-block' : 'none';
+    }
+  }
+
+  function syncPortalModalTypeFields() {
+    const typeSel = document.getElementById('portal-crud-type');
+    const whWrap = document.getElementById('portal-crud-wh-wrap');
+    const pinWrap = document.getElementById('portal-crud-pin-wrap');
+    const onsitePwdWrap = document.getElementById('portal-crud-onsite-pwd-wrap');
+    const isGate = !typeSel || typeSel.value === 'facility_gate';
+    if (whWrap) whWrap.style.display = isGate ? 'block' : 'none';
+    if (pinWrap) pinWrap.style.display = isGate ? 'block' : 'none';
+    if (onsitePwdWrap) onsitePwdWrap.style.display = isGate ? 'none' : 'block';
+  }
+
+  function openPortalCrudModal(portal = null) {
+    const modal = document.getElementById('portal-crud-modal');
+    if (!modal) return;
+    selectedPortalBgFile = null;
+    const fileInp = document.getElementById('portal-crud-bg-file');
+    if (fileInp) fileInp.value = '';
+
+    const titleHead = document.getElementById('portal-crud-modal-title');
+    const sysBadge = document.getElementById('portal-crud-system-badge');
+    const idEl = document.getElementById('portal-crud-id');
+    const removeBgEl = document.getElementById('portal-crud-remove-bg');
+    const titleEl = document.getElementById('portal-crud-title');
+    const keyEl = document.getElementById('portal-crud-key');
+    const subEl = document.getElementById('portal-crud-subtitle');
+    const typeEl = document.getElementById('portal-crud-type');
+    const whEl = document.getElementById('portal-crud-wh-id');
+    const urlEl = document.getElementById('portal-crud-url');
+    const pinEl = document.getElementById('portal-crud-pin');
+    const onsitePwdEl = document.getElementById('portal-crud-onsite-pwd');
+    const opEl = document.getElementById('portal-crud-opacity');
+    const opValEl = document.getElementById('portal-crud-opacity-val');
+    const activeEl = document.getElementById('portal-crud-active');
+
+    if (whEl) {
+      const whs = state.checkpoints?.stock_warehouses || [];
+      whEl.innerHTML = '<option value="">Select Facility Gate Location...</option>' +
+        whs.map((w) => `<option value="${escapeHtml(String(w.id))}">${escapeHtml(w.name)} (${escapeHtml(w.code || 'STK')})</option>`).join('');
+    }
+
+    if (removeBgEl) removeBgEl.value = '0';
+    if (onsitePwdEl) onsitePwdEl.value = '';
+
+    if (portal) {
+      const isSys = Number(portal.is_system) === 1;
+      if (titleHead) titleHead.textContent = `Customize Portal: ${portal.title}`;
+      if (sysBadge) sysBadge.textContent = isSys ? 'Core Portal' : 'Custom Portal';
+      if (idEl) idEl.value = String(portal.id || 0);
+      if (titleEl) titleEl.value = portal.title || '';
+      if (keyEl) {
+        keyEl.value = portal.portal_key || '';
+        keyEl.disabled = isSys;
+      }
+      if (subEl) subEl.value = portal.subtitle || '';
+      if (typeEl) {
+        typeEl.value = portal.portal_type || 'facility_gate';
+        typeEl.disabled = isSys;
+      }
+      if (whEl) {
+        whEl.value = portal.wh_id ? String(portal.wh_id) : '';
+        whEl.disabled = isSys && portal.portal_type === 'onsite_portal';
+      }
+      if (urlEl) {
+        urlEl.value = portal.entry_url || '';
+        urlEl.readOnly = isSys;
+      }
+      if (pinEl) pinEl.value = portal.terminal_pin || '';
+      const opNum = Math.max(0.20, Math.min(0.95, Number(portal.overlay_opacity || 0.78)));
+      if (opEl) opEl.value = opNum.toFixed(2);
+      if (opValEl) opValEl.textContent = `${Math.round(opNum * 100)}%`;
+      if (activeEl) activeEl.checked = Number(portal.is_active) === 1;
+      setPortalModalBgPreview(portal.background_image || '', portal.background_image ? portal.background_image.split('/').pop() : '', Boolean(portal.background_image));
+    } else {
+      if (titleHead) titleHead.textContent = 'Add Standalone Gate / Portal';
+      if (sysBadge) sysBadge.textContent = 'New Portal';
+      if (idEl) idEl.value = '0';
+      if (titleEl) titleEl.value = '';
+      if (keyEl) {
+        keyEl.value = '';
+        keyEl.disabled = false;
+      }
+      if (subEl) subEl.value = '';
+      if (typeEl) {
+        typeEl.value = 'facility_gate';
+        typeEl.disabled = false;
+      }
+      if (whEl) {
+        whEl.value = '';
+        whEl.disabled = false;
+      }
+      if (urlEl) {
+        urlEl.value = '';
+        urlEl.readOnly = false;
+      }
+      if (pinEl) pinEl.value = '';
+      if (opEl) opEl.value = '0.78';
+      if (opValEl) opValEl.textContent = '78%';
+      if (activeEl) activeEl.checked = true;
+      setPortalModalBgPreview('', '', false);
+    }
+
+    syncPortalModalTypeFields();
+    modal.classList.add('open');
+  }
+
   function renderDedicatedNavPages(onlyScreen = null) {
-    if (!onlyScreen || onlyScreen === 'venue-security') renderVenueSecurityPage();
+    if (!onlyScreen || onlyScreen === 'events') renderVenueSecurityPage();
     if (!onlyScreen || onlyScreen === 'shift-relief') renderShiftReliefPage();
     if (!onlyScreen || onlyScreen === 'calltime') renderCallTimePage();
     if (!onlyScreen || onlyScreen === 'rollcall') renderRollCallPage();
     if (!onlyScreen || onlyScreen === 'station-lock') renderStationLockPage();
     if (!onlyScreen || onlyScreen === 'reset-scans') renderResetScansPage();
+    if (!onlyScreen || onlyScreen === 'standalone-portals') renderStandalonePortalsPage();
     if (onlyScreen === 'custom-nav-page' || (state.activeScreen && document.getElementById('screen-custom-nav-page')?.classList.contains('active'))) {
       renderCustomNavPage(state.customNavScreenKey || state.activeScreen);
     }
@@ -8508,7 +8949,7 @@
           showToast('Access Restricted: Security Clearance Matrix configuration requires Administrator privileges.');
           return;
         }
-        switchScreen('analytics', 'matrix-config-section');
+        switchScreen('access-matrix', 'matrix-config-section');
         return;
       }
 
@@ -8656,7 +9097,7 @@
         } else if (act === 'go-overview') {
           switchScreen('overview');
         } else if (act === 'go-analytics') {
-          switchScreen('analytics');
+          switchScreen('access-matrix');
         }
       }
     });
@@ -9769,7 +10210,7 @@
       });
     }
 
-    // Checkpoints Tabs (Screen 2)
+    // Checkpoints Tabs (Screen 2 Directory)
     const evTabs = document.getElementById('events-status-tabs');
     if (evTabs) {
       evTabs.addEventListener('click', (e) => {
@@ -9781,6 +10222,14 @@
         renderCheckpointsDirectory();
       });
     }
+
+    // Checkpoints & Venues Hub Top Sub-Tabs (Directory / Facility Gates CRUD / Event Venues CRUD)
+    document.querySelectorAll('.js-events-hub-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const nextTab = btn.getAttribute('data-cp-hub-tab') || 'directory';
+        switchEventsHubTab(nextTab);
+      });
+    });
 
     // Search Inputs
     const ovSearch = document.getElementById('overview-attendee-search');
@@ -10892,6 +11341,468 @@
         if (!isCurrentUserAdmin()) return;
         state.usersViewMode = 'navigation';
         switchScreen('users');
+      });
+    }
+
+    // Standalone Gates & On-Site Portals Dedicated CRUD Page
+    const addPortalBtn = document.getElementById('open-add-portal-btn');
+    if (addPortalBtn) {
+      addPortalBtn.addEventListener('click', () => openPortalCrudModal(null));
+    }
+    const spTypeFilter = document.getElementById('page-sp-type-filter');
+    if (spTypeFilter) {
+      spTypeFilter.addEventListener('change', (e) => {
+        state.portalsTypeFilter = e.target.value || 'all';
+        renderStandalonePortalsPage();
+      });
+    }
+    const spSearchInput = document.getElementById('page-sp-search-input');
+    if (spSearchInput) {
+      spSearchInput.addEventListener('input', (e) => {
+        state.portalsSearch = e.target.value || '';
+        renderStandalonePortalsPage();
+      });
+    }
+
+    const spGenCopyBtn = document.getElementById('page-sp-gen-copy-btn');
+    const spGenDismissBtn = document.getElementById('page-sp-gen-dismiss-btn');
+    const spGenBanner = document.getElementById('page-sp-generated-banner');
+    if (spGenCopyBtn) {
+      spGenCopyBtn.addEventListener('click', async () => {
+        const msg = spGenCopyBtn.getAttribute('data-copy-msg') || '';
+        if (!msg) return;
+        try {
+          await navigator.clipboard.writeText(msg);
+          showToast('Link & generated PIN/Password copied!');
+        } catch (_) {
+          showToast('Copy failed — copy credentials directly from the banner.');
+        }
+      });
+    }
+    if (spGenDismissBtn && spGenBanner) {
+      spGenDismissBtn.addEventListener('click', () => {
+        spGenBanner.style.display = 'none';
+      });
+    }
+
+    const portalsGrid = document.getElementById('standalone-portals-grid');
+    if (portalsGrid) {
+      portalsGrid.addEventListener('click', async (e) => {
+        const genPinBtn = e.target.closest('.js-sp-gen-pin-btn');
+        if (genPinBtn) {
+          const whId = Number(genPinBtn.getAttribute('data-wh-id') || 0);
+          const pTitle = genPinBtn.getAttribute('data-portal-title') || 'Facility Gate';
+          const pUrl = genPinBtn.getAttribute('data-url') || '';
+          if (!whId) return;
+          const newPin = generateRandomDigitsPin(6);
+          genPinBtn.disabled = true;
+          genPinBtn.textContent = 'Generating...';
+          try {
+            const res = await fetch('api.php?action=save_warehouse_pin', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                checkpoint_type: 'stock_warehouse',
+                checkpoint_id: whId,
+                terminal_pin: newPin,
+              }),
+            });
+            const data = await res.json();
+            if (res.ok && data && data.ok) {
+              if (Array.isArray(data.standalonePortals)) {
+                state.standalonePortals = data.standalonePortals;
+              }
+              renderStandalonePortalsPage();
+              await fetchBootstrap(true);
+              showGeneratedPortalBanner(pTitle, pUrl, 'Gate PIN', newPin);
+              showToast(`New Gate PIN "${newPin}" saved for ${pTitle}.`);
+            } else {
+              showToast((data && data.error) || 'Failed to generate Gate PIN.');
+            }
+          } catch (_) {
+            showToast('Network error generating Gate PIN.');
+          } finally {
+            genPinBtn.disabled = false;
+            genPinBtn.textContent = 'Generate PIN';
+          }
+          return;
+        }
+
+        const genOnsiteBtn = e.target.closest('.js-sp-gen-onsite-btn');
+        if (genOnsiteBtn) {
+          const pTitle = genOnsiteBtn.getAttribute('data-portal-title') || 'Live On-Site Crew Portal';
+          const pUrl = genOnsiteBtn.getAttribute('data-url') || resolvePortalAbsoluteUrl('onsite.php');
+          const newPass = generateRandomOnsitePassword();
+          genOnsiteBtn.disabled = true;
+          genOnsiteBtn.textContent = 'Generating...';
+          try {
+            const res = await fetch('api.php?action=save_onsite_share_config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: true, password: newPass }),
+            });
+            const data = await res.json();
+            if (res.ok && data && data.ok) {
+              await loadOnsiteShareIntoPortalsPage();
+              showGeneratedPortalBanner(pTitle, pUrl, 'Password', newPass);
+              showToast(`New On-Site Password "${newPass}" saved!`);
+            } else {
+              showToast((data && data.error) || 'Failed to generate On-Site password.');
+            }
+          } catch (_) {
+            showToast('Network error generating On-Site password.');
+          } finally {
+            genOnsiteBtn.disabled = false;
+            genOnsiteBtn.textContent = 'Generate Pass';
+          }
+          return;
+        }
+
+        const copyBtn = e.target.closest('.js-sp-copy-btn');
+        if (copyBtn) {
+          const url = copyBtn.getAttribute('data-url') || '';
+          const lbl = copyBtn.getAttribute('data-label') || 'Portal URL';
+          if (url) {
+            try {
+              await navigator.clipboard.writeText(url);
+              showToast(`${lbl} URL copied to clipboard!`);
+            } catch (_) {
+              showToast(`URL: ${url}`);
+            }
+          }
+          return;
+        }
+
+        const editBtn = e.target.closest('.js-sp-edit-btn');
+        if (editBtn) {
+          const pid = Number(editBtn.getAttribute('data-portal-id') || 0);
+          const item = (state.standalonePortals || []).find((p) => Number(p.id) === pid);
+          if (item) openPortalCrudModal(item);
+          return;
+        }
+
+        const resetBgBtn = e.target.closest('.js-sp-reset-bg-btn');
+        if (resetBgBtn) {
+          const pid = Number(resetBgBtn.getAttribute('data-portal-id') || 0);
+          const pTitle = resetBgBtn.getAttribute('data-portal-title') || 'this portal';
+          const ok = await showConfirmModal({
+            title: 'Reset Custom Background',
+            message: `Remove the custom background image from "${pTitle}" and restore the default backdrop?`,
+            confirmText: 'Reset Background',
+            danger: false,
+          });
+          if (!ok) return;
+          try {
+            const res = await fetch('api.php?action=reset_portal_background', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: pid }),
+            });
+            const data = await res.json();
+            if (res.ok && data && data.ok) {
+              state.standalonePortals = data.standalonePortals || state.standalonePortals;
+              renderStandalonePortalsPage();
+              showToast(data.message || 'Background reset.');
+            } else {
+              showToast((data && data.error) || 'Failed to reset background.');
+            }
+          } catch (_) {
+            showToast('Network error resetting background.');
+          }
+          return;
+        }
+
+        const delBtn = e.target.closest('.js-sp-delete-btn');
+        if (delBtn) {
+          const pid = Number(delBtn.getAttribute('data-portal-id') || 0);
+          const pTitle = delBtn.getAttribute('data-portal-title') || 'this portal';
+          const ok = await showConfirmModal({
+            title: 'Delete Custom Portal',
+            message: `Delete "${pTitle}" from Standalone Gates & On-Site Portals?`,
+            confirmText: 'Delete Portal',
+            danger: true,
+          });
+          if (!ok) return;
+          try {
+            const res = await fetch('api.php?action=delete_standalone_portal', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: pid }),
+            });
+            const data = await res.json();
+            if (res.ok && data && data.ok) {
+              state.standalonePortals = data.standalonePortals || [];
+              renderStandalonePortalsPage();
+              renderMainNavigation();
+              showToast(data.message || 'Portal deleted.');
+            } else {
+              showToast((data && data.error) || 'Failed to delete portal.');
+            }
+          } catch (_) {
+            showToast('Network error deleting portal.');
+          }
+        }
+      });
+    }
+
+    // Portal CRUD & Background Image Upload Modal Events
+    const portalModal = document.getElementById('portal-crud-modal');
+    if (portalModal) {
+      portalModal.addEventListener('click', (e) => {
+        if (e.target === portalModal) closePortalCrudModal();
+      });
+    }
+    document.querySelectorAll('.js-close-portal-crud-modal').forEach((btn) => {
+      btn.addEventListener('click', closePortalCrudModal);
+    });
+
+    const portalTypeSel = document.getElementById('portal-crud-type');
+    if (portalTypeSel) {
+      portalTypeSel.addEventListener('change', syncPortalModalTypeFields);
+    }
+
+    const portalOpacityInp = document.getElementById('portal-crud-opacity');
+    const portalOpacityVal = document.getElementById('portal-crud-opacity-val');
+    if (portalOpacityInp && portalOpacityVal) {
+      portalOpacityInp.addEventListener('input', () => {
+        portalOpacityVal.textContent = `${Math.round(Number(portalOpacityInp.value || 0.78) * 100)}%`;
+      });
+    }
+
+    const portalTitleInp = document.getElementById('portal-crud-title');
+    const portalKeyInp = document.getElementById('portal-crud-key');
+    if (portalTitleInp && portalKeyInp) {
+      portalTitleInp.addEventListener('input', () => {
+        const idVal = Number(document.getElementById('portal-crud-id')?.value || 0);
+        if (idVal === 0 && !portalKeyInp.disabled) {
+          portalKeyInp.value = portalTitleInp.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        }
+      });
+    }
+
+    const portalBgDropzone = document.getElementById('portal-bg-dropzone');
+    const portalBgFileInp = document.getElementById('portal-crud-bg-file');
+    const portalBgChangeBtn = document.getElementById('portal-bg-change-btn');
+    const portalBgResetBtn = document.getElementById('portal-bg-reset-btn');
+    const handlePortalBgSelection = (file) => {
+      if (!file || !file.type.startsWith('image/')) {
+        showToast('Please select a valid image file (JPG, PNG, WEBP, GIF).');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        showToast('Background image must be smaller than 5 MB.');
+        return;
+      }
+      selectedPortalBgFile = file;
+      const rmEl = document.getElementById('portal-crud-remove-bg');
+      if (rmEl) rmEl.value = '0';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setPortalModalBgPreview(ev.target.result, file.name, true);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    if (portalBgDropzone && portalBgFileInp) {
+      portalBgDropzone.addEventListener('click', (e) => {
+        if (e.target && e.target.id === 'portal-bg-change-btn') return;
+        portalBgFileInp.click();
+      });
+      portalBgDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        portalBgDropzone.classList.add('drag-over');
+      });
+      portalBgDropzone.addEventListener('dragleave', () => {
+        portalBgDropzone.classList.remove('drag-over');
+      });
+      portalBgDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        portalBgDropzone.classList.remove('drag-over');
+        if (e.dataTransfer?.files?.length) {
+          handlePortalBgSelection(e.dataTransfer.files[0]);
+        }
+      });
+      portalBgFileInp.addEventListener('change', (e) => {
+        if (e.target.files?.length) handlePortalBgSelection(e.target.files[0]);
+      });
+    }
+    if (portalBgChangeBtn && portalBgFileInp) {
+      portalBgChangeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        portalBgFileInp.click();
+      });
+    }
+    if (portalBgResetBtn) {
+      portalBgResetBtn.addEventListener('click', () => {
+        selectedPortalBgFile = null;
+        if (portalBgFileInp) portalBgFileInp.value = '';
+        const rmEl = document.getElementById('portal-crud-remove-bg');
+        if (rmEl) rmEl.value = '1';
+        setPortalModalBgPreview('', '', false);
+      });
+    }
+
+    const portalCrudGenPinBtn = document.getElementById('portal-crud-gen-pin-btn');
+    const portalCrudPinInp = document.getElementById('portal-crud-pin');
+    if (portalCrudGenPinBtn && portalCrudPinInp) {
+      portalCrudGenPinBtn.addEventListener('click', () => {
+        portalCrudPinInp.value = generateRandomDigitsPin(6);
+        portalCrudPinInp.focus();
+      });
+    }
+
+    const portalCrudGenOnsiteBtn = document.getElementById('portal-crud-gen-onsite-btn');
+    const portalCrudOnsitePwdInp = document.getElementById('portal-crud-onsite-pwd');
+    if (portalCrudGenOnsiteBtn && portalCrudOnsitePwdInp) {
+      portalCrudGenOnsiteBtn.addEventListener('click', () => {
+        portalCrudOnsitePwdInp.value = generateRandomOnsitePassword();
+        portalCrudOnsitePwdInp.focus();
+      });
+    }
+
+    const portalCrudForm = document.getElementById('portal-crud-form');
+    if (portalCrudForm) {
+      portalCrudForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = document.getElementById('portal-crud-submit-btn');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving...';
+        }
+        try {
+          const pType = document.getElementById('portal-crud-type')?.value || 'facility_gate';
+          const pTitle = (document.getElementById('portal-crud-title')?.value || '').trim();
+          const newPinVal = (document.getElementById('portal-crud-pin')?.value || '').trim();
+          const newOnsitePwdVal = (document.getElementById('portal-crud-onsite-pwd')?.value || '').trim();
+
+          const fd = new FormData();
+          fd.append('id', document.getElementById('portal-crud-id')?.value || '0');
+          fd.append('title', pTitle);
+          fd.append('portal_key', (document.getElementById('portal-crud-key')?.value || '').trim());
+          fd.append('subtitle', (document.getElementById('portal-crud-subtitle')?.value || '').trim());
+          fd.append('portal_type', pType);
+          fd.append('wh_id', document.getElementById('portal-crud-wh-id')?.value || '');
+          fd.append('entry_url', (document.getElementById('portal-crud-url')?.value || '').trim());
+          fd.append('terminal_pin', newPinVal);
+          fd.append('onsite_password', newOnsitePwdVal);
+          fd.append('overlay_opacity', document.getElementById('portal-crud-opacity')?.value || '0.78');
+          fd.append('is_active', document.getElementById('portal-crud-active')?.checked ? '1' : '0');
+          fd.append('remove_background', document.getElementById('portal-crud-remove-bg')?.value === '1' ? '1' : '0');
+          if (selectedPortalBgFile) {
+            fd.append('background_image', selectedPortalBgFile);
+          }
+
+          const res = await fetch('api.php?action=save_standalone_portal', {
+            method: 'POST',
+            body: fd,
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            state.standalonePortals = data.standalonePortals || state.standalonePortals;
+            closePortalCrudModal();
+            renderStandalonePortalsPage();
+            renderMainNavigation();
+            await fetchBootstrap(true);
+            if (pType === 'onsite_portal') {
+              await loadOnsiteShareIntoPortalsPage();
+              if (newOnsitePwdVal) {
+                showGeneratedPortalBanner(pTitle || 'Live On-Site Crew Portal', resolvePortalAbsoluteUrl('onsite.php'), 'Password', newOnsitePwdVal);
+              }
+            } else if (newPinVal) {
+              const savedPortal = (state.standalonePortals || []).find((p) => Number(p.id) === Number(data.portal_id));
+              showGeneratedPortalBanner(
+                pTitle || 'Facility Gate',
+                resolvePortalAbsoluteUrl(savedPortal ? savedPortal.entry_url : 'gate.php'),
+                'Gate PIN',
+                newPinVal
+              );
+            }
+            showToast(data.message || 'Portal saved!');
+          } else {
+            showToast((data && data.error) || 'Failed to save portal settings.');
+          }
+        } catch (_) {
+          showToast('Network error saving portal settings.');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save Portal Settings';
+          }
+        }
+      });
+    }
+
+    // Embedded On-Site Security Controls inside #screen-standalone-portals
+    const spGenBtn = document.getElementById('page-sp-onsite-gen-btn');
+    const spPwdInp = document.getElementById('page-sp-onsite-pwd-input');
+    const spEnabledCb = document.getElementById('page-sp-onsite-enabled-cb');
+    const spSaveBtn = document.getElementById('page-sp-onsite-save-btn');
+    const spRevokeBtn = document.getElementById('page-sp-onsite-revoke-btn');
+    const spCopyInviteBtn = document.getElementById('page-sp-onsite-copy-invite-btn');
+    const spInvitePreview = document.getElementById('page-sp-onsite-invite-preview');
+    if (spGenBtn && spPwdInp) {
+      spGenBtn.addEventListener('click', () => {
+        spPwdInp.value = generateRandomOnsitePassword();
+        spPwdInp.focus();
+      });
+    }
+    if (spCopyInviteBtn) {
+      spCopyInviteBtn.addEventListener('click', async () => {
+        const txt = spInvitePreview?.textContent || '';
+        if (!txt) return;
+        try {
+          await navigator.clipboard.writeText(txt);
+          showToast('On-Site crew link & password copied!');
+        } catch (_) {
+          showToast('Copy failed — select and copy text manually.');
+        }
+      });
+    }
+    if (spSaveBtn) {
+      spSaveBtn.addEventListener('click', async () => {
+        const newPwd = (spPwdInp?.value || '').trim();
+        const enabled = spEnabledCb ? spEnabledCb.checked : true;
+        spSaveBtn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=save_onsite_share_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled, password: newPwd }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            await loadOnsiteShareIntoPortalsPage();
+            showToast(data.message || 'Technician link settings saved.');
+          } else {
+            showToast((data && data.error) || 'Failed to save share settings.');
+          }
+        } catch (_) {
+          showToast('Network error saving share settings.');
+        } finally {
+          spSaveBtn.disabled = false;
+        }
+      });
+    }
+    if (spRevokeBtn) {
+      spRevokeBtn.addEventListener('click', async () => {
+        spRevokeBtn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=save_onsite_share_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ revoke_sessions: true }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            showToast(data.message || 'Active viewer sessions revoked.');
+          } else {
+            showToast((data && data.error) || 'Failed to revoke sessions.');
+          }
+        } catch (_) {
+          showToast('Network error revoking sessions.');
+        } finally {
+          spRevokeBtn.disabled = false;
+        }
       });
     }
 
@@ -13080,36 +13991,15 @@
       });
     }
 
-    const smPaneEvents = document.getElementById('sm-pane-events');
-    if (smPaneEvents) {
-      smPaneEvents.addEventListener('click', async (e) => {
-        if (e.target.closest('.js-trigger-add-ev')) {
-          if (!canCurrentUserAssignEvents()) {
-            showToast('Permission Denied: Creating Event Venues requires Tech Lead, PM, or Administrator privileges.');
-            return;
-          }
-          openVenueCrudModal(null);
+    document.querySelectorAll('.js-trigger-add-ev').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!canCurrentUserAssignEvents()) {
+          showToast('Permission Denied: Creating Event Venues requires Tech Lead, PM, or Administrator privileges.');
           return;
         }
-        const editBtn = e.target.closest('.js-vs-edit-venue');
-        if (editBtn) {
-          if (!canCurrentUserAssignEvents()) {
-            showToast('Permission Denied: Editing Event Venues requires Tech Lead, PM, or Administrator privileges.');
-            return;
-          }
-          const vid = editBtn.getAttribute('data-venue-id') || '';
-          const venue = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === String(vid) || String(v.id) === String(vid));
-          if (venue) openVenueCrudModal(venue);
-          return;
-        }
-        const delBtn = e.target.closest('.js-vs-delete-venue');
-        if (delBtn) {
-          const vid = delBtn.getAttribute('data-venue-id') || '';
-          const vTitle = delBtn.getAttribute('data-venue-title') || 'this Event Venue';
-          await confirmAndDeleteEventVenue(vid, vTitle);
-        }
+        openVenueCrudModal(null);
       });
-    }
+    });
 
     // Modal open buttons
     const addWhBtn = document.getElementById('open-add-warehouse-btn');
@@ -14410,8 +15300,8 @@
       {
         element: '#overview-allocation-card',
         popover: {
-          title: 'Live Kigali Allocation Radar & Traffic',
-          description: 'Inspect where crew members are currently checked in or in transit across Kigali venues and logistics gates.',
+          title: 'Hourly Traffic & Currently On-Site Crew',
+          description: 'Live check-in volume across Kigali event venues and facility gates, paired with active Currently On-Site (COS) roster.',
           side: 'left',
           align: 'start',
         },

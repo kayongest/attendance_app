@@ -22,6 +22,7 @@ header("Expires: 0");
 $portalEnabled = true;
 $isAuthorized = false;
 $activeDb = '';
+$portalCfg = null;
 
 try {
     require_once __DIR__ . '/db.php';
@@ -31,7 +32,9 @@ try {
     while ($row = $st->fetch(PDO::FETCH_ASSOC)) {
         $settings[$row['setting_key']] = (string) ($row['setting_value'] ?? '');
     }
-    $portalEnabled = ($settings['onsite_share_enabled'] ?? '1') === '1';
+    $portalCfg = resolveStandalonePortalConfig($pdo, 'onsite');
+    $portalCfgActive = $portalCfg ? ((int) ($portalCfg['is_active'] ?? 1) === 1) : true;
+    $portalEnabled = (($settings['onsite_share_enabled'] ?? '1') === '1') && $portalCfgActive;
     $curVer = max(1, (int) ($settings['onsite_share_session_ver'] ?? 1));
     $isAuthorized = $portalEnabled
         && !empty($_SESSION['onsite_viewer_authorized'])
@@ -40,6 +43,12 @@ try {
     $portalEnabled = true;
     $isAuthorized = false;
 }
+
+$portalTitleResolved = ($portalCfg && trim((string) ($portalCfg['title'] ?? '')) !== '')
+    ? trim((string) $portalCfg['title'])
+    : 'Live On-Site Crew Directory';
+$portalBgUrl = $portalCfg ? ($portalCfg['background_image_url'] ?? null) : null;
+$portalOverlayOpacity = $portalCfg ? max(0.15, min(0.95, (float) ($portalCfg['overlay_opacity'] ?? 0.78))) : 0.78;
 
 $initialTheme = 'light';
 if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
@@ -115,6 +124,27 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       color: var(--text-primary);
       min-height: 100vh;
       line-height: 1.45;
+      position: relative;
+    }
+
+    .portal-custom-bg {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .portal-custom-bg-img {
+      position: absolute;
+      inset: -12px;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    .portal-custom-bg-scrim {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-canvas);
     }
 
     /* Lock Gate Card */
@@ -489,12 +519,18 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   </style>
 </head>
 <body>
+  <?php if (!empty($portalBgUrl)): ?>
+  <div class="portal-custom-bg" aria-hidden="true">
+    <div class="portal-custom-bg-img" style="background-image: url('<?php echo htmlspecialchars((string) $portalBgUrl, ENT_QUOTES, 'UTF-8'); ?>');"></div>
+    <div class="portal-custom-bg-scrim" style="opacity: <?php echo htmlspecialchars(number_format((float) $portalOverlayOpacity, 2, '.', ''), ENT_QUOTES, 'UTF-8'); ?>;"></div>
+  </div>
+  <?php endif; ?>
 
   <!-- PASSWORD GATE -->
   <div id="portal-lock-view" class="lock-wrap" style="display: <?php echo $isAuthorized ? 'none' : 'flex'; ?>;">
     <div class="lock-card">
       <div class="lock-badge">Technician Shared Access</div>
-      <h1 class="lock-title">On-Site Crew Directory</h1>
+      <h1 class="lock-title"><?php echo htmlspecialchars($portalTitleResolved, ENT_QUOTES, 'UTF-8'); ?></h1>
       <p class="lock-sub">
         <?php if (!$portalEnabled): ?>
           This shared on-site link is currently disabled by an Administrator.
@@ -536,7 +572,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       <div class="brand-left">
         <div class="brand-mark">aB</div>
         <div>
-          <div style="font-size: 16px; font-weight: 800;">Live On-Site Directory</div>
+          <div style="font-size: 16px; font-weight: 800;"><?php echo htmlspecialchars($portalTitleResolved, ENT_QUOTES, 'UTF-8'); ?></div>
           <div style="font-size: 12px; color: var(--text-secondary);">Stock Managers · Gate Controllers · Tech Leads · Technicians</div>
         </div>
       </div>

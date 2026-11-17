@@ -664,6 +664,20 @@ function resolveStandaloneFacilityGate(PDO $pdo, string $siteKey = '', int $whId
         if ($row) return $row;
     }
 
+    if ($norm !== '') {
+        try {
+            $pst = $pdo->prepare("SELECT `wh_id` FROM `standalone_portals` WHERE LOWER(`portal_key`) = ? AND `wh_id` IS NOT NULL LIMIT 1");
+            $pst->execute([$norm]);
+            $mappedWhId = (int) ($pst->fetchColumn() ?: 0);
+            if ($mappedWhId > 0) {
+                $wst = $pdo->prepare("SELECT * FROM `stock_locations` WHERE `id` = ? AND `is_active` = 1 LIMIT 1");
+                $wst->execute([$mappedWhId]);
+                $wrow = $wst->fetch(PDO::FETCH_ASSOC);
+                if ($wrow) return $wrow;
+            }
+        } catch (Throwable $e) {}
+    }
+
     return null;
 }
 
@@ -682,4 +696,127 @@ function isStandaloneGateAuthorized(PDO $pdo, array $whRow): bool
         return false;
     }
     return hash_equals(sha1($expectedPin), (string) $map[$wid]);
+}
+
+function resolvePortalBackgroundUrl(?string $rawPath): ?string
+{
+    $rel = ltrim(str_replace('\\', '/', trim((string) $rawPath)), '/');
+    if ($rel === '' || strpos($rel, '..') !== false) {
+        return null;
+    }
+    $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+    return is_file($abs) ? $rel : null;
+}
+
+function ensureStandalonePortalsTable(PDO $pdo): void
+{
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `standalone_portals` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `portal_key` VARCHAR(64) NOT NULL UNIQUE,
+                `portal_type` VARCHAR(32) NOT NULL DEFAULT 'facility_gate',
+                `title` VARCHAR(140) NOT NULL,
+                `subtitle` VARCHAR(255) DEFAULT NULL,
+                `entry_url` VARCHAR(255) NOT NULL,
+                `wh_id` INT DEFAULT NULL,
+                `background_image` VARCHAR(255) DEFAULT NULL,
+                `overlay_opacity` DECIMAL(3,2) NOT NULL DEFAULT 0.78,
+                `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+                `is_system` TINYINT(1) NOT NULL DEFAULT 1,
+                `sort_order` INT NOT NULL DEFAULT 1,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        $nderaRow = resolveStandaloneFacilityGate($pdo, 'ndera');
+        $bkRow = resolveStandaloneFacilityGate($pdo, 'bk-arena');
+        $kccRow = resolveStandaloneFacilityGate($pdo, 'kcc');
+
+        $ins = $pdo->prepare("
+            INSERT IGNORE INTO `standalone_portals`
+            (`portal_key`, `portal_type`, `title`, `subtitle`, `entry_url`, `wh_id`, `background_image`, `overlay_opacity`, `is_active`, `is_system`, `sort_order`)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, 0.78, 1, 1, ?)
+        ");
+        $defaults = [
+            ['ndera', 'facility_gate', 'Ndera Warehouse Gate', 'Rwanda Events Gate Terminal · # Ndera Warehouse Gate', 'ndera-gate.php', $nderaRow ? (int) $nderaRow['id'] : null, 1],
+            ['bk-arena', 'facility_gate', 'BK Arena Gate', 'Rwanda Events Gate Terminal · # BK Arena Gate', 'bk-arena-gate.php', $bkRow ? (int) $bkRow['id'] : null, 2],
+            ['kcc', 'facility_gate', 'KCC Gate', 'Rwanda Events Gate Terminal · # KCC Gate', 'kcc-gate.php', $kccRow ? (int) $kccRow['id'] : null, 3],
+            ['onsite', 'onsite_portal', 'Live On-Site Crew Portal', 'Read-Only Live On-Site Directory · Stock Managers, Gate Controllers & Technicians', 'onsite.php', null, 4],
+        ];
+        foreach ($defaults as $row) {
+            $ins->execute($row);
+        }
+    } catch (Throwable $e) {}
+}
+
+function getStandalonePortalsList(PDO $pdo, bool $includePin = false): array
+{
+    ensureStandalonePortalsTable($pdo);
+    $rows = [];
+    try {
+        $sql = "
+            SELECT p.*, s.`name` AS `wh_name`, s.`code` AS `wh_code`, s.`location` AS `wh_location`,
+                   s.`open_time` AS `wh_open_time`, s.`close_time` AS `wh_close_time`, s.`terminal_pin` AS `wh_terminal_pin`
+            FROM `standalone_portals` p
+            LEFT JOIN `stock_locations` s ON s.`id` = p.`wh_id`
+            ORDER BY p.`sort_order` ASC, p.`id` ASC
+        ";
+        foreach ($pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $bgUrl = resolvePortalBackgroundUrl($r['background_image'] ?? null);
+            $item = [
+                'id' => (int) $r['id'],
+                'portal_key' => (string) $r['portal_key'],
+                'portal_type' => (string) ($r['portal_type'] ?? 'facility_gate'),
+                'title' => (string) ($r['title'] ?? ''),
+                'subtitle' => (string) ($r['subtitle'] ?? ''),
+                'entry_url' => (string) ($r['entry_url'] ?? ''),
+                'wh_id' => $r['wh_id'] !== null ? (int) $r['wh_id'] : null,
+                'wh_name' => (string) ($r['wh_name'] ?? ''),
+                'wh_code' => (string) ($r['wh_code'] ?? ''),
+                'wh_location' => (string) ($r['wh_location'] ?? ''),
+                'wh_open_time' => $r['wh_open_time'] ? substr((string) $r['wh_open_time'], 0, 5) : '08:00',
+                'wh_close_time' => $r['wh_close_time'] ? substr((string) $r['wh_close_time'], 0, 5) : '18:00',
+                'has_pin' => trim((string) ($r['wh_terminal_pin'] ?? '')) !== '',
+                'background_image' => $bgUrl,
+                'overlay_opacity' => (float) ($r['overlay_opacity'] ?? 0.78),
+                'is_active' => (int) ($r['is_active'] ?? 1),
+                'is_system' => (int) ($r['is_system'] ?? 0),
+                'sort_order' => (int) ($r['sort_order'] ?? 1),
+            ];
+            if ($includePin && $item['wh_id'] !== null) {
+                $item['terminal_pin'] = (string) ($r['wh_terminal_pin'] ?? '');
+            }
+            $rows[] = $item;
+        }
+    } catch (Throwable $e) {}
+    return $rows;
+}
+
+function resolveStandalonePortalConfig(PDO $pdo, string $portalKey = '', int $whId = 0): ?array
+{
+    ensureStandalonePortalsTable($pdo);
+    $key = strtolower(trim($portalKey));
+    try {
+        if ($key !== '') {
+            $st = $pdo->prepare("SELECT * FROM `standalone_portals` WHERE LOWER(`portal_key`) = ? LIMIT 1");
+            $st->execute([$key]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                $row['background_image_url'] = resolvePortalBackgroundUrl($row['background_image'] ?? null);
+                return $row;
+            }
+        }
+        if ($whId > 0) {
+            $st = $pdo->prepare("SELECT * FROM `standalone_portals` WHERE `wh_id` = ? ORDER BY `is_system` DESC, `id` ASC LIMIT 1");
+            $st->execute([$whId]);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                $row['background_image_url'] = resolvePortalBackgroundUrl($row['background_image'] ?? null);
+                return $row;
+            }
+        }
+    } catch (Throwable $e) {}
+    return null;
 }

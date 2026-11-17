@@ -29,6 +29,7 @@ if ($siteKey === '' && $whIdParam <= 0) {
 }
 
 $whRow = null;
+$portalCfg = null;
 $isAuthorized = false;
 $activeDb = '';
 $dbError = '';
@@ -40,6 +41,7 @@ try {
     if ($whRow) {
         $isAuthorized = isStandaloneGateAuthorized($pdo, $whRow);
     }
+    $portalCfg = resolveStandalonePortalConfig($pdo, $siteKey, $whRow ? (int) $whRow['id'] : $whIdParam);
 } catch (Throwable $e) {
     $dbError = 'Unable to connect to the attendance database.';
 }
@@ -66,8 +68,12 @@ $rawWhName = $whRow ? trim((string) ($whRow['name'] ?? 'Facility')) : '';
 $fallbackGateLabel = $rawWhName !== ''
     ? (preg_match('/gate$/i', $rawWhName) ? $rawWhName : ($rawWhName . ' Gate'))
     : 'Facility Gate';
-$gateDisplayLabel = $gateTitleMap[$normalizedKey] ?? $fallbackGateLabel;
+$customPortalTitle = $portalCfg ? trim((string) ($portalCfg['title'] ?? '')) : '';
+$gateDisplayLabel = $customPortalTitle !== '' ? $customPortalTitle : ($gateTitleMap[$normalizedKey] ?? $fallbackGateLabel);
 $gateHashtagLabel = '# ' . $gateDisplayLabel;
+$portalBgUrl = $portalCfg ? ($portalCfg['background_image_url'] ?? null) : null;
+$portalOverlayOpacity = $portalCfg ? max(0.15, min(0.95, (float) ($portalCfg['overlay_opacity'] ?? 0.78))) : 0.78;
+$portalPaused = $portalCfg ? ((int) ($portalCfg['is_active'] ?? 1) === 0) : false;
 $gateIdResolved = $whRow ? (int) $whRow['id'] : $whIdParam;
 $gateCodeResolved = $whRow ? (string) ($whRow['code'] ?? 'STK') : '';
 $gateLocationResolved = $whRow ? (string) ($whRow['location'] ?? 'Kigali') : '';
@@ -164,6 +170,27 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       color: var(--text-primary);
       min-height: 100vh;
       line-height: 1.45;
+      position: relative;
+    }
+
+    .portal-custom-bg {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .portal-custom-bg-img {
+      position: absolute;
+      inset: -12px;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    .portal-custom-bg-scrim {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-canvas);
     }
 
     /* Top Minimal Bar */
@@ -792,6 +819,12 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   </style>
 </head>
 <body>
+  <?php if (!empty($portalBgUrl)): ?>
+  <div class="portal-custom-bg" aria-hidden="true">
+    <div class="portal-custom-bg-img" style="background-image: url('<?php echo htmlspecialchars((string) $portalBgUrl, ENT_QUOTES, 'UTF-8'); ?>');"></div>
+    <div class="portal-custom-bg-scrim" style="opacity: <?php echo htmlspecialchars(number_format((float) $portalOverlayOpacity, 2, '.', ''), ENT_QUOTES, 'UTF-8'); ?>;"></div>
+  </div>
+  <?php endif; ?>
 
   <!-- Top Utility Bar -->
   <div class="utility-bar">
@@ -817,12 +850,12 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
     </div>
   </header>
 
-  <?php if (!$whRow || $dbError !== ''): ?>
+  <?php if (!$whRow || $dbError !== '' || !empty($portalPaused)): ?>
     <div class="lock-wrap">
       <div class="lock-card">
         <div class="lock-badge">Gate Unavailable</div>
-        <h2 class="lock-title">Facility Gate Not Found</h2>
-        <p class="lock-desc"><?php echo htmlspecialchars($dbError !== '' ? $dbError : 'This facility gate location is missing or marked inactive.', ENT_QUOTES, 'UTF-8'); ?></p>
+        <h2 class="lock-title"><?php echo !empty($portalPaused) ? 'Gate Terminal Paused' : 'Facility Gate Not Found'; ?></h2>
+        <p class="lock-desc"><?php echo htmlspecialchars(!empty($portalPaused) ? 'This standalone gate terminal has been temporarily paused by an Administrator.' : ($dbError !== '' ? $dbError : 'This facility gate location is missing or marked inactive.'), ENT_QUOTES, 'UTF-8'); ?></p>
         <div class="lock-footer">
           <span>Standalone Gate Terminal</span>
           <a href="index.html">Main Dashboard →</a>

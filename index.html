@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261117_v2" />
+  <link rel="stylesheet" href="styles.css?v=20261117_v3" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -46,7 +46,7 @@
         <img src="assets/chevrons-up-down.svg" alt="" class="svg-icon" />
       </button> -->
 
-      <!-- Main Navigation (6 items per Section 4.1 of Spec) -->
+      <!-- Main Navigation (5 consolidated items) -->
       <nav class="nav-group" aria-label="Main navigation" data-node-id="2:3284">
         <button type="button" class="nav-item active" data-nav-target="overview" data-node-id="2:3285">
           <img src="assets/nav-overview-active.svg" alt="" class="svg-icon" id="nav-icon-overview" />
@@ -54,7 +54,7 @@
         </button>
         <button type="button" class="nav-item" data-nav-target="events" data-node-id="2:3288">
           <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" id="nav-icon-events" />
-          <span class="nav-item-label">Venues &amp; Facility Gates</span>
+          <span class="nav-item-label">Checkpoints &amp; Venues</span>
           <span class="nav-item-count" id="sidebar-events-count">07</span>
         </button>
         <button type="button" class="nav-item" data-nav-target="users" id="nav-users-btn">
@@ -64,28 +64,11 @@
         </button>
         <button type="button" class="nav-item" data-nav-target="attendees" data-node-id="2:3292">
           <img src="assets/nav-attendees-inactive.svg" alt="" class="svg-icon" id="nav-icon-attendees" />
-          <span class="nav-item-label">ID Badges &amp; Kiosk</span>
+          <span class="nav-item-label">Staff ID Badges</span>
         </button>
         <button type="button" class="nav-item" data-nav-target="terminals" id="nav-terminals-btn">
           <img src="assets/scan-line-13.svg" alt="" class="svg-icon" id="nav-icon-terminals" />
           <span class="nav-item-label">Terminals</span>
-        </button>
-        <button type="button" class="nav-item" id="nav-venue-security-btn" data-node-id="2:3295">
-          <img src="assets/nav-campaigns.svg" alt="" class="svg-icon" />
-          <span class="nav-item-label">Venue Security Portal</span>
-        </button>
-        <button type="button" class="nav-item" data-nav-target="stock-manager" id="nav-stock-manager-btn">
-          <svg class="svg-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-          </svg>
-          <span class="nav-item-label">Facilities &amp; Gates</span>
-          <span class="nav-item-count" id="sidebar-stock-count">03</span>
-        </button>
-        <button type="button" class="nav-item" id="nav-access-matrix-btn" data-node-id="2:3301">
-          <img src="assets/nav-payments.svg" alt="" class="svg-icon" />
-          <span class="nav-item-label">Clearance Matrix</span>
         </button>
       </nav>
 
@@ -95,7 +78,7 @@
         <span style="text-decoration: underline;">Manage ↗</span>
       </button>
 
-      <!-- Workspace Navigation (Checkpoint Controls) -->
+      <!-- Workspace Navigation (Checkpoint Controls - 6 items) -->
       <nav class="nav-group-workspace" id="sidebar-checkpoint-controls" aria-label="Workspace navigation" data-node-id="2:3304">
         <span class="nav-section-label" data-node-id="2:3306">CHECKPOINT CONTROLS</span>
         <button type="button" class="nav-item" id="sidebar-shift-relief-btn" title="Controller Assignments &amp; Shift Relief Approvals">
@@ -113,6 +96,11 @@
           <span class="nav-item-label">On-Site Roll-Call</span>
           <span class="nav-item-count js-stat-onsite">04</span>
         </button>
+        <button type="button" class="nav-item" id="sidebar-onsite-share-btn" data-nav-target="standalone-portals" title="Gates &amp; On-Site Portals">
+          <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+          <span class="nav-item-label">Gates &amp; On-Site</span>
+          <span class="nav-item-count" id="sidebar-portals-count">04</span>
+        </button>
         <button type="button" class="nav-item" id="sidebar-station-lock-btn" data-node-id="2:3310">
           <img src="assets/nav-integrations.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Station Lock (PIN)</span>
@@ -120,11 +108,6 @@
         <button type="button" class="nav-item" id="sidebar-reset-demo-btn" data-node-id="2:3313" title="Reset all gate scans for today (Admin only)">
           <img src="assets/nav-settings.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Reset Today’s Scans</span>
-        </button>
-        <button type="button" class="nav-item" id="sidebar-onsite-share-btn" data-nav-action="action:onsite-share" title="Standalone Gates &amp; Live On-Site Portal Links">
-          <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
-          <span class="nav-item-label">Gates &amp; On-Site</span>
-          <span class="nav-item-count">04</span>
         </button>
       </nav>
 
@@ -1047,12 +1030,20 @@
           <!-- Page Introduction -->
           <div class="page-intro" data-node-id="2:8117">
             <div class="page-intro-heading" data-node-id="2:8118">
-              <h1 class="page-title" data-node-id="2:8119">Venues &amp; Facility Checkpoints</h1>
+              <h1 class="page-title" data-node-id="2:8119">Checkpoints &amp; Venues</h1>
               <p class="page-subtitle" data-node-id="2:8120">
-                Manage PIN-protected Event Venue entrances and Facility Gate attendance terminals (L2–L4).
+                Unified Facility Gates, Event Venues &amp; Terminal hub — switch active checkpoints, manage Facility Gates, and configure Event Venue security stations (L2–L4).
               </p>
             </div>
             <div class="page-actions">
+              <button type="button" class="btn btn-primary-38" id="open-add-warehouse-btn" style="display: none;">
+                <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+                <span>+ New Facility Gate</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" id="vs-add-venue-btn" style="display: none; background: #4f46e5; border-color: #4f46e5; color: #fff;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add Event Venue</span>
+              </button>
               <button type="button" class="btn btn-secondary-38 js-station-lock-btn">
                 <span class="js-station-lock-label">Lock / Unlock Station</span>
               </button>
@@ -1071,7 +1062,7 @@
                 <img src="assets/metric-calendar.svg" alt="" class="svg-icon" />
               </div>
               <span class="metric-value-30" id="events-total-kpi" data-node-id="2:8130">07</span>
-              <span class="metric-context" data-node-id="2:8131">3 Facility Gates · 4 Event Venues</span>
+              <span class="metric-context" data-node-id="2:8131">Facility Gates · Event Venues</span>
             </div>
 
             <div class="metric-card" data-node-id="2:8132">
@@ -1101,92 +1092,218 @@
               <span class="metric-context" data-node-id="2:8149">Awaiting Admin / Site Manager</span>
             </div>
           </div>
+
+          <!-- Checkpoints & Venues Hub Mode Switcher -->
+          <div class="user-subnav-pills" id="events-hub-tabs" style="display: flex; gap: 10px; margin-top: 14px; margin-bottom: 4px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-primary-32 js-events-hub-tab" id="cp-hub-tab-directory" data-cp-hub-tab="directory">
+              <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+              <span>All Checkpoints Directory (<span id="cp-hub-count-all">07</span>)</span>
+            </button>
+            <button type="button" class="btn btn-secondary-32 js-events-hub-tab" id="cp-hub-tab-warehouses" data-cp-hub-tab="warehouses">
+              <img src="assets/warehouse-13.svg" alt="" class="svg-icon" />
+              <span>Facility Gates CRUD (<span id="cp-hub-count-wh">03</span>)</span>
+            </button>
+            <button type="button" class="btn btn-secondary-32 js-events-hub-tab" id="cp-hub-tab-venues" data-cp-hub-tab="venues">
+              <img src="assets/nav-campaigns.svg" alt="" class="svg-icon" />
+              <span>Event Venues CRUD (<span id="cp-hub-count-venues">04</span>)</span>
+            </button>
+          </div>
         </div>
 
-        <!-- Checkpoints & Batch Custody Directory Table (Node 2:8202) -->
-        <section class="directory-card" data-node-id="2:8202">
-          <div class="directory-header" data-node-id="2:8203">
-            <div class="directory-heading" data-node-id="2:8204">
-              <div class="directory-title-row" data-node-id="2:8205">
-                <h2 class="directory-title-18" data-node-id="2:8206">Checkpoints &amp; Gate Directory</h2>
-                <span class="status-badge status-badge-purple-sm" id="events-directory-badge" data-node-id="2:8207">07</span>
+        <!-- HUB PANE 1: Checkpoints & Gate Directory Table (Node 2:8202) -->
+        <div id="events-hub-pane-directory">
+          <section class="directory-card" data-node-id="2:8202">
+            <div class="directory-header" data-node-id="2:8203">
+              <div class="directory-heading" data-node-id="2:8204">
+                <div class="directory-title-row" data-node-id="2:8205">
+                  <h2 class="directory-title-18" data-node-id="2:8206">Checkpoints &amp; Gate Directory</h2>
+                  <span class="status-badge status-badge-purple-sm" id="events-directory-badge" data-node-id="2:8207">07</span>
+                </div>
+                <p class="directory-desc" data-node-id="2:8209">
+                  Select any Facility Gate or Event Venue to switch the active terminal or copy a shareable kiosk link.
+                </p>
               </div>
-              <p class="directory-desc" data-node-id="2:8209">
-                Select any Facility Gate or Event Venue to switch the active terminal or copy a shareable kiosk link.
-              </p>
+            </div>
+
+            <!-- Checkpoint Tabs -->
+            <div class="status-tabs" id="events-status-tabs" data-node-id="2:8219">
+              <button type="button" class="status-tab active" data-event-tab="all" data-node-id="2:8220">
+                <span class="status-tab-label">All Checkpoints</span>
+                <span class="status-tab-count" id="events-tab-count-all">07</span>
+              </button>
+              <button type="button" class="status-tab" data-event-tab="stock_warehouse" data-node-id="2:8223">
+                <span class="status-tab-label">Facility Gates</span>
+                <span class="status-tab-count" id="events-tab-count-stock">03</span>
+              </button>
+              <button type="button" class="status-tab" data-event-tab="event_venue" data-node-id="2:8226">
+                <span class="status-tab-label">Event Venues</span>
+                <span class="status-tab-count" id="events-tab-count-venue">04</span>
+              </button>
+            </div>
+
+            <!-- Search Box -->
+            <div class="table-tools" data-node-id="2:8235">
+              <label class="table-search-box" for="events-search-input" data-node-id="2:8236">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input
+                  type="text"
+                  id="events-search-input"
+                  class="table-search-input"
+                  placeholder="Search checkpoints by warehouse, venue, or location..."
+                  autocomplete="off"
+                />
+              </label>
+            </div>
+
+            <!-- Checkpoints Table Header -->
+            <div class="data-table-header" data-node-id="2:8251">
+              <div class="col-checkbox-event">
+                <div class="custom-checkbox" role="checkbox" aria-checked="false" tabindex="0"></div>
+              </div>
+              <div class="col-sort-header" data-node-id="2:8253">
+                <span class="th-label">Checkpoint Name</span>
+              </div>
+              <div class="col-event-schedule"><span class="th-label">Call Time &amp; Lead</span></div>
+              <div class="col-event-location"><span class="th-label">Clearance Policy</span></div>
+              <div class="col-event-registrations"><span class="th-label">Today’s Activity</span></div>
+              <div class="col-event-status"><span class="th-label">Checkpoint Type</span></div>
+              <div class="col-event-action"><span class="th-label">Gate Actions</span></div>
+              <div class="col-actions"></div>
+            </div>
+
+            <!-- Checkpoints Table Rows -->
+            <div id="events-table-rows"></div>
+
+            <!-- Footer -->
+            <div class="table-footer" data-node-id="2:8461" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 4px 6px; border-top: 1px solid var(--border-color); margin-top: 10px; flex-wrap: wrap; gap: 10px;">
+              <span class="results-count" id="events-results-count" data-node-id="2:8462">Showing 1–5 of 15 checkpoints</span>
+              <div class="page-controls" id="events-page-controls" style="display: flex; gap: 4px; align-items: center;"></div>
+              <div class="timezone-footer" data-node-id="2:8463" style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted);">
+                <img src="assets/globe-12.svg" alt="" class="svg-icon" />
+                <span data-node-id="2:8465">Central Africa Time (CAT · UTC+2 · Kigali)</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- HUB PANE 2: Facility Gates & Sites CRUD -->
+        <div id="events-hub-pane-warehouses" style="display: none;">
+          <section class="directory-card">
+            <div class="directory-header">
+              <div class="directory-heading">
+                <div class="directory-title-row">
+                  <h2 class="directory-title-18">Facility Checkpoints &amp; Gate Registry</h2>
+                  <span class="status-badge status-badge-purple-sm" id="sm-active-view-badge">Facility Gates</span>
+                </div>
+                <p class="directory-desc">
+                  Manage operational facility checkpoints, operating hours, dedicated terminal PINs, Gate Controller assignments, and photo attachments.
+                </p>
+              </div>
+            </div>
+
+            <div class="table-tools" style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <label class="table-search-box" style="flex: 1 1 320px; max-width: 440px;">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input
+                  type="text"
+                  id="sm-wh-search-input"
+                  class="table-search-input"
+                  placeholder="Search facility gates by name, code, or location..."
+                  autocomplete="off"
+                />
+              </label>
+              <button type="button" class="btn btn-primary-32 js-trigger-add-wh" id="hub-add-wh-inline-btn">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>Add Facility Gate</span>
+              </button>
+            </div>
+
+            <div id="sm-warehouses-grid" class="sm-grid-container"></div>
+
+            <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+              <span class="results-count" id="sm-results-footer">Showing facility records</span>
+              <div class="page-controls" id="sm-page-controls" style="display: flex; gap: 4px; align-items: center;"></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- HUB PANE 3: Event Venues CRUD -->
+        <div id="events-hub-pane-venues" style="display: none;">
+          <div class="metrics-grid" style="margin-bottom: 16px;">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Event Venues</span>
+                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="vs-kpi-venues">0</span>
+              <span class="metric-context">Registered Event Checkpoints</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Venue Crew On-Site</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="vs-kpi-onsite">0</span>
+              <span class="metric-context">Checked-In at Venues Now</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Assigned Controllers</span>
+                <img src="assets/nav-team-members.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="vs-kpi-controllers">0</span>
+              <span class="metric-context">Active Venue Operators</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Active Venue Call Time</span>
+                <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="vs-kpi-calltime">08:00</span>
+              <span class="metric-context" id="vs-kpi-calltime-cp">Primary Event Venue</span>
             </div>
           </div>
 
-          <!-- Checkpoint Tabs -->
-          <div class="status-tabs" id="events-status-tabs" data-node-id="2:8219">
-            <button type="button" class="status-tab active" data-event-tab="all" data-node-id="2:8220">
-              <span class="status-tab-label">All Checkpoints</span>
-              <span class="status-tab-count" id="events-tab-count-all">07</span>
-            </button>
-            <button type="button" class="status-tab" data-event-tab="stock_warehouse" data-node-id="2:8223">
-              <span class="status-tab-label">Facility Gates</span>
-              <span class="status-tab-count" id="events-tab-count-stock">03</span>
-            </button>
-            <button type="button" class="status-tab" data-event-tab="event_venue" data-node-id="2:8226">
-              <span class="status-tab-label">Event Venues</span>
-              <span class="status-tab-count" id="events-tab-count-venue">04</span>
-            </button>
-          </div>
-
-          <!-- Search Box -->
-          <div class="table-tools" data-node-id="2:8235">
-            <label class="table-search-box" for="events-search-input" data-node-id="2:8236">
-              <img src="assets/search-table.svg" alt="" class="svg-icon" />
-              <input
-                type="text"
-                id="events-search-input"
-                class="table-search-input"
-                placeholder="Search checkpoints by warehouse, venue, or location..."
-                autocomplete="off"
-              />
-            </label>
-          </div>
-
-          <!-- Checkpoints Table Header -->
-          <div class="data-table-header" data-node-id="2:8251">
-            <div class="col-checkbox-event">
-              <div class="custom-checkbox" role="checkbox" aria-checked="false" tabindex="0"></div>
+          <section class="directory-card">
+            <div class="directory-header">
+              <div class="directory-heading">
+                <div class="directory-title-row">
+                  <h2 class="directory-title-18">Event Venue Security Stations</h2>
+                  <span class="status-badge status-badge-purple-sm" id="vs-stations-count-badge">0 Venues</span>
+                </div>
+                <p class="directory-desc">
+                  Create, edit, or delete Event Venues, configure their Terminal PIN &amp; call time, or launch any venue’s Gate Kiosk (#pane-kiosk).
+                </p>
+              </div>
             </div>
-            <div class="col-sort-header" data-node-id="2:8253">
-              <span class="th-label">Checkpoint Name</span>
+            <div class="table-tools" style="display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+              <label class="table-search-box" for="vs-search-input" style="flex: 1 1 260px; max-width: 440px;">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input type="text" id="vs-search-input" class="table-search-input" placeholder="Search Event Venues by title, location, Tech Lead, PM, or date..." />
+              </label>
+              <button type="button" class="btn btn-primary-32 js-trigger-add-ev" id="hub-add-venue-inline-btn" style="background: #4f46e5; border-color: #4f46e5; color: #fff;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>Add Event Venue</span>
+              </button>
             </div>
-            <div class="col-event-schedule"><span class="th-label">Call Time &amp; Lead</span></div>
-            <div class="col-event-location"><span class="th-label">Clearance Policy</span></div>
-            <div class="col-event-registrations"><span class="th-label">Today’s Activity</span></div>
-            <div class="col-event-status"><span class="th-label">Checkpoint Type</span></div>
-            <div class="col-event-action"><span class="th-label">Gate Actions</span></div>
-            <div class="col-actions"></div>
-          </div>
-
-          <!-- Checkpoints Table Rows -->
-          <div id="events-table-rows"></div>
-
-          <!-- Footer -->
-          <div class="table-footer" data-node-id="2:8461" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 4px 6px; border-top: 1px solid var(--border-color); margin-top: 10px; flex-wrap: wrap; gap: 10px;">
-            <span class="results-count" id="events-results-count" data-node-id="2:8462">Showing 1–5 of 15 checkpoints</span>
-            <div class="page-controls" id="events-page-controls" style="display: flex; gap: 4px; align-items: center;"></div>
-            <div class="timezone-footer" data-node-id="2:8463" style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted);">
-              <img src="assets/globe-12.svg" alt="" class="svg-icon" />
-              <span data-node-id="2:8465">Central Africa Time (CAT · UTC+2 · Kigali)</span>
+            <div id="vs-venues-grid" class="dedicated-page-grid-3" style="padding: 18px 20px;"></div>
+            <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
+              <span class="results-count" id="vs-results-footer">Showing 0 of 0 event venues</span>
+              <div class="page-controls" id="vs-page-controls" style="display: flex; gap: 4px; align-items: center;"></div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </main>
 
       <!-- ================================================================== -->
-      <!-- SCREEN 3: STAFF ID BADGES & KIOSK (Node 2:8468)                    -->
+      <!-- SCREEN 3: STAFF ID BADGES (Node 2:8468)                            -->
       <!-- ================================================================== -->
       <main class="screen-view" id="screen-attendees" data-node-id="2:8554">
         <div class="overview-top-block" data-node-id="2:8555">
           <!-- Page Introduction -->
           <div class="page-intro" data-node-id="2:8556">
             <div class="page-intro-heading" data-node-id="2:8557">
-              <h1 class="page-title" data-node-id="2:8558">Staff ID Badges &amp; Kiosk</h1>
+              <h1 class="page-title" data-node-id="2:8558">Staff ID Badges</h1>
               <p class="page-subtitle" data-node-id="2:8559">
                 Dynamic Access Matrix verification and paired Check-In (In) &amp; Check-Out (Out) gate attendance timestamps.
               </p>
@@ -1648,195 +1765,8 @@
       </main>
 
       <!-- ================================================================== -->
-      <!-- SCREEN 4: 4-TIER ACCESS CLEARANCE MATRIX                           -->
+      <!-- (Analytics & Stock Manager merged into Users->Matrix & Checkpoints)-->
       <!-- ================================================================== -->
-      <main class="screen-view" id="screen-analytics">
-        <div class="overview-top-block">
-          <div class="page-intro">
-            <div class="page-intro-heading">
-              <h1 class="page-title">Access Clearance Matrix</h1>
-              <p class="page-subtitle">
-                Configure attendance gate clearance tiers (L1–L4) across event venues and facility checkpoints.
-              </p>
-            </div>
-            <div class="page-actions">
-              <button type="button" class="btn btn-secondary-38" id="reset-demo-db-btn">
-                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
-                <span>Reset Today’s Gate Logs</span>
-              </button>
-              <button type="button" class="btn btn-primary-38" id="open-create-tier-btn" style="background: #10b981;">
-                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
-                <span>+ Add Clearance Tier</span>
-              </button>
-              <button type="button" class="btn btn-primary-38" data-action="go-kiosk">
-                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
-                <span>Back to Gate Kiosk</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- 4 Clearance Tier Overview Cards (4 per row, 2 rows) -->
-          <div class="metrics-grid matrix-cards-grid-4col" id="matrix-tier-cards-grid" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; width: 100%;"></div>
-        </div>
-
-        <!-- 4-Tier Access Matrix Crew Assignment Table -->
-        <section class="directory-card" id="matrix-config-section">
-          <div class="directory-header">
-            <div class="directory-heading">
-              <div class="directory-title-row">
-                <h2 class="directory-title-18">Access Clearance Matrix Configuration</h2>
-                <span class="status-badge status-badge-green-sm">Live MySQL Persistence</span>
-              </div>
-              <p class="directory-desc">
-                Configure staff member clearance levels and monitor gate permissions across venues and warehouse checkpoints.
-              </p>
-            </div>
-          </div>
-
-          <div class="data-table-header">
-            <div class="col-sort-header" style="width: 220px;"><span class="th-label">Staff Member</span></div>
-            <div class="col-company" style="width: 160px;"><span class="th-label">Badge Code</span></div>
-            <div class="col-ticket" style="width: 220px;"><span class="th-label">Current Clearance Tier</span></div>
-            <div class="col-reg-date" style="width: 180px;"><span class="th-label">Venue vs. Stock Rule</span></div>
-            <div class="col-checkin" style="flex: 1;"><span class="th-label">Update Clearance Tier</span></div>
-          </div>
-
-          <div id="matrix-config-rows"></div>
-        </section>
-      </main>
-
-      <!-- ================================================================== -->
-      <!-- SCREEN 5: FACILITIES & CHECKPOINTS MANAGER (CRUD)                  -->
-      <!-- ================================================================== -->
-      <main class="screen-view" id="screen-stock-manager">
-        <div class="overview-top-block">
-          <div class="page-intro">
-            <div class="page-intro-heading">
-              <h1 class="page-title">Facilities &amp; Gate Checkpoints Manager</h1>
-              <p class="page-subtitle">
-                Manage operational attendance facility gates, operating hours, dedicated terminal PINs, and Gate Controller assignments.
-              </p>
-            </div>
-            <div class="page-actions">
-              <button type="button" class="btn btn-primary-38" id="open-add-warehouse-btn" style="display: none;">
-                <img src="assets/map-pin-12.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
-                <span>+ New Facility Gate</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="metrics-grid" data-node-id="2:8124">
-            <div class="metric-card" data-node-id="2:8125">
-              <div class="metric-heading" data-node-id="2:8126">
-                <span class="metric-label-reg" data-node-id="2:8127">Active Checkpoints</span>
-                <img src="assets/metric-calendar.svg" alt="" class="svg-icon" />
-              </div>
-              <span class="metric-value-30" id="sm-total-cp-kpi" data-node-id="2:8130">07</span>
-              <span class="metric-context" data-node-id="2:8131">3 Facility Gates · 4 Event Venues</span>
-            </div>
-
-            <div class="metric-card" data-node-id="2:8132">
-              <div class="metric-heading" data-node-id="2:8133">
-                <span class="metric-label-reg" data-node-id="2:8134">Facility Gates</span>
-                <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
-              </div>
-              <span class="metric-value-30" id="sm-gates-kpi" data-node-id="2:8136">03</span>
-              <span class="metric-context" data-node-id="2:8137">Ndera · BK Arena · KCC Sites</span>
-            </div>
-
-            <div class="metric-card" data-node-id="2:8138">
-              <div class="metric-heading" data-node-id="2:8139">
-                <span class="metric-label-reg" data-node-id="2:8140">Event Venue Gates</span>
-                <img src="assets/metric-radio.svg" alt="" class="svg-icon" />
-              </div>
-              <span class="metric-value-30" id="sm-venues-kpi" data-node-id="2:8142">04</span>
-              <span class="metric-context" data-node-id="2:8143">KCC · BK Arena · Intare · Marriott</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Facility Registry Card -->
-        <section class="directory-card">
-          <div class="directory-header">
-            <div class="directory-heading">
-              <div class="directory-title-row">
-                <h2 class="directory-title-18">Facility Checkpoints &amp; Gate Registry</h2>
-                <span class="status-badge status-badge-purple-sm" id="sm-active-view-badge">Facility Gates</span>
-              </div>
-              <p class="directory-desc">
-                Manage operational facility checkpoints, call-time defaults, and gate terminal photo attachments.
-              </p>
-            </div>
-          </div>
-
-          <!-- Segmented View Toggle Bar -->
-          <div class="status-tabs" id="sm-segmented-tabs" style="border-bottom: 1px solid var(--border-color); padding: 0 20px;">
-            <button type="button" class="status-tab active js-sm-tab-btn" data-tab="warehouses" data-target-tab="warehouses">
-              <span class="status-tab-label" style="display: inline-flex; align-items: center; gap: 6px;"><img src="assets/warehouse-13.svg" alt="" class="svg-icon" style="width: 14px; height: 14px;" /><span>Facility Gates &amp; Sites</span></span>
-              <span class="status-tab-count" id="sm-tab-wh-count">03</span>
-            </button>
-            <button type="button" class="status-tab js-sm-tab-btn" data-tab="events" data-target-tab="events">
-              <span class="status-tab-label" style="display: inline-flex; align-items: center; gap: 6px;"><img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" style="width: 14px; height: 14px;" /><span>Event Venues &amp; Gates</span></span>
-              <span class="status-tab-count" id="sm-tab-ev-count">04</span>
-            </button>
-          </div>
-
-          <!-- TAB PANE 1: FACILITY GATES & SITES -->
-          <div id="sm-pane-warehouses" class="sm-tab-pane">
-            <div class="table-tools" style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
-              <label class="table-search-box" style="flex: 1 1 320px; max-width: 440px;">
-                <img src="assets/search-table.svg" alt="" class="svg-icon" />
-                <input
-                  type="text"
-                  id="sm-wh-search-input"
-                  class="table-search-input"
-                  placeholder="Search facility gates by name, code, or location..."
-                  autocomplete="off"
-                />
-              </label>
-              <button type="button" class="btn btn-primary-32 js-trigger-add-wh">
-                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
-                <span>Add Facility Gate</span>
-              </button>
-            </div>
-
-            <!-- Warehouse Cards Grid -->
-            <div id="sm-warehouses-grid" class="sm-grid-container"></div>
-          </div>
-
-          <!-- TAB PANE 1B: EVENT VENUES & GATES -->
-          <div id="sm-pane-events" class="sm-tab-pane" style="display: none;">
-            <div class="table-tools" style="padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
-              <label class="table-search-box" style="flex: 1 1 320px; max-width: 440px;">
-                <img src="assets/search-table.svg" alt="" class="svg-icon" />
-                <input
-                  type="text"
-                  id="sm-ev-search-input"
-                  class="table-search-input"
-                  placeholder="Search event venues by title, location, Tech Lead, or PM..."
-                  autocomplete="off"
-                />
-              </label>
-              <button type="button" class="btn btn-primary-32 js-trigger-add-ev">
-                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
-                <span>Add Event Venue</span>
-              </button>
-            </div>
-
-            <!-- Event Venues Cards Grid (5 per row, 5 per page) -->
-            <div id="sm-events-grid" class="sm-grid-container"></div>
-          </div>
-
-          <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
-            <span class="results-count" id="sm-results-footer">Showing facility records</span>
-            <div class="page-controls" id="sm-page-controls" style="display: flex; gap: 4px; align-items: center;">
-              <span style="font-size: 11px; color: var(--text-secondary);">
-                Supports drag-and-drop image uploads for facility gates and event venues
-              </span>
-            </div>
-          </div>
-        </section>
-      </main>
 
       <!-- ================================================================== -->
       <!-- SCREEN 6: USER & ROLE MANAGEMENT (CRUD)                            -->
@@ -1913,7 +1843,7 @@
             </button>
             <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-navigation" data-view="navigation">
               <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
-              <span>Navigation Menu CRUD (<span id="pill-nav-count">13</span>)</span>
+              <span>Navigation Menu CRUD (<span id="pill-nav-count">11</span>)</span>
             </button>
           </div>
         </div><!-- End overview-top-block -->
@@ -2139,6 +2069,31 @@
             <!-- Clearance Tier Cards Grid in Users Tab (4 per row, 2 rows) -->
             <div class="metrics-grid matrix-cards-grid-4col" id="users-matrix-tier-cards-grid" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; width: 100%;"></div>
           </div>
+
+          <!-- 4-Tier Access Matrix Crew Assignment Table -->
+          <section class="directory-card" id="matrix-config-section">
+            <div class="directory-header">
+              <div class="directory-heading">
+                <div class="directory-title-row">
+                  <h2 class="directory-title-18">Access Clearance Matrix Configuration</h2>
+                  <span class="status-badge status-badge-green-sm">Live MySQL Persistence</span>
+                </div>
+                <p class="directory-desc">
+                  Configure staff member clearance levels and monitor gate permissions across event venues and facility gate checkpoints.
+                </p>
+              </div>
+            </div>
+
+            <div class="data-table-header">
+              <div class="col-sort-header" style="width: 220px;"><span class="th-label">Staff Member</span></div>
+              <div class="col-company" style="width: 160px;"><span class="th-label">Badge Code</span></div>
+              <div class="col-ticket" style="width: 220px;"><span class="th-label">Current Clearance Tier</span></div>
+              <div class="col-reg-date" style="width: 180px;"><span class="th-label">Venue vs. Stock Rule</span></div>
+              <div class="col-checkin" style="flex: 1;"><span class="th-label">Update Clearance Tier</span></div>
+            </div>
+
+            <div id="matrix-config-rows"></div>
+          </section>
         </div><!-- End #matrix-view-container -->
 
         <!-- TAB 4: DEPARTMENTS DIRECTORY & CRUD VIEW CONTAINER -->
@@ -2386,92 +2341,9 @@
       <!-- ================================================================== -->
       <!-- SCREEN 8: VENUE SECURITY PORTAL                                    -->
       <!-- ================================================================== -->
-      <main class="screen-view" id="screen-venue-security">
-        <div class="overview-top-block">
-          <div class="page-intro">
-            <div class="page-intro-heading">
-              <h1 class="page-title">Venue Security Portal</h1>
-              <p class="page-subtitle">
-                Dedicated security operations hub for live Event Venues — inspect active venue call times, assigned controllers &amp; crew, and launch any venue’s Gate Kiosk.
-              </p>
-            </div>
-            <div class="page-actions">
-              <button type="button" class="btn btn-secondary-38" data-action="go-events">
-                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
-                <span>Manage Venues</span>
-              </button>
-              <button type="button" class="btn btn-primary-38" id="vs-add-venue-btn" style="background: #4f46e5; border-color: #4f46e5; color: #fff;">
-                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
-                <span>+ Add Event Venue</span>
-              </button>
-              <!-- <button type="button" class="btn btn-primary-38" id="vs-launch-first-kiosk-btn">
-                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
-                <span>Launch Venue Gate Kiosk</span>
-              </button> -->
-            </div>
-          </div>
-
-          <div class="metrics-grid">
-            <div class="metric-card">
-              <div class="metric-heading">
-                <span class="metric-label-reg">Event Venues</span>
-                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
-              </div>
-              <span class="metric-value-30" id="vs-kpi-venues">0</span>
-              <span class="metric-context">Registered Event Checkpoints</span>
-            </div>
-            <div class="metric-card">
-              <div class="metric-heading">
-                <span class="metric-label-reg">Venue Crew On-Site</span>
-                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
-              </div>
-              <span class="metric-value-30" id="vs-kpi-onsite">0</span>
-              <span class="metric-context">Checked-In at Venues Now</span>
-            </div>
-            <div class="metric-card">
-              <div class="metric-heading">
-                <span class="metric-label-reg">Assigned Controllers</span>
-                <img src="assets/nav-team-members.svg" alt="" class="svg-icon" />
-              </div>
-              <span class="metric-value-30" id="vs-kpi-controllers">0</span>
-              <span class="metric-context">Active Venue Operators</span>
-            </div>
-            <div class="metric-card">
-              <div class="metric-heading">
-                <span class="metric-label-reg">Active Venue Call Time</span>
-                <img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" />
-              </div>
-              <span class="metric-value-30" id="vs-kpi-calltime">08:00</span>
-              <span class="metric-context" id="vs-kpi-calltime-cp">Primary Event Venue</span>
-            </div>
-          </div>
-        </div>
-
-        <section class="directory-card">
-          <div class="directory-header">
-            <div class="directory-heading">
-              <div class="directory-title-row">
-                <h2 class="directory-title-18">Event Venue Security Stations</h2>
-                <span class="status-badge status-badge-purple-sm" id="vs-stations-count-badge">0 Venues</span>
-              </div>
-              <p class="directory-desc">
-                Create, edit, or delete Event Venues, configure their Terminal PIN &amp; roster, or launch any venue’s Gate Kiosk (#pane-kiosk).
-              </p>
-            </div>
-          </div>
-          <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-            <label class="table-search-box" for="vs-search-input" style="flex: 1 1 260px;">
-              <img src="assets/search-table.svg" alt="" class="svg-icon" />
-              <input type="text" id="vs-search-input" class="table-search-input" placeholder="Search Event Venues by title, location, Tech Lead, PM, or date..." />
-            </label>
-          </div>
-          <div id="vs-venues-grid" class="dedicated-page-grid-3" style="padding: 18px 20px;"></div>
-          <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;">
-            <span class="results-count" id="vs-results-footer">Showing 0 of 0 event venues</span>
-            <div class="page-controls" id="vs-page-controls" style="display: flex; gap: 4px; align-items: center;"></div>
-          </div>
-        </section>
-      </main>
+      <!-- ================================================================== -->
+      <!-- (Venue Security merged into Checkpoints & Venues hub Screen 2)     -->
+      <!-- ================================================================== -->
 
       <!-- ================================================================== -->
       <!-- SCREEN 9: SHIFT RELIEF & SWAPS (DEDICATED PAGE)                    -->
@@ -3041,6 +2913,152 @@
             </form>
           </section>
         </div>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 13B: STANDALONE GATES & ON-SITE PORTALS CRUD PAGE           -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-standalone-portals">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <h1 class="page-title">Gates &amp; On-Site Portals</h1>
+              <p class="page-subtitle">
+                Create, customize background images, configure Gate PINs &amp; On-Site access passwords, and launch standalone terminals (ndera-gate.php, bk-arena-gate.php, kcc-gate.php, onsite.php).
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" data-action="go-overview">
+                <img src="assets/nav-overview-inactive.svg" alt="" class="svg-icon" />
+                <span>Gate Dashboard</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" id="open-add-portal-btn" style="display: none;">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ Add Gate / Portal</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Total Standalone Portals</span>
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-sp-kpi-total">4</span>
+              <span class="metric-context">Gates &amp; Crew Directory</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Facility Gate Terminals</span>
+                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-sp-kpi-gates">3</span>
+              <span class="metric-context">Ndera · BK Arena · KCC</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Custom Backgrounds Set</span>
+                <img src="assets/upload-15.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="page-sp-kpi-bgs">0</span>
+              <span class="metric-context">Personalized Gate Backdrops</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">On-Site Portal Status</span>
+                <img src="assets/key-round-13.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" style="font-size: 20px;" id="page-sp-kpi-onsite-status">Active</span>
+              <span class="metric-context">Shared Crew Access (onsite.php)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Portal Cards Directory with Background Customization & CRUD -->
+        <section class="directory-card" style="padding: 20px; margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+            <div>
+              <h2 class="directory-title-18" style="margin: 0;">Standalone Gate Terminals &amp; Crew Portals</h2>
+              <p class="directory-desc" style="margin-top: 2px;">Click <strong>Customize / Edit</strong> on any portal to upload or reset its background image, adjust overlay opacity, rename, or update its Gate PIN.</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <select id="page-sp-type-filter" class="form-input" style="height: 36px; font-size: 12px; width: auto;">
+                <option value="all">All Types</option>
+                <option value="facility_gate">Facility Gates Only</option>
+                <option value="onsite_portal">On-Site Portals Only</option>
+              </select>
+              <input type="text" id="page-sp-search-input" class="form-input" placeholder="Search gate name, URL, or warehouse..." style="height: 36px; min-width: 220px; font-size: 12px;" />
+            </div>
+          </div>
+
+          <div id="page-sp-generated-banner" style="display: none; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.08); margin-bottom: 14px; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div style="min-width: 0; flex: 1;">
+              <div style="font-size: 12px; font-weight: 800; color: var(--text-primary);" id="page-sp-gen-title">Generated Portal Access Credentials</div>
+              <div style="font-size: 12px; color: var(--text-secondary); font-family: monospace; margin-top: 3px; word-break: break-all;" id="page-sp-gen-text"></div>
+            </div>
+            <div style="display: flex; gap: 8px; flex-shrink: 0;">
+              <button type="button" class="btn btn-primary-32" id="page-sp-gen-copy-btn">Copy Link + Password</button>
+              <button type="button" class="btn btn-secondary-32-sm" id="page-sp-gen-dismiss-btn">Dismiss</button>
+            </div>
+          </div>
+
+          <div id="standalone-portals-grid" class="portals-crud-grid"></div>
+        </section>
+
+        <!-- Embedded On-Site Password & Access Security Studio (onsite.php) -->
+        <section class="directory-card" id="page-sp-onsite-card" style="padding: 20px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px;">
+            <div>
+              <h2 class="directory-title-18" style="margin: 0;">Shared On-Site Portal Security (onsite.php)</h2>
+              <p class="directory-desc" style="margin-top: 2px;">Manage the read-only technician access password, enable/disable toggle, and ready-to-share invite message.</p>
+            </div>
+            <span class="status-badge status-badge-green-sm" id="page-sp-onsite-pill">Active</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 12px;">
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 12px;">
+                <div>
+                  <div style="font-size: 12.5px; font-weight: 700;">Enable Shared On-Site Link</div>
+                  <div style="font-size: 11px; color: var(--text-secondary);">Turn off anytime to lock out external viewers.</div>
+                </div>
+                <label class="nav-toggle-switch">
+                  <input type="checkbox" id="page-sp-onsite-enabled-cb" checked />
+                  <span class="nav-toggle-slider"></span>
+                </label>
+              </div>
+
+              <div class="form-field" style="margin-bottom: 10px;">
+                <label class="form-label" for="page-sp-onsite-pwd-input">Shared Technician Password</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="page-sp-onsite-pwd-input" class="form-input" placeholder="Enter new passcode (min 6 chars) or Generate..." autocomplete="off" />
+                  <button type="button" class="btn btn-secondary-38" id="page-sp-onsite-gen-btn" style="white-space: nowrap;">Generate</button>
+                </div>
+                <div id="page-sp-onsite-pwd-hint" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;"></div>
+              </div>
+
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+                <button type="button" class="btn btn-primary-38" id="page-sp-onsite-save-btn">Save Password &amp; Settings</button>
+                <button type="button" class="btn btn-secondary-38" id="page-sp-onsite-revoke-btn" style="color: #dc2626;">Revoke Active Viewers</button>
+              </div>
+            </div>
+
+            <div style="padding: 12px 14px; background: var(--bg-subtle); border: 1px dashed var(--border-color); border-radius: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px;">
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">Shareable Crew URL &amp; Invite</span>
+                  <button type="button" class="btn btn-secondary-32-sm" id="page-sp-onsite-copy-invite-btn">Copy Invite</button>
+                </div>
+                <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                  <input type="text" id="page-sp-onsite-url-input" class="form-input" readonly style="font-family: monospace; font-size: 11.5px; height: 34px;" />
+                  <button type="button" class="btn btn-secondary-32-sm js-copy-portal-url" data-copy-target="page-sp-onsite-url-input" data-copy-label="On-Site Portal URL">Copy</button>
+                </div>
+                <pre id="page-sp-onsite-invite-preview" style="margin: 0; font-size: 11px; white-space: pre-wrap; color: var(--text-secondary); font-family: inherit;"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
 
       <!-- ================================================================== -->
@@ -4369,16 +4387,17 @@
           <div class="form-field">
             <label class="form-label" for="nav-crud-target">Target Screen / Page / Action *</label>
             <select id="nav-crud-target" class="form-input">
-              <optgroup label="Main Screens &amp; Portals">
+              <optgroup label="Main Navigation Screens">
                 <option value="overview">Gate Dashboard (overview)</option>
-                <option value="events">Venues &amp; Facility Gates (events)</option>
+                <option value="events">Checkpoints &amp; Venues (events)</option>
                 <option value="users">Users &amp; Roles (users)</option>
-                <option value="attendees">ID Badges &amp; Kiosk (attendees)</option>
+                <option value="attendees">Staff ID Badges (attendees)</option>
                 <option value="terminals">Terminals (terminals)</option>
-                <option value="venue-security">Venue Security Portal (venue-security)</option>
-                <option value="stock-manager">Facilities &amp; Gates (stock-manager)</option>
-                <option value="access-matrix">Clearance Matrix (access-matrix)</option>
-                <option value="analytics">Analytics &amp; Matrix (analytics)</option>
+              </optgroup>
+              <optgroup label="Hub Shortcuts &amp; Sub-Views">
+                <option value="stock-manager">Checkpoints Hub → Facility Gates (stock-manager)</option>
+                <option value="venue-security">Checkpoints Hub → Event Venues (venue-security)</option>
+                <option value="access-matrix">Users &amp; Roles → Clearance Matrix (access-matrix)</option>
               </optgroup>
               <optgroup label="Checkpoint Controls Pages">
                 <option value="shift-relief">Shift Relief &amp; Swaps Page (shift-relief)</option>
@@ -4386,6 +4405,7 @@
                 <option value="rollcall">On-Site Roll-Call Page (rollcall)</option>
                 <option value="station-lock">Station Lock (PIN) Page (station-lock)</option>
                 <option value="reset-scans">Reset Today's Scans Page (reset-scans)</option>
+                <option value="standalone-portals">Gates &amp; On-Site Portals Page (standalone-portals)</option>
               </optgroup>
               <optgroup label="Quick Modal Triggers (Optional)">
                 <option value="action:shift-relief">Shift Relief &amp; Swaps Modal</option>
@@ -4435,6 +4455,7 @@
               <option value="onsite">On-Site Personnel Count</option>
               <option value="shift_relief">Pending Shift Relief Count</option>
               <option value="calltime">Active Call-Time Pill</option>
+              <option value="standalone_portals">Standalone Gates &amp; Portals Count</option>
               <option value="custom">Custom Badge Text</option>
             </select>
           </div>
@@ -4925,6 +4946,114 @@
     </div>
   </div>
 
+  <!-- Modal: Create / Customize Standalone Gate or On-Site Portal -->
+  <div class="modal-backdrop" id="portal-crud-modal" aria-hidden="true">
+    <div class="modal-card" style="width: 560px; max-width: 95vw; max-height: 92vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="portal-crud-modal-title">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+        <h3 class="modal-title" id="portal-crud-modal-title" style="margin: 0;">Customize Gate / Portal</h3>
+        <span class="status-badge status-badge-purple-sm" id="portal-crud-system-badge">Portal</span>
+      </div>
+
+      <form id="portal-crud-form">
+        <input type="hidden" id="portal-crud-id" value="0" />
+        <input type="hidden" id="portal-crud-remove-bg" value="0" />
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="portal-crud-title">Display Title *</label>
+            <input type="text" id="portal-crud-title" class="form-input" placeholder="e.g. KCC Gate" required />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="portal-crud-key">Portal Slug Key *</label>
+            <input type="text" id="portal-crud-key" class="form-input" placeholder="e.g. kcc or west-gate" required />
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="portal-crud-subtitle">Subtitle / Location Tag</label>
+          <input type="text" id="portal-crud-subtitle" class="form-input" placeholder="Rwanda Events Gate Terminal · # KCC Gate" />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="portal-crud-type">Portal Type</label>
+            <select id="portal-crud-type" class="form-input">
+              <option value="facility_gate">Facility Gate Terminal</option>
+              <option value="onsite_portal">Read-Only On-Site Directory</option>
+            </select>
+          </div>
+          <div class="form-field" id="portal-crud-wh-wrap">
+            <label class="form-label" for="portal-crud-wh-id">Linked Facility Location *</label>
+            <select id="portal-crud-wh-id" class="form-input"></select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="portal-crud-url">Entry URL</label>
+            <input type="text" id="portal-crud-url" class="form-input" placeholder="Auto-generated if blank" style="font-family: monospace; font-size: 12px;" />
+          </div>
+          <div class="form-field" id="portal-crud-pin-wrap">
+            <label class="form-label" for="portal-crud-pin">Gate Station PIN (4–12 chars)</label>
+            <div style="display: flex; gap: 6px;">
+              <input type="text" id="portal-crud-pin" class="form-input" placeholder="Leave blank to keep existing" autocomplete="off" />
+              <button type="button" class="btn btn-secondary-38" id="portal-crud-gen-pin-btn" style="white-space: nowrap;">Generate</button>
+            </div>
+          </div>
+          <div class="form-field" id="portal-crud-onsite-pwd-wrap" style="display: none;">
+            <label class="form-label" for="portal-crud-onsite-pwd">Shared On-Site Password (min 6)</label>
+            <div style="display: flex; gap: 6px;">
+              <input type="text" id="portal-crud-onsite-pwd" class="form-input" placeholder="Leave blank to keep existing" autocomplete="off" />
+              <button type="button" class="btn btn-secondary-38" id="portal-crud-gen-onsite-btn" style="white-space: nowrap;">Generate</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Background Image Uploader -->
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Custom Gate Background Image</span>
+            <button type="button" class="btn-link-inline btn-link-danger" id="portal-bg-reset-btn" style="display: none;">Reset to Default</button>
+          </label>
+          <div class="image-upload-dropzone" id="portal-bg-dropzone">
+            <input type="file" id="portal-crud-bg-file" accept="image/*" style="display: none;" />
+            <div class="dropzone-prompt" id="portal-bg-prompt">
+              <img src="assets/upload-15.svg" alt="" class="svg-icon" style="width: 22px; height: 22px; opacity: 0.65; margin-bottom: 4px;" />
+              <span style="font-size: 12px; font-weight: 600; color: var(--text-primary); display: block;">Click or drop an image to customize background</span>
+              <span style="font-size: 10.5px; color: var(--text-muted);">JPG, PNG, WEBP, or GIF (max 5 MB)</span>
+            </div>
+            <div class="dropzone-preview" id="portal-bg-preview-wrap" style="display: none;">
+              <img src="" alt="Portal Background Preview" id="portal-bg-preview-img" class="dropzone-thumb" style="width: 84px; height: 52px; object-fit: cover; border-radius: 6px;" />
+              <div style="flex: 1; min-width: 0;">
+                <span id="portal-bg-filename" class="dropzone-filename">custom-bg.jpg</span>
+                <span style="font-size: 10.5px; color: #16a34a; font-weight: 600;">Active Background Image</span>
+              </div>
+              <button type="button" class="btn btn-secondary-32-sm" id="portal-bg-change-btn">Change</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; margin-bottom: 16px;">
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="portal-crud-opacity">
+              Backdrop Tint / Readability Scrim: <strong id="portal-crud-opacity-val">78%</strong>
+            </label>
+            <input type="range" id="portal-crud-opacity" min="0.20" max="0.95" step="0.05" value="0.78" style="width: 100%;" />
+          </div>
+          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; padding-top: 16px;">
+            <input type="checkbox" id="portal-crud-active" checked />
+            <span>Active Portal</span>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary-38 js-close-portal-crud-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="portal-crud-submit-btn">Save Portal Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal: Standalone Gates & Live On-Site Portal Links -->
   <div class="modal-backdrop" id="onsite-share-modal" aria-hidden="true">
     <div class="modal-card" style="width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="onsite-share-modal-title">
@@ -5048,6 +5177,6 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261117_v7"></script>
+  <script src="app.js?v=20261117_v10"></script>
 </body>
 </html>

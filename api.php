@@ -565,7 +565,7 @@ function getDefaultNavigationItems(): array
         ],
         [
             'nav_key' => 'events',
-            'label' => 'Venues & Facility Gates',
+            'label' => 'Checkpoints & Venues',
             'nav_target' => 'events',
             'dom_id' => '',
             'node_id' => '2:3288',
@@ -575,7 +575,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'events',
             'badge_id' => 'sidebar-events-count',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,stock_controller',
             'sort_order' => 2,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -599,7 +599,7 @@ function getDefaultNavigationItems(): array
         ],
         [
             'nav_key' => 'attendees',
-            'label' => 'ID Badges & Kiosk',
+            'label' => 'Staff ID Badges',
             'nav_target' => 'attendees',
             'dom_id' => '',
             'node_id' => '2:3292',
@@ -628,57 +628,6 @@ function getDefaultNavigationItems(): array
             'badge_text' => '',
             'allowed_roles' => 'all',
             'sort_order' => 5,
-            'is_enabled' => 1,
-            'is_system' => 1,
-        ],
-        [
-            'nav_key' => 'venue_security',
-            'label' => 'Venue Security Portal',
-            'nav_target' => 'venue-security',
-            'dom_id' => 'nav-venue-security-btn',
-            'node_id' => '2:3295',
-            'icon' => 'assets/nav-campaigns.svg',
-            'active_icon' => '',
-            'icon_id' => '',
-            'badge_type' => 'none',
-            'badge_id' => '',
-            'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager',
-            'sort_order' => 6,
-            'is_enabled' => 1,
-            'is_system' => 1,
-        ],
-        [
-            'nav_key' => 'stock-manager',
-            'label' => 'Facilities & Gates',
-            'nav_target' => 'stock-manager',
-            'dom_id' => 'nav-stock-manager-btn',
-            'node_id' => '',
-            'icon' => 'svg:warehouse',
-            'active_icon' => '',
-            'icon_id' => '',
-            'badge_type' => 'stock',
-            'badge_id' => 'sidebar-stock-count',
-            'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,stock_manager,stock_controller',
-            'sort_order' => 7,
-            'is_enabled' => 1,
-            'is_system' => 1,
-        ],
-        [
-            'nav_key' => 'access_matrix',
-            'label' => 'Clearance Matrix',
-            'nav_target' => 'access-matrix',
-            'dom_id' => 'nav-access-matrix-btn',
-            'node_id' => '2:3301',
-            'icon' => 'assets/nav-payments.svg',
-            'active_icon' => '',
-            'icon_id' => '',
-            'badge_type' => 'none',
-            'badge_id' => '',
-            'badge_text' => '',
-            'allowed_roles' => 'admin,administrator',
-            'sort_order' => 8,
             'is_enabled' => 1,
             'is_system' => 1,
         ],
@@ -738,6 +687,24 @@ function getDefaultNavigationItems(): array
         ],
         [
             'nav_group' => 'workspace',
+            'nav_key' => 'standalone_portals',
+            'label' => 'Gates & On-Site',
+            'nav_target' => 'standalone-portals',
+            'dom_id' => 'sidebar-onsite-share-btn',
+            'node_id' => '',
+            'icon' => 'assets/scan-line-13.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'standalone_portals',
+            'badge_id' => 'sidebar-portals-count',
+            'badge_text' => '04',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,tech_lead,technical_lead,stock_controller',
+            'sort_order' => 4,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
             'nav_key' => 'station_lock',
             'label' => 'Station Lock (PIN)',
             'nav_target' => 'station-lock',
@@ -750,7 +717,7 @@ function getDefaultNavigationItems(): array
             'badge_id' => '',
             'badge_text' => '',
             'allowed_roles' => 'admin,administrator',
-            'sort_order' => 4,
+            'sort_order' => 5,
             'is_enabled' => 1,
             'is_system' => 1,
         ],
@@ -768,24 +735,6 @@ function getDefaultNavigationItems(): array
             'badge_id' => '',
             'badge_text' => '',
             'allowed_roles' => 'admin,administrator',
-            'sort_order' => 5,
-            'is_enabled' => 1,
-            'is_system' => 1,
-        ],
-        [
-            'nav_group' => 'workspace',
-            'nav_key' => 'standalone_portals',
-            'label' => 'Gates & On-Site',
-            'nav_target' => 'action:onsite-share',
-            'dom_id' => 'sidebar-onsite-share-btn',
-            'node_id' => '',
-            'icon' => 'assets/scan-line-13.svg',
-            'active_icon' => '',
-            'icon_id' => '',
-            'badge_type' => 'custom',
-            'badge_id' => '',
-            'badge_text' => '04',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,tech_lead,technical_lead,stock_controller',
             'sort_order' => 6,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -956,6 +905,67 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
             ")->execute([$unifiedRoles]);
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_unified_portals_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
+
+        // One-time migration: route Gates & On-Site sidebar nav-item to dedicated standalone-portals page
+        $migPortalsPage = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_portals_page_v2' LIMIT 1");
+        $migPortalsPage->execute();
+        if (!$migPortalsPage->fetchColumn()) {
+            $pdo->prepare("
+                UPDATE `navigation_items`
+                SET `nav_target` = 'standalone-portals',
+                    `badge_type` = 'standalone_portals',
+                    `badge_id` = 'sidebar-portals-count'
+                WHERE `nav_key` IN ('standalone_portals', 'share_onsite_link')
+            ")->execute();
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_portals_page_v2', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+
+        // One-time migration: consolidate sidebar to 5 Main Nav items + 6 Checkpoint Controls
+        $migConsolidated = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_consolidated_v3' LIMIT 1");
+        $migConsolidated->execute();
+        if (!$migConsolidated->fetchColumn()) {
+            $pdo->prepare("
+                DELETE FROM `navigation_items`
+                WHERE `is_system` = 1
+                  AND `nav_key` IN ('venue_security', 'stock-manager', 'access_matrix')
+            ")->execute();
+
+            $pdo->prepare("
+                UPDATE `navigation_items`
+                SET `label` = 'Checkpoints & Venues',
+                    `nav_group` = 'main',
+                    `sort_order` = 2,
+                    `allowed_roles` = 'admin,administrator,manager,project_manager,stock_manager,stock_controller'
+                WHERE `is_system` = 1 AND `nav_key` = 'events'
+            ")->execute();
+
+            $pdo->prepare("
+                UPDATE `navigation_items`
+                SET `label` = 'Staff ID Badges',
+                    `nav_group` = 'main',
+                    `sort_order` = 4
+                WHERE `is_system` = 1 AND `nav_key` = 'attendees'
+            ")->execute();
+
+            $wsReorder = [
+                'shift_relief' => 1,
+                'set_calltime' => 2,
+                'onsite_rollcall' => 3,
+                'standalone_portals' => 4,
+                'station_lock' => 5,
+                'reset_today_scans' => 6,
+            ];
+            $wsStmt = $pdo->prepare("
+                UPDATE `navigation_items`
+                SET `nav_group` = 'workspace', `sort_order` = ?
+                WHERE `is_system` = 1 AND `nav_key` = ?
+            ");
+            foreach ($wsReorder as $wsKey => $wsOrder) {
+                $wsStmt->execute([$wsOrder, $wsKey]);
+            }
+
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_consolidated_v3', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
     } catch (Throwable $e) {}
 }
 
@@ -1023,6 +1033,43 @@ function ensureOnsiteShareSettings(PDO $pdo): array
         'password_hash' => (string) ($map['onsite_share_password_hash'] ?? ''),
         'session_ver' => max(1, (int) ($map['onsite_share_session_ver'] ?? 1)),
         'is_default' => ($map['onsite_share_is_default'] ?? '0') === '1',
+    ];
+}
+
+function updateOnsiteSharePasswordConfig(PDO $pdo, ?bool $enabled, string $newPassword = '', bool $revokeSessions = false): array
+{
+    $cfg = ensureOnsiteShareSettings($pdo);
+    if ($enabled !== null) {
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_enabled', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
+            ->execute([$enabled ? '1' : '0']);
+    }
+
+    $passwordUpdated = false;
+    if ($newPassword !== '') {
+        if (strlen($newPassword) < 6) {
+            return ['ok' => false, 'status' => 400, 'error' => 'Shared technician password must be at least 6 characters.'];
+        }
+        $hash = password_hash($newPassword, PASSWORD_DEFAULT);
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_password_hash', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
+            ->execute([$hash]);
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_is_default', '0') ON DUPLICATE KEY UPDATE `setting_value` = '0'")
+            ->execute();
+        $passwordUpdated = true;
+        $revokeSessions = true;
+    }
+
+    if ($revokeSessions) {
+        $nextVer = $cfg['session_ver'] + 1;
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_session_ver', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
+            ->execute([(string) $nextVer]);
+    }
+
+    $updatedCfg = ensureOnsiteShareSettings($pdo);
+    return [
+        'ok' => true,
+        'password_updated' => $passwordUpdated,
+        'revoked' => $revokeSessions,
+        'config' => $updatedCfg,
     ];
 }
 
@@ -1344,8 +1391,11 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
         case 'save_warehouse':
         case 'save_warehouse_pin':
         case 'delete_warehouse':
+        case 'save_standalone_portal':
+        case 'delete_standalone_portal':
+        case 'reset_portal_background':
             if (!in_array($role, ['admin', 'manager', 'administrator', 'stock_manager'], true)) {
-                return ['ok' => false, 'error' => 'Permission denied: Facility checkpoint management requires Site Manager or Administrator privileges.'];
+                return ['ok' => false, 'error' => 'Permission denied: Facility checkpoint and gate portal management requires Site Manager or Administrator privileges.'];
             }
             break;
 
@@ -2268,6 +2318,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'roles' => getRolesList($pdo, $crew),
         'departments' => getDepartmentsList($pdo, $crew),
         'navigationConfig' => getNavigationConfig($pdo),
+        'standalonePortals' => getStandalonePortalsList($pdo, $canSeeTerminalPins),
     ];
 }
 
@@ -3002,47 +3053,28 @@ try {
             ['admin', 'administrator', 'manager', 'stock_manager'],
             'Permission denied: Updating the technician on-site link or password requires Site Manager or Administrator privileges.'
         );
-        $cfg = ensureOnsiteShareSettings($pdo);
         $enabledInput = $_POST['enabled'] ?? $jsonBody['enabled'] ?? null;
         $newPassword = trim((string) ($_POST['password'] ?? $jsonBody['password'] ?? ''));
         $revokeSessions = !empty($_POST['revoke_sessions']) || !empty($jsonBody['revoke_sessions']);
+        $enabledArg = $enabledInput !== null
+            ? ($enabledInput === true || $enabledInput === 1 || $enabledInput === '1' || $enabledInput === 'true')
+            : null;
 
-        $newEnabled = $cfg['enabled'];
-        if ($enabledInput !== null) {
-            $newEnabled = ($enabledInput === true || $enabledInput === 1 || $enabledInput === '1' || $enabledInput === 'true');
-            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_enabled', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
-                ->execute([$newEnabled ? '1' : '0']);
+        $upd = updateOnsiteSharePasswordConfig($pdo, $enabledArg, $newPassword, $revokeSessions);
+        if (!$upd['ok']) {
+            http_response_code((int) ($upd['status'] ?? 400));
+            echo json_encode(['ok' => false, 'error' => $upd['error']]);
+            exit;
         }
+        $updatedCfg = $upd['config'];
+        $passwordUpdated = (bool) $upd['password_updated'];
+        $revoked = (bool) $upd['revoked'];
 
-        $nextVer = $cfg['session_ver'];
-        $passwordUpdated = false;
-        if ($newPassword !== '') {
-            if (strlen($newPassword) < 6) {
-                http_response_code(400);
-                echo json_encode(['ok' => false, 'error' => 'Shared technician password must be at least 6 characters.']);
-                exit;
-            }
-            $hash = password_hash($newPassword, PASSWORD_DEFAULT);
-            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_password_hash', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
-                ->execute([$hash]);
-            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_is_default', '0') ON DUPLICATE KEY UPDATE `setting_value` = '0'")
-                ->execute();
-            $passwordUpdated = true;
-            $revokeSessions = true;
-        }
-
-        if ($revokeSessions) {
-            $nextVer = $cfg['session_ver'] + 1;
-            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('onsite_share_session_ver', ?) ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)")
-                ->execute([(string) $nextVer]);
-        }
-
-        $updatedCfg = ensureOnsiteShareSettings($pdo);
         echo json_encode([
             'ok' => true,
             'message' => $passwordUpdated
                 ? 'Technician portal password updated and active viewer sessions rotated.'
-                : ($revokeSessions ? 'All active technician viewer sessions revoked.' : 'Technician on-site link settings saved.'),
+                : ($revoked ? 'All active technician viewer sessions revoked.' : 'Technician on-site link settings saved.'),
             'enabled' => (bool) $updatedCfg['enabled'],
             'session_ver' => (int) $updatedCfg['session_ver'],
             'is_default_password' => (bool) $updatedCfg['is_default'],
@@ -4678,6 +4710,241 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         exit;
     }
 
+    if ($action === 'save_standalone_portal') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_standalone_portal', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureStandalonePortalsTable($pdo);
+
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $title = trim((string) ($_POST['title'] ?? $jsonBody['title'] ?? ''));
+        $subtitle = trim((string) ($_POST['subtitle'] ?? $jsonBody['subtitle'] ?? ''));
+        $portalType = strtolower(trim((string) ($_POST['portal_type'] ?? $jsonBody['portal_type'] ?? 'facility_gate')));
+        if (!in_array($portalType, ['facility_gate', 'onsite_portal'], true)) {
+            $portalType = 'facility_gate';
+        }
+        $rawKey = trim((string) ($_POST['portal_key'] ?? $jsonBody['portal_key'] ?? ''));
+        $portalKey = trim((string) preg_replace('/[^a-z0-9_-]+/', '-', strtolower($rawKey !== '' ? $rawKey : $title)), '-_');
+        $whIdRaw = $_POST['wh_id'] ?? $jsonBody['wh_id'] ?? '';
+        $whId = ($portalType === 'facility_gate' && $whIdRaw !== '' && (int) $whIdRaw > 0) ? (int) $whIdRaw : null;
+        $entryUrlIn = trim((string) ($_POST['entry_url'] ?? $jsonBody['entry_url'] ?? ''));
+        $overlayRaw = (float) ($_POST['overlay_opacity'] ?? $jsonBody['overlay_opacity'] ?? 0.78);
+        $overlayOpacity = max(0.20, min(0.95, round($overlayRaw, 2)));
+        $isActive = isset($_POST['is_active']) ? ((int) $_POST['is_active'] ? 1 : 0) : ((int) ($jsonBody['is_active'] ?? 1) ? 1 : 0);
+        $sortOrder = max(1, (int) ($_POST['sort_order'] ?? $jsonBody['sort_order'] ?? 10));
+        $removeBg = !empty($_POST['remove_background']) || !empty($jsonBody['remove_background']);
+        $terminalPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
+        $onsitePwdRaw = trim((string) ($_POST['onsite_password'] ?? $jsonBody['onsite_password'] ?? ''));
+
+        if ($title === '') {
+            echo json_encode(['ok' => false, 'error' => 'Portal title is required.']);
+            exit;
+        }
+        if ($portalKey === '') {
+            $portalKey = 'gate-' . time();
+        }
+        if ($portalType === 'facility_gate' && !$whId) {
+            echo json_encode(['ok' => false, 'error' => 'Please select a Facility Gate location for this standalone terminal.']);
+            exit;
+        }
+        if ($terminalPinRaw !== '' && !preg_match('/^[A-Za-z0-9]{4,12}$/', $terminalPinRaw)) {
+            echo json_encode(['ok' => false, 'error' => 'Gate Station PIN must be 4–12 letters or digits.']);
+            exit;
+        }
+        if ($portalType === 'onsite_portal' && $onsitePwdRaw !== '' && strlen($onsitePwdRaw) < 6) {
+            echo json_encode(['ok' => false, 'error' => 'Shared On-Site portal password must be at least 6 characters.']);
+            exit;
+        }
+
+        $existing = null;
+        if ($id > 0) {
+            $exSt = $pdo->prepare("SELECT * FROM `standalone_portals` WHERE `id` = ? LIMIT 1");
+            $exSt->execute([$id]);
+            $existing = $exSt->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) {
+                echo json_encode(['ok' => false, 'error' => 'Portal entry not found.']);
+                exit;
+            }
+            if ((int) ($existing['is_system'] ?? 0) === 1) {
+                $portalKey = (string) $existing['portal_key'];
+                $portalType = (string) $existing['portal_type'];
+                $entryUrl = (string) $existing['entry_url'];
+            } else {
+                $entryUrl = $entryUrlIn !== '' ? $entryUrlIn : ($portalType === 'onsite_portal' ? 'onsite.php' : ('gate.php?site=' . rawurlencode($portalKey)));
+            }
+        } else {
+            $chk = $pdo->prepare("SELECT `id` FROM `standalone_portals` WHERE `portal_key` = ? LIMIT 1");
+            $chk->execute([$portalKey]);
+            if ($chk->fetch()) {
+                $portalKey .= '-' . substr((string) time(), -4);
+            }
+            $entryUrl = $entryUrlIn !== '' ? $entryUrlIn : ($portalType === 'onsite_portal' ? 'onsite.php' : ('gate.php?site=' . rawurlencode($portalKey)));
+        }
+
+        $deleteManagedBgFile = static function (?string $rel): void {
+            $clean = ltrim(str_replace('\\', '/', trim((string) $rel)), '/');
+            if ($clean === '' || strpos($clean, 'uploads/portals/') !== 0 || strpos($clean, '..') !== false) {
+                return;
+            }
+            $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $clean);
+            if (is_file($abs)) {
+                @unlink($abs);
+            }
+        };
+
+        $finalBgPath = $existing ? ($existing['background_image'] ?? null) : null;
+        if ($removeBg) {
+            $deleteManagedBgFile($finalBgPath);
+            $finalBgPath = null;
+        }
+
+        if (!empty($_FILES['background_image']['tmp_name']) && is_uploaded_file($_FILES['background_image']['tmp_name'])) {
+            $tmpFile = (string) $_FILES['background_image']['tmp_name'];
+            $fileSize = (int) ($_FILES['background_image']['size'] ?? 0);
+            if ($fileSize <= 0 || $fileSize > 5 * 1024 * 1024) {
+                echo json_encode(['ok' => false, 'error' => 'Background image must be smaller than 5 MB.']);
+                exit;
+            }
+            $ext = strtolower(pathinfo((string) ($_FILES['background_image']['name'] ?? ''), PATHINFO_EXTENSION));
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'], true)) {
+                echo json_encode(['ok' => false, 'error' => 'Unsupported image format. Upload JPG, PNG, WEBP, or GIF.']);
+                exit;
+            }
+            $imgInfo = @getimagesize($tmpFile);
+            if ($imgInfo === false) {
+                echo json_encode(['ok' => false, 'error' => 'Uploaded file is not a valid image.']);
+                exit;
+            }
+            $dir = __DIR__ . '/uploads/portals';
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0777, true);
+            }
+            $safeName = preg_replace('/[^a-z0-9_-]+/', '_', $portalKey);
+            $fileName = 'portal_' . $safeName . '_' . time() . '_' . substr(md5(uniqid('', true)), 0, 6) . '.' . $ext;
+            $dest = $dir . '/' . $fileName;
+            if (!move_uploaded_file($tmpFile, $dest)) {
+                echo json_encode(['ok' => false, 'error' => 'Failed to save background image file on server.']);
+                exit;
+            }
+            $deleteManagedBgFile($finalBgPath);
+            $finalBgPath = 'uploads/portals/' . $fileName;
+        }
+
+        if ($id > 0) {
+            $stmt = $pdo->prepare("
+                UPDATE `standalone_portals`
+                SET `portal_key` = ?, `portal_type` = ?, `title` = ?, `subtitle` = ?, `entry_url` = ?,
+                    `wh_id` = ?, `background_image` = ?, `overlay_opacity` = ?, `is_active` = ?, `sort_order` = ?
+                WHERE `id` = ?
+            ");
+            $stmt->execute([$portalKey, $portalType, $title, $subtitle, $entryUrl, $whId, $finalBgPath, $overlayOpacity, $isActive, $sortOrder, $id]);
+            $msg = "Updated portal '{$title}'.";
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO `standalone_portals`
+                (`portal_key`, `portal_type`, `title`, `subtitle`, `entry_url`, `wh_id`, `background_image`, `overlay_opacity`, `is_active`, `is_system`, `sort_order`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+            ");
+            $stmt->execute([$portalKey, $portalType, $title, $subtitle, $entryUrl, $whId, $finalBgPath, $overlayOpacity, $isActive, $sortOrder]);
+            $id = (int) $pdo->lastInsertId();
+            $msg = "Created portal '{$title}'.";
+        }
+
+        if ($portalType === 'facility_gate' && $whId && $terminalPinRaw !== '') {
+            $pdo->prepare("UPDATE `stock_locations` SET `terminal_pin` = ? WHERE `id` = ?")->execute([$terminalPinRaw, $whId]);
+        }
+        if ($portalType === 'onsite_portal' && $onsitePwdRaw !== '') {
+            $pwdRes = updateOnsiteSharePasswordConfig($pdo, (bool) $isActive, $onsitePwdRaw, true);
+            if (!$pwdRes['ok']) {
+                echo json_encode(['ok' => false, 'error' => $pwdRes['error']]);
+                exit;
+            }
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => $msg,
+            'portal_id' => $id,
+            'standalonePortals' => getStandalonePortalsList($pdo, true),
+        ]);
+        exit;
+    }
+
+    if ($action === 'reset_portal_background') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('reset_portal_background', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureStandalonePortalsTable($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $st = $pdo->prepare("SELECT `id`, `title`, `background_image` FROM `standalone_portals` WHERE `id` = ? LIMIT 1");
+        $st->execute([$id]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            echo json_encode(['ok' => false, 'error' => 'Portal not found.']);
+            exit;
+        }
+        $clean = ltrim(str_replace('\\', '/', trim((string) ($row['background_image'] ?? ''))), '/');
+        if ($clean !== '' && strpos($clean, 'uploads/portals/') === 0 && strpos($clean, '..') === false) {
+            $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $clean);
+            if (is_file($abs)) {
+                @unlink($abs);
+            }
+        }
+        $pdo->prepare("UPDATE `standalone_portals` SET `background_image` = NULL WHERE `id` = ?")->execute([$id]);
+        echo json_encode([
+            'ok' => true,
+            'message' => "Reset custom background image for '{$row['title']}'.",
+            'standalonePortals' => getStandalonePortalsList($pdo, true),
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_standalone_portal') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_standalone_portal', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureStandalonePortalsTable($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $st = $pdo->prepare("SELECT * FROM `standalone_portals` WHERE `id` = ? LIMIT 1");
+        $st->execute([$id]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            echo json_encode(['ok' => false, 'error' => 'Portal not found.']);
+            exit;
+        }
+        if ((int) ($row['is_system'] ?? 0) === 1) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Built-in core gates and On-Site portal cannot be deleted (you can customize, pause, or reset their background).']);
+            exit;
+        }
+        $clean = ltrim(str_replace('\\', '/', trim((string) ($row['background_image'] ?? ''))), '/');
+        if ($clean !== '' && strpos($clean, 'uploads/portals/') === 0 && strpos($clean, '..') === false) {
+            $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $clean);
+            if (is_file($abs)) {
+                @unlink($abs);
+            }
+        }
+        $pdo->prepare("DELETE FROM `standalone_portals` WHERE `id` = ?")->execute([$id]);
+        echo json_encode([
+            'ok' => true,
+            'message' => "Deleted custom portal '{$row['title']}'.",
+            'standalonePortals' => getStandalonePortalsList($pdo, true),
+        ]);
+        exit;
+    }
+
     if ($action === 'save_warehouse_pin' || $action === 'save_checkpoint_pin') {
         $caller = getCallerUser($pdo);
         $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse'));
@@ -4730,6 +4997,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'warehouse_name' => $whName,
                 'terminal_pin' => $pin,
                 'message' => "Dedicated Terminal PIN updated for {$whName}",
+                'standalonePortals' => getStandalonePortalsList($pdo, true),
             ]);
             exit;
         }
@@ -5383,6 +5651,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             'stock' => 'sidebar-stock-count',
             'shift_relief' => 'sidebar-shift-relief-badge',
             'calltime' => 'sidebar-active-calltime-pill',
+            'standalone_portals' => 'sidebar-portals-count',
         ];
         $badgeId = $badgeIdMap[$badgeType] ?? '';
 
