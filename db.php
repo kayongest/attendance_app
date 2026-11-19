@@ -1006,6 +1006,8 @@ function getDefaultBrandingConfig(): array
     return [
         'brand_name' => 'aBility',
         'logo_path' => '',
+        'favicon_path' => '',
+        'logo_size_px' => 34,
         'primary_color' => '#4f46e5',
         'accent_color' => '#10b981',
         'neutral_color' => '#64748b',
@@ -1020,19 +1022,49 @@ function getDefaultBrandingConfig(): array
     ];
 }
 
+function getDefaultBrandingLogoPath(): string
+{
+    return is_file(__DIR__ . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'rwanda-events-logo.png')
+        ? 'assets/rwanda-events-logo.png'
+        : 'assets/brand-mark.svg';
+}
+
+function getDefaultBrandingFaviconPath(): string
+{
+    return is_file(__DIR__ . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'icons' . DIRECTORY_SEPARATOR . 'favicon-64.png')
+        ? 'assets/icons/favicon-64.png'
+        : 'assets/icons/icon-192.png';
+}
+
 function resolveBrandingLogoUrl(?string $rawPath): string
 {
     $rel = ltrim(str_replace('\\', '/', trim((string) $rawPath)), '/');
     if ($rel === '' || strpos($rel, '..') !== false) {
-        return 'assets/brand-mark.svg';
+        return getDefaultBrandingLogoPath();
     }
-    $allowedExact = ['assets/brand-mark.svg', 'reLogo.png', 'reTransparentLogo.png'];
+    $allowedExact = ['assets/rwanda-events-logo.png', 'assets/brand-mark.svg', 'reLogo.png', 'reTransparentLogo.png'];
     $allowedPrefix = (strpos($rel, 'uploads/branding/') === 0 || strpos($rel, 'assets/') === 0);
     if (!$allowedPrefix && !in_array($rel, $allowedExact, true)) {
-        return 'assets/brand-mark.svg';
+        return getDefaultBrandingLogoPath();
     }
     $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
-    return is_file($abs) ? $rel : 'assets/brand-mark.svg';
+    return is_file($abs) ? $rel : getDefaultBrandingLogoPath();
+}
+
+function resolveBrandingFaviconUrl(?string $rawFavPath, ?string $rawLogoPath = ''): string
+{
+    $fav = ltrim(str_replace('\\', '/', trim((string) $rawFavPath)), '/');
+    if ($fav !== '' && strpos($fav, '..') === false) {
+        $allowedPrefix = (strpos($fav, 'uploads/branding/') === 0 || strpos($fav, 'assets/') === 0);
+        if ($allowedPrefix && is_file(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $fav))) {
+            return $fav;
+        }
+    }
+    $logo = trim((string) $rawLogoPath);
+    if ($logo !== '') {
+        return resolveBrandingLogoUrl($logo);
+    }
+    return getDefaultBrandingFaviconPath();
 }
 
 function getBuiltInBrandingFontPresets(): array
@@ -1148,11 +1180,17 @@ function getBrandingConfig(PDO $pdo): array
                 $accent = $safeHex($dec['accent_color'] ?? ($dec['light_accent'] ?? ''), $defaults['accent_color']);
                 $neutral = $safeHex($dec['neutral_color'] ?? '', $defaults['neutral_color']);
                 $logoPathRaw = trim((string) ($dec['logo_path'] ?? ''));
-                $logoResolved = $logoPathRaw !== '' ? resolveBrandingLogoUrl($logoPathRaw) : '';
+                $favPathRaw = trim((string) ($dec['favicon_path'] ?? ''));
+                $logoSizePx = max(24, min(48, (int) ($dec['logo_size_px'] ?? 34)));
+                $logoResolved = $logoPathRaw !== '' ? resolveBrandingLogoUrl($logoPathRaw) : getDefaultBrandingLogoPath();
+                $favResolved = resolveBrandingFaviconUrl($favPathRaw, $logoPathRaw);
                 return [
                     'brand_name' => $brandName !== '' ? substr($brandName, 0, 48) : $defaults['brand_name'],
-                    'logo_path' => $logoResolved !== 'assets/brand-mark.svg' ? $logoResolved : ($logoPathRaw === 'assets/brand-mark.svg' ? 'assets/brand-mark.svg' : ''),
-                    'logo_url' => resolveBrandingLogoUrl($logoResolved),
+                    'logo_path' => $logoPathRaw,
+                    'logo_url' => $logoResolved,
+                    'favicon_path' => $favPathRaw,
+                    'favicon_url' => $favResolved,
+                    'logo_size_px' => $logoSizePx,
                     'primary_color' => $primary,
                     'accent_color' => $accent,
                     'neutral_color' => $neutral,
@@ -1168,7 +1206,8 @@ function getBrandingConfig(PDO $pdo): array
             }
         }
     } catch (Throwable $e) {}
-    $defaults['logo_url'] = 'assets/brand-mark.svg';
+    $defaults['logo_url'] = getDefaultBrandingLogoPath();
+    $defaults['favicon_url'] = getDefaultBrandingFaviconPath();
     return $defaults;
 }
 
@@ -1183,13 +1222,19 @@ function saveBrandingConfig(PDO $pdo, array $in): array
     $neutral = $safeHex($in['neutral_color'] ?? '', $cur['neutral_color']);
     $logoPath = array_key_exists('logo_path', $in) ? trim((string) $in['logo_path']) : ($cur['logo_path'] ?? '');
     if ($logoPath !== '') {
-        $resolved = resolveBrandingLogoUrl($logoPath);
-        $logoPath = $resolved === 'assets/brand-mark.svg' ? '' : $resolved;
+        $logoPath = resolveBrandingLogoUrl($logoPath);
+        if ($logoPath === 'assets/rwanda-events-logo.png' && !array_key_exists('logo_path', $in)) {
+            $logoPath = '';
+        }
     }
+    $favPath = array_key_exists('favicon_path', $in) ? trim((string) $in['favicon_path']) : ($cur['favicon_path'] ?? '');
+    $logoSizePx = max(24, min(48, (int) ($in['logo_size_px'] ?? $cur['logo_size_px'] ?? 34)));
 
     $next = [
         'brand_name' => trim((string) ($in['brand_name'] ?? $cur['brand_name'])) ?: 'aBility',
         'logo_path' => $logoPath,
+        'favicon_path' => $favPath,
+        'logo_size_px' => $logoSizePx,
         'primary_color' => $primary,
         'accent_color' => $accent,
         'neutral_color' => $neutral,
@@ -1213,6 +1258,7 @@ function saveBrandingConfig(PDO $pdo, array $in): array
     } catch (Throwable $e) {}
 
     $next['logo_url'] = resolveBrandingLogoUrl($next['logo_path']);
+    $next['favicon_url'] = resolveBrandingFaviconUrl($next['favicon_path'], $next['logo_path']);
     return $next;
 }
 
@@ -1233,6 +1279,9 @@ function renderBrandingHeadHtml(PDO $pdo): string
     $brandNameJson = json_encode($b['brand_name']);
     $logoUrl = resolveBrandingLogoUrl($b['logo_path'] ?? '');
     $logoUrlJson = json_encode($logoUrl);
+    $faviconUrl = resolveBrandingFaviconUrl($b['favicon_path'] ?? '', $b['logo_path'] ?? '');
+    $faviconUrlJson = json_encode($faviconUrl);
+    $logoSizePx = max(24, min(48, (int) ($b['logo_size_px'] ?? 34))) . 'px';
 
     $lines = [
         '  <link rel="manifest" href="manifest.webmanifest" />',
@@ -1240,7 +1289,8 @@ function renderBrandingHeadHtml(PDO $pdo): string
         '  <meta name="apple-mobile-web-app-capable" content="yes" />',
         '  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />',
         '  <meta name="apple-mobile-web-app-title" content="' . htmlspecialchars($b['brand_name'], ENT_QUOTES, 'UTF-8') . '" />',
-        '  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />',
+        '  <link rel="icon" href="' . htmlspecialchars($faviconUrl, ENT_QUOTES, 'UTF-8') . '" />',
+        '  <link rel="apple-touch-icon" href="' . htmlspecialchars($faviconUrl, ENT_QUOTES, 'UTF-8') . '" />',
     ];
 
     $fontFaceCss = '';
@@ -1266,6 +1316,7 @@ function renderBrandingHeadHtml(PDO $pdo): string
     $lines[] = '      --brand-accent: ' . $accent . ';';
     $lines[] = '      --brand-neutral: ' . $neutral . ';';
     $lines[] = '      --brand-purple: ' . $primary . ';';
+    $lines[] = '      --brand-logo-size: ' . $logoSizePx . ';';
     $lines[] = '      --font-sans: ' . $fontStack . ';';
     $lines[] = '      --brand-font-family: ' . $fontStack . ';';
     $lines[] = '      --brand-font-scale: ' . $scaleNum . ';';
@@ -1282,7 +1333,7 @@ function renderBrandingHeadHtml(PDO $pdo): string
     $lines[] = '  <script>';
     $lines[] = '    window.__ABILITY_BRANDING__ = ' . json_encode($b) . ';';
     $lines[] = '    window.__ABILITY_FONTS__ = ' . json_encode($fontsList) . ';';
-    $lines[] = '    (function(){try{var d=' . json_encode($defTheme) . ';var s=localStorage.getItem("ability_theme");if(!s&&(d==="dark"||d==="light")){document.documentElement.setAttribute("data-theme",d);}document.documentElement.setAttribute("data-text-align",' . json_encode($align) . ');var n=' . $brandNameJson . ';var lg=' . $logoUrlJson . ';document.addEventListener("DOMContentLoaded",function(){document.querySelectorAll(".brand-name,.js-brand-name").forEach(function(el){if(n)el.textContent=n;});if(lg){document.querySelectorAll("img.js-brand-logo-img, img[src*=\'brand-mark.svg\']").forEach(function(img){img.src=lg;if(n)img.alt=n;});}});}catch(e){}})();';
+    $lines[] = '    (function(){try{var d=' . json_encode($defTheme) . ';var s=localStorage.getItem("ability_theme");if(!s&&(d==="dark"||d==="light")){document.documentElement.setAttribute("data-theme",d);}document.documentElement.setAttribute("data-text-align",' . json_encode($align) . ');var n=' . $brandNameJson . ';var lg=' . $logoUrlJson . ';var fav=' . $faviconUrlJson . ';if(fav){document.querySelectorAll("link[rel*=\'icon\']").forEach(function(lk){lk.href=fav;});}document.addEventListener("DOMContentLoaded",function(){document.querySelectorAll(".brand-name,.js-brand-name").forEach(function(el){if(n)el.textContent=n;});if(lg){document.querySelectorAll(".brand-mark-wrap img, img.js-brand-logo-img, img[data-brand-logo=\'1\']").forEach(function(img){img.src=lg;img.setAttribute("data-brand-logo","1");if(n)img.alt=n;});}});}catch(e){}})();';
     $lines[] = '  </script>';
 
     return implode("\n", $lines);

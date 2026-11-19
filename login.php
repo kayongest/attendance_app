@@ -84,7 +84,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   <meta name="apple-mobile-web-app-title" content="aBility Manager" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
-  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+  <link rel="icon" type="image/png" href="assets/icons/favicon-64.png" />
   <?php echo $brandingHtml . "\n"; ?>
   <title>Sign In &amp; Sign Up — aBility Manager</title>
   <script>
@@ -914,7 +914,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
     <div class="form-container sign-in-container">
       <form id="signin-form">
         <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px;">
-          <img class="js-brand-logo-img" src="assets/brand-mark.svg" alt="aBility" style="width:28px;height:28px;border-radius:7px;object-fit:contain;" />
+          <img class="js-brand-logo-img" data-brand-logo="1" src="assets/rwanda-events-logo.png" alt="aBility" style="width:30px;height:30px;border-radius:7px;object-fit:contain;" />
           <strong class="brand-name" style="font-size:15px;">aBility</strong>
         </div>
         <h1>Sign in</h1>

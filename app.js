@@ -165,7 +165,10 @@
     brandingConfig: {
       brand_name: 'aBility',
       logo_path: '',
-      logo_url: 'assets/brand-mark.svg',
+      logo_url: 'assets/rwanda-events-logo.png',
+      favicon_path: '',
+      favicon_url: 'assets/icons/favicon-64.png',
+      logo_size_px: 34,
       primary_color: '#4f46e5',
       accent_color: '#10b981',
       neutral_color: '#64748b',
@@ -273,12 +276,15 @@
     root.style.setProperty('--brand-text-align', align);
     root.setAttribute('data-text-align', align);
 
+    const logoSizePx = Math.max(24, Math.min(48, Number(merged.logo_size_px || 34)));
+    root.style.setProperty('--brand-logo-size', `${logoSizePx}px`);
+
     if (merged.brand_name) {
       document.querySelectorAll('.brand-name, .js-brand-name').forEach((el) => {
         el.textContent = merged.brand_name;
       });
     }
-    const logoSrc = merged.logo_url || merged.logo_path || 'assets/brand-mark.svg';
+    const logoSrc = merged.logo_url || merged.logo_path || 'assets/rwanda-events-logo.png';
     document.querySelectorAll('.brand-mark-wrap img, .js-brand-logo-img, img[data-brand-logo="1"]').forEach((img) => {
       img.setAttribute('data-brand-logo', '1');
       if (img.getAttribute('src') !== logoSrc) {
@@ -289,6 +295,14 @@
     const logoPrev = document.getElementById('branding-logo-preview');
     if (logoPrev && logoPrev.getAttribute('src') !== logoSrc) {
       logoPrev.src = logoSrc;
+    }
+    const favSrc = merged.favicon_url || merged.favicon_path || logoSrc || 'assets/icons/favicon-64.png';
+    if (favSrc && typeof document !== 'undefined') {
+      document.querySelectorAll('link[rel*="icon"]').forEach((lk) => {
+        if (lk.getAttribute('href') !== favSrc) {
+          lk.setAttribute('href', favSrc);
+        }
+      });
     }
   }
 
@@ -9351,9 +9365,14 @@
 
     const logoPrev = document.getElementById('branding-logo-preview');
     const logoLbl = document.getElementById('branding-logo-path-label');
-    const logoSrc = cfg.logo_url || cfg.logo_path || 'assets/brand-mark.svg';
+    const logoSrc = cfg.logo_url || cfg.logo_path || 'assets/rwanda-events-logo.png';
     if (logoPrev) logoPrev.src = logoSrc;
-    if (logoLbl) logoLbl.textContent = cfg.logo_path ? cfg.logo_path : 'assets/brand-mark.svg (Default)';
+    if (logoLbl) logoLbl.textContent = cfg.logo_path ? cfg.logo_path : 'assets/rwanda-events-logo.png (Default)';
+    const lsEl = document.getElementById('brand-logo-size');
+    const lsValEl = document.getElementById('brand-logo-size-val');
+    const lsNum = Math.max(24, Math.min(48, Number(cfg.logo_size_px || 34)));
+    if (lsEl) lsEl.value = String(lsNum);
+    if (lsValEl) lsValEl.textContent = `${lsNum}px`;
     ['branding-logo-upload-form', 'branding-font-crud-form', 'btn-reset-branding-logo'].forEach((elId) => {
       const el = document.getElementById(elId);
       if (el) el.style.display = isAdmin ? '' : 'none';
@@ -11300,6 +11319,7 @@
     // Settings Tab: Branding Studio
     const readBrandingForm = () => ({
       brand_name: document.getElementById('brand-display-name')?.value.trim() || 'aBility',
+      logo_size_px: Number(document.getElementById('brand-logo-size')?.value || 34),
       primary_color: document.getElementById('brand-color-primary-hex')?.value.trim() || '#4f46e5',
       accent_color: document.getElementById('brand-color-accent-hex')?.value.trim() || '#10b981',
       neutral_color: document.getElementById('brand-color-neutral-hex')?.value.trim() || '#64748b',
@@ -11319,12 +11339,14 @@
     syncColorPair('brand-color-primary', 'brand-color-primary-hex');
     syncColorPair('brand-color-accent', 'brand-color-accent-hex');
     syncColorPair('brand-color-neutral', 'brand-color-neutral-hex');
-    ['brand-display-name', 'brand-font-family', 'brand-font-scale', 'brand-text-align', 'brand-default-theme'].forEach((id) => {
+    ['brand-display-name', 'brand-logo-size', 'brand-font-family', 'brand-font-scale', 'brand-text-align', 'brand-default-theme'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) {
         el.addEventListener('input', () => {
           const fsVal = document.getElementById('brand-font-scale-val');
           if (id === 'brand-font-scale' && fsVal) fsVal.textContent = `${Math.round(Number(el.value || 1) * 100)}%`;
+          const lsVal = document.getElementById('brand-logo-size-val');
+          if (id === 'brand-logo-size' && lsVal) lsVal.textContent = `${Number(el.value || 34)}px`;
           applyBrandingConfigClient(readBrandingForm());
           applyAccessibilityPreferences();
         });

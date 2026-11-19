@@ -45,7 +45,7 @@ $themeAttr = (($_COOKIE['ability_theme'] ?? '') === 'light')
   <meta name="theme-color" content="#070b14" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
-  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+  <link rel="icon" type="image/png" href="assets/icons/favicon-64.png" />
   <title>aBility Manager — Geo-Fenced Temporary Relief Activation</title>
   <?= $brandingHtml . "\n" ?>
   <style>
@@ -253,7 +253,7 @@ $themeAttr = (($_COOKIE['ability_theme'] ?? '') === 'light')
   <main class="relief-shell">
     <div class="relief-brand">
       <div style="display:flex;align-items:center;gap:0.65rem;">
-        <img class="js-brand-logo-img" src="assets/brand-mark.svg" alt="aBility" style="width:32px;height:32px;border-radius:8px;object-fit:contain;flex-shrink:0;" />
+        <img class="js-brand-logo-img" data-brand-logo="1" src="assets/rwanda-events-logo.png" alt="aBility" style="width:34px;height:34px;border-radius:8px;object-fit:contain;flex-shrink:0;" />
         <div>
           <h1>Temporary Relief Activation</h1>
           <div class="muted-note" style="margin-top:2px;">Geo-Fenced QR + Authenticator Verification</div>

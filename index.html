@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
-  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+  <link rel="icon" type="image/png" href="assets/icons/favicon-64.png" />
   <title>aBility Manager — Gate Check-in / Check-out Terminal &amp; 4-Tier Access Matrix</title>
   <script>
     (function () {
@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261119_v13" />
+  <link rel="stylesheet" href="styles.css?v=20261119_v14" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -33,7 +33,7 @@
       <div class="sidebar-brand-row">
         <div class="brand-header" id="brand-home-btn" data-node-id="2:3271">
           <div class="brand-mark-wrap" data-node-id="2:3272">
-            <img src="assets/brand-mark.svg" alt="aBility" class="svg-icon" />
+            <img src="assets/rwanda-events-logo.png" alt="aBility" class="brand-logo-img js-brand-logo-img" data-brand-logo="1" />
           </div>
           <span class="brand-name" data-node-id="2:3276">aBility</span>
         </div>
@@ -161,7 +161,7 @@
 
       <!-- Support Card -->
       <div class="support-card" data-node-id="2:3317">
-        <img src="assets/brand-mark.svg" alt="" class="svg-icon" style="width: 18px; height: 18px;" />
+        <img src="assets/rwanda-events-logo.png" alt="" class="js-brand-logo-img" data-brand-logo="1" style="width: 20px; height: 20px; object-fit: contain;" />
         <p class="support-card-title" data-node-id="2:3319">Clearance Enforcement</p>
         <p class="support-card-desc" id="sidebar-support-desc" data-node-id="2:3320">
           Perimeter clearance verified with dual-gate RFID &amp; custody tracking.
@@ -3182,7 +3182,7 @@
                 Interactive System Flow Explorer visualizing live portals, gate scan decision engine, daily state machine, terminal locks, and role governance alongside system settings.
               </p>
             </div>
-            <div class="page-actions">
+            <!-- <div class="page-actions">
               <button type="button" class="btn btn-secondary-38" id="settings-sync-now-btn">
                 <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
                 <span>Sync Live Telemetry</span>
@@ -3191,7 +3191,7 @@
                 <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
                 <span>Open Terminal</span>
               </button>
-            </div>
+            </div> -->
           </div>
 
           <!-- Settings > Flow > ... Dropdown Header & Quick Switcher -->
@@ -3623,20 +3623,26 @@
               </div>
 
               <div style="display:flex;align-items:center;gap:14px;padding:12px;border:1px solid var(--border-color);border-radius:12px;background:var(--surface-subtle);margin-bottom:12px;">
-                <img id="branding-logo-preview" src="assets/brand-mark.svg" alt="Active Logo Preview" style="width:52px;height:52px;border-radius:10px;object-fit:contain;background:#fff;padding:4px;border:1px solid var(--border-color);" />
+                <img id="branding-logo-preview" src="assets/rwanda-events-logo.png" alt="Active Logo Preview" style="width:52px;height:52px;border-radius:10px;object-fit:contain;background:#fff;padding:4px;border:1px solid var(--border-color);" />
                 <div style="min-width:0;flex:1;">
-                  <div style="font-size:13px;font-weight:700;">Active Portal Logo</div>
-                  <code id="branding-logo-path-label" style="font-size:11.5px;color:var(--text-secondary);word-break:break-all;">assets/brand-mark.svg (Default)</code>
+                  <div style="font-size:13px;font-weight:700;">Active Portal Logo &amp; Favicon</div>
+                  <code id="branding-logo-path-label" style="font-size:11.5px;color:var(--text-secondary);word-break:break-all;">assets/rwanda-events-logo.png (Default)</code>
                 </div>
+              </div>
+
+              <div class="form-field" style="margin-bottom:10px;">
+                <label class="form-label" for="brand-logo-size">Sidebar Logo Size: <strong id="brand-logo-size-val">34px</strong> (applies to `.brand-mark-wrap`)</label>
+                <input type="range" id="brand-logo-size" min="24" max="48" step="2" value="34" style="width:100%;" />
               </div>
 
               <form id="branding-logo-upload-form" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
                 <input type="file" id="branding-logo-file" class="form-input" accept=".png,.jpg,.jpeg,.webp,.gif,.svg,image/*" style="flex:1;min-width:190px;padding:6px;" />
-                <button type="submit" class="btn btn-primary-32" id="btn-upload-branding-logo" data-online-only="1">Upload Logo</button>
+                <button type="submit" class="btn btn-primary-32" id="btn-upload-branding-logo" data-online-only="1">Upload Logo &amp; Favicon</button>
               </form>
 
               <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">Or Pick Built-In Asset Preset:</div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;" id="branding-logo-presets">
+                <button type="button" class="btn btn-secondary-32-sm js-logo-preset-btn" data-preset="assets/rwanda-events-logo.png" data-online-only="1">Rwanda Events (Uploaded)</button>
                 <button type="button" class="btn btn-secondary-32-sm js-logo-preset-btn" data-preset="assets/brand-mark.svg" data-online-only="1">aBility SVG</button>
                 <button type="button" class="btn btn-secondary-32-sm js-logo-preset-btn" data-preset="reLogo.png" data-online-only="1">RE Standard Logo</button>
                 <button type="button" class="btn btn-secondary-32-sm js-logo-preset-btn" data-preset="reTransparentLogo.png" data-online-only="1">RE Transparent Logo</button>
@@ -5985,6 +5991,6 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261119_v13"></script>
+  <script src="app.js?v=20261119_v14"></script>
 </body>
 </html>

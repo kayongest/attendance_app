@@ -1,11 +1,12 @@
 /* aBility Manager — Service Worker (Offline Shell + Static Asset Cache) */
-const CACHE_NAME = 'ability-pwa-v20261119-3';
+const CACHE_NAME = 'ability-pwa-v20261119-4';
 const CORE_ASSETS = [
-  './styles.css?v=20261119_v13',
-  './app.js?v=20261119_v13',
+  './styles.css?v=20261119_v14',
+  './app.js?v=20261119_v14',
   './assets/vendor/qrcode.js',
   './assets/vendor/driver/driver.css',
   './assets/vendor/driver/driver.js.iife.js',
+  './assets/rwanda-events-logo.png',
   './assets/brand-mark.svg',
   './assets/nav-overview-active.svg',
   './assets/nav-overview-inactive.svg',
@@ -17,6 +18,7 @@ const CORE_ASSETS = [
   './assets/nav-settings.svg',
   './assets/scan-line-13.svg',
   './assets/sliders-horizontal-13.svg',
+  './assets/icons/favicon-64.png',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
   './assets/icons/apple-touch-icon-180.png',

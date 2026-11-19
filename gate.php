@@ -109,7 +109,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   <meta name="apple-mobile-web-app-title" content="aBility Gate" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
-  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+  <link rel="icon" type="image/png" href="assets/icons/favicon-64.png" />
   <?php echo $brandingHtml . "\n"; ?>
   <title>Rwanda Events Gate Terminal · <?php echo htmlspecialchars($gateDisplayLabel, ENT_QUOTES, 'UTF-8'); ?></title>
   <script>
@@ -861,7 +861,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   <!-- Centered Wireframe Header -->
   <header class="hero-header">
     <div style="display:inline-flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px;">
-      <img class="js-brand-logo-img" src="assets/brand-mark.svg" alt="aBility" style="width:30px;height:30px;border-radius:8px;object-fit:contain;" />
+      <img class="js-brand-logo-img" data-brand-logo="1" src="assets/rwanda-events-logo.png" alt="aBility" style="width:32px;height:32px;border-radius:8px;object-fit:contain;" />
       <h1 class="hero-title" style="margin:0;">Rwanda Events Gate Terminal</h1>
     </div>
     <div class="hero-subtitle" id="gate-hashtag-subtitle"><?php echo htmlspecialchars($gateHashtagLabel, ENT_QUOTES, 'UTF-8'); ?></div>

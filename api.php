@@ -6959,9 +6959,10 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
 
         $curBrand = getBrandingConfig($pdo);
         $oldLogo = trim((string) ($curBrand['logo_path'] ?? ''));
-        $deleteOldLogoFile = static function (string $rel): void {
+        $oldFavicon = trim((string) ($curBrand['favicon_path'] ?? ''));
+        $deleteManagedBrandingAsset = static function (string $rel): void {
             $clean = ltrim(str_replace('\\', '/', $rel), '/');
-            if ($clean !== '' && strpos($clean, 'uploads/branding/logo_') === 0 && strpos($clean, '..') === false) {
+            if ($clean !== '' && strpos($clean, 'uploads/branding/') === 0 && strpos($clean, 'uploads/branding/fonts/') !== 0 && strpos($clean, '..') === false) {
                 $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $clean);
                 if (is_file($abs)) {
                     @unlink($abs);
@@ -6969,17 +6970,70 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             }
         };
 
+        $generateSquareFaviconFromFile = static function (string $srcRel, string $dir): string {
+            $absSrc = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $srcRel);
+            if (!is_file($absSrc) || !function_exists('imagecreatetruecolor')) {
+                return $srcRel;
+            }
+            $ext = strtolower(pathinfo($absSrc, PATHINFO_EXTENSION));
+            if ($ext === 'svg') {
+                return $srcRel;
+            }
+            $rawData = @file_get_contents($absSrc);
+            $srcImg = $rawData ? @imagecreatefromstring($rawData) : false;
+            if (!$srcImg) {
+                return $srcRel;
+            }
+            $sw = imagesx($srcImg);
+            $sh = imagesy($srcImg);
+            if ($sw <= 0 || $sh <= 0) {
+                imagedestroy($srcImg);
+                return $srcRel;
+            }
+            $size = 64;
+            $dst = imagecreatetruecolor($size, $size);
+            imagealphablending($dst, false);
+            imagesavealpha($dst, true);
+            $trans = imagecolorallocatealpha($dst, 0, 0, 0, 127);
+            imagefilledrectangle($dst, 0, 0, $size, $size, $trans);
+            imagealphablending($dst, true);
+            $maxInner = 58.0;
+            $scale = min($maxInner / $sw, $maxInner / $sh);
+            $dw = max(1, (int) round($sw * $scale));
+            $dh = max(1, (int) round($sh * $scale));
+            $dx = (int) floor(($size - $dw) / 2);
+            $dy = (int) floor(($size - $dh) / 2);
+            imagecopyresampled($dst, $srcImg, $dx, $dy, 0, 0, $dw, $dh, $sw, $sh);
+            $favName = 'favicon_' . time() . '_' . substr(md5(uniqid('', true)), 0, 5) . '.png';
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0777, true);
+            }
+            $savedOk = @imagepng($dst, $dir . '/' . $favName);
+            imagedestroy($dst);
+            imagedestroy($srcImg);
+            return $savedOk ? ('uploads/branding/' . $favName) : $srcRel;
+        };
+
         $presetPath = trim((string) ($_POST['preset_path'] ?? $jsonBody['preset_path'] ?? ''));
         $newLogoPath = '';
+        $newFavPath = '';
+        $dir = __DIR__ . '/uploads/branding';
         if ($presetPath !== '') {
-            $allowedPresets = ['assets/brand-mark.svg', 'reLogo.png', 'reTransparentLogo.png'];
+            $allowedPresets = ['assets/rwanda-events-logo.png', 'assets/brand-mark.svg', 'reLogo.png', 'reTransparentLogo.png'];
             if (!in_array($presetPath, $allowedPresets, true) || !is_file(__DIR__ . '/' . $presetPath)) {
                 http_response_code(400);
                 echo json_encode(['ok' => false, 'error' => 'Selected preset logo file does not exist.']);
                 exit;
             }
-            $deleteOldLogoFile($oldLogo);
-            $newLogoPath = ($presetPath === 'assets/brand-mark.svg') ? '' : $presetPath;
+            $deleteManagedBrandingAsset($oldLogo);
+            $deleteManagedBrandingAsset($oldFavicon);
+            if ($presetPath === 'assets/rwanda-events-logo.png') {
+                $newLogoPath = '';
+                $newFavPath = '';
+            } else {
+                $newLogoPath = $presetPath;
+                $newFavPath = $presetPath === 'assets/brand-mark.svg' ? $presetPath : $generateSquareFaviconFromFile($presetPath, $dir);
+            }
         } elseif (!empty($_FILES['logo']['tmp_name']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
             $tmpFile = (string) $_FILES['logo']['tmp_name'];
             $fileSize = (int) ($_FILES['logo']['size'] ?? 0);
@@ -7006,7 +7060,6 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 echo json_encode(['ok' => false, 'error' => 'Uploaded logo is not a valid image file.']);
                 exit;
             }
-            $dir = __DIR__ . '/uploads/branding';
             if (!is_dir($dir)) {
                 @mkdir($dir, 0777, true);
             }
@@ -7016,8 +7069,10 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 echo json_encode(['ok' => false, 'error' => 'Failed to save logo image on server.']);
                 exit;
             }
-            $deleteOldLogoFile($oldLogo);
+            $deleteManagedBrandingAsset($oldLogo);
+            $deleteManagedBrandingAsset($oldFavicon);
             $newLogoPath = 'uploads/branding/' . $fileName;
+            $newFavPath = ($ext === 'svg') ? $newLogoPath : $generateSquareFaviconFromFile($newLogoPath, $dir);
         } else {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Select a logo image or preset to apply.']);
@@ -7025,14 +7080,14 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
 
         $brandNameIn = trim((string) ($_POST['brand_name'] ?? $jsonBody['brand_name'] ?? ''));
-        $savePayload = ['logo_path' => $newLogoPath];
+        $savePayload = ['logo_path' => $newLogoPath, 'favicon_path' => $newFavPath];
         if ($brandNameIn !== '') {
             $savePayload['brand_name'] = $brandNameIn;
         }
         $saved = saveBrandingConfig($pdo, $savePayload);
         echo json_encode([
             'ok' => true,
-            'message' => 'Brand logo updated across portals.',
+            'message' => 'Brand logo and favicon updated across portals.',
             'brandingConfig' => $saved,
         ]);
         exit;
@@ -7052,17 +7107,19 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
         $curBrand = getBrandingConfig($pdo);
-        $oldLogo = ltrim(str_replace('\\', '/', trim((string) ($curBrand['logo_path'] ?? ''))), '/');
-        if ($oldLogo !== '' && strpos($oldLogo, 'uploads/branding/logo_') === 0 && strpos($oldLogo, '..') === false) {
-            $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $oldLogo);
-            if (is_file($abs)) {
-                @unlink($abs);
+        foreach (['logo_path', 'favicon_path'] as $key) {
+            $oldAsset = ltrim(str_replace('\\', '/', trim((string) ($curBrand[$key] ?? ''))), '/');
+            if ($oldAsset !== '' && strpos($oldAsset, 'uploads/branding/') === 0 && strpos($oldAsset, 'uploads/branding/fonts/') !== 0 && strpos($oldAsset, '..') === false) {
+                $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $oldAsset);
+                if (is_file($abs)) {
+                    @unlink($abs);
+                }
             }
         }
-        $saved = saveBrandingConfig($pdo, ['logo_path' => '']);
+        $saved = saveBrandingConfig($pdo, ['logo_path' => '', 'favicon_path' => '']);
         echo json_encode([
             'ok' => true,
-            'message' => 'Brand logo reset to default.',
+            'message' => 'Brand logo and favicon reset to default.',
             'brandingConfig' => $saved,
         ]);
         exit;

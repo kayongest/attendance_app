@@ -77,7 +77,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   <meta name="apple-mobile-web-app-title" content="aBility OnSite" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
-  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+  <link rel="icon" type="image/png" href="assets/icons/favicon-64.png" />
   <?php echo $brandingHtml . "\n"; ?>
   <title>Live On-Site Crew Directory — aBility Tech</title>
   <script>
@@ -600,7 +600,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   <div id="portal-live-view" class="portal-shell" style="display: <?php echo $isAuthorized ? 'block' : 'none'; ?>;">
     <header class="topbar">
       <div class="brand-left">
-        <div class="brand-mark" style="overflow:hidden;padding:4px;"><img class="js-brand-logo-img" src="assets/brand-mark.svg" alt="aBility" style="width:100%;height:100%;object-fit:contain;" /></div>
+        <div class="brand-mark" style="overflow:hidden;padding:4px;"><img class="js-brand-logo-img" data-brand-logo="1" src="assets/rwanda-events-logo.png" alt="aBility" style="width:100%;height:100%;object-fit:contain;" /></div>
         <div>
           <div style="font-size: 16px; font-weight: 800;"><?php echo htmlspecialchars($portalTitleResolved, ENT_QUOTES, 'UTF-8'); ?></div>
           <div style="font-size: 12px; color: var(--text-secondary);">
