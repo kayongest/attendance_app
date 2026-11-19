@@ -154,6 +154,29 @@
     portalsTypeFilter: 'all',
     portalsSearch: '',
 
+    // System Settings & Interactive Flow Explorer
+    settingsTab: 'flow',
+    settingsFlowIdx: 0,
+    settingsNodeIdx: 0,
+    totpEnabled: false,
+    reliefTokens: [],
+    sessionReliefUrls: {},
+    brandingFonts: [],
+    brandingConfig: {
+      brand_name: 'aBility',
+      logo_path: '',
+      logo_url: 'assets/brand-mark.svg',
+      primary_color: '#4f46e5',
+      accent_color: '#10b981',
+      neutral_color: '#64748b',
+      font_family: 'Marvel',
+      font_scale: 1.0,
+      text_align: 'left',
+      default_theme: 'system',
+    },
+    rosterDeptFilter: 'all',
+    deferredPwaPrompt: null,
+
     // Current Operator Session & Alerts
     currentUser: null,
     unreadNotifCount: 0,
@@ -185,6 +208,206 @@
 
   const TIER_CYCLE = ['all', 'L1', 'L2', 'L3', 'L4'];
   const GATE_STATE_CYCLE = ['all', 'ready', 'checked_in', 'checked_out'];
+
+  const BRANDING_FONT_STACKS = {
+    'Marvel': "'Marvel', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    'Inter': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    'Plus Jakarta Sans': "'Plus Jakarta Sans', 'Segoe UI', Roboto, sans-serif",
+    'JetBrains Mono': "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  };
+
+  function applyBrandingConfigClient(cfg = {}, fontsList = null) {
+    if (Array.isArray(fontsList)) {
+      state.brandingFonts = fontsList;
+    }
+    const merged = Object.assign({}, state.brandingConfig || {}, cfg || {});
+    state.brandingConfig = merged;
+    const root = document.documentElement;
+    if (!root) return;
+
+    if (merged.primary_color) {
+      root.style.setProperty('--brand-primary', merged.primary_color);
+      root.style.setProperty('--brand-purple', merged.primary_color);
+    }
+    if (merged.accent_color) root.style.setProperty('--brand-accent', merged.accent_color);
+    if (merged.neutral_color) root.style.setProperty('--brand-neutral', merged.neutral_color);
+
+    // Inject @font-face rules & stylesheet links for custom fonts live
+    const fonts = state.brandingFonts || [];
+    if (fonts.length && typeof document !== 'undefined') {
+      let rtStyle = document.getElementById('ability-branding-fonts-runtime');
+      if (!rtStyle) {
+        rtStyle = document.createElement('style');
+        rtStyle.id = 'ability-branding-fonts-runtime';
+        document.head.appendChild(rtStyle);
+      }
+      const cssRules = [];
+      fonts.forEach((f) => {
+        if (!f || Number(f.is_active ?? 1) !== 1) return;
+        if (f.file_path) {
+          const safeFam = String(f.font_name || '').replace(/[^A-Za-z0-9 _-]/g, '');
+          const fmt = ['woff2', 'woff', 'truetype', 'opentype'].includes(f.font_format) ? f.font_format : 'woff2';
+          cssRules.push(`@font-face{font-family:'${safeFam}';src:url('${f.file_path}') format('${fmt}');font-display:swap;}`);
+        }
+        if (f.font_url && /^https:\/\//i.test(f.font_url)) {
+          const linkId = `ability-font-link-${f.id || safeHashStr(f.font_url)}`;
+          if (!document.getElementById(linkId)) {
+            const lk = document.createElement('link');
+            lk.id = linkId;
+            lk.rel = 'stylesheet';
+            lk.href = f.font_url;
+            document.head.appendChild(lk);
+          }
+        }
+      });
+      rtStyle.textContent = cssRules.join('\n');
+    }
+
+    const customFontMatch = fonts.find((f) => f && f.font_name === merged.font_family);
+    const fontStack = (customFontMatch && customFontMatch.css_stack) || BRANDING_FONT_STACKS[merged.font_family] || BRANDING_FONT_STACKS.Marvel;
+    root.style.setProperty('--brand-font-family', fontStack);
+    root.style.setProperty('--font-sans', fontStack);
+    const scaleNum = Math.max(0.85, Math.min(1.25, Number(merged.font_scale || 1)));
+    root.style.setProperty('--brand-font-scale', scaleNum.toFixed(2));
+    const align = ['left', 'center', 'justify'].includes(String(merged.text_align)) ? merged.text_align : 'left';
+    root.style.setProperty('--brand-text-align', align);
+    root.setAttribute('data-text-align', align);
+
+    if (merged.brand_name) {
+      document.querySelectorAll('.brand-name, .js-brand-name').forEach((el) => {
+        el.textContent = merged.brand_name;
+      });
+    }
+    const logoSrc = merged.logo_url || merged.logo_path || 'assets/brand-mark.svg';
+    document.querySelectorAll('.brand-mark-wrap img, .js-brand-logo-img, img[data-brand-logo="1"]').forEach((img) => {
+      img.setAttribute('data-brand-logo', '1');
+      if (img.getAttribute('src') !== logoSrc) {
+        img.src = logoSrc;
+      }
+      if (merged.brand_name) img.alt = merged.brand_name;
+    });
+    const logoPrev = document.getElementById('branding-logo-preview');
+    if (logoPrev && logoPrev.getAttribute('src') !== logoSrc) {
+      logoPrev.src = logoSrc;
+    }
+  }
+
+  function safeHashStr(s) {
+    let h = 0;
+    for (let i = 0; i < String(s || '').length; i += 1) {
+      h = ((h << 5) - h) + s.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h);
+  }
+
+  function applyAccessibilityPreferences() {
+    const root = document.documentElement;
+    if (!root) return;
+    try {
+      const hc = localStorage.getItem('ability_a11y_high_contrast') === '1';
+      const lg = localStorage.getItem('ability_a11y_large_text') === '1';
+      const rm = localStorage.getItem('ability_a11y_reduced_motion') === '1';
+      if (hc) root.setAttribute('data-contrast', 'high');
+      else root.removeAttribute('data-contrast');
+      if (rm) root.setAttribute('data-reduced-motion', '1');
+      else root.removeAttribute('data-reduced-motion');
+      const baseScale = Number(state.brandingConfig?.font_scale || 1);
+      const effectiveScale = lg ? Math.min(1.30, +(baseScale * 1.12).toFixed(2)) : baseScale;
+      root.style.setProperty('--brand-font-scale', effectiveScale.toFixed(2));
+    } catch (_) {}
+  }
+
+  // Offline-First IndexedDB Cache (`ability_offline_v1`) for Verification Roster Metadata
+  const AbilityMainOffline = (() => {
+    const DB_NAME = 'ability_offline_v1';
+    const DB_VER = 1;
+    function openDb() {
+      return new Promise((resolve, reject) => {
+        if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+        const req = window.indexedDB.open(DB_NAME, DB_VER);
+        req.onupgradeneeded = (ev) => {
+          const db = ev.target.result;
+          if (!db.objectStoreNames.contains('rosters')) {
+            db.createObjectStore('rosters', { keyPath: 'key' });
+          }
+          if (!db.objectStoreNames.contains('scan_queue')) {
+            db.createObjectStore('scan_queue', { keyPath: 'id', autoIncrement: true });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function saveRoster(crewList, checkpoints) {
+      try {
+        const db = await openDb();
+        const sanitizedCrew = (crewList || []).map((c) => ({
+          id: c.id,
+          full_name: c.full_name,
+          badge_code: c.badge_code,
+          rfid_uid: c.rfid_uid,
+          role_display: c.role_display,
+          department: c.department,
+          clearance_code: c.clearance_code,
+          clearance_color: c.clearance_color,
+          badge_status: c.badge_status,
+          daily_state: c.daily_state,
+          checkpoint_authorized: !!c.checkpoint_authorized,
+          stock_authorized: !!c.stock_authorized,
+        }));
+        const tx = db.transaction('rosters', 'readwrite');
+        tx.objectStore('rosters').put({
+          key: 'main_roster',
+          crew: sanitizedCrew,
+          checkpoints: (checkpoints?.directory || []).map((d) => ({
+            id: d.id, type: d.type, name: d.name, call_time: d.call_time, geofence_radius_m: d.geofence_radius_m || 200,
+          })),
+          updated_at: new Date().toISOString(),
+        });
+      } catch (_) {}
+    }
+    async function getStatus() {
+      try {
+        const db = await openDb();
+        return await new Promise((resolve) => {
+          const req = db.transaction('rosters', 'readonly').objectStore('rosters').get('main_roster');
+          req.onsuccess = () => {
+            const val = req.result;
+            resolve(val ? { cached: true, count: (val.crew || []).length, updated_at: val.updated_at } : { cached: false, count: 0, updated_at: null });
+          };
+          req.onerror = () => resolve({ cached: false, count: 0, updated_at: null });
+        });
+      } catch (_) { return { cached: false, count: 0, updated_at: null }; }
+    }
+    async function clearAll() {
+      try {
+        const db = await openDb();
+        db.transaction('rosters', 'readwrite').objectStore('rosters').clear();
+      } catch (_) {}
+    }
+    return { saveRoster, getStatus, clearAll };
+  })();
+
+  function updateNetworkStatusUi() {
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine !== false;
+    const pill = document.getElementById('topbar-network-pill');
+    const txt = document.getElementById('topbar-network-text');
+    if (pill) pill.classList.toggle('is-offline', !isOnline);
+    if (txt) txt.textContent = isOnline ? 'Online' : 'Offline Mode';
+    document.querySelectorAll('[data-online-only="1"]').forEach((el) => {
+      if (isOnline) {
+        el.removeAttribute('data-online-disabled');
+        if (el.dataset.prevTitle) {
+          el.title = el.dataset.prevTitle;
+        }
+      } else {
+        if (!el.dataset.prevTitle && el.title) el.dataset.prevTitle = el.title;
+        el.setAttribute('data-online-disabled', '1');
+        el.title = 'Online Only: reconnect to Internet to run this mutation.';
+      }
+    });
+  }
 
   function escapeHtml(str) {
     return String(str ?? '')
@@ -262,6 +485,20 @@
       state.standalonePortals = data.standalonePortals;
     }
 
+    if (typeof data.totpEnabled !== 'undefined') {
+      state.totpEnabled = Boolean(data.totpEnabled);
+    }
+    if (Array.isArray(data.reliefTokens)) {
+      state.reliefTokens = data.reliefTokens;
+    }
+    if (Array.isArray(data.brandingFonts)) {
+      state.brandingFonts = data.brandingFonts;
+    }
+    if (data.brandingConfig && typeof data.brandingConfig === 'object') {
+      applyBrandingConfigClient(data.brandingConfig, data.brandingFonts || null);
+      applyAccessibilityPreferences();
+    }
+
     if (data.navigationConfig && Array.isArray(data.navigationConfig.items)) {
       state.navigationConfig = {
         main_nav_enabled: data.navigationConfig.main_nav_enabled !== false,
@@ -278,6 +515,8 @@
     } else if (!state.currentUser && state.crew.length > 0) {
       state.currentUser = state.crew.find((c) => Number(c.id) === 2) || state.crew[0];
     }
+
+    AbilityMainOffline.saveRoster(state.crew, state.checkpoints);
 
     if (!preserveCurrentVerification || !state.currentVerification) {
       const selectedMember = state.crew.find((c) => Number(c.id) === Number(state.selectedCrewId));
@@ -1199,6 +1438,7 @@
       'station-lock': document.getElementById('screen-station-lock'),
       'reset-scans': document.getElementById('screen-reset-scans'),
       'standalone-portals': document.getElementById('screen-standalone-portals'),
+      settings: document.getElementById('screen-settings'),
       'custom-nav-page': document.getElementById('screen-custom-nav-page'),
     };
     const activeDomKey = screens[resolvedKey] ? resolvedKey : 'custom-nav-page';
@@ -1221,6 +1461,18 @@
       }
     });
 
+    const settingsGroup = document.getElementById('sidebar-settings-group');
+    const settingsSubmenu = document.getElementById('sidebar-settings-submenu');
+    if (settingsGroup && settingsSubmenu) {
+      if (resolvedKey === 'settings') {
+        settingsGroup.classList.add('is-open');
+        settingsSubmenu.style.display = 'flex';
+      } else {
+        settingsGroup.classList.remove('is-open');
+        settingsSubmenu.style.display = 'none';
+      }
+    }
+
     // Update nav icons
     const ovIcon = document.getElementById('nav-icon-overview');
     const evIcon = document.getElementById('nav-icon-events');
@@ -1242,6 +1494,7 @@
       'station-lock': 'Station Lock (PIN)',
       'reset-scans': 'Reset Today’s Scans',
       'standalone-portals': 'Gates & On-Site Portals',
+      settings: 'System Settings & Flow Explorer',
     };
     const bc = document.getElementById('breadcrumb-page');
     if (bc) {
@@ -1615,17 +1868,17 @@
     const isStockCtrl = (rawRole === 'stock_controller');
 
     if (isManager) {
-      return ['overview', 'events', 'users', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals'].includes(normalizedKey);
+      return ['overview', 'events', 'users', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isStockCtrl) {
-      return ['events', 'terminals', 'attendees', 'shift-relief', 'rollcall', 'standalone-portals'].includes(normalizedKey);
+      return ['events', 'terminals', 'attendees', 'shift-relief', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isTech) {
-      // Tech Lead: Gate Dashboard, Terminal, On-Site Roll-Call, and Portals
-      return ['overview', 'terminals', 'rollcall', 'standalone-portals'].includes(normalizedKey);
+      // Tech Lead: Gate Dashboard, Terminal, On-Site Roll-Call, Portals, and Settings/Flow
+      return ['overview', 'terminals', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isStockMgr) {
-      return ['overview', 'events', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals'].includes(normalizedKey);
+      return ['overview', 'events', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     // Field Crew / Technicians / Drivers / Decorators / Standard crew:
     return ['attendees', 'terminals', 'rollcall'].includes(normalizedKey);
@@ -1775,6 +2028,8 @@
     const btnStationLock = document.getElementById('sidebar-station-lock-btn');
     const btnResetDemo = document.getElementById('sidebar-reset-demo-btn');
     const btnOnsiteShare = document.getElementById('sidebar-onsite-share-btn');
+    const btnSettings = document.getElementById('sidebar-settings-btn');
+    const grpSettings = document.getElementById('sidebar-settings-group');
 
     if (cpNav && !hasWorkspaceNavConfig) {
       cpNav.style.display = 'flex';
@@ -1790,9 +2045,18 @@
       setVis(btnResetDemo, isAdmin);
       // Unified Standalone Gates & On-Site Portal Links
       setVis(btnOnsiteShare, isAdmin || isManager || isTech || isStockMgr || isStockCtrl);
+      // Settings & Interactive System Flow Explorer
+      const settingsAllowed = isAdmin || isManager || isTech || isStockMgr || isStockCtrl;
+      setVis(grpSettings || btnSettings, settingsAllowed);
+      if (btnSettings) setVis(btnSettings, settingsAllowed);
     }
     if (btnResetDemo && !isAdmin) {
       btnResetDemo.style.display = 'none';
+    }
+
+    const topbarSettingsBtn = document.getElementById('topbar-settings-btn');
+    if (topbarSettingsBtn) {
+      topbarSettingsBtn.style.display = isScreenPermittedForCurrentUser('settings') ? 'inline-flex' : 'none';
     }
 
     // 3. Subtabs on Users & Roles Screen
@@ -5854,11 +6118,16 @@
   function populateLeadershipSelect(selectEl, currentVal = '', mode = 'pm') {
     if (!selectEl) return;
     const isPm = mode === 'pm';
-    const placeholder = isPm ? '-- Select Project Manager / Coordinator --' : '-- Select Technical Lead --';
-    const preferredRoles = isPm
-      ? new Set(['project_manager', 'manager', 'admin', 'administrator'])
+    const isCoord = mode === 'coordinator';
+    const placeholder = isCoord
+      ? '-- Select Event Coordinator --'
+      : (isPm ? '-- Select Project Manager --' : '-- Select Technical Lead --');
+    const preferredRoles = (isPm || isCoord)
+      ? new Set(['project_manager', 'event_coordinator', 'manager', 'admin', 'administrator'])
       : new Set(['tech_lead', 'technical_lead', 'stage_manager', 'sound_engineer', 'rigging_lead']);
-    const preferredDepts = isPm ? new Set(['operations', 'executive', 'production']) : new Set(['video', 'audio', 'lighting', 'rigging', 'production']);
+    const preferredDepts = (isPm || isCoord)
+      ? new Set(['operations', 'executive', 'production'])
+      : new Set(['video', 'audio', 'sound', 'lighting', 'electrical', 'rigging', 'interpretation', 'production']);
 
     const crewList = (state.crew || []).filter((u) => u && (u.full_name || u.username));
     const preferred = [];
@@ -5885,7 +6154,7 @@
 
     let html = `<option value="">${placeholder}</option>`;
     if (preferred.length > 0) {
-      html += `<optgroup label="${isPm ? 'Project Managers &amp; Coordinators' : 'Technical Leads'}">${preferred.map(buildOpt).join('')}</optgroup>`;
+      html += `<optgroup label="${isCoord ? 'Event Coordinators &amp; PMs' : (isPm ? 'Project Managers &amp; Coordinators' : 'Technical Leads')}">${preferred.map(buildOpt).join('')}</optgroup>`;
     }
     if (others.length > 0) {
       html += `<optgroup label="All Team Members">${others.map(buildOpt).join('')}</optgroup>`;
@@ -6234,6 +6503,9 @@
     const ctrlInput = document.getElementById('wh-modal-controller');
     const phoneInput = document.getElementById('wh-modal-phone');
     const pinInput = document.getElementById('wh-modal-pin');
+    const radInput = document.getElementById('wh-modal-radius');
+    const latInput = document.getElementById('wh-modal-lat');
+    const lngInput = document.getElementById('wh-modal-lng');
 
     // Reset dropzone
     resetDropzone('wh');
@@ -6252,6 +6524,9 @@
         if (ctrlInput) ctrlInput.value = wh.controller_name || '';
         if (phoneInput) phoneInput.value = wh.controller_phone || '';
         if (pinInput) pinInput.value = resolveWarehousePinClient(wh);
+        if (radInput) radInput.value = String(wh.geofence_radius_m || 200);
+        if (latInput) latInput.value = wh.lat !== null && wh.lat !== undefined ? String(wh.lat) : '';
+        if (lngInput) lngInput.value = wh.lng !== null && wh.lng !== undefined ? String(wh.lng) : '';
 
         if (wh.image) {
           setDropzonePreview('wh', wh.image, wh.image.split('/').pop());
@@ -6260,6 +6535,9 @@
     } else {
       if (titleEl) titleEl.textContent = 'Add New Warehouse';
       if (idInput) idInput.value = '0';
+      if (radInput) radInput.value = '200';
+      if (latInput) latInput.value = '';
+      if (lngInput) lngInput.value = '';
       if (openTimeInput) openTimeInput.value = '08:00';
       if (closeTimeInput) closeTimeInput.value = '18:00';
       if (ctrlInput) {
@@ -7183,6 +7461,37 @@
       ? `<span class="nav-item-count${badge.className ? ` ${escapeHtml(badge.className)}` : ''}"${badge.id ? ` id="${escapeHtml(badge.id)}"` : ''}${badge.style ? ` style="${escapeHtml(badge.style)}"` : ''}>${escapeHtml(badge.text)}</span>`
       : '';
 
+    if (target === 'settings') {
+      const settingsOpen = state.activeScreen === 'settings';
+      const sec = state.settingsTab || 'flow';
+      const sections = [
+        ['flow', 'Flow'],
+        ['relief', 'Relief & Geo-QR'],
+        ['dispatch', 'Dispatch Hierarchy'],
+        ['links', 'Shared Links'],
+        ['branding', 'Branding & Mode'],
+        ['accounts', 'Accounts & Offline'],
+        ['pwa', 'PWA (Android & iOS)'],
+        ['controls', 'Config Shortcuts'],
+      ];
+      return `
+        <div class="sidebar-settings-group${settingsOpen ? ' is-open' : ''}" id="sidebar-settings-group" style="display: ${visible ? 'flex' : 'none'};">
+          <button type="button" class="nav-item sidebar-settings-toggle${isActive ? ' active' : ''}" ${idAttr} ${targetAttr} data-nav-group="${escapeHtml(item.nav_group || 'workspace')}" data-nav-key="${escapeHtml(item.nav_key)}" data-nav-id="${Number(item.id)}" ${nodeAttr} aria-expanded="${settingsOpen ? 'true' : 'false'}" title="Settings > Flow &amp; Platform Configuration" style="display: ${visible ? 'flex' : 'none'}; opacity: 1; filter: none; cursor: pointer;" ${visible ? '' : 'data-restricted="true" tabindex="-1"'}>
+            ${renderNavItemIconHtml(item, isActive)}
+            <span class="nav-item-label">Settings</span>
+            <span class="sidebar-settings-chevron" id="sidebar-settings-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="sidebar-settings-submenu" id="sidebar-settings-submenu" style="display: ${settingsOpen ? 'flex' : 'none'};">
+            ${sections.map(([key, lbl]) => `
+              <button type="button" class="nav-subitem${sec === key ? ' active' : ''}" data-settings-section="${key}">
+                <span>${escapeHtml(lbl)}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <button type="button" class="nav-item${isActive ? ' active' : ''}" ${idAttr} ${targetAttr} data-nav-group="${escapeHtml(item.nav_group || 'main')}" data-nav-key="${escapeHtml(item.nav_key)}" data-nav-id="${Number(item.id)}" ${nodeAttr} title="${escapeHtml(item.label)}" style="display: ${visible ? 'flex' : 'none'}; opacity: 1; filter: none; cursor: pointer;" ${visible ? '' : 'data-restricted="true" tabindex="-1"'}>
         ${renderNavItemIconHtml(item, isActive)}
@@ -7831,6 +8140,10 @@
     const pinEl = document.getElementById('venue-crud-pin');
     const tlEl = document.getElementById('venue-crud-techlead');
     const pmEl = document.getElementById('venue-crud-pm');
+    const coordEl = document.getElementById('venue-crud-coordinator');
+    const radEl = document.getElementById('venue-crud-radius');
+    const latEl = document.getElementById('venue-crud-lat');
+    const lngEl = document.getElementById('venue-crud-lng');
     const crewBox = document.getElementById('venue-crud-crew-list');
 
     const assignedSet = new Set((venue && Array.isArray(venue.assigned_technicians) ? venue.assigned_technicians : []).map(Number));
@@ -7852,8 +8165,12 @@
       if (dateEl) dateEl.value = venue.date || new Date().toISOString().slice(0, 10);
       if (ctEl) ctEl.value = venue.call_time || '08:00';
       if (pinEl) pinEl.value = venue.terminal_pin || '';
+      if (radEl) radEl.value = String(venue.geofence_radius_m || 200);
+      if (latEl) latEl.value = venue.lat !== null && venue.lat !== undefined ? String(venue.lat) : '';
+      if (lngEl) lngEl.value = venue.lng !== null && venue.lng !== undefined ? String(venue.lng) : '';
       populateLeadershipSelect(tlEl, venue.tech_lead || venue.lead_name || '', 'techlead');
       populateLeadershipSelect(pmEl, venue.project_manager || '', 'pm');
+      populateLeadershipSelect(coordEl, venue.event_coordinator || '', 'coordinator');
       if (venue.image) {
         setDropzonePreview('venue', venue.image, venue.image.split('/').pop());
       }
@@ -7865,8 +8182,12 @@
       if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
       if (ctEl) ctEl.value = '08:00';
       if (pinEl) pinEl.value = '1234';
+      if (radEl) radEl.value = '200';
+      if (latEl) latEl.value = '';
+      if (lngEl) lngEl.value = '';
       populateLeadershipSelect(tlEl, '', 'techlead');
       populateLeadershipSelect(pmEl, '', 'pm');
+      populateLeadershipSelect(coordEl, '', 'coordinator');
     }
     modal.style.display = 'flex';
   }
@@ -8193,6 +8514,1131 @@
     }
   }
 
+  const SYSTEM_FLOW_SPEC = [
+    {
+      id: 'portals',
+      label: '1. Portals & Auth',
+      subtitle: 'Four isolated entry points converge on api.php and db.php',
+      branchPill: '4 Entry Points · 3 Session Scopes',
+      nodes: [
+        {
+          step: 'ENTRY 1',
+          short: 'login.php',
+          summary: 'Sign In & Admin Sign Up',
+          title: 'Authentication Gateway (login.php)',
+          source: 'login.php + api.php (login, register)',
+          route: 'POST api.php?action=login | register',
+          detail: 'Authenticates username, email, or REW-BADGE-XXXX against users.password_hash / password. Protects logins with security_rate_limits (5 fails / 600s → 60s block). Roles stock_controller and technician redirect to index.php#pane-kiosk.',
+          outcome: 'Sets $_SESSION["auth_user_id"] + CSRF token',
+          tone: 'chip',
+          jumpScreen: null,
+        },
+        {
+          step: 'ENTRY 2',
+          short: 'index.php',
+          summary: 'Main Operations SPA Shell',
+          title: 'Dashboard & Terminal Shell (index.php)',
+          source: 'index.php + index.html + app.js',
+          route: 'GET api.php?action=bootstrap (6s sync)',
+          detail: 'Gates on auth_user_id, injects meta[name="csrf-token"] and theme preset cookie, then bootstraps full operational payload (crew, checkpoints, timeline, clearanceMatrix, navConfig, portals) and starts 6-second startLiveGateSync() polling.',
+          outcome: 'Authenticated CSRF-protected workspace',
+          tone: 'ok',
+          jumpScreen: 'overview',
+          jumpLabel: 'Open Gate Dashboard',
+        },
+        {
+          step: 'ENTRY 3',
+          short: 'gate.php',
+          summary: 'Standalone Site Kiosks',
+          title: 'Location-Locked Gate Terminals (gate.php)',
+          source: 'ndera-gate.php / bk-arena-gate.php / kcc-gate.php',
+          route: 'standalone_gate_unlock | feed | scan',
+          detail: 'Operates without an operator login. Resolves site via standalone_portals / stock_locations, verifies dedicated terminal_pin (rate-limited), stores SHA-1 pin token in $_SESSION["standalone_gate_auth"][wh_id], and runs executeGateScan().',
+          outcome: 'Isolated per-facility PIN session',
+          tone: 'warn',
+          jumpScreen: 'standalone-portals',
+          jumpLabel: 'Open Gates & On-Site',
+        },
+        {
+          step: 'ENTRY 4',
+          short: 'onsite.php',
+          summary: 'Read-Only Live Directory',
+          title: 'Shareable On-Site Crew Portal (onsite.php)',
+          source: 'onsite.php + api.php (onsite_portal_login)',
+          route: 'GET api.php?action=onsite_public_feed (15s)',
+          detail: 'Strictly isolated from auth_user_id. Unlocks via shared technician passcode (app_settings.onsite_share_password_hash, default TechSite@2026) and session version check. Admin/Site Manager can rotate password or revoke viewers.',
+          outcome: 'Read-only live roll-call feed',
+          tone: 'chip',
+          jumpScreen: 'rollcall',
+          jumpLabel: 'Open On-Site Roll-Call',
+        },
+        {
+          step: 'DATA LAYER',
+          short: 'db.php + MySQL',
+          summary: 'ability_db / attendance_app',
+          title: 'Database Bridge & Auto-Fallback (db.php)',
+          source: 'db.php :: getDbConnection()',
+          route: 'MySQL 127.0.0.1:3306 (PDO)',
+          detail: 'Prefers ability_db when users table exists; otherwise auto-creates attendance_app and runs ensureAbilitySchemaAndSeed(). Legacy batch/stock inventory API endpoints return HTTP 410 Gone under Attendance-Only Deployment.',
+          outcome: 'Tables auto-migrated & indexed',
+          tone: 'ok',
+          jumpScreen: null,
+        },
+      ],
+    },
+    {
+      id: 'scan',
+      label: '2. Scan Engine',
+      subtitle: 'End-to-end badge scan, offline buffering, clearance evaluation & commit',
+      branchPill: 'Online Sync + Offline Queue',
+      nodes: [
+        {
+          step: 'STEP 1',
+          short: 'Capture Input',
+          summary: 'USB / Camera QR / Row',
+          title: 'Multi-Channel Scan Capture',
+          source: 'app.js :: triggerGateScan / scanCameraFrameLoop',
+          route: '#kiosk-badge-input | BarcodeDetector | jsQR',
+          detail: 'Captures USB scanner/keyboard input, live camera QR/Code-128 frames (250ms loop with 2.2s code debounce), or direct row click. Blocked immediately if state.terminalScreenLocked is true.',
+          outcome: 'Badge, RFID UID, ABL code, or name',
+          tone: 'chip',
+          jumpScreen: 'terminals',
+          jumpLabel: 'Open Terminals',
+        },
+        {
+          step: 'STEP 2',
+          short: 'Network Check',
+          summary: 'Online vs localStorage Queue',
+          title: 'Offline-First Queue Branch',
+          source: 'app.js :: enqueueOfflineScan / syncOfflineScans',
+          route: 'localStorage["ability_offline_scan_queue_v1"]',
+          detail: 'If navigator.onLine is false or fetch fails with TypeError, queues scan with client timestamp offline_scanned_at. Server accepts offline timestamps up to 72h back and auto-syncs when window fires online.',
+          outcome: 'Zero lost scans during Wi-Fi drops',
+          tone: 'warn',
+          jumpScreen: 'terminals',
+          jumpLabel: 'Open Terminals',
+        },
+        {
+          step: 'STEP 3',
+          short: 'Lock & Match',
+          summary: 'Controller lock + lookup',
+          title: 'Operator Scope & Identity Lookup',
+          source: 'api.php :: assertControllerCheckpointLock()',
+          route: 'POST api.php?action=process_gate_scan',
+          detail: 'Verifies operator role (admin/manager/stock_manager/tech_lead/stock_controller). For stock_controller, rejects scans outside assigned_checkpoint_type/id (HTTP 403), then resolves crew via findCrewMemberByScanInput().',
+          outcome: 'Authenticated target & checkpoint',
+          tone: 'chip',
+          jumpScreen: null,
+        },
+        {
+          step: 'STEP 4',
+          short: 'Clearance Gate',
+          summary: 'Status & L1–L4 Checkpoint Rules',
+          title: 'Access Evaluation (evaluateCheckpointAccess)',
+          source: 'api.php :: evaluateCheckpointAccess()',
+          route: 'user_badges + checkpoint_type + id',
+          detail: 'Requires badge_status === "active". At stock_warehouse gates, blocks L1 or stock_access_mode="none" and enforces allowed_stock_ids when "selected". At event_venue, permits unless venue_access_mode="none" (except L4).',
+          outcome: 'Denied logs access_verify + reason',
+          tone: 'err',
+          jumpScreen: 'users',
+          jumpSubTab: 'matrix',
+          jumpLabel: 'Open Clearance Matrix',
+        },
+        {
+          step: 'STEP 5',
+          short: 'Dedup & Score',
+          summary: '5s anti-double-scan + Call-Time',
+          title: 'Deduplication & Punctuality Scoring',
+          source: 'api.php :: executeGateScan()',
+          route: 'attendance_logs (±5s check) + call_time',
+          detail: 'Preserves prior scan if same user/checkpoint scanned within <= 5s (duplicate_prevented). Otherwise scores arrival vs call_time/open_time: < -10m Early, <= +15m On-Time, > +15m Late.',
+          outcome: 'Early / On-Time / Late / Check-Out',
+          tone: 'ok',
+          jumpScreen: 'calltime',
+          jumpLabel: 'Open Set Call Time',
+        },
+        {
+          step: 'STEP 6',
+          short: 'Commit & UI',
+          summary: 'DB insert + Modal + Chime',
+          title: 'Audit Write & 4s Kiosk Feedback',
+          source: 'app.js :: renderVerificationDeck / playKioskChime',
+          route: 'INSERT attendance_logs → #kiosk-modal-backdrop',
+          detail: 'Writes immutable scan row, returns fresh bootstrap payload, plays Web Audio tone (approve/checkout/decline), opens centered verification modal with 4s countdown back to scanner.',
+          outcome: 'Live KPIs, timeline & roll-call updated',
+          tone: 'ok',
+          jumpScreen: 'overview',
+          jumpLabel: 'Open Activity Timeline',
+        },
+      ],
+    },
+    {
+      id: 'transit',
+      label: '3. State & Transit',
+      subtitle: 'Paired daily attendance state machine, overnight shifts & cross-facility transfer',
+      branchPill: '3 States · Auto-Transit',
+      nodes: [
+        {
+          step: 'STATE 1',
+          short: 'ready',
+          summary: 'Not Yet Scanned Today',
+          title: 'Initial State: Ready',
+          source: 'api.php :: buildFullPayload()',
+          route: 'No open check_in today or prior 18h',
+          detail: 'Default daily_state for staff with no active check-in. An authorized auto scan at any permitted checkpoint resolves to check_in and starts their active shift.',
+          outcome: 'Next auto scan → check_in',
+          tone: 'chip',
+          jumpScreen: 'attendees',
+          jumpLabel: 'Open Staff ID Badges',
+        },
+        {
+          step: 'STATE 2',
+          short: 'checked_in',
+          summary: 'On-Site (+18h Night Shift)',
+          title: 'Active State: Checked In',
+          source: 'api.php :: buildFullPayload()',
+          route: 'attendance_logs (today + 18h overnight lookback)',
+          detail: 'Places person into rollCallList, checkpoint on_site_now, Overview COS view, and onsite.php. Unclosed check_in logs up to 18h before midnight remain checked_in past 00:00 (NIGHT SHIFT ACTIVE).',
+          outcome: 'Listed in Live On-Site Roll-Call',
+          tone: 'ok',
+          jumpScreen: 'rollcall',
+          jumpLabel: 'Open On-Site Roll-Call',
+        },
+        {
+          step: 'BRANCH A',
+          short: 'Same Gate → Out',
+          summary: 'State transitions to checked_out',
+          title: 'Same-Checkpoint Exit Scan',
+          source: 'api.php :: executeGateScan()',
+          route: 'scan_action = check_out (same cpType & cpId)',
+          detail: 'Re-scanning at the same facility/venue transitions daily_state to checked_out, stamps check_out_time, logs SHIFT CHECK-OUT, and removes the user from active on-site headcount.',
+          outcome: 'State → checked_out · Duration pairable',
+          tone: 'warn',
+          jumpScreen: 'terminals',
+          jumpLabel: 'Open Terminals',
+        },
+        {
+          step: 'BRANCH B',
+          short: 'New Gate → Transit',
+          summary: 'Auto Check-Out A + Check-In B',
+          title: 'Cross-Facility Auto-Transit Transfer',
+          source: 'api.php :: executeGateScan() + confirm_gate_action()',
+          route: '2 logs: check_out (prev) + check_in (new)',
+          detail: 'If a checked_in person scans at a different checkpoint without checking out first, executeGateScan() inserts a check_out at the previous gate ("Transit departure → Transferred") AND a check_in at the new gate.',
+          outcome: 'Seamless multi-site custody continuity',
+          tone: 'chip',
+          jumpScreen: 'events',
+          jumpLabel: 'Open Checkpoints & Venues',
+        },
+        {
+          step: 'MANUAL FLOW',
+          short: 'Row Preview',
+          summary: 'Override / Late Lockout',
+          title: 'Manual Kiosk Decision & Late Override',
+          source: 'app.js :: openKioskModal + api.php :: confirm_gate_action',
+          route: 'POST api.php?action=confirm_gate_action',
+          detail: 'Clicking a crew table row opens unconfirmed preview with Approve In/Out, Decline Entry, and Supervisor Override. Declining with "late" sets badge_status="disabled_late"; Supervisor Override checks password/PIN, logs late_override, and reactivates badge.',
+          outcome: 'Accountable late-entry exceptions',
+          tone: 'err',
+          jumpScreen: 'attendees',
+          jumpLabel: 'Open Staff ID Badges',
+        },
+      ],
+    },
+    {
+      id: 'locks',
+      label: '4. Locks & Relief',
+      subtitle: 'Three layers of terminal locking and tracked Gate Controller handover approval',
+      branchPill: '3 Lock Layers · Relief Queue',
+      nodes: [
+        {
+          step: 'LOCK 1',
+          short: 'Lock-on-Entry',
+          summary: 'Auto-locks #pane-kiosk',
+          title: 'Terminal Screen Lock-on-Entry',
+          source: 'app.js :: switchScreen() + renderTerminalLockScreen()',
+          route: 'POST api.php?action=verify_terminal_pin',
+          detail: 'Entering Terminals forces state.terminalScreenLocked = true, hiding the call-time quickbar and scanner input behind a live clock screen. Unlocks only after server verifies the active site terminal_pin (5 tries / 10m rate limit).',
+          outcome: 'Prevents unattended desk scans',
+          tone: 'warn',
+          jumpScreen: 'terminals',
+          jumpLabel: 'Open Terminals',
+        },
+        {
+          step: 'LOCK 2',
+          short: 'Station Lock',
+          summary: 'Pins browser to 1 site',
+          title: 'Browser Station Lock (PIN)',
+          source: 'app.js :: submitStationLockToggle()',
+          route: 'localStorage["ability_station_locked"] + PIN',
+          detail: 'Admin, Site Manager, or Tech Lead enters the checkpoint PIN to lock or unlock checkpoint switching across that browser workstation, keeping shared gate laptops pinned to one checkpoint.',
+          outcome: 'Stops accidental gate switching',
+          tone: 'chip',
+          jumpScreen: 'station-lock',
+          jumpLabel: 'Open Station Lock (PIN)',
+        },
+        {
+          step: 'LOCK 3',
+          short: 'Controller DB Lock',
+          summary: 'Server-enforced gate scope',
+          title: 'Gate Controller Server Lock',
+          source: 'api.php :: assertControllerCheckpointLock()',
+          route: 'users.assigned_checkpoint_type & _id',
+          detail: 'Every stock_controller session is locked server-side across bootstrap, scans, confirmations, PIN verify, and attendance_report to their assigned checkpoint. Cross-gate calls return HTTP 403.',
+          outcome: 'Strict per-gate separation of duty',
+          tone: 'err',
+          jumpScreen: null,
+        },
+        {
+          step: 'HANDOVER 1',
+          short: 'Shift Request',
+          summary: 'Relief / Sick / Night Swap',
+          title: 'Submit Relief or Swap Request',
+          source: 'api.php :: request_controller_shift()',
+          route: 'INSERT controller_shift_requests (pending)',
+          detail: 'Controllers, Tech Leads, Site Managers, or Admins submit a target checkpoint, replacement controller, reason (sick_leave, shift_swap, high_volume, night_shift, new_assignment), and optional shift_start/end.',
+          outcome: 'Queued for Supervisor review + alert',
+          tone: 'chip',
+          jumpScreen: 'shift-relief',
+          jumpLabel: 'Open Shift Relief & Swaps',
+        },
+        {
+          step: 'HANDOVER 2',
+          short: 'Approve & Swap',
+          summary: 'Reassigns DB checkpoint',
+          title: 'Review & Execute Controller Handover',
+          source: 'api.php :: review_controller_shift()',
+          route: 'UPDATE controller_shift_requests + users',
+          detail: 'Only Admin or Site Manager (stock_manager) can approve/reject. Approval updates replacement users.assigned_checkpoint_* + assignment_expires_at, updates stock_locations.controller_name, and clears outgoing controller assignment.',
+          outcome: 'Instant audited terminal transfer',
+          tone: 'ok',
+          jumpScreen: 'shift-relief',
+          jumpLabel: 'Open Shift Relief Queue',
+        },
+      ],
+    },
+    {
+      id: 'rbac',
+      label: '5. RBAC & Sync',
+      subtitle: 'Server-enforced role scoping, dynamic navigation, shift pairing & alert state',
+      branchPill: 'Server RBAC · Dynamic Nav',
+      nodes: [
+        {
+          step: 'ROLE 1',
+          short: 'Admin / Mgr',
+          summary: 'Full System & Matrix CRUD',
+          title: 'System Administrator & Manager',
+          source: 'api.php :: canCallerPerformAction()',
+          route: 'admin, administrator, manager',
+          detail: 'Full access to clearance tiers (L1–L4+), roles, departments, navigation_items CRUD, switch_user, user deletion, Station Lock page, and password-confirmed reset_today_scans.',
+          outcome: 'Max Assignable Tier: L4+',
+          tone: 'ok',
+          jumpScreen: 'users',
+          jumpSubTab: 'roles',
+          jumpLabel: 'Open Roles Matrix',
+        },
+        {
+          step: 'ROLE 2',
+          short: 'Lead & Site Mgr',
+          summary: 'Scoped L1–L2 / L1–L3 Delegation',
+          title: 'Technical Lead & Site Manager',
+          source: 'api.php :: canCallerPerformAction() + app.js',
+          route: 'tech_lead | stock_manager',
+          detail: 'tech_lead sets venue call-times, assigns event rosters (assign_event_crew), and onboards L1/L2 tech crew. stock_manager manages warehouses/portals, timeline CRUD, onsite.php config, relief approvals, and L1–L3 onboarding.',
+          outcome: 'Enforced server-side on every POST',
+          tone: 'chip',
+          jumpScreen: 'events',
+          jumpLabel: 'Open Checkpoints & Venues',
+        },
+        {
+          step: 'ROLE 3',
+          short: 'Controller & Crew',
+          summary: 'Terminal vs Self-Badge Scope',
+          title: 'Gate Controller & Field Crew',
+          source: 'api.php :: getDefaultNavigationItems() + app.js',
+          route: 'stock_controller | technician | crew',
+          detail: 'stock_controller operates #pane-kiosk, Checkpoints, Badges, Roll-Call, Portals, and Shift Relief requests; cannot create users or edit tiers. Crew/technicians are scoped to Staff ID Badges, Terminals, and On-Site Roll-Call.',
+          outcome: 'Strict least-privilege UI + API',
+          tone: 'warn',
+          jumpScreen: 'attendees',
+          jumpLabel: 'Open Staff ID Badges',
+        },
+        {
+          step: 'NAV ENGINE',
+          short: 'Dynamic Nav',
+          summary: 'Consolidated Sidebar (MySQL)',
+          title: 'Database-Driven Navigation & Hub Routing',
+          source: 'api.php :: ensureNavigationTables() + app.js :: switchScreen()',
+          route: 'navigation_items + app_settings',
+          detail: 'Renders Main Navigation and Checkpoint Controls from MySQL navigation_items. Legacy routes (analytics, access-matrix, stock-manager, venue-security) cleanly redirect to consolidated hubs.',
+          outcome: 'Live enable/disable & custom pages',
+          tone: 'chip',
+          jumpScreen: 'users',
+          jumpSubTab: 'navigation',
+          jumpLabel: 'Open Navigation CRUD',
+        },
+        {
+          step: 'REPORT & ALERTS',
+          short: 'Reports & Reads',
+          summary: 'Shift Pairing & Alert State',
+          title: 'Multi-Range Attendance Reports & Alerts',
+          source: 'api.php :: attendance_report + mark_notifications_read',
+          route: 'today | night_shift | 7d | custom',
+          detail: 'Pairs check_in → check_out durations across Today, Night Shift (18:00–09:00), 7d, or Custom dates for CSV/Print sign-off. Admin bell alerts track pending relief, denied/late scans, and persist read state in user_notification_reads.',
+          outcome: 'Audited shift hours & persistent alerts',
+          tone: 'ok',
+          jumpScreen: 'overview',
+          jumpLabel: 'Open Gate Dashboard',
+        },
+      ],
+    },
+    {
+      id: 'relief_geo_totp',
+      label: '5. Geo-QR & TOTP Relief',
+      subtitle: 'Single-use GPS Geo-Fenced QR tokens paired with RFC 6238 Authenticator codes and automatic expiry',
+      branchPill: 'GPS Haversine (200m) + 6-Digit TOTP + Shift End Expiry',
+      nodes: [
+        {
+          step: 'ENROLL 2FA',
+          short: 'TOTP Secret',
+          summary: 'RFC 6238 6-Digit Setup',
+          title: 'Authenticator Secret Enrollment',
+          source: 'api.php :: totp_setup + totp_verify_enable',
+          route: 'user_totp_secrets (Base32)',
+          detail: 'Operator enrolls Google Authenticator / Authy via otpauth://totp QR generated offline by AbilityQRCode. Server verifies 6-digit HMAC-SHA1 30s rotating code via computeTotpCode().',
+          outcome: 'TOTP verified & stored per user',
+          tone: 'chip',
+          jumpScreen: 'settings',
+          jumpSettingsTab: 'relief',
+          jumpLabel: 'Open Relief Geo-QR',
+        },
+        {
+          step: 'ISSUE QR',
+          short: 'Relief Token',
+          summary: 'Single-Use SHA-256 Handover',
+          title: 'Generate Geo-Fenced Relief QR Token',
+          source: 'api.php :: generate_relief_qr',
+          route: 'relief_qr_tokens + controller_shift_requests',
+          detail: 'Supervisor selects Relief Controller, Checkpoint, radius (default 200m), duration, and outputs relief.php?token=... while storing SHA-256 token hash.',
+          outcome: 'Pending relief QR ready for field scan',
+          tone: 'warn',
+          jumpScreen: 'settings',
+          jumpSettingsTab: 'relief',
+          jumpLabel: 'Generate QR Token',
+        },
+        {
+          step: 'FIELD SCAN',
+          short: 'relief.php',
+          summary: 'Geo-Fence + PIN Fallback',
+          title: 'Checkpoint GPS Proximity Verification',
+          source: 'relief.php + db.php :: calculateHaversineMeters',
+          route: 'POST api.php?action=redeem_relief_qr',
+          detail: 'Validates live GPS distance against checkpoint lat/lng within geofence_radius_m, or verifies checkpoint Terminal Override PIN indoors if GPS is unavailable.',
+          outcome: 'Proximity / override confirmed',
+          tone: 'chip',
+          jumpScreen: 'shift-relief',
+          jumpLabel: 'Open Shift Relief',
+        },
+        {
+          step: 'ACTIVATE & EXPIRE',
+          short: 'Auto-Expire',
+          summary: 'Atomic Redemption & Revoke',
+          title: 'Temporary Assignment & Expiry Enforcement',
+          source: 'db.php :: expireStaleShiftAssignments',
+          route: 'users.assignment_expires_at',
+          detail: 'Marks QR token redeemed_at in transaction, updates assigned checkpoint + assignment_expires_at, and automatically revokes access when shift_end elapses.',
+          outcome: 'Time-boxed relief custody active',
+          tone: 'ok',
+          jumpScreen: 'terminals',
+          jumpLabel: 'Open Gate Terminal',
+        },
+      ],
+    },
+    {
+      id: 'hierarchy_pwa',
+      label: '6. Hierarchy, Links & PWA',
+      subtitle: 'Command tree (PM/Coordinator → Tech Lead → 6 Depts → Support), link policies, branding, & offline/PWA',
+      branchPill: '6 Tech Depts · Policy Links · IndexedDB Offline · Android/iOS PWA',
+      nodes: [
+        {
+          step: 'COMMAND FLOW',
+          short: 'Dispatch Tree',
+          summary: 'PM → Tech Lead → 6 Depts → Support',
+          title: 'Operational Dispatch & Department Hierarchy',
+          source: 'db.php :: ensureDepartmentsTable + api.php :: save_event',
+          route: 'events.event_coordinator + assigned_roster_json',
+          detail: 'Maps Project Manager / Event Coordinator → Technical Lead → Technicians across Video, Sound, Lighting, Electrical, Rigging, and Interpretation → Support Staff.',
+          outcome: 'Structured venue roster dispatch',
+          tone: 'chip',
+          jumpScreen: 'settings',
+          jumpSettingsTab: 'dispatch',
+          jumpLabel: 'View Dispatch Hierarchy',
+        },
+        {
+          step: 'SHARED LINKS',
+          short: 'Best For & Limits',
+          summary: 'Portal Suitability & Expiry',
+          title: 'Shared Link Policies & Phone Masking',
+          source: 'standalone_portals + api.php :: onsite_public_feed',
+          route: 'best_for + permissions_summary + mask_phones',
+          detail: 'Defines Best For audience, Permissions & Limitations, Read-Only scan lock (allow_scan), phone number masking, and automatic expiration (expires_at) on shared portals.',
+          outcome: 'Auditable external portal scope',
+          tone: 'warn',
+          jumpScreen: 'settings',
+          jumpSettingsTab: 'links',
+          jumpLabel: 'Inspect Shared Links',
+        },
+        {
+          step: 'BRANDING',
+          short: 'Themes & Tokens',
+          summary: 'Colours, Fonts, Alignment & Mode',
+          title: 'Global Branding & Accessibility Studio',
+          source: 'db.php :: renderBrandingHeadHtml + app.js',
+          route: 'POST api.php?action=save_branding_config',
+          detail: 'Applies brand colours, offline-safe font family/scale, text alignment, Dark/Light default, High Contrast, and Reduced Motion across SPA + standalone PHP portals.',
+          outcome: 'Consistent multi-portal styling',
+          tone: 'chip',
+          jumpScreen: 'settings',
+          jumpSettingsTab: 'branding',
+          jumpLabel: 'Open Branding Studio',
+        },
+        {
+          step: 'OFFLINE & PWA',
+          short: 'Android & iOS',
+          summary: 'IndexedDB Cache vs Online Only',
+          title: 'Offline Badge Verification & Installable PWA',
+          source: 'sw.js + manifest.webmanifest + ability_offline_v1',
+          route: 'Cache API + IndexedDB scan_queue',
+          detail: 'Caches non-sensitive verification rosters for offline lookup and queues gate terminal scans until reconnect, while locking mutating Online-Only actions offline.',
+          outcome: 'Resilient mobile field PWA',
+          tone: 'ok',
+          jumpScreen: 'settings',
+          jumpSettingsTab: 'pwa',
+          jumpLabel: 'Open PWA Setup',
+        },
+      ],
+    },
+  ];
+
+  const SETTINGS_SECTIONS = ['flow', 'relief', 'dispatch', 'links', 'branding', 'accounts', 'pwa', 'controls'];
+
+  function renderSvgQrInto(el, text) {
+    if (!el) return;
+    if (window.AbilityQRCode && typeof window.AbilityQRCode.toSvg === 'function') {
+      el.innerHTML = window.AbilityQRCode.toSvg(String(text || ''), 176);
+    } else {
+      el.textContent = String(text || '');
+    }
+  }
+
+  function switchSettingsTab(tab = 'flow') {
+    const nextTab = SETTINGS_SECTIONS.includes(tab) ? tab : 'flow';
+    state.settingsTab = nextTab;
+    SETTINGS_SECTIONS.forEach((key) => {
+      const btn = document.getElementById(`settings-tab-${key}`);
+      const pane = document.getElementById(`settings-pane-${key}`);
+      const isAct = nextTab === key;
+      if (btn) {
+        btn.className = isAct ? 'btn btn-primary-32 js-settings-tab-btn active-subtab' : 'btn btn-secondary-32 js-settings-tab-btn';
+        const ic = btn.querySelector('img');
+        if (ic) ic.style.filter = isAct ? 'brightness(0) invert(1)' : 'none';
+      }
+      if (pane) {
+        pane.style.display = isAct ? 'block' : 'none';
+      }
+    });
+    const secSelect = document.getElementById('settings-section-select');
+    if (secSelect && secSelect.value !== nextTab) {
+      secSelect.value = nextTab;
+    }
+    const flowSubSel = document.getElementById('settings-flow-subselect');
+    const flowSubSep = document.getElementById('settings-flow-subsep');
+    if (flowSubSel) flowSubSel.style.display = nextTab === 'flow' ? 'inline-block' : 'none';
+    if (flowSubSep) flowSubSep.style.display = nextTab === 'flow' ? 'inline' : 'none';
+    document.querySelectorAll('.nav-subitem[data-settings-section]').forEach((subEl) => {
+      subEl.classList.toggle('active', subEl.getAttribute('data-settings-section') === nextTab);
+    });
+    renderSettingsScreen();
+  }
+
+  function renderSettingsReliefSection() {
+    const totpPill = document.getElementById('totp-status-pill');
+    const btnShowDisable = document.getElementById('btn-totp-show-disable');
+    if (totpPill) {
+      totpPill.textContent = state.totpEnabled ? '2FA Enabled' : 'Not Enrolled';
+      totpPill.className = 'status-badge ' + (state.totpEnabled ? 'status-badge-green-sm' : 'status-badge-amber-sm');
+    }
+    if (btnShowDisable) {
+      btnShowDisable.style.display = state.totpEnabled ? 'inline-flex' : 'none';
+    }
+
+    const userSel = document.getElementById('relief-qr-user');
+    if (userSel) {
+      const prevVal = userSel.value;
+      const eligible = (state.crew || []).filter((c) => Number(c.is_active ?? 1) !== 0);
+      userSel.innerHTML = '<option value="">Select Relief Controller...</option>' +
+        eligible.map((c) => `<option value="${Number(c.id)}">${escapeHtml(c.full_name)} (${escapeHtml(c.role_display || c.role)})</option>`).join('');
+      if (prevVal) userSel.value = prevVal;
+    }
+
+    const cpSel = document.getElementById('relief-qr-checkpoint');
+    const whs = (state.checkpoints?.stock_warehouses || []).map((w) => Object.assign({}, w, { type: 'stock_warehouse', typeLabel: 'Facility Gate' }));
+    const evs = (state.checkpoints?.event_venues || []).map((e) => Object.assign({}, e, { type: 'event_venue', typeLabel: 'Event Venue' }));
+    const allCps = [...whs, ...evs];
+    if (cpSel) {
+      const prevCp = cpSel.value;
+      cpSel.innerHTML = '<option value="">Select Checkpoint...</option>' +
+        allCps.map((cp) => `<option value="${escapeHtml(cp.type)}:${escapeHtml(String(cp.raw_id || cp.id))}" data-radius="${Number(cp.geofence_radius_m || 200)}">${escapeHtml(cp.name)} (${escapeHtml(cp.typeLabel)})</option>`).join('');
+      if (prevCp) cpSel.value = prevCp;
+    }
+
+    const geoListEl = document.getElementById('relief-checkpoint-geo-list');
+    if (geoListEl) {
+      const canEditGeo = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserTechLead();
+      geoListEl.innerHTML = allCps.map((cp) => {
+        const cpKey = `${cp.type}:${cp.raw_id || cp.id}`;
+        const latVal = cp.lat !== null && cp.lat !== undefined ? String(cp.lat) : '';
+        const lngVal = cp.lng !== null && cp.lng !== undefined ? String(cp.lng) : '';
+        const radVal = Number(cp.geofence_radius_m || 200);
+        return `
+          <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <div>
+                <strong style="font-size:13px;">${escapeHtml(cp.name)}</strong>
+                <span class="status-badge status-badge-blue-sm" style="margin-left:6px;">${escapeHtml(cp.typeLabel)}</span>
+              </div>
+              <span style="font-size:11px;color:var(--text-muted);">${latVal && lngVal ? `${latVal}, ${lngVal}` : 'GPS Not Set'} · ${radVal}m</span>
+            </div>
+            ${canEditGeo ? `
+            <div style="display:grid;grid-template-columns:1fr 1fr 90px auto auto;gap:6px;align-items:center;">
+              <input type="number" step="0.000001" class="form-input js-geo-lat" data-cp-key="${escapeHtml(cpKey)}" placeholder="Lat" value="${escapeHtml(latVal)}" style="height:32px;font-size:12px;" />
+              <input type="number" step="0.000001" class="form-input js-geo-lng" data-cp-key="${escapeHtml(cpKey)}" placeholder="Lng" value="${escapeHtml(lngVal)}" style="height:32px;font-size:12px;" />
+              <input type="number" min="50" max="5000" class="form-input js-geo-rad" data-cp-key="${escapeHtml(cpKey)}" value="${radVal}" style="height:32px;font-size:12px;" title="Radius (meters)" />
+              <button type="button" class="btn btn-secondary-32-sm js-geo-capture-btn" data-cp-key="${escapeHtml(cpKey)}" title="Capture Browser GPS">GPS</button>
+              <button type="button" class="btn btn-primary-32 js-geo-save-btn" data-cp-key="${escapeHtml(cpKey)}" data-cp-type="${escapeHtml(cp.type)}" data-cp-id="${escapeHtml(String(cp.raw_id || cp.id))}" data-online-only="1">Save</button>
+            </div>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    const histEl = document.getElementById('relief-qr-history-list');
+    if (histEl) {
+      const toks = state.reliefTokens || [];
+      if (!toks.length) {
+        histEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">No Geo-Fenced Relief QR tokens issued yet.</div>';
+      } else {
+        histEl.innerHTML = toks.map((t) => {
+          const stClass = t.redeemed_at ? 'status-badge-green-sm' : (t.is_expired ? 'status-badge-red-sm' : 'status-badge-amber-sm');
+          const stText = t.redeemed_at ? 'Redeemed' : (t.is_expired ? 'Expired' : 'Active');
+          return `
+            <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+              <div>
+                <div style="font-size:12.5px;font-weight:700;">${escapeHtml(t.target_name || 'Controller')} → ${escapeHtml(t.checkpoint_name || '')}</div>
+                <div style="font-size:11px;color:var(--text-secondary);">Radius ${Number(t.geofence_radius_m || 200)}m · ${t.require_totp ? 'TOTP Required' : 'Geo Only'}${t.distance_m !== null && t.distance_m !== undefined ? ` · Verified at ${t.distance_m}m` : ''}${t.override_used ? ' · PIN Override' : ''}</div>
+              </div>
+              <div style="text-align:right;">
+                <span class="status-badge ${stClass}">${stText}</span>
+                <div style="font-size:10.5px;color:var(--text-muted);margin-top:3px;">Exp: ${escapeHtml(t.expires_at || '—')}</div>
+                ${state.sessionReliefUrls && state.sessionReliefUrls[t.id] && !t.redeemed_at && !t.is_expired ? `<a href="${escapeHtml(state.sessionReliefUrls[t.id])}" target="_blank" style="font-size:11px;font-weight:700;display:inline-block;margin-top:3px;">Open ↗</a>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+  }
+
+  function renderSettingsDispatchSection() {
+    const selEl = document.getElementById('dispatch-event-select');
+    const canvasEl = document.getElementById('dispatch-hierarchy-canvas');
+    const events = state.checkpoints?.event_venues || [];
+    if (selEl) {
+      const curVal = selEl.value;
+      selEl.innerHTML = '<option value="">All Crew Department Pool</option>' +
+        events.map((ev) => `<option value="${escapeHtml(String(ev.raw_id || ev.id))}">${escapeHtml(ev.title || ev.name)}</option>`).join('');
+      if (curVal && events.some((ev) => String(ev.raw_id || ev.id) === curVal)) {
+        selEl.value = curVal;
+      } else if (events[0]) {
+        selEl.value = String(events[0].raw_id || events[0].id);
+      }
+    }
+    if (!canvasEl) return;
+
+    const pickedId = selEl ? selEl.value : '';
+    const activeEv = events.find((ev) => String(ev.raw_id || ev.id) === pickedId) || null;
+    const assignedSet = activeEv && Array.isArray(activeEv.assigned_technicians)
+      ? new Set(activeEv.assigned_technicians.map(Number))
+      : null;
+    const pool = assignedSet
+      ? (state.crew || []).filter((c) => assignedSet.has(Number(c.id)))
+      : (state.crew || []);
+
+    const pmName = activeEv?.project_manager || ((state.crew || []).find((c) => c.role === 'project_manager')?.full_name || 'Project Manager');
+    const coordName = activeEv?.event_coordinator || ((state.crew || []).find((c) => c.role === 'event_coordinator')?.full_name || 'Event Coordinator');
+    const tlName = activeEv?.tech_lead || activeEv?.lead_name || ((state.crew || []).find((c) => c.role === 'tech_lead')?.full_name || 'Technical Lead');
+
+    const deptNames = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
+    const deptMatches = (c, d) => {
+      const dep = String(c.department || '').toLowerCase();
+      const role = String(c.role || '').toLowerCase();
+      if (d === 'Sound') return dep.includes('sound') || dep.includes('audio') || role.includes('sound') || role === 'technician';
+      if (d === 'Video') return dep.includes('video') || role.includes('video');
+      if (d === 'Lighting') return dep.includes('light') || role.includes('light');
+      if (d === 'Electrical') return dep.includes('elect') || role.includes('elect');
+      if (d === 'Rigging') return dep.includes('rig') || role.includes('rig');
+      if (d === 'Interpretation') return dep.includes('interp') || role.includes('interp');
+      return dep === d.toLowerCase();
+    };
+    const supportList = pool.filter((c) => {
+      const dep = String(c.department || '').toLowerCase();
+      const role = String(c.role || '').toLowerCase();
+      return role === 'support_staff' || dep.includes('support') || role === 'user' || role === 'driver' || role === 'security';
+    });
+
+    canvasEl.innerHTML = `
+      <div class="dispatch-tier">
+        <div class="dispatch-node-card is-root">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Tier 1 · Command</div>
+          <div style="font-size:15px;font-weight:800;margin-top:2px;">Project Manager / Event Coordinator</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">PM: <strong>${escapeHtml(pmName)}</strong> · Coordinator: <strong>${escapeHtml(coordName)}</strong></div>
+        </div>
+      </div>
+      <div class="dispatch-arrow-down">&#8595;</div>
+      <div class="dispatch-tier">
+        <div class="dispatch-node-card">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 2 · Technical Supervision</div>
+          <div style="font-size:14.5px;font-weight:800;margin-top:2px;">Tech Lead</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Lead: <strong>${escapeHtml(tlName)}</strong></div>
+        </div>
+      </div>
+      <div class="dispatch-arrow-down">&#8595;</div>
+      <div class="dispatch-tier">
+        <div class="dispatch-node-card" style="min-width:220px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 3 · Technical Execution</div>
+          <div style="font-size:14px;font-weight:800;margin-top:2px;">Technicians (${deptNames.length} Specialty Branches)</div>
+        </div>
+      </div>
+      <div class="dispatch-arrow-down">&#8595;</div>
+      <div class="dispatch-dept-grid">
+        ${deptNames.map((dn) => {
+          const members = pool.filter((c) => deptMatches(c, dn));
+          return `
+            <div class="dispatch-dept-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <strong style="font-size:13px;">${escapeHtml(dn)}</strong>
+                <span class="status-badge status-badge-blue-sm">${members.length}</span>
+              </div>
+              <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.45;">
+                ${members.length ? members.slice(0, 4).map((m) => escapeHtml(m.full_name)).join('<br>') + (members.length > 4 ? `<br>+${members.length - 4} more` : '') : '<em>Unassigned</em>'}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div class="dispatch-arrow-down">&#8595;</div>
+      <div class="dispatch-tier">
+        <div class="dispatch-node-card" style="width:100%;max-width:640px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 4 · Operations Ground Support</div>
+          <div style="font-size:14px;font-weight:800;margin-top:2px;">Support Staff (${supportList.length})</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">
+            ${supportList.length ? supportList.slice(0, 6).map((s) => escapeHtml(s.full_name)).join(' · ') : 'Assign runners, logistics drivers, or venue crew via Event Roster.'}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSettingsLinksSection() {
+    const gridEl = document.getElementById('settings-shared-links-grid');
+    if (!gridEl) return;
+    const portals = state.standalonePortals || [];
+    const canEdit = isCurrentUserAdmin() || isCurrentUserStockManager();
+    const cardsHtml = portals.map((p) => {
+      const expiredBadge = p.is_expired ? '<span class="status-badge status-badge-red-sm">Expired</span>' : (Number(p.is_active) === 1 ? '<span class="status-badge status-badge-green-sm">Active</span>' : '<span class="status-badge status-badge-amber-sm">Paused</span>');
+      const fullUrl = resolvePortalAbsoluteUrl(p.entry_url || '');
+      return `
+        <div class="shared-link-policy-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div>
+              <h3 style="margin:0;font-size:14.5px;font-weight:800;">${escapeHtml(p.title || p.portal_key)}</h3>
+              <code style="font-size:11px;color:var(--text-muted);">${escapeHtml(p.entry_url || '')}</code>
+            </div>
+            ${expiredBadge}
+          </div>
+          <div style="font-size:12px;line-height:1.5;">
+            <div><strong>Best For:</strong> ${escapeHtml(p.best_for || 'Authorized gate or crew visibility')}</div>
+            <div style="margin-top:4px;color:var(--text-secondary);"><strong>Permissions &amp; Limitations:</strong> ${escapeHtml(p.permissions_summary || 'Standard portal scope')}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="status-badge status-badge-blue-sm">${Number(p.allow_scan ?? 1) === 1 ? 'Scans Enabled' : 'Read-Only'}</span>
+            <span class="status-badge ${Number(p.mask_phones ?? 0) === 1 ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${Number(p.mask_phones ?? 0) === 1 ? 'Phones Masked' : 'Full Phones'}</span>
+            ${p.expires_at ? `<span class="status-badge status-badge-amber-sm">Exp: ${escapeHtml(p.expires_at)}</span>` : ''}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;">
+            <a href="${escapeHtml(fullUrl)}" target="_blank" class="btn btn-secondary-32-sm" style="text-decoration:none;">Open Link ↗</a>
+            ${canEdit ? `<button type="button" class="btn btn-primary-32 js-settings-edit-portal-btn" data-portal-id="${Number(p.id)}">Edit Policy</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const reliefCardHtml = `
+      <div class="shared-link-policy-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div>
+            <h3 style="margin:0;font-size:14.5px;font-weight:800;">Geo-Fenced Relief Activation</h3>
+            <code style="font-size:11px;color:var(--text-muted);">relief.php?token=...</code>
+          </div>
+          <span class="status-badge status-badge-blue-sm">Token Gated</span>
+        </div>
+        <div style="font-size:12px;line-height:1.5;">
+          <div><strong>Best For:</strong> Temporary shift relief handovers outdoors or at remote gates.</div>
+          <div style="margin-top:4px;color:var(--text-secondary);"><strong>Permissions &amp; Limitations:</strong> Single-use SHA-256 token; requires 200m GPS proximity (or Terminal PIN override) + TOTP 2FA; auto-expires at shift_end.</div>
+        </div>
+        <div style="margin-top:auto;">
+          <button type="button" class="btn btn-secondary-32-sm" id="js-links-goto-relief">Issue Relief QR →</button>
+        </div>
+      </div>
+    `;
+    gridEl.innerHTML = cardsHtml + reliefCardHtml;
+  }
+
+  function renderSettingsBrandingSection() {
+    const cfg = state.brandingConfig || {};
+    const isAdmin = isCurrentUserAdmin();
+    const dnEl = document.getElementById('brand-display-name');
+    if (dnEl) dnEl.value = cfg.brand_name || 'aBility';
+
+    const bindPair = (colorId, hexId, val) => {
+      const cEl = document.getElementById(colorId);
+      const hEl = document.getElementById(hexId);
+      if (cEl && val) cEl.value = val;
+      if (hEl && val) hEl.value = val;
+    };
+    bindPair('brand-color-primary', 'brand-color-primary-hex', cfg.primary_color || '#4f46e5');
+    bindPair('brand-color-accent', 'brand-color-accent-hex', cfg.accent_color || '#10b981');
+    bindPair('brand-color-neutral', 'brand-color-neutral-hex', cfg.neutral_color || '#64748b');
+
+    const ffEl = document.getElementById('brand-font-family');
+    const fonts = state.brandingFonts && state.brandingFonts.length
+      ? state.brandingFonts
+      : Object.keys(BRANDING_FONT_STACKS).map((name, i) => ({
+          id: i + 1,
+          font_name: name,
+          css_stack: BRANDING_FONT_STACKS[name],
+          font_url: '',
+          file_path: '',
+          is_system: 1,
+          is_active: 1,
+        }));
+    if (ffEl) {
+      const activeFonts = fonts.filter((f) => Number(f.is_active ?? 1) === 1);
+      ffEl.innerHTML = activeFonts.map((f) => `<option value="${escapeHtml(f.font_name)}">${escapeHtml(f.font_name)}${f.file_path ? ' (Uploaded)' : (f.font_url ? ' (Webfont)' : '')}</option>`).join('');
+      if (cfg.font_family) ffEl.value = cfg.font_family;
+    }
+
+    const fsEl = document.getElementById('brand-font-scale');
+    const fsValEl = document.getElementById('brand-font-scale-val');
+    if (fsEl) fsEl.value = Number(cfg.font_scale || 1).toFixed(2);
+    if (fsValEl) fsValEl.textContent = `${Math.round(Number(cfg.font_scale || 1) * 100)}%`;
+    const taEl = document.getElementById('brand-text-align');
+    if (taEl && cfg.text_align) taEl.value = cfg.text_align;
+    const dtEl = document.getElementById('brand-default-theme');
+    if (dtEl && cfg.default_theme) dtEl.value = cfg.default_theme;
+    const saveBtn = document.getElementById('btn-save-branding');
+    if (saveBtn) saveBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+
+    const logoPrev = document.getElementById('branding-logo-preview');
+    const logoLbl = document.getElementById('branding-logo-path-label');
+    const logoSrc = cfg.logo_url || cfg.logo_path || 'assets/brand-mark.svg';
+    if (logoPrev) logoPrev.src = logoSrc;
+    if (logoLbl) logoLbl.textContent = cfg.logo_path ? cfg.logo_path : 'assets/brand-mark.svg (Default)';
+    ['branding-logo-upload-form', 'branding-font-crud-form', 'btn-reset-branding-logo'].forEach((elId) => {
+      const el = document.getElementById(elId);
+      if (el) el.style.display = isAdmin ? '' : 'none';
+    });
+
+    const fontsListEl = document.getElementById('branding-fonts-crud-list');
+    if (fontsListEl) {
+      fontsListEl.innerHTML = fonts.map((f) => {
+        const isCurrent = (cfg.font_family || 'Marvel') === f.font_name;
+        const isSys = Number(f.is_system) === 1;
+        return `
+          <div style="border:1px solid var(--border-color);border-radius:10px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <div style="min-width:0;flex:1;">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <strong style="font-size:13px;font-family:${escapeHtml(f.css_stack || 'inherit')};">${escapeHtml(f.font_name)}</strong>
+                ${isCurrent ? '<span class="status-badge status-badge-green-sm">Selected</span>' : ''}
+                <span class="status-badge ${isSys ? 'status-badge-blue-sm' : 'status-badge-amber-sm'}">${isSys ? 'Preset' : 'Custom'}</span>
+                ${Number(f.is_active ?? 1) === 0 ? '<span class="status-badge status-badge-red-sm">Disabled</span>' : ''}
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.css_stack || '')}${f.file_path ? ` · ${escapeHtml(f.file_path)}` : ''}</div>
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0;">
+              ${!isCurrent && Number(f.is_active ?? 1) === 1 ? `<button type="button" class="btn btn-secondary-32-sm js-font-use-btn" data-font-name="${escapeHtml(f.font_name)}" data-online-only="1">Use</button>` : ''}
+              ${isAdmin ? `<button type="button" class="btn btn-secondary-32-sm js-font-edit-btn" data-font-id="${Number(f.id)}">Edit</button>` : ''}
+              ${isAdmin && !isSys ? `<button type="button" class="btn btn-secondary-32-sm js-font-delete-btn" data-font-id="${Number(f.id)}" data-font-name="${escapeHtml(f.font_name)}" style="color:#dc2626;" data-online-only="1">Delete</button>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  async function renderSettingsAccountsOfflineSection() {
+    try {
+      const hc = document.getElementById('a11y-high-contrast');
+      const lg = document.getElementById('a11y-large-text');
+      const rm = document.getElementById('a11y-reduced-motion');
+      if (hc) hc.checked = localStorage.getItem('ability_a11y_high_contrast') === '1';
+      if (lg) lg.checked = localStorage.getItem('ability_a11y_large_text') === '1';
+      if (rm) rm.checked = localStorage.getItem('ability_a11y_reduced_motion') === '1';
+    } catch (_) {}
+    const pill = document.getElementById('offline-cache-status-pill');
+    if (pill) {
+      const st = await AbilityMainOffline.getStatus();
+      pill.textContent = st.cached ? `${st.count} Badges Cached` : 'Empty Cache';
+      pill.className = 'status-badge ' + (st.cached ? 'status-badge-green-sm' : 'status-badge-amber-sm');
+    }
+    updateNetworkStatusUi();
+  }
+
+  function renderSettingsPwaSection() {
+    const swEl = document.getElementById('pwa-sw-status');
+    const installBtn = document.getElementById('pwa-install-btn');
+    if (swEl) {
+      if (!('serviceWorker' in navigator)) {
+        swEl.textContent = 'Service Worker: Unsupported';
+      } else if (navigator.serviceWorker.controller) {
+        swEl.textContent = 'Service Worker: Active & Caching';
+        swEl.className = 'status-badge status-badge-green-sm';
+      } else {
+        swEl.textContent = 'Service Worker: Registered';
+      }
+    }
+    if (installBtn) {
+      installBtn.style.display = state.deferredPwaPrompt ? 'inline-flex' : 'none';
+    }
+  }
+
+  function renderSettingsScreen() {
+    const activeTab = SETTINGS_SECTIONS.includes(state.settingsTab) ? state.settingsTab : 'flow';
+    SETTINGS_SECTIONS.forEach((key) => {
+      const pane = document.getElementById(`settings-pane-${key}`);
+      if (pane) pane.style.display = activeTab === key ? 'block' : 'none';
+      const btn = document.getElementById(`settings-tab-${key}`);
+      if (btn) btn.className = activeTab === key ? 'btn btn-primary-32 js-settings-tab-btn active-subtab' : 'btn btn-secondary-32 js-settings-tab-btn';
+    });
+    const secSelect = document.getElementById('settings-section-select');
+    if (secSelect && secSelect.value !== activeTab) secSelect.value = activeTab;
+    const flowSubSel = document.getElementById('settings-flow-subselect');
+    const flowSubSep = document.getElementById('settings-flow-subsep');
+    if (flowSubSel) {
+      flowSubSel.innerHTML = SYSTEM_FLOW_SPEC.map((f, idx) => `<option value="${idx}">${escapeHtml(f.label)}</option>`).join('');
+      flowSubSel.value = String(Math.max(0, Math.min(SYSTEM_FLOW_SPEC.length - 1, Number(state.settingsFlowIdx) || 0)));
+      flowSubSel.style.display = activeTab === 'flow' ? 'inline-block' : 'none';
+    }
+    if (flowSubSep) flowSubSep.style.display = activeTab === 'flow' ? 'inline' : 'none';
+    document.querySelectorAll('.nav-subitem[data-settings-section]').forEach((subEl) => {
+      subEl.classList.toggle('active', subEl.getAttribute('data-settings-section') === activeTab);
+    });
+
+    if (activeTab === 'relief') renderSettingsReliefSection();
+    if (activeTab === 'dispatch') renderSettingsDispatchSection();
+    if (activeTab === 'links') renderSettingsLinksSection();
+    if (activeTab === 'branding') renderSettingsBrandingSection();
+    if (activeTab === 'accounts') renderSettingsAccountsOfflineSection();
+    if (activeTab === 'pwa') renderSettingsPwaSection();
+
+    const kpiDb = document.getElementById('settings-kpi-db');
+    const kpiRole = document.getElementById('settings-kpi-role');
+    const kpiUser = document.getElementById('settings-kpi-user');
+    const kpiCps = document.getElementById('settings-kpi-checkpoints');
+    const kpiPortals = document.getElementById('settings-kpi-portals');
+    const kpiRelief = document.getElementById('settings-kpi-relief');
+    const kpiOnsite = document.getElementById('settings-kpi-onsite');
+    const runtimeBadge = document.getElementById('settings-runtime-db-badge');
+
+    const cpCount = (state.checkpoints?.directory || []).length;
+    const portalCount = (state.standalonePortals || []).length;
+    const pendingRelief = Number(state.pendingShiftRequestCount || 0);
+    const onsiteCount = (state.rollCallList || []).length;
+
+    if (kpiDb) kpiDb.textContent = state.dbSource || 'ability_db';
+    if (runtimeBadge) runtimeBadge.textContent = `Attendance-Only · ${state.dbSource || 'ability_db'}`;
+    if (kpiRole) kpiRole.textContent = state.currentUser?.role_display || 'Staff';
+    if (kpiUser) kpiUser.textContent = state.currentUser?.full_name ? `${state.currentUser.full_name} (${state.currentUser.clearance_code || 'L2'})` : 'Active Operator';
+    if (kpiCps) kpiCps.textContent = String(cpCount);
+    if (kpiPortals) kpiPortals.textContent = `${portalCount} Standalone Portal${portalCount === 1 ? '' : 's'}`;
+    if (kpiRelief) kpiRelief.textContent = String(pendingRelief);
+    if (kpiOnsite) kpiOnsite.textContent = `${onsiteCount} Currently On-Site`;
+
+    const flowTabsEl = document.getElementById('settings-flow-tabs');
+    const flowSubEl = document.getElementById('settings-flow-subtitle');
+    const branchPillEl = document.getElementById('settings-flow-branch-pill');
+    const counterEl = document.getElementById('settings-flow-step-counter');
+    const diagramEl = document.getElementById('settings-flow-diagram');
+    const stepBadgeEl = document.getElementById('settings-node-step-badge');
+    const nodeTitleEl = document.getElementById('settings-node-title');
+    const nodeSourceEl = document.getElementById('settings-node-source');
+    const nodeRouteEl = document.getElementById('settings-node-route');
+    const nodeDetailEl = document.getElementById('settings-node-detail');
+    const nodeOutcomeEl = document.getElementById('settings-node-outcome');
+    const jumpBtn = document.getElementById('settings-flow-jump-btn');
+    const prevBtn = document.getElementById('settings-flow-prev-btn');
+    const nextBtn = document.getElementById('settings-flow-next-btn');
+
+    const flowIdx = Math.max(0, Math.min(SYSTEM_FLOW_SPEC.length - 1, Number(state.settingsFlowIdx) || 0));
+    state.settingsFlowIdx = flowIdx;
+    const activeFlow = SYSTEM_FLOW_SPEC[flowIdx];
+    const nodeIdx = Math.max(0, Math.min(activeFlow.nodes.length - 1, Number(state.settingsNodeIdx) || 0));
+    state.settingsNodeIdx = nodeIdx;
+    const activeNode = activeFlow.nodes[nodeIdx];
+
+    if (flowTabsEl) {
+      flowTabsEl.innerHTML = SYSTEM_FLOW_SPEC.map((f, idx) => `
+        <button type="button" role="tab" aria-selected="${idx === flowIdx}" class="flow-explorer-tab-btn${idx === flowIdx ? ' active' : ''}" data-flow-idx="${idx}">
+          ${escapeHtml(f.label)}
+        </button>
+      `).join('');
+    }
+    if (flowSubEl) flowSubEl.textContent = activeFlow.subtitle;
+    if (branchPillEl) branchPillEl.textContent = activeFlow.branchPill;
+    if (counterEl) counterEl.textContent = `Step ${nodeIdx + 1} of ${activeFlow.nodes.length}`;
+
+    if (diagramEl) {
+      diagramEl.innerHTML = activeFlow.nodes.map((n, idx) => `
+        <button type="button" class="flow-pipeline-node${idx === nodeIdx ? ' is-active' : ''}" data-node-idx="${idx}">
+          <div class="flow-node-top">
+            <span class="flow-step-badge tone-${escapeHtml(n.tone)}">${escapeHtml(n.step)}</span>
+            <span class="flow-node-arrow">${idx < activeFlow.nodes.length - 1 ? '→' : '●'}</span>
+          </div>
+          <div class="flow-node-short">${escapeHtml(n.short)}</div>
+          <div class="flow-node-summary">${escapeHtml(n.summary)}</div>
+        </button>
+      `).join('');
+    }
+
+    if (stepBadgeEl) {
+      stepBadgeEl.textContent = activeNode.step;
+      stepBadgeEl.className = `flow-step-badge tone-${activeNode.tone}`;
+    }
+    if (nodeTitleEl) nodeTitleEl.textContent = activeNode.title;
+    if (nodeSourceEl) nodeSourceEl.textContent = activeNode.source;
+    if (nodeRouteEl) nodeRouteEl.textContent = activeNode.route;
+    if (nodeDetailEl) nodeDetailEl.textContent = activeNode.detail;
+    if (nodeOutcomeEl) {
+      nodeOutcomeEl.textContent = activeNode.outcome;
+      nodeOutcomeEl.className = `flow-outcome-pill tone-${activeNode.tone}`;
+    }
+
+    if (jumpBtn) {
+      const canJump = Boolean(activeNode.jumpScreen && isScreenPermittedForCurrentUser(activeNode.jumpScreen));
+      jumpBtn.style.display = canJump ? 'inline-flex' : 'none';
+      if (canJump) {
+        jumpBtn.textContent = `${activeNode.jumpLabel || 'Open Screen'} →`;
+        jumpBtn.setAttribute('data-jump-screen', activeNode.jumpScreen);
+        jumpBtn.setAttribute('data-jump-subtab', activeNode.jumpSubTab || '');
+        jumpBtn.setAttribute('data-jump-settings-tab', activeNode.jumpSettingsTab || '');
+      }
+    }
+    if (prevBtn) prevBtn.disabled = nodeIdx === 0;
+    if (nextBtn) nextBtn.disabled = nodeIdx >= activeFlow.nodes.length - 1;
+
+    const shortcutsEl = document.getElementById('settings-shortcuts-grid');
+    if (shortcutsEl) {
+      const isAdmin = isCurrentUserAdmin();
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      const cards = [
+        {
+          title: 'Navigation Menu CRUD',
+          desc: 'Enable, disable, reorder, or create Main Navigation and Checkpoint Controls sidebar items.',
+          actionLabel: 'Manage Navigation',
+          screen: 'users',
+          subTab: 'navigation',
+          visible: isAdmin,
+        },
+        {
+          title: '4-Tier Clearance Matrix',
+          desc: 'Configure L1–L4+ physical access tiers, badge styling, and default checkpoint access rules.',
+          actionLabel: 'Open Matrix',
+          screen: 'users',
+          subTab: 'matrix',
+          visible: isAdmin,
+        },
+        {
+          title: 'Roles & Permissions CRUD',
+          desc: 'Create or edit operational roles and bind default clearance levels and departments.',
+          actionLabel: 'Manage Roles',
+          screen: 'users',
+          subTab: 'roles',
+          visible: isAdmin,
+        },
+        {
+          title: 'Departments CRUD',
+          desc: 'Manage technical & production departments across crew profiles and roles.',
+          actionLabel: 'Manage Departments',
+          screen: 'users',
+          subTab: 'departments',
+          visible: isAdmin,
+        },
+        {
+          title: 'Gates & On-Site Portals',
+          desc: 'Customize standalone kiosk backgrounds, Gate PINs, and shared onsite.php access passwords.',
+          actionLabel: 'Open Portals',
+          screen: 'standalone-portals',
+          visible: isScreenPermittedForCurrentUser('standalone-portals'),
+        },
+        {
+          title: 'Station Lock & Terminal PINs',
+          desc: 'Lock browser stations to a checkpoint or rotate per-facility and event venue PINs.',
+          actionLabel: 'Open Station Lock',
+          screen: 'station-lock',
+          visible: isAdmin,
+        },
+        {
+          title: 'Set Call Time Schedules',
+          desc: 'Adjust baseline check-in call-times (+15m grace window) across venues and facility gates.',
+          actionLabel: 'Open Call Times',
+          screen: 'calltime',
+          visible: isScreenPermittedForCurrentUser('calltime'),
+        },
+        {
+          title: 'Shift Relief & Approvals',
+          desc: 'Submit or approve Gate Controller relief, sick-leave coverage, and night shift handovers.',
+          actionLabel: 'Open Relief Queue',
+          screen: 'shift-relief',
+          visible: isScreenPermittedForCurrentUser('shift-relief'),
+        },
+        {
+          title: 'Appearance & Theme Mode',
+          desc: `Currently active: ${isDark ? 'Dark Mode' : 'Light Mode'}. Persists across browser sessions and login screens.`,
+          actionLabel: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+          actionType: 'toggle-theme',
+          visible: true,
+        },
+      ].filter((c) => c.visible);
+
+      shortcutsEl.innerHTML = cards.map((c) => `
+        <div class="settings-shortcut-card">
+          <div>
+            <h3 class="settings-shortcut-title">${escapeHtml(c.title)}</h3>
+            <p class="settings-shortcut-desc">${escapeHtml(c.desc)}</p>
+          </div>
+          <div>
+            <button type="button" class="btn btn-secondary-32-sm js-settings-shortcut-btn"
+              data-shortcut-action="${escapeHtml(c.actionType || 'screen')}"
+              data-shortcut-screen="${escapeHtml(c.screen || '')}"
+              data-shortcut-subtab="${escapeHtml(c.subTab || '')}">
+              ${escapeHtml(c.actionLabel)} →
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
   function generateRandomDigitsPin(len = 6) {
     const digits = '0123456789';
     let out = '';
@@ -8470,6 +9916,11 @@
     const opEl = document.getElementById('portal-crud-opacity');
     const opValEl = document.getElementById('portal-crud-opacity-val');
     const activeEl = document.getElementById('portal-crud-active');
+    const bestForEl = document.getElementById('portal-crud-best-for');
+    const permsEl = document.getElementById('portal-crud-permissions');
+    const expEl = document.getElementById('portal-crud-expires-at');
+    const allowScanEl = document.getElementById('portal-crud-allow-scan');
+    const maskPhonesEl = document.getElementById('portal-crud-mask-phones');
 
     if (whEl) {
       const whs = state.checkpoints?.stock_warehouses || [];
@@ -8504,6 +9955,11 @@
         urlEl.readOnly = isSys;
       }
       if (pinEl) pinEl.value = portal.terminal_pin || '';
+      if (bestForEl) bestForEl.value = portal.best_for || '';
+      if (permsEl) permsEl.value = portal.permissions_summary || '';
+      if (expEl) expEl.value = portal.expires_at ? String(portal.expires_at).replace(' ', 'T').slice(0, 16) : '';
+      if (allowScanEl) allowScanEl.checked = Number(portal.allow_scan ?? (portal.portal_type === 'onsite_portal' ? 0 : 1)) === 1;
+      if (maskPhonesEl) maskPhonesEl.checked = Number(portal.mask_phones ?? 0) === 1;
       const opNum = Math.max(0.20, Math.min(0.95, Number(portal.overlay_opacity || 0.78)));
       if (opEl) opEl.value = opNum.toFixed(2);
       if (opValEl) opValEl.textContent = `${Math.round(opNum * 100)}%`;
@@ -8532,6 +9988,11 @@
         urlEl.readOnly = false;
       }
       if (pinEl) pinEl.value = '';
+      if (bestForEl) bestForEl.value = '';
+      if (permsEl) permsEl.value = '';
+      if (expEl) expEl.value = '';
+      if (allowScanEl) allowScanEl.checked = true;
+      if (maskPhonesEl) maskPhonesEl.checked = false;
       if (opEl) opEl.value = '0.78';
       if (opValEl) opValEl.textContent = '78%';
       if (activeEl) activeEl.checked = true;
@@ -8550,6 +10011,7 @@
     if (!onlyScreen || onlyScreen === 'station-lock') renderStationLockPage();
     if (!onlyScreen || onlyScreen === 'reset-scans') renderResetScansPage();
     if (!onlyScreen || onlyScreen === 'standalone-portals') renderStandalonePortalsPage();
+    if (!onlyScreen || onlyScreen === 'settings') renderSettingsScreen();
     if (onlyScreen === 'custom-nav-page' || (state.activeScreen && document.getElementById('screen-custom-nav-page')?.classList.contains('active'))) {
       renderCustomNavPage(state.customNavScreenKey || state.activeScreen);
     }
@@ -9048,8 +10510,30 @@
     const workspaceNavGroup = document.getElementById('sidebar-checkpoint-controls');
     if (workspaceNavGroup) {
       workspaceNavGroup.addEventListener('click', (e) => {
+        const subBtn = e.target.closest('.nav-subitem[data-settings-section]');
+        if (subBtn) {
+          const sec = subBtn.getAttribute('data-settings-section') || 'flow';
+          if (state.activeScreen !== 'settings') {
+            state.settingsTab = sec;
+            switchScreen('settings');
+          } else {
+            switchSettingsTab(sec);
+          }
+          return;
+        }
         const btn = e.target.closest('.nav-item');
         if (!btn) return;
+        if (btn.getAttribute('data-nav-target') === 'settings') {
+          const grp = document.getElementById('sidebar-settings-group');
+          const sub = document.getElementById('sidebar-settings-submenu');
+          if (state.activeScreen === 'settings' && grp && sub) {
+            const nowOpen = !grp.classList.contains('is-open');
+            grp.classList.toggle('is-open', nowOpen);
+            sub.style.display = nowOpen ? 'flex' : 'none';
+            btn.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+            return;
+          }
+        }
         handleSidebarNavInteraction(btn);
       });
     }
@@ -9401,6 +10885,808 @@
       menuKiosk.addEventListener('click', () => {
         closeAllTopbarDropdowns();
         switchScreen('terminals', 'pane-kiosk');
+      });
+    }
+
+    const openSettingsFromTrigger = () => {
+      closeAllTopbarDropdowns();
+      switchScreen('settings');
+    };
+    ['topbar-settings-btn', 'topbar-menu-settings', 'topbar-user-settings'].forEach((id) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', openSettingsFromTrigger);
+    });
+
+    const settingsSyncBtn = document.getElementById('settings-sync-now-btn');
+    if (settingsSyncBtn) {
+      settingsSyncBtn.addEventListener('click', async () => {
+        await fetchBootstrap(true);
+        showToast('Live system telemetry & flow state synced.');
+      });
+    }
+
+    document.querySelectorAll('.js-settings-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        switchSettingsTab(btn.getAttribute('data-settings-tab') || 'flow');
+      });
+    });
+
+    const settingsFlowTabs = document.getElementById('settings-flow-tabs');
+    if (settingsFlowTabs) {
+      settingsFlowTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-flow-idx]');
+        if (!btn) return;
+        state.settingsFlowIdx = Number(btn.getAttribute('data-flow-idx')) || 0;
+        state.settingsNodeIdx = 0;
+        renderSettingsScreen();
+      });
+    }
+
+    const settingsFlowDiagram = document.getElementById('settings-flow-diagram');
+    if (settingsFlowDiagram) {
+      settingsFlowDiagram.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-node-idx]');
+        if (!btn) return;
+        state.settingsNodeIdx = Number(btn.getAttribute('data-node-idx')) || 0;
+        renderSettingsScreen();
+      });
+    }
+
+    const settingsPrevBtn = document.getElementById('settings-flow-prev-btn');
+    if (settingsPrevBtn) {
+      settingsPrevBtn.addEventListener('click', () => {
+        if (state.settingsNodeIdx > 0) {
+          state.settingsNodeIdx -= 1;
+          renderSettingsScreen();
+        }
+      });
+    }
+
+    const settingsNextBtn = document.getElementById('settings-flow-next-btn');
+    if (settingsNextBtn) {
+      settingsNextBtn.addEventListener('click', () => {
+        const activeFlow = SYSTEM_FLOW_SPEC[state.settingsFlowIdx] || SYSTEM_FLOW_SPEC[0];
+        if (activeFlow && state.settingsNodeIdx < activeFlow.nodes.length - 1) {
+          state.settingsNodeIdx += 1;
+          renderSettingsScreen();
+        }
+      });
+    }
+
+    const settingsJumpBtn = document.getElementById('settings-flow-jump-btn');
+    if (settingsJumpBtn) {
+      settingsJumpBtn.addEventListener('click', () => {
+        const scr = settingsJumpBtn.getAttribute('data-jump-screen');
+        const subTab = settingsJumpBtn.getAttribute('data-jump-subtab');
+        const settingsSub = settingsJumpBtn.getAttribute('data-jump-settings-tab');
+        if (scr === 'users' && subTab) {
+          state.usersViewMode = subTab;
+        }
+        if (scr === 'settings' && settingsSub) {
+          switchScreen('settings');
+          switchSettingsTab(settingsSub);
+          return;
+        }
+        if (scr) switchScreen(scr);
+      });
+    }
+
+    const secSelect = document.getElementById('settings-section-select');
+    if (secSelect) {
+      secSelect.addEventListener('change', (e) => {
+        switchSettingsTab(e.target.value || 'flow');
+      });
+    }
+
+    const flowSubSel = document.getElementById('settings-flow-subselect');
+    if (flowSubSel) {
+      flowSubSel.addEventListener('change', (e) => {
+        state.settingsFlowIdx = Number(e.target.value) || 0;
+        state.settingsNodeIdx = 0;
+        renderSettingsScreen();
+      });
+    }
+
+    function captureBrowserGps(onOk) {
+      if (!navigator.geolocation) {
+        showToast('Browser geolocation is unavailable on this device.');
+        return;
+      }
+      showToast('Requesting GPS coordinates...');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => onOk(Number(pos.coords.latitude.toFixed(6)), Number(pos.coords.longitude.toFixed(6))),
+        (err) => showToast('GPS error: ' + err.message),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+
+    // Settings Tab: Temporary Relief (TOTP & Geo-QR)
+    const btnTotpSetup = document.getElementById('btn-totp-setup');
+    if (btnTotpSetup) {
+      btnTotpSetup.addEventListener('click', async () => {
+        if (!navigator.onLine) { showToast('Online Only: reconnect to setup Authenticator 2FA.'); return; }
+        btnTotpSetup.disabled = true;
+        try {
+          const res = await fetch('api.php?action=totp_setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            const box = document.getElementById('totp-enroll-box');
+            const secEl = document.getElementById('totp-secret-display');
+            const qrEl = document.getElementById('totp-qr-container');
+            if (box) box.style.display = 'block';
+            if (secEl) secEl.textContent = data.secret || '';
+            renderSvgQrInto(qrEl, data.otpauth_uri || '');
+            showToast(data.message || 'Scan TOTP QR and verify below.');
+          } else {
+            showToast((data && data.error) || 'Could not initialize TOTP.');
+          }
+        } catch (_) {
+          showToast('Network error initializing TOTP.');
+        } finally {
+          btnTotpSetup.disabled = false;
+        }
+      });
+    }
+
+    const btnTotpVerify = document.getElementById('btn-totp-verify');
+    if (btnTotpVerify) {
+      btnTotpVerify.addEventListener('click', async () => {
+        const code = (document.getElementById('totp-verify-code')?.value || '').trim();
+        if (!/^\d{6}$/.test(code)) { showToast('Enter the 6-digit code from your Authenticator app.'); return; }
+        btnTotpVerify.disabled = true;
+        try {
+          const res = await fetch('api.php?action=totp_verify_enable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            state.totpEnabled = true;
+            const box = document.getElementById('totp-enroll-box');
+            if (box) box.style.display = 'none';
+            const inp = document.getElementById('totp-verify-code');
+            if (inp) inp.value = '';
+            renderSettingsReliefSection();
+            showToast(data.message || 'TOTP Authenticator enabled.');
+          } else {
+            showToast((data && data.error) || 'Invalid TOTP code.');
+          }
+        } catch (_) {
+          showToast('Network error verifying TOTP.');
+        } finally {
+          btnTotpVerify.disabled = false;
+        }
+      });
+    }
+
+    const btnTotpShowDisable = document.getElementById('btn-totp-show-disable');
+    if (btnTotpShowDisable) {
+      btnTotpShowDisable.addEventListener('click', () => {
+        const p = document.getElementById('totp-disable-panel');
+        if (p) p.style.display = p.style.display === 'none' ? 'block' : 'none';
+      });
+    }
+
+    const btnTotpConfirmDisable = document.getElementById('btn-totp-confirm-disable');
+    if (btnTotpConfirmDisable) {
+      btnTotpConfirmDisable.addEventListener('click', async () => {
+        const pwd = document.getElementById('totp-disable-password')?.value || '';
+        if (!pwd) { showToast('Enter your password to confirm.'); return; }
+        btnTotpConfirmDisable.disabled = true;
+        try {
+          const res = await fetch('api.php?action=totp_disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwd }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            state.totpEnabled = false;
+            const p = document.getElementById('totp-disable-panel');
+            if (p) p.style.display = 'none';
+            const pwdInp = document.getElementById('totp-disable-password');
+            if (pwdInp) pwdInp.value = '';
+            renderSettingsReliefSection();
+            showToast(data.message || 'TOTP 2FA disabled.');
+          } else {
+            showToast((data && data.error) || 'Failed to disable TOTP.');
+          }
+        } catch (_) {
+          showToast('Network error disabling TOTP.');
+        } finally {
+          btnTotpConfirmDisable.disabled = false;
+        }
+      });
+    }
+
+    const reliefCpSel = document.getElementById('relief-qr-checkpoint');
+    if (reliefCpSel) {
+      reliefCpSel.addEventListener('change', () => {
+        const opt = reliefCpSel.options[reliefCpSel.selectedIndex];
+        const rad = opt ? opt.getAttribute('data-radius') : '';
+        const radInp = document.getElementById('relief-qr-radius');
+        if (rad && radInp) radInp.value = rad;
+      });
+    }
+
+    const reliefQrForm = document.getElementById('relief-qr-generate-form');
+    if (reliefQrForm) {
+      reliefQrForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!navigator.onLine) { showToast('Online Only: reconnect to generate a Relief QR.'); return; }
+        const btn = document.getElementById('btn-generate-relief-qr');
+        if (btn) btn.disabled = true;
+        const cpVal = document.getElementById('relief-qr-checkpoint')?.value || '';
+        const [cpType, cpId] = cpVal.includes(':') ? cpVal.split(':') : ['stock_warehouse', ''];
+        try {
+          const res = await fetch('api.php?action=generate_relief_qr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              assigned_user_id: Number(document.getElementById('relief-qr-user')?.value || 0),
+              checkpoint_type: cpType,
+              checkpoint_id: cpId,
+              geofence_radius_m: Number(document.getElementById('relief-qr-radius')?.value || 200),
+              duration_hours: Number(document.getElementById('relief-qr-hours')?.value || 8),
+              expires_minutes: Number(document.getElementById('relief-qr-exp-mins')?.value || 60),
+              require_geofence: document.getElementById('relief-qr-req-geo')?.checked ? 1 : 0,
+              require_totp: document.getElementById('relief-qr-req-totp')?.checked ? 1 : 0,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            applyBootstrapPayload(data, true);
+            const absUrl = new URL(data.relief_url || ('relief.php?token=' + data.token), window.location.href).href;
+            if (data.token_id) {
+              state.sessionReliefUrls[data.token_id] = absUrl;
+            }
+            const outBox = document.getElementById('relief-qr-output-box');
+            const sumEl = document.getElementById('relief-qr-summary');
+            const urlInp = document.getElementById('relief-qr-url');
+            const openBtn = document.getElementById('btn-open-relief-url');
+            const svgEl = document.getElementById('relief-qr-svg');
+            if (outBox) outBox.style.display = 'block';
+            if (sumEl) {
+              sumEl.textContent = `${data.assigned_user_name} → ${data.checkpoint_name} (${data.geofence_radius_m}m · ${data.require_totp ? 'TOTP' : 'Geo Only'})`;
+            }
+            if (urlInp) urlInp.value = absUrl;
+            if (openBtn) openBtn.href = absUrl;
+            renderSvgQrInto(svgEl, absUrl);
+            renderSettingsReliefSection();
+            showToast(data.message || 'Geo-Fenced Relief QR generated.');
+          } else {
+            showToast((data && data.error) || 'Failed to generate Relief QR.');
+          }
+        } catch (_) {
+          showToast('Network error generating Relief QR.');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      });
+    }
+
+    const btnCopyReliefUrl = document.getElementById('btn-copy-relief-url');
+    if (btnCopyReliefUrl) {
+      btnCopyReliefUrl.addEventListener('click', () => {
+        const val = document.getElementById('relief-qr-url')?.value || '';
+        if (!val) return;
+        navigator.clipboard?.writeText(val).then(() => showToast('Relief URL copied.')).catch(() => showToast(val));
+      });
+    }
+
+    const geoListEl = document.getElementById('relief-checkpoint-geo-list');
+    if (geoListEl) {
+      geoListEl.addEventListener('click', async (e) => {
+        const capBtn = e.target.closest('.js-geo-capture-btn');
+        if (capBtn) {
+          const cpKey = capBtn.getAttribute('data-cp-key');
+          captureBrowserGps((lat, lng) => {
+            const latInp = geoListEl.querySelector(`.js-geo-lat[data-cp-key="${CSS.escape(cpKey)}"]`);
+            const lngInp = geoListEl.querySelector(`.js-geo-lng[data-cp-key="${CSS.escape(cpKey)}"]`);
+            if (latInp) latInp.value = String(lat);
+            if (lngInp) lngInp.value = String(lng);
+            showToast(`Captured GPS: ${lat}, ${lng}`);
+          });
+          return;
+        }
+        const saveBtn = e.target.closest('.js-geo-save-btn');
+        if (saveBtn) {
+          const cpKey = saveBtn.getAttribute('data-cp-key');
+          const cpType = saveBtn.getAttribute('data-cp-type');
+          const cpId = saveBtn.getAttribute('data-cp-id');
+          const latVal = geoListEl.querySelector(`.js-geo-lat[data-cp-key="${CSS.escape(cpKey)}"]`)?.value || '';
+          const lngVal = geoListEl.querySelector(`.js-geo-lng[data-cp-key="${CSS.escape(cpKey)}"]`)?.value || '';
+          const radVal = Number(geoListEl.querySelector(`.js-geo-rad[data-cp-key="${CSS.escape(cpKey)}"]`)?.value || 200);
+          saveBtn.disabled = true;
+          try {
+            let res;
+            if (cpType === 'event_venue') {
+              const evObj = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === String(cpId));
+              res = await fetch('api.php?action=save_event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  event_id: cpId,
+                  call_time: evObj?.call_time || '08:00',
+                  assigned_technicians: evObj?.assigned_technicians || [],
+                  lat: latVal,
+                  lng: lngVal,
+                  geofence_radius_m: radVal,
+                }),
+              });
+            } else {
+              const whObj = (state.checkpoints?.stock_warehouses || []).find((w) => String(w.id) === String(cpId));
+              res = await fetch('api.php?action=save_warehouse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: Number(cpId),
+                  name: whObj?.name || 'Facility Gate',
+                  code: whObj?.code || '',
+                  location: whObj?.location || '',
+                  open_time: whObj?.open_time || '08:00',
+                  close_time: whObj?.close_time || '18:00',
+                  controller_name: whObj?.controller_name || '',
+                  is_active: 1,
+                  lat: latVal,
+                  lng: lngVal,
+                  geofence_radius_m: radVal,
+                }),
+              });
+            }
+            const data = await res.json();
+            if (res.ok && data && data.ok) {
+              await fetchBootstrap(true);
+              showToast('Checkpoint geo-fence coordinates saved.');
+            } else {
+              showToast((data && data.error) || 'Failed to save coordinates.');
+            }
+          } catch (_) {
+            showToast('Network error saving coordinates.');
+          } finally {
+            saveBtn.disabled = false;
+          }
+        }
+      });
+    }
+
+    const pageSrOpenGeo = document.getElementById('page-sr-open-geoqr-btn');
+    if (pageSrOpenGeo) {
+      pageSrOpenGeo.addEventListener('click', () => {
+        switchScreen('settings');
+        switchSettingsTab('relief');
+      });
+    }
+
+    // Settings Tab: Dispatch Hierarchy
+    const dispatchEvSel = document.getElementById('dispatch-event-select');
+    if (dispatchEvSel) {
+      dispatchEvSel.addEventListener('change', renderSettingsDispatchSection);
+    }
+    const dispatchOpenRoster = document.getElementById('dispatch-open-roster-btn');
+    if (dispatchOpenRoster) {
+      dispatchOpenRoster.addEventListener('click', () => {
+        const evId = document.getElementById('dispatch-event-select')?.value || '';
+        const evObj = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === evId);
+        if (typeof window.openScheduleRosterModalForFacility === 'function' && evObj) {
+          window.openScheduleRosterModalForFacility(evObj.name);
+        } else {
+          const btn = document.getElementById('open-schedule-roster-btn');
+          if (btn) btn.click();
+        }
+      });
+    }
+
+    // Settings Tab: Shared Links Policy
+    const linksOpenPortals = document.getElementById('settings-links-open-portals-btn');
+    if (linksOpenPortals) linksOpenPortals.addEventListener('click', () => switchScreen('standalone-portals'));
+    const linksGrid = document.getElementById('settings-shared-links-grid');
+    if (linksGrid) {
+      linksGrid.addEventListener('click', (e) => {
+        if (e.target.closest('#js-links-goto-relief')) {
+          switchSettingsTab('relief');
+          return;
+        }
+        const editBtn = e.target.closest('.js-settings-edit-portal-btn');
+        if (editBtn) {
+          const pid = Number(editBtn.getAttribute('data-portal-id'));
+          const item = (state.standalonePortals || []).find((p) => Number(p.id) === pid);
+          if (item) openPortalCrudModal(item);
+        }
+      });
+    }
+
+    // Settings Tab: Branding Studio
+    const readBrandingForm = () => ({
+      brand_name: document.getElementById('brand-display-name')?.value.trim() || 'aBility',
+      primary_color: document.getElementById('brand-color-primary-hex')?.value.trim() || '#4f46e5',
+      accent_color: document.getElementById('brand-color-accent-hex')?.value.trim() || '#10b981',
+      neutral_color: document.getElementById('brand-color-neutral-hex')?.value.trim() || '#64748b',
+      font_family: document.getElementById('brand-font-family')?.value || 'Marvel',
+      font_scale: Number(document.getElementById('brand-font-scale')?.value || 1),
+      text_align: document.getElementById('brand-text-align')?.value || 'left',
+      default_theme: document.getElementById('brand-default-theme')?.value || 'system',
+    });
+    const syncColorPair = (pickerId, hexId) => {
+      const pEl = document.getElementById(pickerId);
+      const hEl = document.getElementById(hexId);
+      if (pEl && hEl) {
+        pEl.addEventListener('input', () => { hEl.value = pEl.value; applyBrandingConfigClient(readBrandingForm()); applyAccessibilityPreferences(); });
+        hEl.addEventListener('input', () => { if (/^#[0-9a-fA-F]{6}$/.test(hEl.value)) pEl.value = hEl.value; applyBrandingConfigClient(readBrandingForm()); applyAccessibilityPreferences(); });
+      }
+    };
+    syncColorPair('brand-color-primary', 'brand-color-primary-hex');
+    syncColorPair('brand-color-accent', 'brand-color-accent-hex');
+    syncColorPair('brand-color-neutral', 'brand-color-neutral-hex');
+    ['brand-display-name', 'brand-font-family', 'brand-font-scale', 'brand-text-align', 'brand-default-theme'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', () => {
+          const fsVal = document.getElementById('brand-font-scale-val');
+          if (id === 'brand-font-scale' && fsVal) fsVal.textContent = `${Math.round(Number(el.value || 1) * 100)}%`;
+          applyBrandingConfigClient(readBrandingForm());
+          applyAccessibilityPreferences();
+        });
+      }
+    });
+    document.querySelectorAll('.js-brand-quick-theme').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const ch = btn.getAttribute('data-theme-choice');
+        if (ch && typeof applyTheme === 'function') applyTheme(ch, true, false);
+      });
+    });
+    const resetBrandBtn = document.getElementById('btn-branding-reset-defaults');
+    if (resetBrandBtn) {
+      resetBrandBtn.addEventListener('click', () => {
+        applyBrandingConfigClient({ brand_name: 'aBility', primary_color: '#4f46e5', accent_color: '#10b981', neutral_color: '#64748b', font_family: 'Marvel', font_scale: 1, text_align: 'left', default_theme: 'system' });
+        applyAccessibilityPreferences();
+        renderSettingsBrandingSection();
+        showToast('Preview reset to default theme.');
+      });
+    }
+    const brandingForm = document.getElementById('branding-config-form');
+    if (brandingForm) {
+      brandingForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const sb = document.getElementById('btn-save-branding');
+        if (sb && sb.style.display !== 'none') sb.click();
+      });
+    }
+    const saveBrandBtn = document.getElementById('btn-save-branding');
+    if (saveBrandBtn) {
+      saveBrandBtn.addEventListener('click', async () => {
+        if (!navigator.onLine) { showToast('Online Only: reconnect to save Branding globally.'); return; }
+        saveBrandBtn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=save_branding_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(readBrandingForm()),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            if (data.brandingConfig) applyBrandingConfigClient(data.brandingConfig, data.brandingFonts || null);
+            applyAccessibilityPreferences();
+            renderSettingsBrandingSection();
+            showToast(data.message || 'Branding configuration saved globally.');
+          } else {
+            showToast((data && data.error) || 'Failed to save branding.');
+          }
+        } catch (_) {
+          showToast('Network error saving branding.');
+        } finally {
+          saveBrandBtn.disabled = false;
+        }
+      });
+    }
+
+    // Branding Logo Upload / Preset / Reset
+    const logoUploadForm = document.getElementById('branding-logo-upload-form');
+    if (logoUploadForm) {
+      logoUploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!navigator.onLine) { showToast('Online Only: reconnect to upload a logo.'); return; }
+        const fileInp = document.getElementById('branding-logo-file');
+        if (!fileInp || !fileInp.files || !fileInp.files[0]) {
+          showToast('Select a logo image file first.');
+          return;
+        }
+        const btn = document.getElementById('btn-upload-branding-logo');
+        if (btn) btn.disabled = true;
+        try {
+          const fd = new FormData();
+          fd.append('logo', fileInp.files[0]);
+          const res = await fetch('api.php?action=upload_branding_logo', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            fileInp.value = '';
+            if (data.brandingConfig) applyBrandingConfigClient(data.brandingConfig);
+            renderSettingsBrandingSection();
+            showToast(data.message || 'Logo uploaded and applied.');
+          } else {
+            showToast((data && data.error) || 'Logo upload failed.');
+          }
+        } catch (_) {
+          showToast('Network error uploading logo.');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      });
+    }
+    document.querySelectorAll('.js-logo-preset-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!navigator.onLine) { showToast('Online Only: reconnect to change logo.'); return; }
+        const presetPath = btn.getAttribute('data-preset') || '';
+        btn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=upload_branding_logo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ preset_path: presetPath }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            if (data.brandingConfig) applyBrandingConfigClient(data.brandingConfig);
+            renderSettingsBrandingSection();
+            showToast(data.message || 'Preset logo applied.');
+          } else {
+            showToast((data && data.error) || 'Could not apply logo preset.');
+          }
+        } catch (_) {
+          showToast('Network error updating logo preset.');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+    const resetLogoBtn = document.getElementById('btn-reset-branding-logo');
+    if (resetLogoBtn) {
+      resetLogoBtn.addEventListener('click', async () => {
+        if (!navigator.onLine) { showToast('Online Only: reconnect to reset logo.'); return; }
+        resetLogoBtn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=reset_branding_logo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            if (data.brandingConfig) applyBrandingConfigClient(data.brandingConfig);
+            renderSettingsBrandingSection();
+            showToast(data.message || 'Brand logo reset to default.');
+          } else {
+            showToast((data && data.error) || 'Failed to reset logo.');
+          }
+        } catch (_) {
+          showToast('Network error resetting logo.');
+        } finally {
+          resetLogoBtn.disabled = false;
+        }
+      });
+    }
+
+    // Branding Fonts CRUD Form & List Handlers
+    const resetFontCrudForm = () => {
+      const form = document.getElementById('branding-font-crud-form');
+      if (form) form.reset();
+      const idEl = document.getElementById('brand-font-crud-id');
+      if (idEl) idEl.value = '0';
+      const cancelBtn = document.getElementById('btn-cancel-branding-font');
+      if (cancelBtn) cancelBtn.style.display = 'none';
+      const saveBtnF = document.getElementById('btn-save-branding-font');
+      if (saveBtnF) saveBtnF.textContent = 'Add / Save Font';
+    };
+    const cancelFontBtn = document.getElementById('btn-cancel-branding-font');
+    if (cancelFontBtn) cancelFontBtn.addEventListener('click', resetFontCrudForm);
+
+    const fontCrudForm = document.getElementById('branding-font-crud-form');
+    if (fontCrudForm) {
+      fontCrudForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!navigator.onLine) { showToast('Online Only: reconnect to save fonts.'); return; }
+        const btn = document.getElementById('btn-save-branding-font');
+        if (btn) btn.disabled = true;
+        try {
+          const fd = new FormData();
+          fd.append('id', document.getElementById('brand-font-crud-id')?.value || '0');
+          fd.append('font_name', (document.getElementById('brand-font-crud-name')?.value || '').trim());
+          fd.append('css_stack', (document.getElementById('brand-font-crud-stack')?.value || '').trim());
+          fd.append('font_url', (document.getElementById('brand-font-crud-url')?.value || '').trim());
+          fd.append('is_active', document.getElementById('brand-font-crud-active')?.checked ? '1' : '0');
+          fd.append('activate', document.getElementById('brand-font-crud-activate')?.checked ? '1' : '0');
+          const fInp = document.getElementById('brand-font-crud-file');
+          if (fInp && fInp.files && fInp.files[0]) {
+            fd.append('font_file', fInp.files[0]);
+          }
+          const res = await fetch('api.php?action=save_branding_font', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            resetFontCrudForm();
+            applyBrandingConfigClient(data.brandingConfig || state.brandingConfig, data.brandingFonts || null);
+            renderSettingsBrandingSection();
+            showToast(data.message || 'Font saved.');
+          } else {
+            showToast((data && data.error) || 'Failed to save font.');
+          }
+        } catch (_) {
+          showToast('Network error saving font.');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      });
+    }
+
+    const fontsCrudListEl = document.getElementById('branding-fonts-crud-list');
+    if (fontsCrudListEl) {
+      fontsCrudListEl.addEventListener('click', async (e) => {
+        const useBtn = e.target.closest('.js-font-use-btn');
+        if (useBtn) {
+          const fname = useBtn.getAttribute('data-font-name') || '';
+          const nextCfg = Object.assign({}, readBrandingForm(), { font_family: fname });
+          applyBrandingConfigClient(nextCfg);
+          const sel = document.getElementById('brand-font-family');
+          if (sel) sel.value = fname;
+          if (isCurrentUserAdmin() && navigator.onLine) {
+            try {
+              const r = await fetch('api.php?action=save_branding_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ font_family: fname }),
+              });
+              const d = await r.json();
+              if (r.ok && d && d.ok && d.brandingConfig) applyBrandingConfigClient(d.brandingConfig, d.brandingFonts || null);
+            } catch (_) {}
+          }
+          renderSettingsBrandingSection();
+          showToast(`Active font set to ${fname}.`);
+          return;
+        }
+        const editBtn = e.target.closest('.js-font-edit-btn');
+        if (editBtn) {
+          const fid = Number(editBtn.getAttribute('data-font-id'));
+          const item = (state.brandingFonts || []).find((f) => Number(f.id) === fid);
+          if (!item) return;
+          const idEl = document.getElementById('brand-font-crud-id');
+          const nameEl = document.getElementById('brand-font-crud-name');
+          const stackEl = document.getElementById('brand-font-crud-stack');
+          const urlEl = document.getElementById('brand-font-crud-url');
+          const actEl = document.getElementById('brand-font-crud-active');
+          const cancelBtn = document.getElementById('btn-cancel-branding-font');
+          const saveBtnF = document.getElementById('btn-save-branding-font');
+          if (idEl) idEl.value = String(item.id);
+          if (nameEl) nameEl.value = item.font_name || '';
+          if (stackEl) stackEl.value = item.css_stack || '';
+          if (urlEl) urlEl.value = item.font_url || '';
+          if (actEl) actEl.checked = Number(item.is_active ?? 1) === 1;
+          if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+          if (saveBtnF) saveBtnF.textContent = 'Update Font';
+          if (nameEl) nameEl.focus();
+          return;
+        }
+        const delBtn = e.target.closest('.js-font-delete-btn');
+        if (delBtn) {
+          if (!navigator.onLine) { showToast('Online Only: reconnect to delete font.'); return; }
+          const fid = Number(delBtn.getAttribute('data-font-id'));
+          const fname = delBtn.getAttribute('data-font-name') || 'this font';
+          const confirmed = typeof showConfirmDialog === 'function'
+            ? await showConfirmDialog(`Delete custom font "${fname}"?`, 'Delete Font')
+            : window.confirm(`Delete custom font "${fname}"?`);
+          if (!confirmed) return;
+          delBtn.disabled = true;
+          try {
+            const res = await fetch('api.php?action=delete_branding_font', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: fid }),
+            });
+            const data = await res.json();
+            if (res.ok && data && data.ok) {
+              applyBrandingConfigClient(data.brandingConfig || state.brandingConfig, data.brandingFonts || null);
+              renderSettingsBrandingSection();
+              showToast(data.message || 'Font deleted.');
+            } else {
+              showToast((data && data.error) || 'Could not delete font.');
+            }
+          } catch (_) {
+            showToast('Network error deleting font.');
+          } finally {
+            delBtn.disabled = false;
+          }
+        }
+      });
+    }
+
+    // Settings Tab: Accounts, Password Change, Accessibility & Offline Cache
+    const ownPwdForm = document.getElementById('own-password-form');
+    if (ownPwdForm) {
+      ownPwdForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!navigator.onLine) { showToast('Online Only: reconnect to change your password.'); return; }
+        const curPwd = document.getElementById('own-current-pwd')?.value || '';
+        const newPwd = document.getElementById('own-new-pwd')?.value || '';
+        const confPwd = document.getElementById('own-confirm-pwd')?.value || '';
+        if (newPwd.length < 8) { showToast('New password must be at least 8 characters.'); return; }
+        if (newPwd !== confPwd) { showToast('New passwords do not match.'); return; }
+        const btn = document.getElementById('btn-change-own-pwd');
+        if (btn) btn.disabled = true;
+        try {
+          const res = await fetch('api.php?action=change_own_password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password: curPwd, new_password: newPwd, confirm_password: confPwd }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            ownPwdForm.reset();
+            showToast(data.message || 'Password updated.');
+          } else {
+            showToast((data && data.error) || 'Failed to update password.');
+          }
+        } catch (_) {
+          showToast('Network error updating password.');
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      });
+    }
+    [
+      ['a11y-high-contrast', 'ability_a11y_high_contrast'],
+      ['a11y-large-text', 'ability_a11y_large_text'],
+      ['a11y-reduced-motion', 'ability_a11y_reduced_motion'],
+    ].forEach(([elId, storeKey]) => {
+      const cb = document.getElementById(elId);
+      if (cb) {
+        cb.addEventListener('change', () => {
+          try { localStorage.setItem(storeKey, cb.checked ? '1' : '0'); } catch (_) {}
+          applyAccessibilityPreferences();
+          showToast('Accessibility preference updated.');
+        });
+      }
+    });
+    const btnSyncCache = document.getElementById('btn-refresh-offline-cache');
+    if (btnSyncCache) {
+      btnSyncCache.addEventListener('click', async () => {
+        await fetchBootstrap(true);
+        await renderSettingsAccountsOfflineSection();
+        showToast('Offline verification roster synced to IndexedDB.');
+      });
+    }
+    const btnWipeCache = document.getElementById('btn-wipe-offline-cache');
+    if (btnWipeCache) {
+      btnWipeCache.addEventListener('click', async () => {
+        await AbilityMainOffline.clearAll();
+        await renderSettingsAccountsOfflineSection();
+        showToast('Offline IndexedDB verification cache cleared.');
+      });
+    }
+
+    // Settings Tab: PWA Install Prompt
+    const pwaInstallBtn = document.getElementById('pwa-install-btn');
+    if (pwaInstallBtn) {
+      pwaInstallBtn.addEventListener('click', async () => {
+        if (!state.deferredPwaPrompt) return;
+        state.deferredPwaPrompt.prompt();
+        await state.deferredPwaPrompt.userChoice.catch(() => {});
+        state.deferredPwaPrompt = null;
+        renderSettingsPwaSection();
+      });
+    }
+
+    const settingsShortcutsGrid = document.getElementById('settings-shortcuts-grid');
+    if (settingsShortcutsGrid) {
+      settingsShortcutsGrid.addEventListener('click', (e) => {
+        const btn = e.target.closest('.js-settings-shortcut-btn');
+        if (!btn) return;
+        const act = btn.getAttribute('data-shortcut-action');
+        if (act === 'toggle-theme') {
+          toggleTheme(true);
+          renderSettingsScreen();
+          return;
+        }
+        const scr = btn.getAttribute('data-shortcut-screen');
+        const subTab = btn.getAttribute('data-shortcut-subtab');
+        if (scr === 'users' && subTab) {
+          state.usersViewMode = subTab;
+        }
+        if (scr) switchScreen(scr);
       });
     }
 
@@ -10940,6 +13226,40 @@
         });
       });
     }
+    const whCapBtn = document.getElementById('wh-capture-gps-btn');
+    if (whCapBtn && navigator.geolocation) {
+      whCapBtn.addEventListener('click', () => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const l1 = document.getElementById('wh-modal-lat');
+            const l2 = document.getElementById('wh-modal-lng');
+            if (l1) l1.value = pos.coords.latitude.toFixed(6);
+            if (l2) l2.value = pos.coords.longitude.toFixed(6);
+            showToast('Warehouse GPS coordinates captured.');
+          },
+          (err) => showToast('GPS error: ' + err.message),
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      });
+    }
+
+    const venueCapBtn = document.getElementById('venue-capture-gps-btn');
+    if (venueCapBtn && navigator.geolocation) {
+      venueCapBtn.addEventListener('click', () => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const l1 = document.getElementById('venue-crud-lat');
+            const l2 = document.getElementById('venue-crud-lng');
+            if (l1) l1.value = pos.coords.latitude.toFixed(6);
+            if (l2) l2.value = pos.coords.longitude.toFixed(6);
+            showToast('Venue GPS coordinates captured.');
+          },
+          (err) => showToast('GPS error: ' + err.message),
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      });
+    }
+
     const venueCrudForm = document.getElementById('venue-crud-form');
     if (venueCrudForm) {
       venueCrudForm.addEventListener('submit', async (e) => {
@@ -10960,6 +13280,10 @@
         fd.append('terminal_pin', document.getElementById('venue-crud-pin')?.value.trim() || '');
         fd.append('tech_lead', document.getElementById('venue-crud-techlead')?.value.trim() || '');
         fd.append('project_manager', document.getElementById('venue-crud-pm')?.value.trim() || '');
+        fd.append('event_coordinator', document.getElementById('venue-crud-coordinator')?.value.trim() || '');
+        fd.append('geofence_radius_m', document.getElementById('venue-crud-radius')?.value || '200');
+        fd.append('lat', document.getElementById('venue-crud-lat')?.value || '');
+        fd.append('lng', document.getElementById('venue-crud-lng')?.value || '');
         fd.append('assigned_technicians', JSON.stringify(assignedTechs));
         const fileInput = document.getElementById('venue-modal-image');
         if (fileInput && fileInput.files && fileInput.files[0]) {
@@ -11686,6 +14010,11 @@
           fd.append('terminal_pin', newPinVal);
           fd.append('onsite_password', newOnsitePwdVal);
           fd.append('overlay_opacity', document.getElementById('portal-crud-opacity')?.value || '0.78');
+          fd.append('best_for', (document.getElementById('portal-crud-best-for')?.value || '').trim());
+          fd.append('permissions_summary', (document.getElementById('portal-crud-permissions')?.value || '').trim());
+          fd.append('expires_at', document.getElementById('portal-crud-expires-at')?.value || '');
+          fd.append('allow_scan', document.getElementById('portal-crud-allow-scan')?.checked ? '1' : '0');
+          fd.append('mask_phones', document.getElementById('portal-crud-mask-phones')?.checked ? '1' : '0');
           fd.append('is_active', document.getElementById('portal-crud-active')?.checked ? '1' : '0');
           fd.append('remove_background', document.getElementById('portal-crud-remove-bg')?.value === '1' ? '1' : '0');
           if (selectedPortalBgFile) {
@@ -12132,10 +14461,34 @@
 
     function renderRosterChecklist() {
       const listEl = document.getElementById('roster-crew-checklist');
+      const pillsEl = document.getElementById('roster-dept-filter-pills');
+      if (pillsEl) {
+        const deptBuckets = ['all', 'Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation', 'Support Staff'];
+        pillsEl.innerHTML = deptBuckets.map((db) => `
+          <button type="button" class="btn ${state.rosterDeptFilter === db ? 'btn-primary-32' : 'btn-secondary-32-sm'} js-roster-dept-pill" data-dept="${escapeHtml(db)}">${db === 'all' ? 'All Depts' : escapeHtml(db)}</button>
+        `).join('');
+        pillsEl.querySelectorAll('.js-roster-dept-pill').forEach((pb) => {
+          pb.addEventListener('click', () => {
+            state.rosterDeptFilter = pb.getAttribute('data-dept') || 'all';
+            renderRosterChecklist();
+          });
+        });
+      }
       if (!listEl) return;
       const query = String(rosterSearchInput ? rosterSearchInput.value : '').trim().toLowerCase();
+      const deptFilter = String(state.rosterDeptFilter || 'all').toLowerCase();
       const filtered = (state.crew || []).filter((u) => {
         if (!u) return false;
+        if (deptFilter !== 'all') {
+          const uDept = String(u.department || '').toLowerCase();
+          const uRole = String(u.role || '').toLowerCase();
+          const matchesDept =
+            (deptFilter === 'sound' && (uDept.includes('sound') || uDept.includes('audio') || uRole === 'technician' || uRole.includes('sound'))) ||
+            (deptFilter === 'support staff' && (uDept.includes('support') || uRole === 'support_staff' || uRole === 'driver' || uRole === 'security' || uRole === 'user')) ||
+            uDept.includes(deptFilter) ||
+            uRole.includes(deptFilter);
+          if (!matchesDept) return false;
+        }
         if (!query) return true;
         const hay = `${u.full_name || ''} ${u.role || ''} ${u.department || ''} ${u.clearance_level || ''}`.toLowerCase();
         return hay.includes(query);
@@ -12199,11 +14552,13 @@
       if (isEventVenue) {
         const callInput = document.getElementById('roster-event-calltime');
         const pmInput = document.getElementById('roster-event-pm');
+        const coordInput = document.getElementById('roster-event-coordinator');
         const tlSelect = document.getElementById('roster-event-techlead');
         const dateLabel = document.getElementById('roster-event-date-label');
         if (callInput) callInput.value = (facility.call_time || '08:00').slice(0, 5);
         if (dateLabel) dateLabel.textContent = facility.date ? `Date: ${facility.date}` : '';
         populateLeadershipSelect(pmInput, facility.project_manager || '', 'pm');
+        populateLeadershipSelect(coordInput, facility.event_coordinator || '', 'coordinator');
         populateLeadershipSelect(tlSelect, facility.tech_lead || facility.lead_name || '', 'techlead');
       }
 
@@ -12383,6 +14738,32 @@
       rosterSearchInput.addEventListener('input', renderRosterChecklist);
     }
 
+    function buildStructuredEventRoster(pm, eventCoord, techLead, crewIds) {
+      const idSet = new Set((crewIds || []).map(Number));
+      const depts = { Video: [], Sound: [], Lighting: [], Electrical: [], Rigging: [], Interpretation: [] };
+      const supportStaff = [];
+      (state.crew || []).forEach((u) => {
+        const uid = Number(u.id);
+        if (!idSet.has(uid)) return;
+        const d = String(u.department || '').toLowerCase();
+        const r = String(u.role || '').toLowerCase();
+        if (d.includes('video') || r.includes('video')) depts.Video.push(uid);
+        else if (d.includes('sound') || d.includes('audio') || r.includes('sound') || r === 'technician') depts.Sound.push(uid);
+        else if (d.includes('light') || r.includes('light')) depts.Lighting.push(uid);
+        else if (d.includes('elect') || r.includes('elect')) depts.Electrical.push(uid);
+        else if (d.includes('rig') || r.includes('rig')) depts.Rigging.push(uid);
+        else if (d.includes('interp') || r.includes('interp')) depts.Interpretation.push(uid);
+        else supportStaff.push(uid);
+      });
+      return {
+        project_manager: pm,
+        event_coordinator: eventCoord,
+        tech_lead: techLead,
+        departments: depts,
+        support_staff: supportStaff,
+      };
+    }
+
     const rosterSaveEventBtn = document.getElementById('roster-save-event-btn');
     if (rosterSaveEventBtn) {
       rosterSaveEventBtn.addEventListener('click', async () => {
@@ -12394,6 +14775,7 @@
         const callTime = document.getElementById('roster-event-calltime')?.value || '08:00';
         const techLead = document.getElementById('roster-event-techlead')?.value || '';
         const pm = document.getElementById('roster-event-pm')?.value || '';
+        const eventCoord = document.getElementById('roster-event-coordinator')?.value || '';
         const facility = findFacilityByLookupName(facilityName);
         const existingCrewIds = getFacilityCrewMembers(facility, state.crew || []).map((m) => Number(m.id));
         const crewToSave = rosterCheckedIds.size > 0 ? Array.from(rosterCheckedIds) : existingCrewIds;
@@ -12405,7 +14787,9 @@
             call_time: callTime,
             tech_lead: techLead,
             project_manager: pm,
+            event_coordinator: eventCoord,
             assigned_technicians: crewToSave,
+            assigned_roster: buildStructuredEventRoster(pm, eventCoord, techLead, crewToSave),
           }, 'Event call-time and details saved.');
         } catch (err) {
           console.error('save_event error:', err);
@@ -12427,6 +14811,7 @@
         const callTime = document.getElementById('roster-event-calltime')?.value || '08:00';
         const techLead = document.getElementById('roster-event-techlead')?.value || '';
         const pm = document.getElementById('roster-event-pm')?.value || '';
+        const eventCoord = document.getElementById('roster-event-coordinator')?.value || '';
         const crewIds = Array.from(rosterCheckedIds);
 
         rosterAssignCrewBtn.disabled = true;
@@ -12436,7 +14821,9 @@
             call_time: callTime,
             tech_lead: techLead,
             project_manager: pm,
+            event_coordinator: eventCoord,
             assigned_technicians: crewIds,
+            assigned_roster: buildStructuredEventRoster(pm, eventCoord, techLead, crewIds),
           }, 'Event crew roster synced.');
         } catch (err) {
           console.error('assign_event_crew error:', err);
@@ -14182,6 +16569,9 @@
         fd.append('controller_name', document.getElementById('wh-modal-controller').value);
         fd.append('controller_phone', document.getElementById('wh-modal-phone').value);
         fd.append('terminal_pin', (document.getElementById('wh-modal-pin')?.value || '').trim());
+        fd.append('geofence_radius_m', document.getElementById('wh-modal-radius')?.value || '200');
+        fd.append('lat', document.getElementById('wh-modal-lat')?.value || '');
+        fd.append('lng', document.getElementById('wh-modal-lng')?.value || '');
 
         const fileInput = document.getElementById('wh-modal-image');
         if (fileInput && fileInput.files && fileInput.files[0]) {
@@ -14302,6 +16692,9 @@
     } catch (e) {}
 
     updateThemeUI(theme);
+    if (state.activeScreen === 'settings') {
+      renderSettingsScreen();
+    }
 
     if (showFeedback && currentTheme !== theme) {
       const isDark = theme === 'dark';
@@ -14601,6 +16994,7 @@
             replacement_controller_id: Number(document.getElementById(ids.repSelect)?.value || 0),
             outgoing_controller_id: Number(document.getElementById(ids.outSelect)?.value || 0),
             reason_type: document.getElementById(ids.reasonSelect)?.value || 'shift_swap',
+            relief_mode: document.getElementById('page-sr-relief-mode')?.value || 'standard',
             shift_start: document.getElementById(ids.startInput)?.value || '',
             shift_end: document.getElementById(ids.endInput)?.value || '',
             notes: document.getElementById(ids.notesInput)?.value || '',
@@ -15449,6 +17843,22 @@
   // Initialize
   document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
+    applyAccessibilityPreferences();
+    updateNetworkStatusUi();
+    window.addEventListener('online', () => { updateNetworkStatusUi(); syncOfflineScans(true); });
+    window.addEventListener('offline', () => { updateNetworkStatusUi(); showToast('Offline mode active: Online-Only controls locked.'); });
+    window.addEventListener('beforeinstallprompt', (ev) => {
+      ev.preventDefault();
+      state.deferredPwaPrompt = ev;
+      if (state.activeScreen === 'settings' && state.settingsTab === 'pwa') {
+        renderSettingsPwaSection();
+      }
+    });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').then(() => {
+        if (state.activeScreen === 'settings' && state.settingsTab === 'pwa') renderSettingsPwaSection();
+      }).catch(() => {});
+    }
     initSidebarCollapse();
     initRosterLayoutToggle();
     bindEvents();
@@ -15459,12 +17869,19 @@
       switchScreen('terminals', 'pane-kiosk');
     } else if (window.location.hash === '#rollcall') {
       switchScreen('rollcall');
+    } else if (window.location.hash === '#settings' || window.location.hash === '#flow-explorer') {
+      switchScreen('settings');
     }
     await fetchBootstrap(false);
+    if (state.currentUser && Number(state.currentUser.must_change_password) === 1 && isScreenPermittedForCurrentUser('settings')) {
+      showToast('Security Notice: Update your temporary password under Settings > Accounts & Offline.');
+    }
     syncOfflineScans(false);
     startLiveGateSync();
     if (window.location.hash === '#rollcall' && isScreenPermittedForCurrentUser('rollcall')) {
       switchScreen('rollcall');
+    } else if ((window.location.hash === '#settings' || window.location.hash === '#flow-explorer') && isScreenPermittedForCurrentUser('settings')) {
+      switchScreen('settings');
     } else if (isCurrentUserStockController()) {
       switchScreen('terminals', 'pane-kiosk');
       applyNavigationRestrictions();

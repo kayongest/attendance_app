@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="aBility Manager" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
+  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
   <title>aBility Manager — Gate Check-in / Check-out Terminal &amp; 4-Tier Access Matrix</title>
   <script>
     (function () {
@@ -17,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261117_v3" />
+  <link rel="stylesheet" href="styles.css?v=20261119_v13" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -109,6 +116,39 @@
           <img src="assets/nav-settings.svg" alt="" class="svg-icon" />
           <span class="nav-item-label">Reset Today’s Scans</span>
         </button>
+        <div class="sidebar-settings-group" id="sidebar-settings-group">
+          <button type="button" class="nav-item sidebar-settings-toggle" id="sidebar-settings-btn" data-nav-target="settings" aria-expanded="false" title="Settings > Flow &amp; Platform Configuration">
+            <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
+            <span class="nav-item-label">Settings</span>
+            <span class="sidebar-settings-chevron" id="sidebar-settings-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div class="sidebar-settings-submenu" id="sidebar-settings-submenu" style="display: none;">
+            <button type="button" class="nav-subitem active" data-settings-section="flow">
+              <span>Flow</span>
+            </button>
+            <button type="button" class="nav-subitem" data-settings-section="relief">
+              <span>Relief &amp; Geo-QR</span>
+            </button>
+            <button type="button" class="nav-subitem" data-settings-section="dispatch">
+              <span>Dispatch Hierarchy</span>
+            </button>
+            <button type="button" class="nav-subitem" data-settings-section="links">
+              <span>Shared Links</span>
+            </button>
+            <button type="button" class="nav-subitem" data-settings-section="branding">
+              <span>Branding &amp; Mode</span>
+            </button>
+            <button type="button" class="nav-subitem" data-settings-section="accounts">
+              <span>Accounts &amp; Offline</span>
+            </button>
+            <button type="button" class="nav-subitem" data-settings-section="pwa">
+              <span>PWA (Android &amp; iOS)</span>
+            </button>
+            <button type="button" class="nav-subitem" data-settings-section="controls">
+              <span>Config Shortcuts</span>
+            </button>
+          </div>
+        </div>
       </nav>
 
       <!-- Admin shortcut when Checkpoint Controls bar is disabled -->
@@ -159,6 +199,11 @@
         </div>
 
         <div class="topbar-utilities" data-node-id="2:3335">
+          <!-- Offline / Online Status Indicator -->
+          <span class="db-sync-pill network-mode-pill" id="topbar-network-pill" title="Connectivity Status: Mutations require online; badge verification supports offline cache">
+            <span class="network-dot-indicator" id="topbar-network-dot"></span>
+            <span id="topbar-network-text">Online</span>
+          </span>
           <!-- Live Database Status & Sync Button -->
           <button type="button" class="db-sync-pill" id="topbar-db-pill" title="Connected MySQL Database · Click to Force Sync / Health Check">
             <img src="assets/status-dot-green-5.svg" alt="" class="svg-icon" id="topbar-db-dot" />
@@ -203,6 +248,11 @@
             </svg>
           </button>
 
+          <!-- System Settings & Flow Explorer Button -->
+          <button type="button" class="icon-btn" id="topbar-settings-btn" title="Settings &amp; Interactive System Flow Explorer" aria-label="System Settings &amp; Flow Explorer" style="display: none;">
+            <img src="assets/nav-settings.svg" alt="Settings" class="svg-icon" />
+          </button>
+
           <!-- Help & Controls Dropdown (Administrator Only) -->
           <div class="topbar-popover-wrap" id="topbar-help-wrap" style="display: none;">
             <button type="button" class="icon-btn" id="topbar-help-btn" title="Gate Terminal Help &amp; Quick Controls" data-node-id="2:3844">
@@ -225,6 +275,13 @@
                   <div class="item-content">
                     <span class="item-title">Gate Terminal (#pane-kiosk)</span>
                     <span class="item-sub">Open full paired scanner terminal</span>
+                  </div>
+                </button>
+                <button type="button" class="topbar-dropdown-item" id="topbar-menu-settings">
+                  <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
+                  <div class="item-content">
+                    <span class="item-title">System Flow Explorer &amp; Settings</span>
+                    <span class="item-sub">Interactive runtime flows &amp; controls</span>
                   </div>
                 </button>
                 <div class="topbar-dropdown-divider"></div>
@@ -309,6 +366,13 @@
                   <div class="item-content">
                     <span class="item-title" id="user-menu-theme-title">Theme: Dark Mode</span>
                     <span class="item-sub" id="user-menu-theme-sub">Toggle dark/light interface</span>
+                  </div>
+                </button>
+                <button type="button" class="topbar-dropdown-item" id="topbar-user-settings">
+                  <img src="assets/nav-settings.svg" alt="" class="svg-icon" style="width: 16px; height: 16px; flex-shrink: 0;" />
+                  <div class="item-content">
+                    <span class="item-title">Settings &amp; Flow Explorer</span>
+                    <span class="item-sub">System flows &amp; admin controls</span>
                   </div>
                 </button>
                 <div class="topbar-dropdown-divider"></div>
@@ -2452,12 +2516,23 @@
                 </div>
               </div>
 
-              <div class="form-field" style="margin-bottom: 14px;">
-                <label class="form-label" for="page-sr-notes">Operational Notes</label>
-                <input type="text" id="page-sr-notes" class="form-input" placeholder="e.g. Covering night load-out shift at KCC due to high volume or medical leave" />
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <div class="form-field">
+                  <label class="form-label" for="page-sr-relief-mode">Verification Method</label>
+                  <select id="page-sr-relief-mode" class="form-input">
+                    <option value="standard">Standard Supervisor Approval</option>
+                    <option value="geo_qr">Geo-Fenced QR Code (200m)</option>
+                    <option value="geo_qr_totp">Geo-Fenced QR + Authenticator (TOTP)</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label class="form-label" for="page-sr-notes">Operational Notes</label>
+                  <input type="text" id="page-sr-notes" class="form-input" placeholder="e.g. Covering night load-out shift at KCC" />
+                </div>
               </div>
 
-              <div style="display: flex; justify-content: flex-end;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary-32" id="page-sr-open-geoqr-btn">Geo-QR &amp; TOTP Setup →</button>
                 <button type="submit" class="btn btn-primary-38" id="page-sr-submit-btn">Submit Relief Request</button>
               </div>
             </form>
@@ -3090,6 +3165,665 @@
           <div id="custom-nav-page-body"></div>
         </section>
       </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 15: SYSTEM SETTINGS & INTERACTIVE FLOW EXPLORER             -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-settings">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span class="status-badge status-badge-purple-sm">aBility Manager</span>
+                <span class="status-badge status-badge-green-sm" id="settings-runtime-db-badge">Attendance-Only Deployment</span>
+              </div>
+              <h1 class="page-title" style="margin-top: 6px;">System Settings &amp; Flow Explorer</h1>
+              <p class="page-subtitle">
+                Interactive System Flow Explorer visualizing live portals, gate scan decision engine, daily state machine, terminal locks, and role governance alongside system settings.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" id="settings-sync-now-btn">
+                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                <span>Sync Live Telemetry</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" data-action="go-kiosk">
+                <img src="assets/scan-line-13.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+                <span>Open Terminal</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Settings > Flow > ... Dropdown Header & Quick Switcher -->
+          <div class="settings-dropdown-bar">
+            <div class="settings-breadcrumb-chain">
+              <span class="settings-crumb-root">Settings</span>
+              <span class="settings-crumb-sep">&rsaquo;</span>
+              <label for="settings-section-select" class="sr-only">Settings Section</label>
+              <select id="settings-section-select" class="form-input settings-breadcrumb-select" aria-label="Settings Section">
+                <option value="flow">Flow (Interactive System Explorer)</option>
+                <option value="relief">1. Temporary Relief — Geo-Fenced QR &amp; Authenticator (TOTP)</option>
+                <option value="dispatch">2. Flow — Operational Hierarchy (PM → Tech Lead → 6 Depts)</option>
+                <option value="links">3. Shared Links — Best For &amp; Permissions / Limitations</option>
+                <option value="branding">4. Branding — Colours, Fonts, Alignment &amp; Dark/Light</option>
+                <option value="accounts">5. Accounts &amp; Accessibility — Offline vs Online-Only</option>
+                <option value="pwa">6. PWA — Android &amp; iOS Mobile App</option>
+                <option value="controls">System Configuration &amp; Shortcuts</option>
+              </select>
+              <span class="settings-crumb-sep settings-flow-subsep" id="settings-flow-subsep">&rsaquo;</span>
+              <select id="settings-flow-subselect" class="form-input settings-breadcrumb-select settings-flow-subselect" aria-label="System Flow Category"></select>
+            </div>
+            <div class="user-subnav-pills settings-pill-strip" style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-primary-32 js-settings-tab-btn" id="settings-tab-flow" data-settings-tab="flow">
+                <span>Flow</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32 js-settings-tab-btn" id="settings-tab-relief" data-settings-tab="relief">
+                <span>Relief Geo-QR</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32 js-settings-tab-btn" id="settings-tab-dispatch" data-settings-tab="dispatch">
+                <span>Hierarchy</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32 js-settings-tab-btn" id="settings-tab-links" data-settings-tab="links">
+                <span>Shared Links</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32 js-settings-tab-btn" id="settings-tab-branding" data-settings-tab="branding">
+                <span>Branding</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32 js-settings-tab-btn" id="settings-tab-accounts" data-settings-tab="accounts">
+                <span>Accounts &amp; Offline</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32 js-settings-tab-btn" id="settings-tab-pwa" data-settings-tab="pwa">
+                <span>PWA</span>
+              </button>
+              <button type="button" class="btn btn-secondary-32 js-settings-tab-btn" id="settings-tab-controls" data-settings-tab="controls">
+                <span>Shortcuts</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 1: INTERACTIVE SYSTEM FLOW EXPLORER -->
+        <div id="settings-pane-flow" style="margin-top: 14px;">
+          <!-- Live Runtime Telemetry Strip -->
+          <div class="metrics-grid" style="margin-bottom: 18px;">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Active Database</span>
+                <img src="assets/status-dot-green-5.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" style="font-size: 20px;" id="settings-kpi-db">ability_db</span>
+              <span class="metric-context">PDO MySQL Dual-Bridge</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Active Operator Scope</span>
+                <img src="assets/metric-users.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" style="font-size: 20px;" id="settings-kpi-role">Administrator</span>
+              <span class="metric-context" id="settings-kpi-user">Signed-In Session</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Checkpoints &amp; Portals</span>
+                <img src="assets/nav-events-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="settings-kpi-checkpoints">7</span>
+              <span class="metric-context" id="settings-kpi-portals">4 Standalone Portals</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Pending Shift Relief</span>
+                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="settings-kpi-relief">0</span>
+              <span class="metric-context" id="settings-kpi-onsite">0 Currently On-Site</span>
+            </div>
+          </div>
+
+          <!-- Interactive System Flow Explorer Card -->
+          <section class="directory-card flow-explorer-card" id="settings-flow-explorer-card">
+            <div class="flow-explorer-header">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span class="status-badge status-badge-purple-sm">aBility Manager</span>
+                  <h2 class="directory-title-18" style="margin: 0;">Interactive System Flow Explorer</h2>
+                </div>
+                <p class="directory-desc" id="settings-flow-subtitle" style="margin-top: 4px;">
+                  Select a subsystem flow below and click any node to inspect its source symbols, API routes, and decision rules.
+                </p>
+              </div>
+              <div class="flow-explorer-tabs" id="settings-flow-tabs" role="tablist" aria-label="System Flow Categories"></div>
+            </div>
+
+            <div class="flow-explorer-meta-bar">
+              <span class="flow-explorer-branch-pill" id="settings-flow-branch-pill">4 Entry Points · 3 Session Scopes</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="flow-explorer-step-counter" id="settings-flow-step-counter">Step 1 of 5</span>
+              </div>
+            </div>
+
+            <!-- Horizontal Interactive Flow Pipeline -->
+            <div class="flow-explorer-pipeline" id="settings-flow-diagram"></div>
+
+            <!-- Selected Node Detailed Inspector -->
+            <div class="flow-explorer-inspector" id="settings-flow-inspector">
+              <div class="flow-inspector-left">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+                  <span class="flow-step-badge" id="settings-node-step-badge">ENTRY 1</span>
+                  <h3 class="flow-node-title" id="settings-node-title">Authentication Gateway</h3>
+                </div>
+                <div class="flow-inspector-meta-row">
+                  <span class="flow-meta-label">Source File / Symbol:</span>
+                  <code class="flow-meta-code" id="settings-node-source">login.php + api.php</code>
+                </div>
+                <div class="flow-inspector-meta-row">
+                  <span class="flow-meta-label">Route / Data Store:</span>
+                  <code class="flow-meta-code flow-meta-link" id="settings-node-route">POST api.php?action=login</code>
+                </div>
+              </div>
+
+              <div class="flow-inspector-right">
+                <p class="flow-node-detail" id="settings-node-detail"></p>
+                <div class="flow-inspector-footer">
+                  <span class="flow-outcome-pill" id="settings-node-outcome"></span>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary-32-sm" id="settings-flow-jump-btn" style="display: none;">Open Screen →</button>
+                    <button type="button" class="btn btn-secondary-32-sm" id="settings-flow-prev-btn">← Prev</button>
+                    <button type="button" class="btn btn-primary-32" id="settings-flow-next-btn">Next →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Macro Topology Reference Card -->
+          <section class="directory-card" style="margin-top: 18px; padding: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;">
+              <div>
+                <h2 class="directory-title-18" style="margin: 0;">End-to-End Runtime Topology</h2>
+                <p class="directory-desc" style="margin-top: 2px;">How browser portals, security boundaries, and the dual-database layer interact across the deployment.</p>
+              </div>
+              <span class="status-badge status-badge-blue-sm">Live Architecture Map</span>
+            </div>
+            <div class="flow-topology-grid">
+              <div class="flow-topo-col">
+                <div class="flow-topo-heading">1. Browser Entry Points</div>
+                <div class="flow-topo-item"><strong>login.php</strong><span>Sign In (username/email/badge) + Admin Sign Up</span></div>
+                <div class="flow-topo-item"><strong>index.php + app.js</strong><span>Operations SPA (6s live sync + localStorage queue)</span></div>
+                <div class="flow-topo-item"><strong>gate.php / ndera / bk-arena / kcc</strong><span>Standalone PIN-locked site kiosks</span></div>
+                <div class="flow-topo-item"><strong>onsite.php</strong><span>Passcode-gated read-only roll-call (15s poll)</span></div>
+              </div>
+              <div class="flow-topo-col">
+                <div class="flow-topo-heading">2. api.php Security &amp; Engines</div>
+                <div class="flow-topo-item"><strong>Session &amp; CSRF Gate</strong><span>Isolated session scopes + X-CSRF-Token + rate limits</span></div>
+                <div class="flow-topo-item"><strong>RBAC &amp; Controller Lock</strong><span>canCallerPerformAction() + assertControllerCheckpointLock()</span></div>
+                <div class="flow-topo-item"><strong>Gate Decision Engine</strong><span>evaluateCheckpointAccess() + executeGateScan()</span></div>
+                <div class="flow-topo-item"><strong>Reporting &amp; Relief</strong><span>attendance_report() shift pairing + shift handover</span></div>
+              </div>
+              <div class="flow-topo-col">
+                <div class="flow-topo-heading">3. db.php &amp; MySQL Storage</div>
+                <div class="flow-topo-item"><strong>db.php Dual-DB Bridge</strong><span>Uses ability_db if available, else attendance_app</span></div>
+                <div class="flow-topo-item"><strong>Identity &amp; Clearance</strong><span>users, user_badges, roles, departments, access_clearance_levels</span></div>
+                <div class="flow-topo-item"><strong>Checkpoints &amp; Portals</strong><span>stock_locations, events, standalone_portals</span></div>
+                <div class="flow-topo-item"><strong>Logs, Config &amp; Security</strong><span>attendance_logs, controller_shift_requests, navigation_items, app_settings, user_notification_reads, security_rate_limits</span></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- TAB 2: SYSTEM CONFIGURATION & SHORTCUTS -->
+        <div id="settings-pane-controls" style="display: none; margin-top: 14px;">
+          <section class="directory-card" style="padding: 20px;">
+            <div style="margin-bottom: 16px;">
+              <h2 class="directory-title-18" style="margin: 0;">System Configuration &amp; Governance Shortcuts</h2>
+              <p class="directory-desc" style="margin-top: 2px;">Jump directly to administrative modules, access controls, portal settings, and appearance preferences permitted for your role.</p>
+            </div>
+            <div class="settings-shortcuts-grid" id="settings-shortcuts-grid"></div>
+          </section>
+        </div>
+
+        <!-- TAB 3 (ITEM 1): TEMPORARY RELIEF — GEO-FENCED QR CODE & AUTHENTICATOR (TOTP) -->
+        <div id="settings-pane-relief" style="display: none; margin-top: 14px;">
+          <div class="dedicated-page-grid-2">
+            <!-- Left: Authenticator (TOTP 2FA) Enrollment -->
+            <section class="directory-card" style="padding: 20px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                <div>
+                  <h2 class="directory-title-18" style="margin:0;">Authenticator (TOTP) for Relief Verification</h2>
+                  <p class="directory-desc" style="margin-top:3px;">Enroll Google Authenticator, Microsoft Authenticator, or Authy (RFC 6238 6-digit codes) for dual-factor QR relief.</p>
+                </div>
+                <span class="status-badge status-badge-amber-sm" id="totp-status-pill">Checking...</span>
+              </div>
+
+              <div id="totp-setup-controls" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <button type="button" class="btn btn-primary-32" id="btn-totp-setup" data-online-only="1">Setup / Rotate TOTP Secret</button>
+                <button type="button" class="btn btn-secondary-32" id="btn-totp-show-disable" style="display:none;" data-online-only="1">Disable 2FA</button>
+              </div>
+
+              <div id="totp-enroll-box" style="display:none;border:1px solid var(--border-color);border-radius:12px;padding:14px;background:var(--surface-subtle);">
+                <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+                  <div id="totp-qr-container" class="qr-svg-frame"></div>
+                  <div style="flex:1;min-width:200px;">
+                    <div style="font-size:12px;font-weight:700;margin-bottom:4px;">Manual Secret Key (Base32)</div>
+                    <code id="totp-secret-display" style="display:block;padding:8px;border-radius:8px;background:var(--bg-surface);border:1px solid var(--border-color);font-size:12px;word-break:break-all;margin-bottom:10px;"></code>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <input type="text" id="totp-verify-code" class="form-input" maxlength="6" inputmode="numeric" placeholder="Enter 6-digit code" style="max-width:160px;text-align:center;font-weight:700;letter-spacing:0.2em;" />
+                      <button type="button" class="btn btn-primary-32" id="btn-totp-verify" data-online-only="1">Verify &amp; Enable</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="totp-disable-panel" style="display:none;margin-top:10px;border:1px solid rgba(239,68,68,0.35);border-radius:10px;padding:12px;">
+                <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Confirm Account Password to Disable TOTP</div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <input type="password" id="totp-disable-password" class="form-input" placeholder="Current password" style="max-width:220px;" />
+                  <button type="button" class="btn btn-danger-32" id="btn-totp-confirm-disable" data-online-only="1">Confirm Disable</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Right: Generate Geo-Fenced Relief QR -->
+            <section class="directory-card" style="padding: 20px;">
+              <div style="margin-bottom:12px;">
+                <h2 class="directory-title-18" style="margin:0;">Issue Geo-Fenced Temporary Relief QR</h2>
+                <p class="directory-desc" style="margin-top:3px;">Generates a single-use, GPS geo-fenced + optional TOTP relief handover token (<code>relief.php?token=...</code>).</p>
+              </div>
+              <form id="relief-qr-generate-form">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                  <div class="form-field">
+                    <label class="form-label" for="relief-qr-user">Target Relief Controller *</label>
+                    <select id="relief-qr-user" class="form-input" required></select>
+                  </div>
+                  <div class="form-field">
+                    <label class="form-label" for="relief-qr-checkpoint">Target Gate / Venue *</label>
+                    <select id="relief-qr-checkpoint" class="form-input" required></select>
+                  </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                  <div class="form-field">
+                    <label class="form-label" for="relief-qr-radius">Geo-Fence Radius (m)</label>
+                    <input type="number" id="relief-qr-radius" class="form-input" min="50" max="5000" value="200" />
+                  </div>
+                  <div class="form-field">
+                    <label class="form-label" for="relief-qr-hours">Shift Duration (hrs)</label>
+                    <input type="number" id="relief-qr-hours" class="form-input" min="1" max="72" value="8" />
+                  </div>
+                  <div class="form-field">
+                    <label class="form-label" for="relief-qr-exp-mins">QR Window (mins)</label>
+                    <input type="number" id="relief-qr-exp-mins" class="form-input" min="5" max="1440" value="60" />
+                  </div>
+                </div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;font-weight:600;">
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="checkbox" id="relief-qr-req-geo" checked />
+                    <span>Enforce GPS Geo-Fence</span>
+                  </label>
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="checkbox" id="relief-qr-req-totp" checked />
+                    <span>Require Authenticator (TOTP)</span>
+                  </label>
+                </div>
+                <button type="submit" class="btn btn-primary-38" id="btn-generate-relief-qr" data-online-only="1">Generate Geo-Fenced Relief QR</button>
+              </form>
+
+              <div id="relief-qr-output-box" style="display:none;margin-top:14px;border:1px solid var(--border-color);border-radius:12px;padding:14px;background:var(--surface-subtle);">
+                <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">
+                  <div id="relief-qr-svg" class="qr-svg-frame"></div>
+                  <div style="flex:1;min-width:200px;">
+                    <div id="relief-qr-summary" style="font-size:12.5px;font-weight:700;margin-bottom:6px;"></div>
+                    <input type="text" id="relief-qr-url" class="form-input" readonly style="font-family:monospace;font-size:11.5px;margin-bottom:8px;" />
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                      <button type="button" class="btn btn-secondary-32" id="btn-copy-relief-url">Copy Activation URL</button>
+                      <a id="btn-open-relief-url" href="relief.php" target="_blank" class="btn btn-primary-32" style="text-decoration:none;">Open Activation Page ↗</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Checkpoint GPS Geo-Fence Configuration & Recent Tokens -->
+          <div class="dedicated-page-grid-2" style="margin-top:16px;">
+            <section class="directory-card" style="padding:20px;">
+              <div style="margin-bottom:10px;">
+                <h2 class="directory-title-18" style="margin:0;">Checkpoint Geo-Fence Coordinates</h2>
+                <p class="directory-desc" style="margin-top:2px;">Set GPS Latitude, Longitude, and Geo-Fence radius (meters) per gate or event venue.</p>
+              </div>
+              <div id="relief-checkpoint-geo-list" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;"></div>
+            </section>
+            <section class="directory-card" style="padding:20px;">
+              <div style="margin-bottom:10px;">
+                <h2 class="directory-title-18" style="margin:0;">Issued Relief QR Tokens &amp; Audit</h2>
+                <p class="directory-desc" style="margin-top:2px;">Tracks single-use redemptions, GPS distance, supervisor PIN overrides, and auto-expiries.</p>
+              </div>
+              <div id="relief-qr-history-list" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;"></div>
+            </section>
+          </div>
+        </div>
+
+        <!-- TAB 4 (ITEM 2): OPERATIONAL DISPATCH FLOW HIERARCHY -->
+        <div id="settings-pane-dispatch" style="display: none; margin-top: 14px;">
+          <section class="directory-card" style="padding:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+              <div>
+                <h2 class="directory-title-18" style="margin:0;">Operational Command &amp; Department Dispatch Flow</h2>
+                <p class="directory-desc" style="margin-top:2px;">Project Manager / Event Coordinator &rarr; Tech Lead &rarr; Technicians (6 Departments) &rarr; Support Staff.</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <select id="dispatch-event-select" class="form-input" style="min-width:220px;"></select>
+                <button type="button" class="btn btn-primary-32" id="dispatch-open-roster-btn">Assign Event Roster →</button>
+              </div>
+            </div>
+            <div id="dispatch-hierarchy-canvas" class="dispatch-tree-wrap"></div>
+          </section>
+        </div>
+
+        <!-- TAB 5 (ITEM 3): SHARED LINKS — BEST FOR & PERMISSIONS / LIMITATIONS -->
+        <div id="settings-pane-links" style="display: none; margin-top: 14px;">
+          <section class="directory-card" style="padding:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+              <div>
+                <h2 class="directory-title-18" style="margin:0;">Shared Links: Best For &amp; Permissions / Limitations</h2>
+                <p class="directory-desc" style="margin-top:2px;">Operational suitability, phone masking privacy, scan permissions, and time-boxed expiry across every standalone link.</p>
+              </div>
+              <button type="button" class="btn btn-secondary-32" id="settings-links-open-portals-btn">Open Portals Manager →</button>
+            </div>
+            <div id="settings-shared-links-grid" class="shared-links-policy-grid"></div>
+          </section>
+        </div>
+
+        <!-- TAB 6 (ITEM 4): BRANDING — COLOURS, FONTS CRUD, LOGO UPLOAD/CHANGE, ALIGNMENT, DARK & LIGHT MODE -->
+        <div id="settings-pane-branding" style="display: none; margin-top: 14px;">
+          <section class="directory-card" style="padding:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+              <div>
+                <h2 class="directory-title-18" style="margin:0;">Branding Studio — Colours, Fonts, Alignment &amp; Modes</h2>
+                <p class="directory-desc" style="margin-top:2px;">Customize brand name, logo, colours, custom fonts, text alignment, and default light/dark mode across all portals.</p>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button type="button" class="btn btn-secondary-32" id="btn-branding-reset-defaults">Reset Preview</button>
+                <button type="button" class="btn btn-primary-32" id="btn-save-branding" data-online-only="1">Save Branding Globally</button>
+              </div>
+            </div>
+            <form id="branding-config-form" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
+              <div class="form-field">
+                <label class="form-label" for="brand-display-name">Organization / Brand Name</label>
+                <input type="text" id="brand-display-name" class="form-input" value="aBility" maxlength="48" placeholder="e.g. aBility or Rwanda Events" />
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="brand-color-primary">Primary Brand Colour</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="color" id="brand-color-primary" value="#4f46e5" style="width:46px;height:38px;border:none;border-radius:8px;cursor:pointer;" />
+                  <input type="text" id="brand-color-primary-hex" class="form-input" value="#4f46e5" maxlength="7" />
+                </div>
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="brand-color-accent">Accent / Success Colour</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="color" id="brand-color-accent" value="#10b981" style="width:46px;height:38px;border:none;border-radius:8px;cursor:pointer;" />
+                  <input type="text" id="brand-color-accent-hex" class="form-input" value="#10b981" maxlength="7" />
+                </div>
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="brand-color-neutral">Neutral Slate Tone</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="color" id="brand-color-neutral" value="#64748b" style="width:46px;height:38px;border:none;border-radius:8px;cursor:pointer;" />
+                  <input type="text" id="brand-color-neutral-hex" class="form-input" value="#64748b" maxlength="7" />
+                </div>
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="brand-font-family">Active Typography Family</label>
+                <select id="brand-font-family" class="form-input">
+                  <option value="Marvel">Marvel / Clean UI Sans</option>
+                  <option value="Inter">Inter / System UI</option>
+                  <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
+                  <option value="JetBrains Mono">JetBrains Mono (Technical)</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="brand-font-scale">Font Scale: <strong id="brand-font-scale-val">100%</strong></label>
+                <input type="range" id="brand-font-scale" min="0.90" max="1.20" step="0.05" value="1.00" style="width:100%;" />
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="brand-text-align">Content Text Alignment</label>
+                <select id="brand-text-align" class="form-input">
+                  <option value="left">Left Aligned (Default)</option>
+                  <option value="center">Center Aligned</option>
+                  <option value="justify">Justified Alignment</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="brand-default-theme">Default Dark &amp; Light Mode</label>
+                <select id="brand-default-theme" class="form-input">
+                  <option value="system">Follow Device (System)</option>
+                  <option value="light">Light Mode Default</option>
+                  <option value="dark">Dark Mode Default</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label class="form-label">Quick Switch Preview</label>
+                <div style="display:flex;gap:8px;">
+                  <button type="button" class="btn btn-secondary-32 js-brand-quick-theme" data-theme-choice="light">☀ Light</button>
+                  <button type="button" class="btn btn-secondary-32 js-brand-quick-theme" data-theme-choice="dark">🌙 Dark</button>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <div class="dedicated-page-grid-2" style="margin-top:16px;">
+            <!-- Card A: Brand Logo Upload / Change / Reset -->
+            <section class="directory-card" style="padding:20px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <div>
+                  <h2 class="directory-title-18" style="margin:0;">Logo Upload &amp; Change</h2>
+                  <p class="directory-desc" style="margin-top:2px;">Upload PNG, JPG, WEBP, or clean SVG logo shown on Sidebar, Login, Gate Terminal, On-Site &amp; Relief portals.</p>
+                </div>
+                <button type="button" class="btn btn-secondary-32" id="btn-reset-branding-logo" data-online-only="1">Reset Default</button>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:14px;padding:12px;border:1px solid var(--border-color);border-radius:12px;background:var(--surface-subtle);margin-bottom:12px;">
+                <img id="branding-logo-preview" src="assets/brand-mark.svg" alt="Active Logo Preview" style="width:52px;height:52px;border-radius:10px;object-fit:contain;background:#fff;padding:4px;border:1px solid var(--border-color);" />
+                <div style="min-width:0;flex:1;">
+                  <div style="font-size:13px;font-weight:700;">Active Portal Logo</div>
+                  <code id="branding-logo-path-label" style="font-size:11.5px;color:var(--text-secondary);word-break:break-all;">assets/brand-mark.svg (Default)</code>
+                </div>
+              </div>
+
+              <form id="branding-logo-upload-form" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+                <input type="file" id="branding-logo-file" class="form-input" accept=".png,.jpg,.jpeg,.webp,.gif,.svg,image/*" style="flex:1;min-width:190px;padding:6px;" />
+                <button type="submit" class="btn btn-primary-32" id="btn-upload-branding-logo" data-online-only="1">Upload Logo</button>
+              </form>
+
+              <div style="font-size:11.5px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">Or Pick Built-In Asset Preset:</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;" id="branding-logo-presets">
+                <button type="button" class="btn btn-secondary-32-sm js-logo-preset-btn" data-preset="assets/brand-mark.svg" data-online-only="1">aBility SVG</button>
+                <button type="button" class="btn btn-secondary-32-sm js-logo-preset-btn" data-preset="reLogo.png" data-online-only="1">RE Standard Logo</button>
+                <button type="button" class="btn btn-secondary-32-sm js-logo-preset-btn" data-preset="reTransparentLogo.png" data-online-only="1">RE Transparent Logo</button>
+              </div>
+            </section>
+
+            <!-- Card B: Fonts CRUD (Create / Read / Update / Delete) -->
+            <section class="directory-card" style="padding:20px;">
+              <div style="margin-bottom:12px;">
+                <h2 class="directory-title-18" style="margin:0;">Fonts CRUD Manager</h2>
+                <p class="directory-desc" style="margin-top:2px;">Add, upload self-hosted font files (<code>.woff2</code> / <code>.woff</code> / <code>.ttf</code> / <code>.otf</code>), edit CSS stacks, or remove custom fonts.</p>
+              </div>
+
+              <form id="branding-font-crud-form" style="border:1px solid var(--border-color);border-radius:12px;padding:12px;background:var(--surface-subtle);margin-bottom:12px;">
+                <input type="hidden" id="brand-font-crud-id" value="0" />
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                  <div class="form-field" style="margin:0;">
+                    <label class="form-label" for="brand-font-crud-name">Font Name *</label>
+                    <input type="text" id="brand-font-crud-name" class="form-input" placeholder="e.g. Poppins" required maxlength="80" />
+                  </div>
+                  <div class="form-field" style="margin:0;">
+                    <label class="form-label" for="brand-font-crud-stack">CSS Font Stack (Optional)</label>
+                    <input type="text" id="brand-font-crud-stack" class="form-input" placeholder='"Poppins", sans-serif' maxlength="255" />
+                  </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                  <div class="form-field" style="margin:0;">
+                    <label class="form-label" for="brand-font-crud-file">Upload Font File (Offline-Safe)</label>
+                    <input type="file" id="brand-font-crud-file" class="form-input" accept=".woff2,.woff,.ttf,.otf" style="padding:5px;" />
+                  </div>
+                  <div class="form-field" style="margin:0;">
+                    <label class="form-label" for="brand-font-crud-url">Or HTTPS Stylesheet URL</label>
+                    <input type="url" id="brand-font-crud-url" class="form-input" placeholder="https://fonts.googleapis.com/..." />
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                  <div style="display:flex;gap:14px;font-size:12px;font-weight:600;">
+                    <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+                      <input type="checkbox" id="brand-font-crud-active" checked />
+                      <span>Active</span>
+                    </label>
+                    <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+                      <input type="checkbox" id="brand-font-crud-activate" checked />
+                      <span>Set as Active Font</span>
+                    </label>
+                  </div>
+                  <div style="display:flex;gap:6px;">
+                    <button type="button" class="btn btn-secondary-32-sm" id="btn-cancel-branding-font" style="display:none;">Cancel</button>
+                    <button type="submit" class="btn btn-primary-32" id="btn-save-branding-font" data-online-only="1">Add / Save Font</button>
+                  </div>
+                </div>
+              </form>
+
+              <div id="branding-fonts-crud-list" style="display:flex;flex-direction:column;gap:8px;max-height:240px;overflow-y:auto;"></div>
+            </section>
+          </div>
+        </div>
+
+        <!-- TAB 7 (ITEM 5): ACCOUNTS & ACCESSIBILITY | OFFLINE VS ONLY ONLINE -->
+        <div id="settings-pane-accounts" style="display: none; margin-top: 14px;">
+          <div class="dedicated-page-grid-2">
+            <!-- Left: Self-Service Password Update & Accessibility -->
+            <section class="directory-card" style="padding:20px;">
+              <h2 class="directory-title-18" style="margin:0 0 6px;">Account Security &amp; Accessibility</h2>
+              <p class="directory-desc" style="margin:0 0 14px;">Update your personal password and toggle visual/motion accessibility preferences.</p>
+
+              <form id="own-password-form" style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border-color);">
+                <div class="form-field" style="margin-bottom:8px;">
+                  <label class="form-label" for="own-current-pwd">Current Password *</label>
+                  <input type="password" id="own-current-pwd" class="form-input" required autocomplete="current-password" />
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+                  <div class="form-field">
+                    <label class="form-label" for="own-new-pwd">New Password (8+ chars) *</label>
+                    <input type="password" id="own-new-pwd" class="form-input" required minlength="8" autocomplete="new-password" />
+                  </div>
+                  <div class="form-field">
+                    <label class="form-label" for="own-confirm-pwd">Confirm Password *</label>
+                    <input type="password" id="own-confirm-pwd" class="form-input" required minlength="8" autocomplete="new-password" />
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary-32" id="btn-change-own-pwd" data-online-only="1">Update My Password</button>
+              </form>
+
+              <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+                <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+                  <span><strong>High Contrast Mode</strong> (sharper borders &amp; badge legibility)</span>
+                  <input type="checkbox" id="a11y-high-contrast" />
+                </label>
+                <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+                  <span><strong>Large Operational Text</strong> (+12% UI readability scale)</span>
+                  <input type="checkbox" id="a11y-large-text" />
+                </label>
+                <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+                  <span><strong>Reduced Motion</strong> (disable transitions &amp; pulse animations)</span>
+                  <input type="checkbox" id="a11y-reduced-motion" />
+                </label>
+              </div>
+            </section>
+
+            <!-- Right: Offline vs "Only" Online Matrix & Cache Controls -->
+            <section class="directory-card" style="padding:20px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                <div>
+                  <h2 class="directory-title-18" style="margin:0;">Offline vs &ldquo;Only&rdquo; Online Capabilities</h2>
+                  <p class="directory-desc" style="margin-top:2px;">IndexedDB (<code>ability_offline_v1</code>) caches safe verification rosters while locking mutating actions offline.</p>
+                </div>
+                <span class="status-badge status-badge-green-sm" id="offline-cache-status-pill">Cache Ready</span>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+                <div style="border:1px solid rgba(16,185,129,0.35);border-radius:10px;padding:12px;">
+                  <div style="font-size:12px;font-weight:800;color:#10b981;margin-bottom:6px;">Available Offline</div>
+                  <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.55;">
+                    <li>Badge QR/RFID clearance lookup</li>
+                    <li>Gate terminal scan queueing</li>
+                    <li>Cached crew &amp; checkpoint directory</li>
+                    <li>Branding, theme &amp; accessibility UI</li>
+                  </ul>
+                </div>
+                <div style="border:1px solid rgba(245,158,11,0.4);border-radius:10px;padding:12px;">
+                  <div style="font-size:12px;font-weight:800;color:#f59e0b;margin-bottom:6px;">&ldquo;Only&rdquo; Online (Strict)</div>
+                  <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.55;">
+                    <li>Login, registration &amp; password reset</li>
+                    <li>Shift relief approvals &amp; Geo-QR creation</li>
+                    <li>TOTP 2FA setup &amp; QR redemption</li>
+                    <li>User, role, portal &amp; branding saves</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn btn-secondary-32" id="btn-refresh-offline-cache">Sync Offline Cache Now</button>
+                <button type="button" class="btn btn-secondary-32" id="btn-wipe-offline-cache" style="color:#dc2626;">Wipe Offline Cache</button>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- TAB 8 (ITEM 6): PWA — ANDROID & IOS APP INSTALL -->
+        <div id="settings-pane-pwa" style="display: none; margin-top: 14px;">
+          <section class="directory-card" style="padding:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+              <div>
+                <h2 class="directory-title-18" style="margin:0;">Progressive Web App (Android &amp; iOS)</h2>
+                <p class="directory-desc" style="margin-top:2px;">Install aBility Manager natively on Android Chrome/Edge and iOS Safari with offline shell caching.</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="status-badge status-badge-blue-sm" id="pwa-sw-status">Service Worker: Checking...</span>
+                <button type="button" class="btn btn-primary-32" id="pwa-install-btn" style="display:none;">Install App</button>
+              </div>
+            </div>
+
+            <div class="dedicated-page-grid-2">
+              <div style="border:1px solid var(--border-color);border-radius:12px;padding:16px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                  <img src="assets/icons/icon-192.png" alt="aBility Icon" style="width:44px;height:44px;border-radius:10px;" />
+                  <div>
+                    <h3 style="margin:0;font-size:15px;">Android (Chrome / Edge / Samsung)</h3>
+                    <span class="muted-text" style="font-size:12px;">WebAPK Manifest + <code>beforeinstallprompt</code></span>
+                  </div>
+                </div>
+                <ol style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.65;">
+                  <li>Open aBility Manager over HTTPS or <code>localhost</code> in Chrome on Android.</li>
+                  <li>Click <strong>Install App</strong> above when prompted, or tap the browser <strong>&#8942;</strong> menu &rarr; <strong>Add to Home screen / Install app</strong>.</li>
+                  <li>Launches fullscreen (<code>display: standalone</code>) with offline badge roster cache and queued gate sync.</li>
+                </ol>
+              </div>
+
+              <div style="border:1px solid var(--border-color);border-radius:12px;padding:16px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                  <img src="assets/icons/apple-touch-icon-180.png" alt="aBility iOS Icon" style="width:44px;height:44px;border-radius:10px;" />
+                  <div>
+                    <h3 style="margin:0;font-size:15px;">iOS &amp; iPadOS (Safari 16.4+)</h3>
+                    <span class="muted-text" style="font-size:12px;">Apple Touch Icon 180px + Standalone Viewport</span>
+                  </div>
+                </div>
+                <ol style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.65;">
+                  <li>Open <code>index.php</code> or any standalone gate (<code>kcc-gate.php</code>, <code>relief.php</code>) in Safari.</li>
+                  <li>Tap Safari&rsquo;s <strong>Share</strong> icon (square with upward arrow) at the bottom bar.</li>
+                  <li>Scroll and tap <strong>Add to Home Screen</strong>, then confirm the <strong>aBility Manager</strong> icon.</li>
+                </ol>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
     </div>
   </div>
 
@@ -3625,7 +4359,7 @@
           <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">Event Call-Time &amp; Leadership</span>
           <span style="font-size: 11px; color: var(--text-secondary);" id="roster-event-date-label"></span>
         </div>
-        <div style="display: grid; grid-template-columns: 140px 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+        <div style="display: grid; grid-template-columns: 140px 1fr; gap: 10px; margin-bottom: 10px;">
           <div class="form-field" style="margin: 0;">
             <label class="form-label" for="roster-event-calltime">Call-Time</label>
             <input type="time" id="roster-event-calltime" class="form-input" value="08:00" style="height: 36px;" />
@@ -3634,11 +4368,18 @@
             <label class="form-label" for="roster-event-techlead">Tech Lead</label>
             <select id="roster-event-techlead" class="form-input" style="height: 36px;"></select>
           </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
           <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="roster-event-pm">Project Manager / Coordinator</label>
+            <label class="form-label" for="roster-event-pm">Project Manager</label>
             <select id="roster-event-pm" class="form-input" style="height: 36px;"></select>
           </div>
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="roster-event-coordinator">Event Coordinator</label>
+            <select id="roster-event-coordinator" class="form-input" style="height: 36px;"></select>
+          </div>
         </div>
+        <div id="roster-dept-filter-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
         <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
           <button type="button" class="btn btn-secondary-38" id="roster-save-event-btn">Save Event &amp; Call-Time</button>
           <button type="button" class="btn btn-primary-38" id="roster-assign-crew-btn">Sync Checked Crew to Event</button>
@@ -3915,9 +4656,27 @@
           </div>
         </div>
 
-        <div class="form-field" style="margin-bottom: 12px;">
-          <label class="form-label" for="wh-modal-pin">Dedicated Terminal Lock PIN</label>
-          <input type="text" id="wh-modal-pin" class="form-input" placeholder="e.g. 247365 (4–12 characters)" minlength="4" maxlength="12" autocomplete="off" />
+        <div style="display: grid; grid-template-columns: 1fr 120px; gap: 10px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="wh-modal-pin">Dedicated Terminal Lock PIN</label>
+            <input type="text" id="wh-modal-pin" class="form-input" placeholder="e.g. 247365 (4–12 chars)" minlength="4" maxlength="12" autocomplete="off" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="wh-modal-radius">Geo-Fence (m)</label>
+            <input type="number" id="wh-modal-radius" class="form-input" min="50" max="5000" value="200" />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px;">
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="wh-modal-lat">GPS Latitude</label>
+            <input type="number" id="wh-modal-lat" class="form-input" step="0.000001" placeholder="-1.9441" />
+          </div>
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="wh-modal-lng">GPS Longitude</label>
+            <input type="number" id="wh-modal-lng" class="form-input" step="0.000001" placeholder="30.0619" />
+          </div>
+          <button type="button" class="btn btn-secondary-32" id="wh-capture-gps-btn" title="Use Browser GPS">GPS</button>
         </div>
 
         <!-- Image Upload Dropzone -->
@@ -4406,6 +5165,7 @@
                 <option value="station-lock">Station Lock (PIN) Page (station-lock)</option>
                 <option value="reset-scans">Reset Today's Scans Page (reset-scans)</option>
                 <option value="standalone-portals">Gates &amp; On-Site Portals Page (standalone-portals)</option>
+                <option value="settings">Settings &amp; System Flow Explorer (settings)</option>
               </optgroup>
               <optgroup label="Quick Modal Triggers (Optional)">
                 <option value="action:shift-relief">Shift Relief &amp; Swaps Modal</option>
@@ -4895,15 +5655,35 @@
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-field">
             <label class="form-label" for="venue-crud-techlead">Technical Lead</label>
             <select id="venue-crud-techlead" class="form-input"></select>
           </div>
           <div class="form-field">
-            <label class="form-label" for="venue-crud-pm">Project Manager / Coordinator</label>
+            <label class="form-label" for="venue-crud-pm">Project Manager</label>
             <select id="venue-crud-pm" class="form-input"></select>
           </div>
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-coordinator">Event Coordinator</label>
+            <select id="venue-crud-coordinator" class="form-input"></select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 110px 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px;">
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="venue-crud-radius">Fence (m)</label>
+            <input type="number" id="venue-crud-radius" class="form-input" min="50" max="5000" value="200" />
+          </div>
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="venue-crud-lat">GPS Lat</label>
+            <input type="number" id="venue-crud-lat" class="form-input" step="0.000001" placeholder="-1.9536" />
+          </div>
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="venue-crud-lng">GPS Lng</label>
+            <input type="number" id="venue-crud-lng" class="form-input" step="0.000001" placeholder="30.0928" />
+          </div>
+          <button type="button" class="btn btn-secondary-32" id="venue-capture-gps-btn">GPS</button>
         </div>
 
         <div class="form-field" style="margin-bottom: 16px;">
@@ -5007,6 +5787,33 @@
               <button type="button" class="btn btn-secondary-38" id="portal-crud-gen-onsite-btn" style="white-space: nowrap;">Generate</button>
             </div>
           </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field">
+            <label class="form-label" for="portal-crud-best-for">Best For (Intended Audience)</label>
+            <input type="text" id="portal-crud-best-for" class="form-input" placeholder="e.g. Gate security &amp; loading bay custody" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="portal-crud-expires-at">Link Expires At (Optional)</label>
+            <input type="datetime-local" id="portal-crud-expires-at" class="form-input" />
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="portal-crud-permissions">Permissions &amp; Limitations Summary</label>
+          <input type="text" id="portal-crud-permissions" class="form-input" placeholder="e.g. Read-only directory; no badge edits or admin settings" />
+        </div>
+
+        <div style="display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12.5px; font-weight: 600;">
+          <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="portal-crud-allow-scan" checked />
+            <span>Allow Terminal Badge Scans</span>
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="portal-crud-mask-phones" />
+            <span>Mask Crew Phone Numbers (Privacy)</span>
+          </label>
         </div>
 
         <!-- Custom Background Image Uploader -->
@@ -5177,6 +5984,7 @@
   <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
-  <script src="app.js?v=20261117_v10"></script>
+  <script src="assets/vendor/qrcode.js"></script>
+  <script src="app.js?v=20261119_v13"></script>
 </body>
 </html>

@@ -33,10 +33,17 @@ $portalCfg = null;
 $isAuthorized = false;
 $activeDb = '';
 $dbError = '';
+$brandingHtml = '';
+$defaultBrandingTheme = null;
 
 try {
     require_once __DIR__ . '/db.php';
     $pdo = getDbConnection($activeDb);
+    $brandingHtml = renderBrandingHeadHtml($pdo);
+    $bCfg = getBrandingConfig($pdo);
+    if (!empty($bCfg['default_theme']) && in_array($bCfg['default_theme'], ['dark', 'light'], true)) {
+        $defaultBrandingTheme = $bCfg['default_theme'];
+    }
     $whRow = resolveStandaloneFacilityGate($pdo, $siteKey, $whIdParam);
     if ($whRow) {
         $isAuthorized = isStandaloneGateAuthorized($pdo, $whRow);
@@ -74,6 +81,10 @@ $gateHashtagLabel = '# ' . $gateDisplayLabel;
 $portalBgUrl = $portalCfg ? ($portalCfg['background_image_url'] ?? null) : null;
 $portalOverlayOpacity = $portalCfg ? max(0.15, min(0.95, (float) ($portalCfg['overlay_opacity'] ?? 0.78))) : 0.78;
 $portalPaused = $portalCfg ? ((int) ($portalCfg['is_active'] ?? 1) === 0) : false;
+$portalExpired = ($portalCfg && !empty($portalCfg['expires_at']) && strtotime((string) $portalCfg['expires_at']) < time());
+$portalBestFor = $portalCfg ? trim((string) ($portalCfg['best_for'] ?? '')) : '';
+$portalPermsSummary = $portalCfg ? trim((string) ($portalCfg['permissions_summary'] ?? '')) : '';
+$portalAllowScan = $portalCfg ? ((int) ($portalCfg['allow_scan'] ?? 1) === 1) : true;
 $gateIdResolved = $whRow ? (int) $whRow['id'] : $whIdParam;
 $gateCodeResolved = $whRow ? (string) ($whRow['code'] ?? 'STK') : '';
 $gateLocationResolved = $whRow ? (string) ($whRow['location'] ?? 'Kigali') : '';
@@ -82,7 +93,7 @@ $gateHoursResolved = $whRow
     : '08:00 – 18:00';
 $gatePinConfigured = $whRow ? (resolveWarehouseTerminalPin($whRow) !== '') : false;
 
-$initialTheme = 'light';
+$initialTheme = $defaultBrandingTheme ?: 'light';
 if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
     $initialTheme = $_COOKIE['ability_theme'];
 }
@@ -91,8 +102,15 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
 <html lang="en" data-theme="<?php echo htmlspecialchars($initialTheme, ENT_QUOTES, 'UTF-8'); ?>">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="csrf-token" content="<?php echo htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="aBility Gate" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
+  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+  <?php echo $brandingHtml . "\n"; ?>
   <title>Rwanda Events Gate Terminal · <?php echo htmlspecialchars($gateDisplayLabel, ENT_QUOTES, 'UTF-8'); ?></title>
   <script>
     (function () {
@@ -842,20 +860,32 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
 
   <!-- Centered Wireframe Header -->
   <header class="hero-header">
-    <h1 class="hero-title">Rwanda Events Gate Terminal</h1>
+    <div style="display:inline-flex;align-items:center;justify-content:center;gap:10px;margin-bottom:4px;">
+      <img class="js-brand-logo-img" src="assets/brand-mark.svg" alt="aBility" style="width:30px;height:30px;border-radius:8px;object-fit:contain;" />
+      <h1 class="hero-title" style="margin:0;">Rwanda Events Gate Terminal</h1>
+    </div>
     <div class="hero-subtitle" id="gate-hashtag-subtitle"><?php echo htmlspecialchars($gateHashtagLabel, ENT_QUOTES, 'UTF-8'); ?></div>
     <div class="hero-meta">
       <span class="meta-tag"><?php echo htmlspecialchars($gateCodeResolved !== '' ? $gateCodeResolved : 'GATE', ENT_QUOTES, 'UTF-8'); ?> · <?php echo htmlspecialchars($gateLocationResolved !== '' ? $gateLocationResolved : 'Kigali', ENT_QUOTES, 'UTF-8'); ?></span>
       <span class="meta-tag">Hours: <?php echo htmlspecialchars($gateHoursResolved, ENT_QUOTES, 'UTF-8'); ?></span>
+      <?php if ($portalBestFor !== ''): ?>
+      <span class="meta-tag" title="Best For"><?php echo htmlspecialchars('Best For: ' . $portalBestFor, ENT_QUOTES, 'UTF-8'); ?></span>
+      <?php endif; ?>
+      <?php if ($portalPermsSummary !== ''): ?>
+      <span class="meta-tag" title="Permissions &amp; Limitations"><?php echo htmlspecialchars($portalPermsSummary, ENT_QUOTES, 'UTF-8'); ?></span>
+      <?php endif; ?>
+      <?php if (!$portalAllowScan): ?>
+      <span class="meta-tag" style="border-color:rgba(245,158,11,0.5);color:#f59e0b;">Read-Only Mode</span>
+      <?php endif; ?>
     </div>
   </header>
 
-  <?php if (!$whRow || $dbError !== '' || !empty($portalPaused)): ?>
+  <?php if (!$whRow || $dbError !== '' || !empty($portalPaused) || !empty($portalExpired)): ?>
     <div class="lock-wrap">
       <div class="lock-card">
-        <div class="lock-badge">Gate Unavailable</div>
-        <h2 class="lock-title"><?php echo !empty($portalPaused) ? 'Gate Terminal Paused' : 'Facility Gate Not Found'; ?></h2>
-        <p class="lock-desc"><?php echo htmlspecialchars(!empty($portalPaused) ? 'This standalone gate terminal has been temporarily paused by an Administrator.' : ($dbError !== '' ? $dbError : 'This facility gate location is missing or marked inactive.'), ENT_QUOTES, 'UTF-8'); ?></p>
+        <div class="lock-badge"><?php echo !empty($portalExpired) ? 'Link Expired' : 'Gate Unavailable'; ?></div>
+        <h2 class="lock-title"><?php echo !empty($portalExpired) ? 'Gate Link Expired' : (!empty($portalPaused) ? 'Gate Terminal Paused' : 'Facility Gate Not Found'); ?></h2>
+        <p class="lock-desc"><?php echo htmlspecialchars(!empty($portalExpired) ? ('This standalone gate link expired on ' . ($portalCfg['expires_at'] ?? '') . '. Contact an Administrator to extend it.') : (!empty($portalPaused) ? 'This standalone gate terminal has been temporarily paused by an Administrator.' : ($dbError !== '' ? $dbError : 'This facility gate location is missing or marked inactive.')), ENT_QUOTES, 'UTF-8'); ?></p>
         <div class="lock-footer">
           <span>Standalone Gate Terminal</span>
           <a href="index.html">Main Dashboard →</a>
@@ -987,6 +1017,106 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       let currentPage = 1;
       let scanBusy = false;
       let pollTimer = null;
+
+      // Offline-First IndexedDB Cache & Queued Scan Sync (`ability_offline_v1`)
+      const AbilityGateOffline = (() => {
+        const DB_NAME = 'ability_offline_v1';
+        const DB_VER = 1;
+        function openDb() {
+          return new Promise((resolve, reject) => {
+            if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+            const req = window.indexedDB.open(DB_NAME, DB_VER);
+            req.onupgradeneeded = (ev) => {
+              const db = ev.target.result;
+              if (!db.objectStoreNames.contains('rosters')) {
+                db.createObjectStore('rosters', { keyPath: 'key' });
+              }
+              if (!db.objectStoreNames.contains('scan_queue')) {
+                db.createObjectStore('scan_queue', { keyPath: 'id', autoIncrement: true });
+              }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+        }
+        async function saveRoster(crewList) {
+          try {
+            const db = await openDb();
+            const sanitized = (crewList || []).map((c) => ({
+              id: c.id,
+              full_name: c.full_name,
+              badge_code: c.badge_code,
+              rfid_uid: c.rfid_uid,
+              role_display: c.role_display,
+              department: c.department,
+              clearance_code: c.clearance_code,
+              clearance_color: c.clearance_color,
+              badge_status: c.badge_status,
+              stock_authorized: !!c.stock_authorized,
+              checkpoint_authorized: !!c.checkpoint_authorized,
+              checkpoint_auth_reason: c.checkpoint_auth_reason || '',
+              daily_state: c.daily_state || 'ready',
+              check_in_time: c.check_in_time || null,
+              check_out_time: c.check_out_time || null,
+              last_checkpoint_type: c.last_checkpoint_type || null,
+              last_checkpoint_id: c.last_checkpoint_id || null,
+              initials: c.initials || 'U'
+            }));
+            const tx = db.transaction('rosters', 'readwrite');
+            tx.objectStore('rosters').put({ key: 'gate_' + WH_ID, crew: sanitized, updated_at: new Date().toISOString() });
+          } catch (_) {}
+        }
+        async function getRoster() {
+          try {
+            const db = await openDb();
+            return await new Promise((resolve) => {
+              const req = db.transaction('rosters', 'readonly').objectStore('rosters').get('gate_' + WH_ID);
+              req.onsuccess = () => resolve(req.result || null);
+              req.onerror = () => resolve(null);
+            });
+          } catch (_) { return null; }
+        }
+        async function clearRoster() {
+          try {
+            const db = await openDb();
+            const tx = db.transaction('rosters', 'readwrite');
+            tx.objectStore('rosters').delete('gate_' + WH_ID);
+          } catch (_) {}
+        }
+        async function queueScan(payload) {
+          try {
+            const db = await openDb();
+            return await new Promise((resolve) => {
+              const tx = db.transaction('scan_queue', 'readwrite');
+              const req = tx.objectStore('scan_queue').add({
+                site_key: SITE_KEY,
+                wh_id: WH_ID,
+                payload,
+                offline_scanned_at: new Date().toISOString()
+              });
+              req.onsuccess = () => resolve(true);
+              req.onerror = () => resolve(false);
+            });
+          } catch (_) { return false; }
+        }
+        async function listQueued() {
+          try {
+            const db = await openDb();
+            return await new Promise((resolve) => {
+              const req = db.transaction('scan_queue', 'readonly').objectStore('scan_queue').getAll();
+              req.onsuccess = () => resolve(req.result || []);
+              req.onerror = () => resolve([]);
+            });
+          } catch (_) { return []; }
+        }
+        async function removeQueued(id) {
+          try {
+            const db = await openDb();
+            db.transaction('scan_queue', 'readwrite').objectStore('scan_queue').delete(id);
+          } catch (_) {}
+        }
+        return { saveRoster, getRoster, clearRoster, queueScan, listQueued, removeQueued };
+      })();
 
       const lockView = document.getElementById('gate-lock-view');
       const termView = document.getElementById('gate-terminal-view');
@@ -1141,6 +1271,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
 
       if (lockBtn) {
         lockBtn.addEventListener('click', async () => {
+          await AbilityGateOffline.clearRoster();
           try {
             await apiPost('standalone_gate_lock', {});
           } catch (e) {}
@@ -1151,6 +1282,29 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
             setTimeout(() => pinInput.focus(), 60);
           }
         });
+      }
+
+      async function syncQueuedGateScans() {
+        if (!isAuthorized || !navigator.onLine) return;
+        const queued = await AbilityGateOffline.listQueued();
+        if (!queued.length) return;
+        let synced = 0;
+        for (const item of queued) {
+          if (Number(item.wh_id) !== Number(WH_ID)) continue;
+          try {
+            const body = Object.assign({}, item.payload || {}, { offline_scanned_at: item.offline_scanned_at });
+            const { status } = await apiPost('standalone_gate_scan', body);
+            if (status >= 200 && status < 500 && status !== 401) {
+              await AbilityGateOffline.removeQueued(item.id);
+              synced++;
+            }
+          } catch (_) {
+            break;
+          }
+        }
+        if (synced > 0) {
+          if (syncLabel) syncLabel.textContent = `Synced ${synced} offline scan(s)`;
+        }
       }
 
       function applyFeedData(data) {
@@ -1183,15 +1337,18 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
         }
         renderList();
         renderRecentLogs();
+        AbilityGateOffline.saveRoster(allCrew);
       }
 
       async function loadFeed() {
         if (!isAuthorized) return;
+        await syncQueuedGateScans();
         try {
           const url = 'api.php?action=standalone_gate_feed&site_key=' + encodeURIComponent(SITE_KEY) + '&wh_id=' + encodeURIComponent(String(WH_ID));
           const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
           const data = await res.json().catch(() => null);
           if (res.status === 401 || (data && data.authorized === false)) {
+            await AbilityGateOffline.clearRoster();
             setTerminalUnlocked(false);
             return;
           }
@@ -1199,7 +1356,14 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
             applyFeedData(data);
           }
         } catch (err) {
-          if (syncLabel) syncLabel.textContent = 'Offline';
+          const cached = await AbilityGateOffline.getRoster();
+          if (cached && Array.isArray(cached.crew) && cached.crew.length) {
+            allCrew = cached.crew;
+            renderList();
+            if (syncLabel) syncLabel.textContent = 'Offline · Cached Roster';
+          } else if (syncLabel) {
+            syncLabel.textContent = 'Offline';
+          }
         }
       }
 
@@ -1404,8 +1568,15 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
             renderList();
           }
         } catch (err) {
-          playTone('err');
-          showFeedback('error', 'ERROR', 'Network error recording scan', 'Check server connection and retry.');
+          const saved = await AbilityGateOffline.queueScan(payload);
+          if (saved) {
+            playTone('ok');
+            showFeedback('granted', 'QUEUED OFFLINE', 'Scan stored safely in IndexedDB', 'Will automatically replay to server once connection restores.');
+            if (syncLabel) syncLabel.textContent = 'Offline · Queued';
+          } else {
+            playTone('err');
+            showFeedback('error', 'ERROR', 'Network error recording scan', 'Check server connection and retry.');
+          }
         } finally {
           scanBusy = false;
         }
@@ -1501,6 +1672,14 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
           loadFeed();
         }
       }, 20000);
+
+      window.addEventListener('online', () => {
+        syncQueuedGateScans().then(() => loadFeed());
+      });
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
     })();
   </script>
   <?php endif; ?>

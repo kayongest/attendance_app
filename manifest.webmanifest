@@ -1,0 +1,32 @@
+{
+  "name": "aBility Manager — Workforce Attendance & Gate Access",
+  "short_name": "aBility",
+  "description": "Multi-site attendance terminal, 4-tier gate clearance, geo-fenced relief handovers, and live crew roll-call.",
+  "start_url": "index.php",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#134c80",
+  "background_color": "#090d16",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

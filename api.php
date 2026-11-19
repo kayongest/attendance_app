@@ -394,15 +394,20 @@ function ensureRolesTable(PDO $pdo): void
         if ($cnt === 0) {
             $seedRoles = [
                 ['admin', 'Administrator', 'Administrator', 'L4_ALL_ACCESS', 'Executive', 'Full operational control, security matrix management, user provision and badge issuance.', 1],
+                ['project_manager', 'Project Manager', 'Project Manager', 'L4_ALL_ACCESS', 'Executive', 'End-to-end event orchestration, client liaison, call times, and department dispatch approvals.', 1],
+                ['event_coordinator', 'Event Coordinator', 'Event Coordinator', 'L4_ALL_ACCESS', 'Production', 'Coordinates event schedules, Technical Lead assignments, and cross-department crew readiness.', 1],
                 ['stock_manager', 'Stock Logistics Manager', 'Stock Logistics Manager', 'L4_ALL_ACCESS', 'Warehouse', 'Oversees warehouse hubs, inventory movement, and logistics personnel onboarding.', 1],
                 ['stock_controller', 'Stock Controller', 'Stock Controller', 'L3_STOCK_WAREHOUSE', 'Warehouse', 'Gate terminal scanning (#pane-kiosk), facility gate custody, and shift relief coordination.', 1],
-                ['tech_lead', 'Technical Lead', 'Technical Lead', 'L4_ALL_ACCESS', 'Production', 'Supervises audio, video, lighting and rigging operations across all checkpoints.', 1],
-                ['technician', 'Stage & Audio Technician', 'Stage & Audio Technician', 'L2_TECH_STAGE', 'Audio', 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 1],
-                ['sound_engineer', 'Lead Sound Engineer', 'Lead Sound Engineer', 'L2_TECH_STAGE', 'Audio', 'Lead acoustic calibration and sound engineering for live events and concert tours.', 0],
+                ['tech_lead', 'Technical Lead', 'Technical Lead', 'L4_ALL_ACCESS', 'Production', 'Supervises Video, Sound, Lighting, Electrical, Rigging, and Interpretation operations.', 1],
+                ['technician', 'Stage & Audio Technician', 'Stage & Audio Technician', 'L2_TECH_STAGE', 'Sound', 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 1],
+                ['sound_engineer', 'Lead Sound Engineer', 'Lead Sound Engineer', 'L2_TECH_STAGE', 'Sound', 'Lead acoustic calibration and sound engineering for live events and concert tours.', 0],
                 ['lighting_tech', 'Lighting Technician', 'Lighting Technician', 'L2_TECH_STAGE', 'Lighting', 'DMX universes routing, moving-head fixtures, dimmer racks and stage wash fixtures.', 0],
                 ['video_director', 'Video Director', 'Video Director', 'L2_TECH_STAGE', 'Video', 'Controls LED video walls, SDI fiber transmission, switchers, and live camera chains.', 0],
+                ['electrical_tech', 'Electrical Technician', 'Electrical Technician', 'L2_TECH_STAGE', 'Electrical', 'Manages 3-phase distros, generator sync, power load balancing, and stage electrical safety.', 0],
+                ['interpretation_tech', 'Interpretation Technician', 'Interpretation Technician', 'L2_TECH_STAGE', 'Interpretation', 'Sets up Bosch/IR interpretation booths, delegate receivers, and multilingual audio routing.', 0],
                 ['stage_manager', 'Stage Manager', 'Stage Manager', 'L2_TECH_STAGE', 'Production', 'Directs stage crew, backstage call-time coordination, and cueing.', 0],
                 ['rigging_lead', 'Rigging Lead', 'Rigging Lead', 'L2_TECH_STAGE', 'Rigging', 'Motors, truss rigging, load calculations and safety cable inspections overhead.', 0],
+                ['support_staff', 'Support Staff', 'Support Staff', 'L1_VENUE_BASIC', 'Support Staff', 'Site runners, hospitality loaders, cable assistants, and rapid venue turnaround support.', 0],
                 ['user', 'Venue Crew', 'Venue Crew', 'L1_VENUE_BASIC', 'Production', 'General event venue operations and support staff. Stock warehouse access restricted.', 0],
                 ['security', 'Security Officer', 'Security Officer', 'L1_VENUE_BASIC', 'Security', 'Front of house and gate security perimeter verification.', 0],
                 ['driver', 'Logistics Driver', 'Logistics Driver', 'L1_VENUE_BASIC', 'Logistics', 'Cross-facility crew shuttle, loading bay check-in, and transit logistics.', 0],
@@ -412,14 +417,25 @@ function ensureRolesTable(PDO $pdo): void
                 $ins->execute($sr);
             }
         } else {
-            // Ensure stock_manager role exists in roles table
-            try {
-                $hasSm = (int)$pdo->query("SELECT COUNT(*) FROM `roles` WHERE `role_key` = 'stock_manager'")->fetchColumn();
-                if ($hasSm === 0) {
-                    $pdo->prepare("INSERT INTO `roles` (`role_key`, `role_name`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, 1, 1)")
-                        ->execute(['stock_manager', 'Stock Logistics Manager', 'Stock Logistics Manager', 'L4_ALL_ACCESS', 'Warehouse', 'Oversees warehouse hubs, inventory movement, and logistics personnel onboarding.']);
-                }
-            } catch (Throwable $e) {}
+            // Backfill required workflow & operational hierarchy roles on already-populated DBs
+            $requiredRoles = [
+                ['stock_manager', 'Stock Logistics Manager', 'Stock Logistics Manager', 'L4_ALL_ACCESS', 'Warehouse', 'Oversees warehouse hubs, inventory movement, and logistics personnel onboarding.', 1],
+                ['project_manager', 'Project Manager', 'Project Manager', 'L4_ALL_ACCESS', 'Executive', 'End-to-end event orchestration, client liaison, call times, and department dispatch approvals.', 1],
+                ['event_coordinator', 'Event Coordinator', 'Event Coordinator', 'L4_ALL_ACCESS', 'Production', 'Coordinates event schedules, Technical Lead assignments, and cross-department crew readiness.', 1],
+                ['electrical_tech', 'Electrical Technician', 'Electrical Technician', 'L2_TECH_STAGE', 'Electrical', 'Manages 3-phase distros, generator sync, power load balancing, and stage electrical safety.', 0],
+                ['interpretation_tech', 'Interpretation Technician', 'Interpretation Technician', 'L2_TECH_STAGE', 'Interpretation', 'Sets up Bosch/IR interpretation booths, delegate receivers, and multilingual audio routing.', 0],
+                ['support_staff', 'Support Staff', 'Support Staff', 'L1_VENUE_BASIC', 'Support Staff', 'Site runners, hospitality loaders, cable assistants, and rapid venue turnaround support.', 0],
+            ];
+            $chkStmt = $pdo->prepare("SELECT COUNT(*) FROM `roles` WHERE `role_key` = ?");
+            $insStmt = $pdo->prepare("INSERT INTO `roles` (`role_key`, `role_name`, `title`, `clearance_level`, `department`, `description`, `is_system`, `is_active`) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
+            foreach ($requiredRoles as $req) {
+                try {
+                    $chkStmt->execute([$req[0]]);
+                    if ((int) $chkStmt->fetchColumn() === 0) {
+                        $insStmt->execute($req);
+                    }
+                } catch (Throwable $e) {}
+            }
         }
     } catch (Throwable $e) {}
 }
@@ -500,6 +516,7 @@ function getRolesList(PDO $pdo, array $crew = []): array
 
 function getDepartmentsList(PDO $pdo, array $crew = []): array
 {
+    ensureDepartmentsTable($pdo);
     try {
         $stmt = $pdo->query("SELECT * FROM `departments` ORDER BY `name` ASC, `id` ASC");
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -739,6 +756,24 @@ function getDefaultNavigationItems(): array
             'is_enabled' => 1,
             'is_system' => 1,
         ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'system_settings',
+            'label' => 'Settings & Flow',
+            'nav_target' => 'settings',
+            'dom_id' => 'sidebar-settings-btn',
+            'node_id' => '',
+            'icon' => 'assets/sliders-horizontal-13.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,tech_lead,technical_lead,stock_manager,stock_controller',
+            'sort_order' => 7,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
     ];
 }
 
@@ -966,19 +1001,32 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
 
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_consolidated_v3', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
+
+        // One-time migration: add Settings & System Flow Explorer item to Checkpoint Controls sidebar
+        $migSettings = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_settings_flow_v1' LIMIT 1");
+        $migSettings->execute();
+        if (!$migSettings->fetchColumn()) {
+            $settingsRoles = 'admin,administrator,manager,project_manager,tech_lead,technical_lead,stock_manager,stock_controller';
+            $pdo->prepare("
+                INSERT IGNORE INTO `navigation_items`
+                (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
+                VALUES ('workspace', 'system_settings', 'Settings & Flow', 'settings', 'sidebar-settings-btn', '', 'assets/sliders-horizontal-13.svg', '', '', 'none', '', '', ?, 7, 1, 1)
+            ")->execute([$settingsRoles]);
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_settings_flow_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
     } catch (Throwable $e) {}
 }
 
 function classifyRollCallRoleCategory(string $roleKey): string
 {
     $r = strtolower(trim($roleKey));
-    if (in_array($r, ['stock_manager', 'admin', 'administrator', 'manager', 'project_manager', 'tech_lead', 'technical_lead'], true)) {
+    if (in_array($r, ['stock_manager', 'admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'technical_lead'], true)) {
         return 'supervisor';
     }
     if ($r === 'stock_controller') {
         return 'controller';
     }
-    if (in_array($r, ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'stage_manager', 'rigging_lead'], true)) {
+    if (in_array($r, ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'electrical_tech', 'interpretation_tech', 'stage_manager', 'rigging_lead'], true)) {
         return 'technician';
     }
     return 'crew';
@@ -1204,6 +1252,10 @@ function formatRoleDisplay(string $role): string
         'stock_manager' => 'Site Manager',
         'tech_lead' => 'Technical Lead',
         'project_manager' => 'Project Manager',
+        'event_coordinator' => 'Event Coordinator',
+        'electrical_tech' => 'Electrical Technician',
+        'interpretation_tech' => 'Interpretation Technician',
+        'support_staff' => 'Support Staff',
     ];
     if (isset($map[$r])) {
         return $map[$r];
@@ -1264,6 +1316,7 @@ function loadCheckpointsLookup(PDO $pdo): array
 
 function assertControllerCheckpointLock(PDO $pdo, string $targetType, string $targetId): array
 {
+    expireStaleShiftAssignments($pdo);
     $caller = getCallerUser($pdo);
     if (!$caller) {
         return ['ok' => false, 'error' => 'Authentication required.'];
@@ -1321,6 +1374,11 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
         case 'save_department':
         case 'delete_department':
         case 'manage_navigation':
+        case 'save_branding_config':
+        case 'save_branding_font':
+        case 'delete_branding_font':
+        case 'upload_branding_logo':
+        case 'reset_branding_logo':
             if (!$isAdmin) {
                 return ['ok' => false, 'error' => 'Permission denied: This action requires Administrator privileges.'];
             }
@@ -1341,7 +1399,7 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
                     $allowedTiers[] = 'L3_STOCK_CTRL';
                     $allowedTiers[] = 'L3';
                 }
-                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'tech_lead', 'stock_manager'];
+                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'stock_manager'];
                 if (!in_array($targetTier, $allowedTiers, true) || in_array($targetRole, $disallowedRoles, true)) {
                     return ['ok' => false, 'error' => 'Permission denied: Site Managers can only manage facility crew (L1/L2) or Gate Controllers (L3).'];
                 }
@@ -1351,13 +1409,13 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
                 $targetTier = strtoupper(trim((string)($context['clearance_level'] ?? 'L2')));
                 $targetRole = strtolower(trim((string)($context['role'] ?? 'technician')));
                 $allowedTiers = ['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L1', 'L2'];
-                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'stock_manager'];
+                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'stock_manager'];
                 if (!in_array($targetTier, $allowedTiers, true) || in_array($targetRole, $disallowedRoles, true)) {
                     return ['ok' => false, 'error' => 'Permission denied: Technical Leads can only onboard technical crew with Level 1 or Level 2 clearance.'];
                 }
             }
             // 4. Standard crew cannot add users
-            if (in_array($role, ['technician', 'driver', 'security', 'user'], true)) {
+            if (in_array($role, ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'electrical_tech', 'interpretation_tech', 'rigging_lead', 'support_staff', 'driver', 'security', 'user'], true)) {
                 return ['ok' => false, 'error' => 'Permission denied: User provisioning requires Supervisor, Tech Lead, or Administrator privileges.'];
             }
             break;
@@ -1372,12 +1430,12 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
         case 'save_event':
         case 'delete_event':
         case 'assign_event_crew':
-            // Tech Lead, Project Manager, Admin, and Stock Manager (for warehouses)
-            if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead', 'project_manager'], true)) {
+            // Tech Lead, Project Manager, Event Coordinator, Admin, and Stock Manager (for warehouses)
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead', 'project_manager', 'event_coordinator'], true)) {
                 if ($role === 'stock_manager' && ($context['checkpoint_type'] ?? '') === 'stock_warehouse') {
                     break;
                 }
-                return ['ok' => false, 'error' => 'Permission denied: Setting Call Times and managing event venues requires Tech Lead, Project Manager, or Administrator privileges.'];
+                return ['ok' => false, 'error' => 'Permission denied: Setting Call Times and managing event venues requires Tech Lead, Project Manager, Event Coordinator, or Administrator privileges.'];
             }
             break;
 
@@ -1400,8 +1458,9 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             break;
 
         case 'review_controller_shift':
-            if (!in_array($role, ['admin', 'manager', 'administrator', 'stock_manager'], true)) {
-                return ['ok' => false, 'error' => 'Permission denied: Only Administrators and Site Managers can approve or reject Gate Controller assignments and shift relief requests.'];
+        case 'generate_relief_qr':
+            if (!in_array($role, ['admin', 'manager', 'administrator', 'stock_manager', 'project_manager', 'event_coordinator'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Only Administrators, Site Managers, or Event Leads can authorize Shift Relief assignments and Geo-Fenced Relief QRs.'];
             }
             break;
 
@@ -1454,15 +1513,17 @@ function verifyTerminalPinSecret(string $inputPin, string $storedSecret): bool
     return hash_equals($expected, $candidate);
 }
 
-function getSessionCsrfToken(): string
-{
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        return '';
+if (!function_exists('getSessionCsrfToken')) {
+    function getSessionCsrfToken(): string
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return '';
+        }
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return (string) $_SESSION['csrf_token'];
     }
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return (string) $_SESSION['csrf_token'];
 }
 
 function validateCsrfForAuthenticatedPost(array $jsonBody): bool
@@ -1535,6 +1596,7 @@ function clearSecurityRateLimit(PDO $pdo, string $rateKey): void
 
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
 {
+    expireStaleShiftAssignments($pdo);
     $todayStr = date('Y-m-d');
     $sessionRole = strtolower(trim((string) ($_SESSION['auth_user_role'] ?? '')));
     if ($sessionRole === '' && !empty($_SESSION['auth_user_id'])) {
@@ -1595,6 +1657,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'min_clearance' => 'L2 / L3 / L4 Required (L1 Blocked)',
             'assigned_technicians' => $whAssignedIds,
             'assigned_count' => count($whAssignedIds),
+            'geofence_radius_m' => (int) ($sr['geofence_radius_m'] ?? 200),
             'lat' => isset($sr['lat']) && $sr['lat'] !== null ? (float) $sr['lat'] : null,
             'lng' => isset($sr['lng']) && $sr['lng'] !== null ? (float) $sr['lng'] : null,
             'map_x' => isset($sr['map_x']) && $sr['map_x'] !== null ? (float) $sr['map_x'] : null,
@@ -1617,9 +1680,10 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $loc = (string) ($er['location'] ?? 'Kigali Convention Centre');
         $callTime = substr((string) ($er['call_time'] ?? '08:00'), 0, 5) ?: '08:00';
         $pm = trim((string) ($er['project_manager'] ?? ''));
+        $ec = trim((string) ($er['event_coordinator'] ?? ''));
         $tl = trim((string) ($er['tech_lead'] ?? ''));
-        $leadName = $tl ?: ($pm ?: 'Technical Lead');
-        $leadLabel = ($tl ? 'Tech Lead: ' . $tl : ($pm ? 'Project Manager: ' . $pm : 'Tech Lead: ' . $leadName));
+        $leadName = $tl ?: ($pm ?: ($ec ?: 'Technical Lead'));
+        $leadLabel = ($tl ? 'Tech Lead: ' . $tl : ($pm ? 'Project Manager: ' . $pm : ($ec ? 'Event Coordinator: ' . $ec : 'Tech Lead: ' . $leadName)));
 
         $assignedRaw = trim((string) ($er['assigned_technician'] ?? ''));
         $assignedIds = [];
@@ -1662,13 +1726,16 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'date' => (string) ($er['date'] ?? $todayStr),
             'call_time' => $callTime,
             'project_manager' => $pm,
+            'event_coordinator' => $ec,
             'tech_lead' => $tl,
             'lead_name' => $leadName,
             'lead_label' => $leadLabel,
             'min_clearance' => 'L1 / L2 / L3 / L4 Authorized',
             'assigned_technicians' => $assignedIds,
             'assigned_technician_names' => $assignedNames,
+            'assigned_roster' => json_decode((string) ($er['assigned_roster_json'] ?? ''), true) ?: null,
             'assigned_count' => count($assignedIds),
+            'geofence_radius_m' => (int) ($er['geofence_radius_m'] ?? 200),
             'image' => resolveProfileImageUrl($er['image'] ?? null),
             'lat' => isset($er['lat']) && $er['lat'] !== null ? (float) $er['lat'] : null,
             'lng' => isset($er['lng']) && $er['lng'] !== null ? (float) $er['lng'] : null,
@@ -1955,6 +2022,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             u.`assigned_checkpoint_type`,
             u.`assigned_checkpoint_id`,
             u.`assignment_expires_at`,
+            u.`must_change_password`,
             u.`is_active`,
             ub.`badge_code` AS `raw_badge_code`,
             ub.`rfid_uid`,
@@ -2035,6 +2103,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'assigned_checkpoint_id' => $assignedCpObj ? (string) $assignedCpObj['id'] : ($ur['assigned_checkpoint_id'] ?: null),
             'assigned_checkpoint_name' => $assignedCpObj ? $assignedCpObj['name'] : null,
             'assignment_expires_at' => $ur['assignment_expires_at'] ?: null,
+            'must_change_password' => (int) ($ur['must_change_password'] ?? 0),
             'initials' => computeInitials($fullName),
             'badge_code' => $rewBadge,
             'raw_badge_code' => (string) ($ur['raw_badge_code'] ?: $rewBadge),
@@ -2261,6 +2330,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
                 'replacement_controller_name' => $repCtrl ? $repCtrl['full_name'] : 'Unassigned',
                 'replacement_controller_badge' => $repCtrl ? $repCtrl['badge_code'] : '',
                 'reason_type' => (string) ($sr['reason_type'] ?? 'shift_swap'),
+                'relief_mode' => (string) ($sr['relief_mode'] ?? 'standard'),
                 'notes' => (string) ($sr['notes'] ?? ''),
                 'shift_start' => $sr['shift_start'] ?? null,
                 'shift_end' => $sr['shift_end'] ?? null,
@@ -2284,11 +2354,57 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         } catch (Throwable $e) {}
     }
 
+    $totpEnabled = false;
+    if ($authUserId > 0) {
+        try {
+            $tSt = $pdo->prepare("SELECT `is_enabled` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+            $tSt->execute([$authUserId]);
+            $totpEnabled = ((int) $tSt->fetchColumn() === 1);
+        } catch (Throwable $e) {}
+    }
+
+    $reliefTokens = [];
+    if ($canSeeTerminalPins || $sessionRole === 'stock_controller' || in_array($sessionRole, ['project_manager', 'event_coordinator'], true)) {
+        try {
+            $rtSql = "SELECT `id`, `shift_request_id`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `assigned_user_id`, `require_totp`, `require_geofence`, `geofence_radius_m`, `expires_at`, `redeemed_at`, `redeemed_by_id`, `distance_m`, `override_used`, `created_by_id`, `created_at` FROM `relief_qr_tokens` ORDER BY `id` DESC LIMIT 12";
+            foreach ($pdo->query($rtSql)->fetchAll(PDO::FETCH_ASSOC) as $rt) {
+                $tUid = (int) ($rt['assigned_user_id'] ?? 0);
+                $rUid = (int) ($rt['created_by_id'] ?? 0);
+                $cpRec = findCheckpointRecord($stockWarehouses, $eventVenues, (string) $rt['checkpoint_type'], (string) $rt['checkpoint_id']);
+                $reliefTokens[] = [
+                    'id' => (int) $rt['id'],
+                    'shift_request_id' => (int) ($rt['shift_request_id'] ?? 0),
+                    'assigned_user_id' => $tUid,
+                    'target_user_id' => $tUid,
+                    'target_name' => isset($crewById[$tUid]) ? $crewById[$tUid]['full_name'] : ('User #' . $tUid),
+                    'created_by_id' => $rUid,
+                    'requested_by_name' => isset($crewById[$rUid]) ? $crewById[$rUid]['full_name'] : 'Supervisor',
+                    'checkpoint_type' => (string) $rt['checkpoint_type'],
+                    'checkpoint_id' => (string) $rt['checkpoint_id'],
+                    'checkpoint_name' => (string) ($rt['checkpoint_name'] ?: ($cpRec ? $cpRec['name'] : ($rt['checkpoint_type'] . ' #' . $rt['checkpoint_id']))),
+                    'geofence_radius_m' => (int) ($rt['geofence_radius_m'] ?? 200),
+                    'require_totp' => (int) ($rt['require_totp'] ?? 1),
+                    'require_geofence' => (int) ($rt['require_geofence'] ?? 1),
+                    'expires_at' => (string) ($rt['expires_at'] ?? ''),
+                    'is_expired' => !empty($rt['expires_at']) && strtotime((string) $rt['expires_at']) < time(),
+                    'redeemed_at' => $rt['redeemed_at'] ?: null,
+                    'distance_m' => $rt['distance_m'] !== null ? (int) $rt['distance_m'] : null,
+                    'override_used' => (int) ($rt['override_used'] ?? 0),
+                    'created_at' => (string) ($rt['created_at'] ?? ''),
+                ];
+            }
+        } catch (Throwable $e) {}
+    }
+
     return [
         'ok' => true,
         'dbSource' => $activeDb,
         'csrfToken' => getSessionCsrfToken(),
         'currentUser' => $currentUser,
+        'totpEnabled' => $totpEnabled,
+        'reliefTokens' => $reliefTokens,
+        'brandingConfig' => getBrandingConfig($pdo),
+        'brandingFonts' => getBrandingFontsList($pdo),
         'read_notif_ids' => $readNotifIds,
         'clearanceMatrix' => $clearanceMatrix,
         'checkpoints' => [
@@ -2607,6 +2723,7 @@ function buildStandaloneGateFeedPayload(array $fullPayload, array $whRow): array
             'close_time' => substr((string) ($whRow['close_time'] ?? '18:00:00'), 0, 5),
             'call_time' => substr((string) ($whRow['open_time'] ?? '08:00:00'), 0, 5),
             'controller_name' => (string) ($whRow['controller_name'] ?? ''),
+            'geofence_radius_m' => (int) ($whRow['geofence_radius_m'] ?? 200),
             'on_site_now' => 0,
             'checked_in_today' => 0,
             'denied_today' => 0,
@@ -2701,6 +2818,8 @@ try {
         'standalone_gate_lock',
         'standalone_gate_feed',
         'standalone_gate_scan',
+        'get_relief_token_info',
+        'redeem_relief_qr',
     ];
     if (!in_array($action, $publicActions, true) && empty($_SESSION['auth_user_id'])) {
         http_response_code(401);
@@ -2785,6 +2904,7 @@ try {
 
     if ($action === 'onsite_public_feed') {
         $cfg = ensureOnsiteShareSettings($pdo);
+        $portalCfg = resolveStandalonePortalConfig($pdo, 'onsite');
         $hasSharedViewer = isOnsiteViewerSessionAuthorized($pdo);
         $hasOperatorSession = !empty($_SESSION['auth_user_id']);
         if (!$hasSharedViewer && !$hasOperatorSession) {
@@ -2797,19 +2917,32 @@ try {
             ]);
             exit;
         }
-        if ($hasSharedViewer && !$cfg['enabled'] && !$hasOperatorSession) {
+        $portalExpired = ($portalCfg && !empty($portalCfg['expires_at']) && strtotime((string) $portalCfg['expires_at']) < time());
+        $portalDisabled = ($portalCfg && (int) ($portalCfg['is_active'] ?? 1) === 0);
+        if (($hasSharedViewer && !$cfg['enabled'] && !$hasOperatorSession) || (($portalExpired || $portalDisabled) && !$hasOperatorSession)) {
             http_response_code(403);
             echo json_encode([
                 'ok' => false,
                 'authorized' => false,
                 'enabled' => false,
-                'error' => 'Shared link has been disabled by Administrator.',
+                'expired' => $portalExpired,
+                'error' => $portalExpired
+                    ? ('This shared link expired on ' . $portalCfg['expires_at'] . '. Contact an Administrator to extend access.')
+                    : 'Shared link has been disabled by Administrator.',
             ]);
             exit;
         }
 
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $rc = $full['rollCallList'] ?? [];
+        if ($portalCfg && (int) ($portalCfg['mask_phones'] ?? 0) === 1) {
+            foreach ($rc as &$rcItem) {
+                if (!empty($rcItem['phone'])) {
+                    $rcItem['phone'] = maskPhoneNumber((string) $rcItem['phone']);
+                }
+            }
+            unset($rcItem);
+        }
         $cpSummaries = [];
         foreach (($full['checkpoints']['directory'] ?? []) as $cp) {
             $cpSummaries[] = [
@@ -2829,6 +2962,13 @@ try {
             'generated_at' => date('h:i:s A'),
             'rollCallList' => $rc,
             'checkpoints' => $cpSummaries,
+            'portal' => $portalCfg ? [
+                'best_for' => (string) ($portalCfg['best_for'] ?? ''),
+                'permissions_summary' => (string) ($portalCfg['permissions_summary'] ?? ''),
+                'allow_scan' => (int) ($portalCfg['allow_scan'] ?? 0),
+                'mask_phones' => (int) ($portalCfg['mask_phones'] ?? 0),
+                'expires_at' => $portalCfg['expires_at'] ?? null,
+            ] : null,
         ]);
         exit;
     }
@@ -2847,6 +2987,17 @@ try {
         if (!$whRow) {
             http_response_code(404);
             echo json_encode(['ok' => false, 'error' => 'Facility gate terminal was not found or is inactive.']);
+            exit;
+        }
+        $portalCfg = resolveStandalonePortalConfig($pdo, $siteKey, (int) $whRow['id']);
+        if ($portalCfg && (int) ($portalCfg['is_active'] ?? 1) === 0) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'This gate portal link is disabled by an Administrator.']);
+            exit;
+        }
+        if ($portalCfg && !empty($portalCfg['expires_at']) && strtotime((string) $portalCfg['expires_at']) < time()) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'expired' => true, 'error' => 'This gate portal link expired on ' . $portalCfg['expires_at'] . '.']);
             exit;
         }
         $wid = (int) $whRow['id'];
@@ -2930,8 +3081,37 @@ try {
             exit;
         }
 
+        $portalCfg = resolveStandalonePortalConfig($pdo, $siteKey, (int) $whRow['id']);
+        if ($portalCfg && (((int) ($portalCfg['is_active'] ?? 1) === 0) || (!empty($portalCfg['expires_at']) && strtotime((string) $portalCfg['expires_at']) < time()))) {
+            http_response_code(403);
+            echo json_encode([
+                'ok' => false,
+                'authorized' => false,
+                'expired' => !empty($portalCfg['expires_at']) && strtotime((string) $portalCfg['expires_at']) < time(),
+                'error' => 'This shared gate portal link is expired or disabled.',
+            ]);
+            exit;
+        }
+
         $full = buildFullPayload($pdo, $activeDb, 'stock_warehouse', (int) $whRow['id']);
         $feed = buildStandaloneGateFeedPayload($full, $whRow);
+        if ($portalCfg) {
+            if ((int) ($portalCfg['mask_phones'] ?? 0) === 1 && !empty($feed['crew'])) {
+                foreach ($feed['crew'] as &$fc) {
+                    if (!empty($fc['phone'])) {
+                        $fc['phone'] = maskPhoneNumber((string) $fc['phone']);
+                    }
+                }
+                unset($fc);
+            }
+            $feed['portal'] = [
+                'best_for' => (string) ($portalCfg['best_for'] ?? ''),
+                'permissions_summary' => (string) ($portalCfg['permissions_summary'] ?? ''),
+                'allow_scan' => (int) ($portalCfg['allow_scan'] ?? 1),
+                'mask_phones' => (int) ($portalCfg['mask_phones'] ?? 0),
+                'expires_at' => $portalCfg['expires_at'] ?? null,
+            ];
+        }
         $feed['csrf_token'] = getSessionCsrfToken();
         echo json_encode($feed);
         exit;
@@ -2959,6 +3139,17 @@ try {
         if (!$whRow) {
             http_response_code(404);
             echo json_encode(['ok' => false, 'allowed' => false, 'error' => 'Facility gate location not found.']);
+            exit;
+        }
+        $portalCfg = resolveStandalonePortalConfig($pdo, $siteKey, (int) $whRow['id']);
+        if ($portalCfg && (((int) ($portalCfg['is_active'] ?? 1) === 0) || (!empty($portalCfg['expires_at']) && strtotime((string) $portalCfg['expires_at']) < time()))) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'allowed' => false, 'error' => 'This gate portal link is expired or disabled.']);
+            exit;
+        }
+        if ($portalCfg && (int) ($portalCfg['allow_scan'] ?? 1) === 0) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'allowed' => false, 'error' => 'Scanning disabled: this portal link is Read-Only under Permissions & Limitations.']);
             exit;
         }
         if (!isStandaloneGateAuthorized($pdo, $whRow)) {
@@ -3191,10 +3382,12 @@ try {
             }
         }
 
+        $requiresPwdChange = ((int) ($userRow['must_change_password'] ?? 0) === 1);
         echo json_encode([
             'ok' => true,
             'message' => "Welcome back, {$userRow['full_name']}!",
             'user' => $matchedMember ?: $userRow,
+            'requires_password_change' => $requiresPwdChange,
             'csrfToken' => $freshCsrf,
             'dbSource' => $activeDb,
         ]);
@@ -4151,8 +4344,20 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
         $projectManager = trim((string) ($_POST['project_manager'] ?? $jsonBody['project_manager'] ?? ''));
+        $eventCoordinator = trim((string) ($_POST['event_coordinator'] ?? $jsonBody['event_coordinator'] ?? ''));
         $eventPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
         $assignedTechs = $_POST['assigned_technicians'] ?? $jsonBody['assigned_technicians'] ?? [];
+        $hasRosterIn = array_key_exists('assigned_roster', $_POST) || array_key_exists('assigned_roster', $jsonBody);
+        $assignedRosterIn = $_POST['assigned_roster'] ?? $jsonBody['assigned_roster'] ?? null;
+        if (is_string($assignedRosterIn) && $assignedRosterIn !== '') {
+            $decodedRoster = json_decode($assignedRosterIn, true);
+            $assignedRosterIn = is_array($decodedRoster) ? $decodedRoster : null;
+        }
+        $hasRadiusIn = isset($_POST['geofence_radius_m']) || isset($jsonBody['geofence_radius_m']);
+        $geofenceRadiusM = max(50, min(5000, (int) ($_POST['geofence_radius_m'] ?? $jsonBody['geofence_radius_m'] ?? 200)));
+        $latIn = $_POST['lat'] ?? $jsonBody['lat'] ?? null;
+        $lngIn = $_POST['lng'] ?? $jsonBody['lng'] ?? null;
+        $hasCoords = ($latIn !== null && $latIn !== '' && $lngIn !== null && $lngIn !== '' && is_numeric($latIn) && is_numeric($lngIn));
 
         if ($eventPinRaw !== '' && !preg_match('/^[A-Za-z0-9]{4,12}$/', $eventPinRaw)) {
             echo json_encode(['ok' => false, 'error' => 'Venue Terminal PIN must be 4–12 letters or digits']);
@@ -4170,6 +4375,24 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $assignedTechs = json_decode((string)$assignedTechs, true) ?: [];
         }
         $assignedTechsInt = array_values(array_unique(array_filter(array_map('intval', (array)$assignedTechs))));
+        $assignedRosterJson = null;
+        if (is_array($assignedRosterIn)) {
+            $normDepts = [];
+            foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'] as $dk) {
+                $dIds = array_values(array_unique(array_filter(array_map('intval', (array) ($assignedRosterIn['departments'][$dk] ?? [])))));
+                $normDepts[$dk] = $dIds;
+                $assignedTechsInt = array_merge($assignedTechsInt, $dIds);
+            }
+            $supportIds = array_values(array_unique(array_filter(array_map('intval', (array) ($assignedRosterIn['support_staff'] ?? [])))));
+            $assignedTechsInt = array_values(array_unique(array_merge($assignedTechsInt, $supportIds)));
+            $assignedRosterJson = json_encode([
+                'project_manager' => trim((string) ($assignedRosterIn['project_manager'] ?? $projectManager)),
+                'event_coordinator' => trim((string) ($assignedRosterIn['event_coordinator'] ?? $eventCoordinator)),
+                'tech_lead' => trim((string) ($assignedRosterIn['tech_lead'] ?? $techLead)),
+                'departments' => $normDepts,
+                'support_staff' => $supportIds,
+            ]);
+        }
 
         // Normalize call time
         $timeParts = explode(':', $rawCallTime);
@@ -4214,19 +4437,17 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $realEventId = $chk->fetchColumn();
             if ($realEventId !== false && $realEventId !== null) {
                 $realEventId = (string) $realEventId;
-                $stmtUpd = $pdo->prepare("
-                    UPDATE `events`
-                    SET `title` = CASE WHEN ? != '' THEN ? ELSE `title` END,
-                        `location` = CASE WHEN ? != '' THEN ? ELSE `location` END,
-                        `date` = CASE WHEN ? != '' THEN ? ELSE `date` END,
-                        `call_time` = ?,
-                        `tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END,
-                        `project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END,
-                        `terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END,
-                        `assigned_technician` = ?
-                        " . ($uploadedEventImagePath !== null ? ", `image` = ?" : "") . "
-                    WHERE `id` = ?
-                ");
+                $setClauses = [
+                    "`title` = CASE WHEN ? != '' THEN ? ELSE `title` END",
+                    "`location` = CASE WHEN ? != '' THEN ? ELSE `location` END",
+                    "`date` = CASE WHEN ? != '' THEN ? ELSE `date` END",
+                    "`call_time` = ?",
+                    "`tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END",
+                    "`project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END",
+                    "`event_coordinator` = CASE WHEN ? != '' THEN ? ELSE `event_coordinator` END",
+                    "`terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END",
+                    "`assigned_technician` = ?",
+                ];
                 $updParams = [
                     $titleIn, $titleIn,
                     $locationIn, $locationIn,
@@ -4234,13 +4455,29 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     $formattedTime,
                     $techLead, $techLead,
                     $projectManager, $projectManager,
+                    $eventCoordinator, $eventCoordinator,
                     $eventPinRaw, $eventPinRaw,
                     json_encode($assignedTechsInt),
                 ];
+                if ($hasRosterIn && $assignedRosterJson !== null) {
+                    $setClauses[] = "`assigned_roster_json` = ?";
+                    $updParams[] = $assignedRosterJson;
+                }
+                if ($hasRadiusIn) {
+                    $setClauses[] = "`geofence_radius_m` = ?";
+                    $updParams[] = $geofenceRadiusM;
+                }
+                if ($hasCoords) {
+                    $setClauses[] = "`lat` = ?, `lng` = ?";
+                    $updParams[] = (float) $latIn;
+                    $updParams[] = (float) $lngIn;
+                }
                 if ($uploadedEventImagePath !== null) {
+                    $setClauses[] = "`image` = ?";
                     $updParams[] = $uploadedEventImagePath;
                 }
                 $updParams[] = $realEventId;
+                $stmtUpd = $pdo->prepare("UPDATE `events` SET " . implode(', ', $setClauses) . " WHERE `id` = ?");
                 $stmtUpd->execute($updParams);
                 $syncAssignedUsers($realEventId, $assignedTechsInt);
             }
@@ -4261,8 +4498,8 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $newLoc = $locationIn !== '' ? $locationIn : 'Kigali Event Venue';
             $newPin = $eventPinRaw !== '' ? $eventPinRaw : '1234';
             $stmtIns = $pdo->prepare("
-                INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`, `terminal_pin`, `image`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmtIns->execute([
                 $newEventId,
@@ -4271,8 +4508,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $eventDateSafe,
                 $formattedTime,
                 $projectManager !== '' ? $projectManager : 'Operations PM',
+                $eventCoordinator,
                 $techLead !== '' ? $techLead : 'Tech Lead',
                 json_encode($assignedTechsInt),
+                $assignedRosterJson,
+                $geofenceRadiusM,
+                $hasCoords ? (float) $latIn : null,
+                $hasCoords ? (float) $lngIn : null,
                 $newPin,
                 $uploadedEventImagePath,
             ]);
@@ -4628,6 +4870,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $controllerPhone = trim((string) ($_POST['controller_phone'] ?? $jsonBody['controller_phone'] ?? ''));
         $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : (int) ($jsonBody['is_active'] ?? 1);
         $terminalPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
+        $hasRadiusIn = isset($_POST['geofence_radius_m']) || isset($jsonBody['geofence_radius_m']);
+        $geofenceRadiusM = max(50, min(5000, (int) ($_POST['geofence_radius_m'] ?? $jsonBody['geofence_radius_m'] ?? 200)));
+        $latIn = $_POST['lat'] ?? $jsonBody['lat'] ?? null;
+        $lngIn = $_POST['lng'] ?? $jsonBody['lng'] ?? null;
+        $hasCoords = ($latIn !== null && $latIn !== '' && $lngIn !== null && $lngIn !== '' && is_numeric($latIn) && is_numeric($lngIn));
 
         if ($name === '') {
             echo json_encode(['ok' => false, 'error' => 'Warehouse name is required']);
@@ -4658,47 +4905,39 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
 
         if ($id > 0) {
-            if ($uploadedImagePath && $terminalPinRaw !== '') {
-                $stmt = $pdo->prepare("
-                    UPDATE `stock_locations`
-                    SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
-                        `controller_name` = ?, `controller_phone` = ?, `is_active` = ?, `image` = ?, `terminal_pin` = ?
-                    WHERE `id` = ?
-                ");
-                $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath, $terminalPinRaw, $id]);
-            } elseif ($uploadedImagePath) {
-                $stmt = $pdo->prepare("
-                    UPDATE `stock_locations`
-                    SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
-                        `controller_name` = ?, `controller_phone` = ?, `is_active` = ?, `image` = ?
-                    WHERE `id` = ?
-                ");
-                $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath, $id]);
-            } elseif ($terminalPinRaw !== '') {
-                $stmt = $pdo->prepare("
-                    UPDATE `stock_locations`
-                    SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
-                        `controller_name` = ?, `controller_phone` = ?, `is_active` = ?, `terminal_pin` = ?
-                    WHERE `id` = ?
-                ");
-                $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $terminalPinRaw, $id]);
-            } else {
-                $stmt = $pdo->prepare("
-                    UPDATE `stock_locations`
-                    SET `name` = ?, `code` = ?, `location_code` = ?, `location` = ?, `open_time` = ?, `close_time` = ?,
-                        `controller_name` = ?, `controller_phone` = ?, `is_active` = ?
-                    WHERE `id` = ?
-                ");
-                $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $id]);
+            $whSets = [
+                '`name` = ?', '`code` = ?', '`location_code` = ?', '`location` = ?',
+                '`open_time` = ?', '`close_time` = ?', '`controller_name` = ?',
+                '`controller_phone` = ?', '`is_active` = ?'
+            ];
+            $whParams = [$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive];
+            if ($uploadedImagePath) {
+                $whSets[] = '`image` = ?';
+                $whParams[] = $uploadedImagePath;
             }
+            if ($terminalPinRaw !== '') {
+                $whSets[] = '`terminal_pin` = ?';
+                $whParams[] = $terminalPinRaw;
+            }
+            if ($hasRadiusIn) {
+                $whSets[] = '`geofence_radius_m` = ?';
+                $whParams[] = $geofenceRadiusM;
+            }
+            if ($hasCoords) {
+                $whSets[] = '`lat` = ?, `lng` = ?';
+                $whParams[] = (float) $latIn;
+                $whParams[] = (float) $lngIn;
+            }
+            $whParams[] = $id;
+            $pdo->prepare("UPDATE `stock_locations` SET " . implode(', ', $whSets) . " WHERE `id` = ?")->execute($whParams);
         } else {
             $pinToInsert = $terminalPinRaw !== '' ? $terminalPinRaw : str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
             $stmt = $pdo->prepare("
                 INSERT INTO `stock_locations`
-                (`name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `controller_name`, `controller_phone`, `is_active`, `image`, `terminal_pin`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (`name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `controller_name`, `controller_phone`, `is_active`, `geofence_radius_m`, `lat`, `lng`, `image`, `terminal_pin`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $uploadedImagePath, $pinToInsert]);
+            $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $geofenceRadiusM, $hasCoords ? (float) $latIn : null, $hasCoords ? (float) $lngIn : null, $uploadedImagePath, $pinToInsert]);
             $id = (int) $pdo->lastInsertId();
         }
 
@@ -4739,6 +4978,22 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $removeBg = !empty($_POST['remove_background']) || !empty($jsonBody['remove_background']);
         $terminalPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
         $onsitePwdRaw = trim((string) ($_POST['onsite_password'] ?? $jsonBody['onsite_password'] ?? ''));
+        $hasBestFor = isset($_POST['best_for']) || isset($jsonBody['best_for']);
+        $bestFor = trim((string) ($_POST['best_for'] ?? $jsonBody['best_for'] ?? ''));
+        $hasPerms = isset($_POST['permissions_summary']) || isset($jsonBody['permissions_summary']);
+        $permissionsSummary = trim((string) ($_POST['permissions_summary'] ?? $jsonBody['permissions_summary'] ?? ''));
+        $allowScan = isset($_POST['allow_scan'])
+            ? ((int) $_POST['allow_scan'] ? 1 : 0)
+            : (isset($jsonBody['allow_scan']) ? ((int) $jsonBody['allow_scan'] ? 1 : 0) : ($portalType === 'onsite_portal' ? 0 : 1));
+        $maskPhones = isset($_POST['mask_phones'])
+            ? ((int) $_POST['mask_phones'] ? 1 : 0)
+            : ((int) ($jsonBody['mask_phones'] ?? 0) ? 1 : 0);
+        $hasExpires = array_key_exists('expires_at', $_POST) || array_key_exists('expires_at', $jsonBody);
+        $expiresAtRaw = trim((string) ($_POST['expires_at'] ?? $jsonBody['expires_at'] ?? ''));
+        $expiresAt = ($expiresAtRaw !== '' && strtotime($expiresAtRaw) !== false) ? date('Y-m-d H:i:s', strtotime($expiresAtRaw)) : null;
+        $hasMaxSess = array_key_exists('max_sessions', $_POST) || array_key_exists('max_sessions', $jsonBody);
+        $maxSessionsRaw = $_POST['max_sessions'] ?? $jsonBody['max_sessions'] ?? '';
+        $maxSessions = ($maxSessionsRaw !== '' && (int) $maxSessionsRaw > 0) ? (int) $maxSessionsRaw : null;
 
         if ($title === '') {
             echo json_encode(['ok' => false, 'error' => 'Portal title is required.']);
@@ -4835,21 +5090,43 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
 
         if ($id > 0) {
+            if (!$hasBestFor) {
+                $bestFor = (string) ($existing['best_for'] ?? '');
+            }
+            if (!$hasPerms) {
+                $permissionsSummary = (string) ($existing['permissions_summary'] ?? '');
+            }
+            if (!$hasExpires) {
+                $expiresAt = $existing['expires_at'] ?? null;
+            }
+            if (!$hasMaxSess) {
+                $maxSessions = isset($existing['max_sessions']) && $existing['max_sessions'] !== null ? (int) $existing['max_sessions'] : null;
+            }
             $stmt = $pdo->prepare("
                 UPDATE `standalone_portals`
                 SET `portal_key` = ?, `portal_type` = ?, `title` = ?, `subtitle` = ?, `entry_url` = ?,
-                    `wh_id` = ?, `background_image` = ?, `overlay_opacity` = ?, `is_active` = ?, `sort_order` = ?
+                    `wh_id` = ?, `background_image` = ?, `overlay_opacity` = ?, `best_for` = ?,
+                    `permissions_summary` = ?, `allow_scan` = ?, `mask_phones` = ?, `expires_at` = ?,
+                    `max_sessions` = ?, `is_active` = ?, `sort_order` = ?
                 WHERE `id` = ?
             ");
-            $stmt->execute([$portalKey, $portalType, $title, $subtitle, $entryUrl, $whId, $finalBgPath, $overlayOpacity, $isActive, $sortOrder, $id]);
+            $stmt->execute([
+                $portalKey, $portalType, $title, $subtitle, $entryUrl,
+                $whId, $finalBgPath, $overlayOpacity, $bestFor,
+                $permissionsSummary, $allowScan, $maskPhones, $expiresAt,
+                $maxSessions, $isActive, $sortOrder, $id
+            ]);
             $msg = "Updated portal '{$title}'.";
         } else {
             $stmt = $pdo->prepare("
                 INSERT INTO `standalone_portals`
-                (`portal_key`, `portal_type`, `title`, `subtitle`, `entry_url`, `wh_id`, `background_image`, `overlay_opacity`, `is_active`, `is_system`, `sort_order`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                (`portal_key`, `portal_type`, `title`, `subtitle`, `entry_url`, `wh_id`, `background_image`, `overlay_opacity`, `best_for`, `permissions_summary`, `allow_scan`, `mask_phones`, `expires_at`, `max_sessions`, `is_active`, `is_system`, `sort_order`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
             ");
-            $stmt->execute([$portalKey, $portalType, $title, $subtitle, $entryUrl, $whId, $finalBgPath, $overlayOpacity, $isActive, $sortOrder]);
+            $stmt->execute([
+                $portalKey, $portalType, $title, $subtitle, $entryUrl, $whId, $finalBgPath, $overlayOpacity,
+                $bestFor, $permissionsSummary, $allowScan, $maskPhones, $expiresAt, $maxSessions, $isActive, $sortOrder
+            ]);
             $id = (int) $pdo->lastInsertId();
             $msg = "Created portal '{$title}'.";
         }
@@ -6034,7 +6311,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
         $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
-        if (!in_array($callerRole, ['admin', 'manager', 'administrator', 'stock_manager', 'tech_lead', 'stock_controller'], true)) {
+        if (!in_array($callerRole, ['admin', 'manager', 'administrator', 'project_manager', 'event_coordinator', 'stock_manager', 'tech_lead', 'stock_controller'], true)) {
             http_response_code(403);
             echo json_encode(['ok' => false, 'error' => 'Permission denied: Submitting gate controller relief requests requires Gate Controller, Technical Lead, Site Manager, or Administrator access.']);
             exit;
@@ -6085,6 +6362,10 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $reasonType = 'shift_swap';
         }
         $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
+        $reliefMode = strtolower(trim((string) ($_POST['relief_mode'] ?? $jsonBody['relief_mode'] ?? 'standard')));
+        if (!in_array($reliefMode, ['standard', 'geo_qr', 'geo_qr_totp'], true)) {
+            $reliefMode = 'standard';
+        }
         $shiftStartRaw = trim((string) ($_POST['shift_start'] ?? $jsonBody['shift_start'] ?? ''));
         $shiftEndRaw = trim((string) ($_POST['shift_end'] ?? $jsonBody['shift_end'] ?? ''));
         $shiftStart = $shiftStartRaw !== '' ? date('Y-m-d H:i:s', strtotime($shiftStartRaw)) : null;
@@ -6092,8 +6373,8 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
 
         $ins = $pdo->prepare("
             INSERT INTO `controller_shift_requests`
-            (`checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `requested_by_id`, `outgoing_controller_id`, `replacement_controller_id`, `reason_type`, `notes`, `shift_start`, `shift_end`, `status`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            (`checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `requested_by_id`, `outgoing_controller_id`, `replacement_controller_id`, `reason_type`, `relief_mode`, `notes`, `shift_start`, `shift_end`, `status`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
         ");
         $ins->execute([
             $cpMeta['type'],
@@ -6103,6 +6384,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $outId,
             $repId,
             $reasonType,
+            $reliefMode,
             $notes,
             $shiftStart,
             $shiftEnd,
@@ -6427,6 +6709,1041 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'total_hours_worked' => round($totalClosedMinutes / 60, 1),
             ],
             'rows' => $enrichedRows,
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_branding_config') {
+        echo json_encode([
+            'ok' => true,
+            'brandingConfig' => getBrandingConfig($pdo),
+            'brandingFonts' => getBrandingFontsList($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'save_branding_config') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_branding_config', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $payloadIn = !empty($jsonBody) ? $jsonBody : $_POST;
+        $saved = saveBrandingConfig($pdo, $payloadIn);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Branding theme configuration saved and applied.',
+            'brandingConfig' => $saved,
+            'brandingFonts' => getBrandingFontsList($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'list_branding_fonts') {
+        echo json_encode([
+            'ok' => true,
+            'brandingFonts' => getBrandingFontsList($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'save_branding_font') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_branding_font', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureBrandingFontsTable($pdo);
+
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $fontNameRaw = trim((string) ($_POST['font_name'] ?? $jsonBody['font_name'] ?? ''));
+        $fontName = trim((string) preg_replace('/[^A-Za-z0-9 _-]+/', '', $fontNameRaw));
+        $cssStackIn = trim((string) ($_POST['css_stack'] ?? $jsonBody['css_stack'] ?? ''));
+        $cssStack = trim((string) preg_replace('/[<>;{}]/', '', $cssStackIn));
+        $fontUrl = trim((string) ($_POST['font_url'] ?? $jsonBody['font_url'] ?? ''));
+        $isActive = isset($_POST['is_active']) ? ((int) $_POST['is_active'] ? 1 : 0) : ((int) ($jsonBody['is_active'] ?? 1) ? 1 : 0);
+        $activateAfterSave = !empty($_POST['activate']) || !empty($jsonBody['activate']);
+
+        if ($fontName === '' || strlen($fontName) < 2) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Enter a valid font name (letters, numbers, spaces, hyphen).']);
+            exit;
+        }
+        if ($fontUrl !== '' && !preg_match('#^https://[^\s<>"\']+$#i', $fontUrl)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'External font stylesheet URL must start with https://.']);
+            exit;
+        }
+        if ($cssStack === '') {
+            $cssStack = '"' . $fontName . '", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif';
+        }
+
+        $existing = null;
+        if ($id > 0) {
+            $exSt = $pdo->prepare("SELECT * FROM `branding_fonts` WHERE `id` = ? LIMIT 1");
+            $exSt->execute([$id]);
+            $existing = $exSt->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Font entry not found.']);
+                exit;
+            }
+        }
+
+        $finalFilePath = $existing ? (string) ($existing['file_path'] ?? '') : '';
+        $finalFormat = $existing ? (string) ($existing['font_format'] ?? '') : '';
+
+        $deleteManagedFontFile = static function (?string $rel): void {
+            $clean = ltrim(str_replace('\\', '/', trim((string) $rel)), '/');
+            if ($clean === '' || strpos($clean, 'uploads/branding/fonts/') !== 0 || strpos($clean, '..') !== false) {
+                return;
+            }
+            $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $clean);
+            if (is_file($abs)) {
+                @unlink($abs);
+            }
+        };
+
+        if (!empty($_FILES['font_file']['tmp_name']) && is_uploaded_file($_FILES['font_file']['tmp_name'])) {
+            $tmpFile = (string) $_FILES['font_file']['tmp_name'];
+            $fileSize = (int) ($_FILES['font_file']['size'] ?? 0);
+            if ($fileSize <= 0 || $fileSize > 5 * 1024 * 1024) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Font file must be under 5 MB.']);
+                exit;
+            }
+            $ext = strtolower(pathinfo((string) ($_FILES['font_file']['name'] ?? ''), PATHINFO_EXTENSION));
+            $fmtMap = ['woff2' => 'woff2', 'woff' => 'woff', 'ttf' => 'truetype', 'otf' => 'opentype'];
+            if (!isset($fmtMap[$ext])) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Supported font files: .woff2, .woff, .ttf, .otf.']);
+                exit;
+            }
+            $dir = __DIR__ . '/uploads/branding/fonts';
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0777, true);
+            }
+            $slug = strtolower((string) preg_replace('/[^a-z0-9_-]+/', '_', $fontName));
+            $fileName = 'font_' . $slug . '_' . time() . '.' . $ext;
+            if (!move_uploaded_file($tmpFile, $dir . '/' . $fileName)) {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'error' => 'Unable to store uploaded font file.']);
+                exit;
+            }
+            $deleteManagedFontFile($finalFilePath);
+            $finalFilePath = 'uploads/branding/fonts/' . $fileName;
+            $finalFormat = $fmtMap[$ext];
+        }
+
+        try {
+            if ($id > 0) {
+                $oldName = (string) ($existing['font_name'] ?? '');
+                $pdo->prepare("
+                    UPDATE `branding_fonts`
+                    SET `font_name` = ?, `css_stack` = ?, `font_url` = ?, `file_path` = ?, `font_format` = ?, `is_active` = ?
+                    WHERE `id` = ?
+                ")->execute([$fontName, $cssStack, $fontUrl !== '' ? $fontUrl : null, $finalFilePath !== '' ? $finalFilePath : null, $finalFormat !== '' ? $finalFormat : null, $isActive, $id]);
+
+                $curBrand = getBrandingConfig($pdo);
+                if ($oldName !== '' && $oldName === ($curBrand['font_family'] ?? '') && $oldName !== $fontName) {
+                    saveBrandingConfig($pdo, ['font_family' => $fontName]);
+                }
+                $msg = "Font '{$fontName}' updated.";
+            } else {
+                $pdo->prepare("
+                    INSERT INTO `branding_fonts` (`font_name`, `css_stack`, `font_url`, `file_path`, `font_format`, `is_system`, `is_active`)
+                    VALUES (?, ?, ?, ?, ?, 0, ?)
+                ")->execute([$fontName, $cssStack, $fontUrl !== '' ? $fontUrl : null, $finalFilePath !== '' ? $finalFilePath : null, $finalFormat !== '' ? $finalFormat : null, $isActive]);
+                $id = (int) $pdo->lastInsertId();
+                $msg = "Font '{$fontName}' created.";
+            }
+        } catch (Throwable $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'A font with that name already exists or could not be saved.']);
+            exit;
+        }
+
+        if ($activateAfterSave && $isActive === 1) {
+            saveBrandingConfig($pdo, ['font_family' => $fontName]);
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => $msg,
+            'font_id' => $id,
+            'brandingFonts' => getBrandingFontsList($pdo),
+            'brandingConfig' => getBrandingConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'delete_branding_font') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_branding_font', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureBrandingFontsTable($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $st = $pdo->prepare("SELECT * FROM `branding_fonts` WHERE `id` = ? LIMIT 1");
+        $st->execute([$id]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Font not found.']);
+            exit;
+        }
+        if ((int) ($row['is_system'] ?? 0) === 1) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'System preset fonts cannot be deleted. You can disable or add custom fonts instead.']);
+            exit;
+        }
+
+        $rel = ltrim(str_replace('\\', '/', trim((string) ($row['file_path'] ?? ''))), '/');
+        if ($rel !== '' && strpos($rel, 'uploads/branding/fonts/') === 0 && strpos($rel, '..') === false) {
+            $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+            if (is_file($abs)) {
+                @unlink($abs);
+            }
+        }
+
+        $pdo->prepare("DELETE FROM `branding_fonts` WHERE `id` = ?")->execute([$id]);
+        $curBrand = getBrandingConfig($pdo);
+        if (($curBrand['font_family'] ?? '') === ($row['font_name'] ?? '')) {
+            saveBrandingConfig($pdo, ['font_family' => 'Marvel']);
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => "Deleted font '{$row['font_name']}'.",
+            'brandingFonts' => getBrandingFontsList($pdo),
+            'brandingConfig' => getBrandingConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'upload_branding_logo') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('upload_branding_logo', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        $curBrand = getBrandingConfig($pdo);
+        $oldLogo = trim((string) ($curBrand['logo_path'] ?? ''));
+        $deleteOldLogoFile = static function (string $rel): void {
+            $clean = ltrim(str_replace('\\', '/', $rel), '/');
+            if ($clean !== '' && strpos($clean, 'uploads/branding/logo_') === 0 && strpos($clean, '..') === false) {
+                $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $clean);
+                if (is_file($abs)) {
+                    @unlink($abs);
+                }
+            }
+        };
+
+        $presetPath = trim((string) ($_POST['preset_path'] ?? $jsonBody['preset_path'] ?? ''));
+        $newLogoPath = '';
+        if ($presetPath !== '') {
+            $allowedPresets = ['assets/brand-mark.svg', 'reLogo.png', 'reTransparentLogo.png'];
+            if (!in_array($presetPath, $allowedPresets, true) || !is_file(__DIR__ . '/' . $presetPath)) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Selected preset logo file does not exist.']);
+                exit;
+            }
+            $deleteOldLogoFile($oldLogo);
+            $newLogoPath = ($presetPath === 'assets/brand-mark.svg') ? '' : $presetPath;
+        } elseif (!empty($_FILES['logo']['tmp_name']) && is_uploaded_file($_FILES['logo']['tmp_name'])) {
+            $tmpFile = (string) $_FILES['logo']['tmp_name'];
+            $fileSize = (int) ($_FILES['logo']['size'] ?? 0);
+            if ($fileSize <= 0 || $fileSize > 5 * 1024 * 1024) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Logo image must be smaller than 5 MB.']);
+                exit;
+            }
+            $ext = strtolower(pathinfo((string) ($_FILES['logo']['name'] ?? ''), PATHINFO_EXTENSION));
+            if (!in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'], true)) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Unsupported logo format. Upload PNG, JPG, WEBP, GIF, or clean SVG.']);
+                exit;
+            }
+            if ($ext === 'svg') {
+                $svgContent = (string) file_get_contents($tmpFile);
+                if (stripos($svgContent, '<svg') === false || preg_match('/<\s*script|on[a-z]+\s*=|javascript:/i', $svgContent)) {
+                    http_response_code(400);
+                    echo json_encode(['ok' => false, 'error' => 'Invalid or unsafe SVG logo file.']);
+                    exit;
+                }
+            } elseif (@getimagesize($tmpFile) === false) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Uploaded logo is not a valid image file.']);
+                exit;
+            }
+            $dir = __DIR__ . '/uploads/branding';
+            if (!is_dir($dir)) {
+                @mkdir($dir, 0777, true);
+            }
+            $fileName = 'logo_' . time() . '_' . substr(md5(uniqid('', true)), 0, 6) . '.' . $ext;
+            if (!move_uploaded_file($tmpFile, $dir . '/' . $fileName)) {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'error' => 'Failed to save logo image on server.']);
+                exit;
+            }
+            $deleteOldLogoFile($oldLogo);
+            $newLogoPath = 'uploads/branding/' . $fileName;
+        } else {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Select a logo image or preset to apply.']);
+            exit;
+        }
+
+        $brandNameIn = trim((string) ($_POST['brand_name'] ?? $jsonBody['brand_name'] ?? ''));
+        $savePayload = ['logo_path' => $newLogoPath];
+        if ($brandNameIn !== '') {
+            $savePayload['brand_name'] = $brandNameIn;
+        }
+        $saved = saveBrandingConfig($pdo, $savePayload);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Brand logo updated across portals.',
+            'brandingConfig' => $saved,
+        ]);
+        exit;
+    }
+
+    if ($action === 'reset_branding_logo') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('reset_branding_logo', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $curBrand = getBrandingConfig($pdo);
+        $oldLogo = ltrim(str_replace('\\', '/', trim((string) ($curBrand['logo_path'] ?? ''))), '/');
+        if ($oldLogo !== '' && strpos($oldLogo, 'uploads/branding/logo_') === 0 && strpos($oldLogo, '..') === false) {
+            $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $oldLogo);
+            if (is_file($abs)) {
+                @unlink($abs);
+            }
+        }
+        $saved = saveBrandingConfig($pdo, ['logo_path' => '']);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Brand logo reset to default.',
+            'brandingConfig' => $saved,
+        ]);
+        exit;
+    }
+
+    if ($action === 'change_own_password') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        if (!$caller) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Authentication required.']);
+            exit;
+        }
+        $curPwd = (string) ($_POST['current_password'] ?? $jsonBody['current_password'] ?? '');
+        $newPwd = (string) ($_POST['new_password'] ?? $jsonBody['new_password'] ?? '');
+        $confPwd = (string) ($_POST['confirm_password'] ?? $jsonBody['confirm_password'] ?? '');
+
+        if (!verifyUserPasswordRow($caller, $curPwd)) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Current password is incorrect.']);
+            exit;
+        }
+        if (strlen($newPwd) < 8) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'New password must be at least 8 characters long.']);
+            exit;
+        }
+        if ($confPwd !== '' && $newPwd !== $confPwd) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'New password and confirmation do not match.']);
+            exit;
+        }
+        if ($curPwd === $newPwd) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'New password must differ from your current password.']);
+            exit;
+        }
+
+        $newHash = password_hash($newPwd, PASSWORD_DEFAULT);
+        if (usersTableHasPasswordCol($pdo)) {
+            $pdo->prepare("UPDATE `users` SET `password_hash` = ?, `password` = ?, `must_change_password` = 0 WHERE `id` = ?")
+                ->execute([$newHash, $newHash, (int) $caller['id']]);
+        } else {
+            $pdo->prepare("UPDATE `users` SET `password_hash` = ?, `must_change_password` = 0 WHERE `id` = ?")
+                ->execute([$newHash, (int) $caller['id']]);
+        }
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Your password has been updated cleanly.',
+            'must_change_password' => 0,
+        ]);
+        exit;
+    }
+
+    if ($action === 'totp_status') {
+        $caller = getCallerUser($pdo);
+        if (!$caller) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Authentication required.']);
+            exit;
+        }
+        $st = $pdo->prepare("SELECT `is_enabled`, `verified_at`, `updated_at` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+        $st->execute([(int) $caller['id']]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        echo json_encode([
+            'ok' => true,
+            'enabled' => $row ? ((int) $row['is_enabled'] === 1) : false,
+            'has_pending_secret' => ($row && (int) $row['is_enabled'] === 0),
+            'verified_at' => $row['verified_at'] ?? null,
+            'updated_at' => $row['updated_at'] ?? null,
+        ]);
+        exit;
+    }
+
+    if ($action === 'totp_setup') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        if (!$caller) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Authentication required.']);
+            exit;
+        }
+        $secret = base32Encode(random_bytes(20));
+        $pdo->prepare("
+            INSERT INTO `user_totp_secrets` (`user_id`, `secret_base32`, `is_enabled`, `verified_at`)
+            VALUES (?, ?, 0, NULL)
+            ON DUPLICATE KEY UPDATE `secret_base32` = VALUES(`secret_base32`), `is_enabled` = 0, `verified_at` = NULL
+        ")->execute([(int) $caller['id'], $secret]);
+
+        $account = (string) ($caller['username'] ?: ($caller['email'] ?: ('user' . $caller['id'])));
+        $issuer = 'aBility Manager';
+        $label = rawurlencode($issuer) . ':' . rawurlencode($account);
+        $otpauthUri = "otpauth://totp/{$label}?secret={$secret}&issuer=" . rawurlencode($issuer) . "&digits=6&period=30";
+
+        echo json_encode([
+            'ok' => true,
+            'secret' => $secret,
+            'otpauth_uri' => $otpauthUri,
+            'account' => $account,
+            'issuer' => $issuer,
+            'message' => 'Scan the QR code in Google Authenticator / Authy and enter the 6-digit code to enable.',
+        ]);
+        exit;
+    }
+
+    if ($action === 'totp_verify_enable') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        if (!$caller) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Authentication required.']);
+            exit;
+        }
+        $code = preg_replace('/\D+/', '', (string) ($_POST['code'] ?? $jsonBody['code'] ?? ''));
+        $st = $pdo->prepare("SELECT `secret_base32` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+        $st->execute([(int) $caller['id']]);
+        $secret = (string) ($st->fetchColumn() ?: '');
+        if ($secret === '') {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'No Authenticator setup found. Click Setup Authenticator first.']);
+            exit;
+        }
+        if (!verifyTotpCode($secret, $code, 1)) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Invalid 6-digit Authenticator code. Check device time sync and try again.']);
+            exit;
+        }
+        $pdo->prepare("UPDATE `user_totp_secrets` SET `is_enabled` = 1, `verified_at` = NOW() WHERE `user_id` = ?")
+            ->execute([(int) $caller['id']]);
+        echo json_encode([
+            'ok' => true,
+            'enabled' => true,
+            'message' => 'Authenticator (TOTP) 2FA verified and active on your account.',
+        ]);
+        exit;
+    }
+
+    if ($action === 'totp_disable') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        if (!$caller) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Authentication required.']);
+            exit;
+        }
+        $pwd = (string) ($_POST['password'] ?? $jsonBody['password'] ?? '');
+        if (!verifyUserPasswordRow($caller, $pwd)) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Account password required to disable Authenticator 2FA.']);
+            exit;
+        }
+        $pdo->prepare("DELETE FROM `user_totp_secrets` WHERE `user_id` = ?")->execute([(int) $caller['id']]);
+        echo json_encode([
+            'ok' => true,
+            'enabled' => false,
+            'message' => 'Authenticator (TOTP) 2FA disabled.',
+        ]);
+        exit;
+    }
+
+    if ($action === 'generate_relief_qr') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('generate_relief_qr', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+
+        $shiftRequestId = (int) ($_POST['shift_request_id'] ?? $jsonBody['shift_request_id'] ?? 0);
+        $assignedUserId = (int) ($_POST['assigned_user_id'] ?? $jsonBody['assigned_user_id'] ?? $_POST['replacement_controller_id'] ?? $jsonBody['replacement_controller_id'] ?? 0);
+        $cpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'stock_warehouse'));
+        $cpIdRaw = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? ''));
+        $durationHours = max(1, min(72, (int) ($_POST['duration_hours'] ?? $jsonBody['duration_hours'] ?? 8)));
+        $expiresMinutes = max(5, min(1440, (int) ($_POST['expires_minutes'] ?? $jsonBody['expires_minutes'] ?? 60)));
+        $requireTotp = isset($_POST['require_totp'])
+            ? ((int) $_POST['require_totp'] ? 1 : 0)
+            : (isset($jsonBody['require_totp']) ? ((int) $jsonBody['require_totp'] ? 1 : 0) : 1);
+        $requireGeofence = isset($_POST['require_geofence'])
+            ? ((int) $_POST['require_geofence'] ? 1 : 0)
+            : (isset($jsonBody['require_geofence']) ? ((int) $jsonBody['require_geofence'] ? 1 : 0) : 1);
+        $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? 'Geo-Fenced Temporary Relief QR'));
+
+        if ($shiftRequestId > 0) {
+            $srSt = $pdo->prepare("SELECT * FROM `controller_shift_requests` WHERE `id` = ? LIMIT 1");
+            $srSt->execute([$shiftRequestId]);
+            $srRow = $srSt->fetch(PDO::FETCH_ASSOC);
+            if ($srRow) {
+                if ($assignedUserId <= 0) {
+                    $assignedUserId = (int) ($srRow['replacement_controller_id'] ?? 0);
+                }
+                if ($cpIdRaw === '') {
+                    $cpType = (string) ($srRow['checkpoint_type'] ?? 'stock_warehouse');
+                    $cpIdRaw = (string) ($srRow['checkpoint_id'] ?? '');
+                }
+            } else {
+                $shiftRequestId = 0;
+            }
+        }
+
+        if ($assignedUserId <= 0) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Select a Relief Gate Controller before generating a Geo-Fenced QR token.']);
+            exit;
+        }
+
+        $uSt = $pdo->prepare("SELECT `id`, `full_name`, `username`, `role` FROM `users` WHERE `id` = ? LIMIT 1");
+        $uSt->execute([$assignedUserId]);
+        $targetUser = $uSt->fetch(PDO::FETCH_ASSOC);
+        if (!$targetUser) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Target controller account not found.']);
+            exit;
+        }
+
+        $lookup = loadCheckpointsLookup($pdo);
+        $cpMeta = findCheckpointRecord($lookup['stock_warehouses'], $lookup['event_venues'], $cpType, $cpIdRaw);
+        if (!$cpMeta) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Select a valid checkpoint terminal.']);
+            exit;
+        }
+
+        $cpDbRadius = 200;
+        $cpHasCoords = false;
+        try {
+            if ($cpMeta['type'] === 'event_venue') {
+                $cSt = $pdo->prepare("SELECT `lat`, `lng`, `geofence_radius_m` FROM `events` WHERE `id` = ? LIMIT 1");
+                $cSt->execute([(string) $cpMeta['raw_id']]);
+            } else {
+                $cSt = $pdo->prepare("SELECT `lat`, `lng`, `geofence_radius_m` FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+                $cSt->execute([(int) $cpMeta['id']]);
+            }
+            $cRow = $cSt->fetch(PDO::FETCH_ASSOC);
+            if ($cRow) {
+                $cpDbRadius = max(50, min(5000, (int) ($cRow['geofence_radius_m'] ?? 200)));
+                $cpHasCoords = ($cRow['lat'] !== null && $cRow['lng'] !== null);
+            }
+        } catch (Throwable $e) {}
+
+        $radiusM = isset($_POST['geofence_radius_m']) || isset($jsonBody['geofence_radius_m'])
+            ? max(50, min(5000, (int) ($_POST['geofence_radius_m'] ?? $jsonBody['geofence_radius_m'] ?? $cpDbRadius)))
+            : $cpDbRadius;
+
+        $totpCheck = $pdo->prepare("SELECT `is_enabled` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+        $totpCheck->execute([$assignedUserId]);
+        $targetTotpEnabled = ((int) $totpCheck->fetchColumn() === 1);
+
+        $shiftStartStr = date('Y-m-d H:i:s');
+        $shiftEndStr = date('Y-m-d H:i:s', time() + $durationHours * 3600);
+        $qrExpiresAt = date('Y-m-d H:i:s', time() + $expiresMinutes * 60);
+        $reliefModeVal = $requireTotp ? 'geo_qr_totp' : 'geo_qr';
+
+        if ($shiftRequestId <= 0) {
+            $insSr = $pdo->prepare("
+                INSERT INTO `controller_shift_requests`
+                (`checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `requested_by_id`, `replacement_controller_id`, `reason_type`, `relief_mode`, `notes`, `shift_start`, `shift_end`, `status`)
+                VALUES (?, ?, ?, ?, ?, 'shift_swap', ?, ?, ?, ?, 'pending')
+            ");
+            $insSr->execute([
+                $cpMeta['type'],
+                (string) $cpMeta['id'],
+                $cpMeta['name'],
+                (int) $caller['id'],
+                $assignedUserId,
+                $reliefModeVal,
+                $notes,
+                $shiftStartStr,
+                $shiftEndStr,
+            ]);
+            $shiftRequestId = (int) $pdo->lastInsertId();
+        } else {
+            $pdo->prepare("UPDATE `controller_shift_requests` SET `relief_mode` = ?, `shift_end` = COALESCE(`shift_end`, ?) WHERE `id` = ?")
+                ->execute([$reliefModeVal, $shiftEndStr, $shiftRequestId]);
+        }
+
+        $rawToken = bin2hex(random_bytes(24));
+        $tokenHash = hash('sha256', $rawToken);
+        $insTok = $pdo->prepare("
+            INSERT INTO `relief_qr_tokens`
+            (`shift_request_id`, `token_hash`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `assigned_user_id`, `require_totp`, `require_geofence`, `geofence_radius_m`, `expires_at`, `created_by_id`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $insTok->execute([
+            $shiftRequestId,
+            $tokenHash,
+            $cpMeta['type'],
+            (string) $cpMeta['id'],
+            $cpMeta['name'],
+            $assignedUserId,
+            $requireTotp,
+            $requireGeofence,
+            $radiusM,
+            $qrExpiresAt,
+            (int) $caller['id'],
+        ]);
+        $tokenId = (int) $pdo->lastInsertId();
+
+        $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        echo json_encode(array_merge($full, [
+            'ok' => true,
+            'token' => $rawToken,
+            'token_id' => $tokenId,
+            'shift_request_id' => $shiftRequestId,
+            'relief_url' => 'relief.php?token=' . $rawToken,
+            'checkpoint_name' => $cpMeta['name'],
+            'assigned_user_name' => (string) ($targetUser['full_name'] ?: $targetUser['username']),
+            'geofence_radius_m' => $radiusM,
+            'checkpoint_has_coords' => $cpHasCoords,
+            'require_totp' => $requireTotp,
+            'require_geofence' => $requireGeofence,
+            'target_totp_enabled' => $targetTotpEnabled,
+            'expires_at' => $qrExpiresAt,
+            'shift_end' => $shiftEndStr,
+            'message' => "Geo-Fenced Relief QR generated for {$targetUser['full_name']} at {$cpMeta['name']}.",
+        ]));
+        exit;
+    }
+
+    if ($action === 'get_relief_token_info') {
+        $rawToken = trim((string) ($_GET['token'] ?? $_POST['token'] ?? $jsonBody['token'] ?? ''));
+        if ($rawToken === '' || !preg_match('/^[a-f0-9]{16,128}$/i', $rawToken)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid or missing Relief QR token.']);
+            exit;
+        }
+        $tokenHash = hash('sha256', $rawToken);
+        $st = $pdo->prepare("SELECT * FROM `relief_qr_tokens` WHERE `token_hash` = ? LIMIT 1");
+        $st->execute([$tokenHash]);
+        $tok = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$tok) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Relief QR token was not found.']);
+            exit;
+        }
+
+        $uSt = $pdo->prepare("SELECT `id`, `username`, `full_name`, `role` FROM `users` WHERE `id` = ? LIMIT 1");
+        $uSt->execute([(int) $tok['assigned_user_id']]);
+        $targetUser = $uSt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        $tSt = $pdo->prepare("SELECT `is_enabled` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+        $tSt->execute([(int) $tok['assigned_user_id']]);
+        $targetTotpEnabled = ((int) $tSt->fetchColumn() === 1);
+
+        $cpLat = null;
+        $cpLng = null;
+        $cpLoc = '';
+        if ($tok['checkpoint_type'] === 'event_venue') {
+            $cSt = $pdo->prepare("SELECT `lat`, `lng`, `location` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $cSt->execute([(string) $tok['checkpoint_id'], (string) $tok['checkpoint_id']]);
+        } else {
+            $cSt = $pdo->prepare("SELECT `lat`, `lng`, `location` FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+            $cSt->execute([(int) $tok['checkpoint_id']]);
+        }
+        $cpRow = $cSt->fetch(PDO::FETCH_ASSOC);
+        if ($cpRow) {
+            $cpLat = $cpRow['lat'] !== null ? (float) $cpRow['lat'] : null;
+            $cpLng = $cpRow['lng'] !== null ? (float) $cpRow['lng'] : null;
+            $cpLoc = (string) ($cpRow['location'] ?? '');
+        }
+
+        $shiftEnd = null;
+        if ((int) $tok['shift_request_id'] > 0) {
+            $sSt = $pdo->prepare("SELECT `shift_end` FROM `controller_shift_requests` WHERE `id` = ? LIMIT 1");
+            $sSt->execute([(int) $tok['shift_request_id']]);
+            $shiftEnd = $sSt->fetchColumn() ?: null;
+        }
+
+        $isRedeemed = !empty($tok['redeemed_at']);
+        $isExpired = !empty($tok['expires_at']) && strtotime((string) $tok['expires_at']) < time();
+        $sessionUserId = (int) ($_SESSION['auth_user_id'] ?? 0);
+
+        echo json_encode([
+            'ok' => true,
+            'csrf_token' => getSessionCsrfToken(),
+            'session_user_id' => $sessionUserId,
+            'token_info' => [
+                'id' => (int) $tok['id'],
+                'status' => $isRedeemed ? 'redeemed' : ($isExpired ? 'expired' : 'active'),
+                'checkpoint_type' => (string) $tok['checkpoint_type'],
+                'checkpoint_id' => (string) $tok['checkpoint_id'],
+                'checkpoint_name' => (string) $tok['checkpoint_name'],
+                'checkpoint_location' => $cpLoc,
+                'checkpoint_lat' => $cpLat,
+                'checkpoint_lng' => $cpLng,
+                'geofence_radius_m' => (int) $tok['geofence_radius_m'],
+                'require_geofence' => (int) $tok['require_geofence'],
+                'require_totp' => (int) $tok['require_totp'],
+                'assigned_user_id' => (int) $tok['assigned_user_id'],
+                'assigned_user_name' => $targetUser ? (string) ($targetUser['full_name'] ?: $targetUser['username']) : 'Relief Controller',
+                'assigned_username' => $targetUser ? (string) $targetUser['username'] : '',
+                'target_totp_enabled' => $targetTotpEnabled,
+                'expires_at' => (string) $tok['expires_at'],
+                'redeemed_at' => $tok['redeemed_at'] ?: null,
+                'shift_end' => $shiftEnd,
+            ],
+        ]);
+        exit;
+    }
+
+    if ($action === 'redeem_relief_qr') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        if (!validateCsrfForAuthenticatedPost($jsonBody)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Invalid or expired security token. Refresh the page and retry.']);
+            exit;
+        }
+
+        $rawToken = trim((string) ($_POST['token'] ?? $jsonBody['token'] ?? ''));
+        $totpCode = preg_replace('/\D+/', '', (string) ($_POST['totp_code'] ?? $jsonBody['totp_code'] ?? ''));
+        $supervisorPin = trim((string) ($_POST['supervisor_pin'] ?? $jsonBody['supervisor_pin'] ?? ''));
+        $latIn = $_POST['lat'] ?? $jsonBody['lat'] ?? null;
+        $lngIn = $_POST['lng'] ?? $jsonBody['lng'] ?? null;
+        $hasGps = ($latIn !== null && $latIn !== '' && $lngIn !== null && $lngIn !== '' && is_numeric($latIn) && is_numeric($lngIn));
+        $loginUsername = trim((string) ($_POST['username'] ?? $jsonBody['username'] ?? ''));
+        $loginPassword = (string) ($_POST['password'] ?? $jsonBody['password'] ?? '');
+
+        if ($rawToken === '' || !preg_match('/^[a-f0-9]{16,128}$/i', $rawToken)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid Relief QR token.']);
+            exit;
+        }
+
+        $tokenHash = hash('sha256', $rawToken);
+        $clientIp = trim((string) ($_SERVER['REMOTE_ADDR'] ?? 'local'));
+        $rateKey = 'relief_redeem:' . substr($tokenHash, 0, 16) . ':' . sha1(strtolower($clientIp));
+        $rateCheck = checkSecurityRateLimit($pdo, $rateKey, 6, 600);
+        if (!$rateCheck['allowed']) {
+            http_response_code(429);
+            echo json_encode(['ok' => false, 'error' => "Too many attempts. Wait {$rateCheck['retry_after']}s and retry."]);
+            exit;
+        }
+
+        $st = $pdo->prepare("SELECT * FROM `relief_qr_tokens` WHERE `token_hash` = ? LIMIT 1");
+        $st->execute([$tokenHash]);
+        $tok = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$tok) {
+            recordFailedRateLimit($pdo, $rateKey, 6, 600, 60);
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Relief QR token not found.']);
+            exit;
+        }
+        if (!empty($tok['redeemed_at'])) {
+            http_response_code(409);
+            echo json_encode(['ok' => false, 'error' => 'This Relief QR code was already redeemed at ' . $tok['redeemed_at'] . '. Request a fresh QR code from a Supervisor.']);
+            exit;
+        }
+        if (!empty($tok['expires_at']) && strtotime((string) $tok['expires_at']) < time()) {
+            http_response_code(410);
+            echo json_encode(['ok' => false, 'error' => 'This Relief QR code expired at ' . $tok['expires_at'] . '. Request a fresh QR code.']);
+            exit;
+        }
+
+        $assignedUserId = (int) $tok['assigned_user_id'];
+        $uSt = $pdo->prepare("SELECT * FROM `users` WHERE `id` = ? LIMIT 1");
+        $uSt->execute([$assignedUserId]);
+        $targetUser = $uSt->fetch(PDO::FETCH_ASSOC);
+        if (!$targetUser) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Assigned relief controller account no longer exists.']);
+            exit;
+        }
+
+        // Verify caller identity (active matching/supervisor session OR target user's login credentials)
+        $sessionUserId = (int) ($_SESSION['auth_user_id'] ?? 0);
+        $caller = $sessionUserId > 0 ? getCallerUser($pdo) : null;
+        $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+        $isSupervisorSession = ($caller && in_array($callerRole, ['admin', 'administrator', 'manager', 'stock_manager', 'project_manager', 'event_coordinator'], true));
+
+        if ($sessionUserId > 0 && $sessionUserId !== $assignedUserId && !$isSupervisorSession) {
+            recordFailedRateLimit($pdo, $rateKey, 6, 600, 60);
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => "This Relief QR is issued for {$targetUser['full_name']}. Sign in with their account or ask an Administrator to activate it."]);
+            exit;
+        }
+        if ($sessionUserId <= 0) {
+            if ($loginUsername === '' || $loginPassword === '') {
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'error' => "Enter {$targetUser['username']}'s username and password to verify your identity before activating relief."]);
+                exit;
+            }
+            $uMatch = (strtolower($loginUsername) === strtolower((string) $targetUser['username']) || strtolower($loginUsername) === strtolower((string) ($targetUser['email'] ?? '')));
+            if (!$uMatch || !verifyUserPasswordRow($targetUser, $loginPassword)) {
+                recordFailedRateLimit($pdo, $rateKey, 6, 600, 60);
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'error' => 'Incorrect username or password for this Relief QR assignee.']);
+                exit;
+            }
+        }
+
+        // Lookup checkpoint coordinates & terminal PIN
+        $cpLat = null;
+        $cpLng = null;
+        $expectedPin = '';
+        if ($tok['checkpoint_type'] === 'event_venue') {
+            $cSt = $pdo->prepare("SELECT `lat`, `lng`, `terminal_pin` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $cSt->execute([(string) $tok['checkpoint_id'], (string) $tok['checkpoint_id']]);
+            $cRow = $cSt->fetch(PDO::FETCH_ASSOC);
+            if ($cRow) {
+                $cpLat = $cRow['lat'] !== null ? (float) $cRow['lat'] : null;
+                $cpLng = $cRow['lng'] !== null ? (float) $cRow['lng'] : null;
+                $expectedPin = trim((string) ($cRow['terminal_pin'] ?? ''));
+            }
+        } else {
+            $cSt = $pdo->prepare("SELECT * FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+            $cSt->execute([(int) $tok['checkpoint_id']]);
+            $cRow = $cSt->fetch(PDO::FETCH_ASSOC);
+            if ($cRow) {
+                $cpLat = $cRow['lat'] !== null ? (float) $cRow['lat'] : null;
+                $cpLng = $cRow['lng'] !== null ? (float) $cRow['lng'] : null;
+                $expectedPin = resolveWarehouseTerminalPin($cRow);
+            }
+        }
+
+        // Check Geo-Fence OR Supervisor Override PIN
+        $overrideUsed = 0;
+        $distanceM = null;
+        if ($hasGps && $cpLat !== null && $cpLng !== null) {
+            $distanceM = (int) round(calculateHaversineMeters($cpLat, $cpLng, (float) $latIn, (float) $lngIn));
+        }
+
+        if ($supervisorPin !== '') {
+            if ($expectedPin === '' || !verifyTerminalPinSecret($supervisorPin, $expectedPin)) {
+                recordFailedRateLimit($pdo, $rateKey, 6, 600, 60);
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'error' => 'Incorrect Supervisor Override PIN for this checkpoint.']);
+                exit;
+            }
+            $overrideUsed = 1;
+        } elseif ((int) $tok['require_geofence'] === 1) {
+            if ($cpLat === null || $cpLng === null) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Checkpoint GPS coordinates are not configured yet. Enter Supervisor Override PIN or configure Lat/Lng in Settings > Relief & Geo-QR.']);
+                exit;
+            }
+            if (!$hasGps) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'GPS location permission is required to verify you are within ' . (int) $tok['geofence_radius_m'] . 'm of the gate, or enter Supervisor Override PIN.']);
+                exit;
+            }
+            if ($distanceM > (int) $tok['geofence_radius_m']) {
+                recordFailedRateLimit($pdo, $rateKey, 6, 600, 60);
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'distance_m' => $distanceM, 'error' => "Outside Geo-Fence: {$distanceM}m away from {$tok['checkpoint_name']} (max {$tok['geofence_radius_m']}m)."]);
+                exit;
+            }
+        }
+
+        // Check Authenticator (TOTP)
+        $tSt = $pdo->prepare("SELECT `secret_base32`, `is_enabled` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+        $tSt->execute([$assignedUserId]);
+        $totpRow = $tSt->fetch(PDO::FETCH_ASSOC);
+        $totpIsEnabled = ($totpRow && (int) $totpRow['is_enabled'] === 1);
+
+        if ((int) $tok['require_totp'] === 1 || $totpIsEnabled) {
+            if (!$totpIsEnabled) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Authenticator (TOTP) is required for this Relief QR, but is not yet enabled for this controller. Open Settings > Relief & Geo-QR to enroll TOTP.']);
+                exit;
+            }
+            if (!verifyTotpCode((string) $totpRow['secret_base32'], $totpCode, 1)) {
+                recordFailedRateLimit($pdo, $rateKey, 6, 600, 60);
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'error' => 'Invalid or expired 6-digit Authenticator (TOTP) code.']);
+                exit;
+            }
+        }
+
+        // Atomic single-use redemption & temporary checkpoint activation
+        $pdo->beginTransaction();
+        try {
+            $redeemStmt = $pdo->prepare("
+                UPDATE `relief_qr_tokens`
+                SET `redeemed_at` = NOW(), `redeemed_by_id` = ?, `verified_lat` = ?, `verified_lng` = ?, `distance_m` = ?, `override_used` = ?
+                WHERE `id` = ? AND `redeemed_at` IS NULL
+            ");
+            $redeemStmt->execute([
+                $assignedUserId,
+                $hasGps ? (float) $latIn : null,
+                $hasGps ? (float) $lngIn : null,
+                $distanceM,
+                $overrideUsed,
+                (int) $tok['id'],
+            ]);
+            if ($redeemStmt->rowCount() !== 1) {
+                $pdo->rollBack();
+                http_response_code(409);
+                echo json_encode(['ok' => false, 'error' => 'This Relief QR code was already redeemed.']);
+                exit;
+            }
+
+            $assignmentExpiresAt = date('Y-m-d H:i:s', time() + 8 * 3600);
+            if ((int) $tok['shift_request_id'] > 0) {
+                $sSt = $pdo->prepare("SELECT `shift_end` FROM `controller_shift_requests` WHERE `id` = ? LIMIT 1");
+                $sSt->execute([(int) $tok['shift_request_id']]);
+                $srEnd = $sSt->fetchColumn();
+                if ($srEnd) {
+                    $assignmentExpiresAt = (string) $srEnd;
+                }
+                $pdo->prepare("
+                    UPDATE `controller_shift_requests`
+                    SET `status` = 'approved', `reviewed_by_id` = COALESCE(`reviewed_by_id`, ?), `reviewed_at` = NOW(),
+                        `review_notes` = CONCAT(COALESCE(`review_notes`, ''), CASE WHEN COALESCE(`review_notes`, '') != '' THEN ' · ' ELSE '' END, ?)
+                    WHERE `id` = ?
+                ")->execute([
+                    (int) $tok['created_by_id'],
+                    ($overrideUsed ? 'Redeemed via Supervisor PIN Override' : 'Redeemed via Geo-Fenced QR') . ($distanceM !== null ? " ({$distanceM}m)" : ''),
+                    (int) $tok['shift_request_id'],
+                ]);
+            }
+
+            $pdo->prepare("
+                UPDATE `users`
+                SET `assigned_checkpoint_type` = ?, `assigned_checkpoint_id` = ?, `assignment_expires_at` = ?
+                WHERE `id` = ?
+            ")->execute([
+                (string) $tok['checkpoint_type'],
+                (string) $tok['checkpoint_id'],
+                $assignmentExpiresAt,
+                $assignedUserId,
+            ]);
+
+            if ($tok['checkpoint_type'] === 'stock_warehouse' && ctype_digit((string) $tok['checkpoint_id']) && !empty($targetUser['full_name'])) {
+                try {
+                    $pdo->prepare("UPDATE `stock_locations` SET `controller_name` = ? WHERE `id` = ?")
+                        ->execute([(string) $targetUser['full_name'], (int) $tok['checkpoint_id']]);
+                } catch (Throwable $e) {}
+            }
+
+            $pdo->commit();
+        } catch (Throwable $txErr) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $txErr;
+        }
+
+        clearSecurityRateLimit($pdo, $rateKey);
+        if ($sessionUserId <= 0) {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                @session_regenerate_id(true);
+            }
+            $_SESSION['auth_user_id'] = $assignedUserId;
+            $_SESSION['auth_user_role'] = strtolower((string) ($targetUser['role'] ?? 'stock_controller'));
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'message' => "Temporary relief activated for {$tok['checkpoint_name']} until {$assignmentExpiresAt}.",
+            'checkpoint_type' => (string) $tok['checkpoint_type'],
+            'checkpoint_id' => (string) $tok['checkpoint_id'],
+            'checkpoint_name' => (string) $tok['checkpoint_name'],
+            'assignment_expires_at' => $assignmentExpiresAt,
+            'distance_m' => $distanceM,
+            'override_used' => $overrideUsed,
+            'redirect_url' => 'index.php',
         ]);
         exit;
     }

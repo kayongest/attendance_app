@@ -20,13 +20,21 @@ header("Pragma: no-cache");
 header("Expires: 0");
 
 $portalEnabled = true;
+$portalExpired = false;
 $isAuthorized = false;
 $activeDb = '';
 $portalCfg = null;
+$brandingHtml = '';
+$defaultBrandingTheme = null;
 
 try {
     require_once __DIR__ . '/db.php';
     $pdo = getDbConnection($activeDb);
+    $brandingHtml = renderBrandingHeadHtml($pdo);
+    $bCfg = getBrandingConfig($pdo);
+    if (!empty($bCfg['default_theme']) && in_array($bCfg['default_theme'], ['dark', 'light'], true)) {
+        $defaultBrandingTheme = $bCfg['default_theme'];
+    }
     $st = $pdo->query("SELECT `setting_key`, `setting_value` FROM `app_settings` WHERE `setting_key` IN ('onsite_share_enabled', 'onsite_share_session_ver')");
     $settings = [];
     while ($row = $st->fetch(PDO::FETCH_ASSOC)) {
@@ -34,7 +42,8 @@ try {
     }
     $portalCfg = resolveStandalonePortalConfig($pdo, 'onsite');
     $portalCfgActive = $portalCfg ? ((int) ($portalCfg['is_active'] ?? 1) === 1) : true;
-    $portalEnabled = (($settings['onsite_share_enabled'] ?? '1') === '1') && $portalCfgActive;
+    $portalExpired = ($portalCfg && !empty($portalCfg['expires_at']) && strtotime((string) $portalCfg['expires_at']) < time());
+    $portalEnabled = (($settings['onsite_share_enabled'] ?? '1') === '1') && $portalCfgActive && !$portalExpired;
     $curVer = max(1, (int) ($settings['onsite_share_session_ver'] ?? 1));
     $isAuthorized = $portalEnabled
         && !empty($_SESSION['onsite_viewer_authorized'])
@@ -47,10 +56,12 @@ try {
 $portalTitleResolved = ($portalCfg && trim((string) ($portalCfg['title'] ?? '')) !== '')
     ? trim((string) $portalCfg['title'])
     : 'Live On-Site Crew Directory';
+$portalBestFor = $portalCfg ? trim((string) ($portalCfg['best_for'] ?? '')) : '';
+$portalPermsSummary = $portalCfg ? trim((string) ($portalCfg['permissions_summary'] ?? '')) : '';
 $portalBgUrl = $portalCfg ? ($portalCfg['background_image_url'] ?? null) : null;
 $portalOverlayOpacity = $portalCfg ? max(0.15, min(0.95, (float) ($portalCfg['overlay_opacity'] ?? 0.78))) : 0.78;
 
-$initialTheme = 'light';
+$initialTheme = $defaultBrandingTheme ?: 'light';
 if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
     $initialTheme = $_COOKIE['ability_theme'];
 }
@@ -59,8 +70,15 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
 <html lang="en" data-theme="<?php echo htmlspecialchars($initialTheme, ENT_QUOTES, 'UTF-8'); ?>">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="csrf-token" content="<?php echo htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8'); ?>" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="aBility OnSite" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
+  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+  <?php echo $brandingHtml . "\n"; ?>
   <title>Live On-Site Crew Directory — aBility Tech</title>
   <script>
     (function () {
@@ -529,15 +547,27 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   <!-- PASSWORD GATE -->
   <div id="portal-lock-view" class="lock-wrap" style="display: <?php echo $isAuthorized ? 'none' : 'flex'; ?>;">
     <div class="lock-card">
-      <div class="lock-badge">Technician Shared Access</div>
+      <div class="lock-badge"><?php echo $portalExpired ? 'Shared Link Expired' : 'Technician Shared Access'; ?></div>
       <h1 class="lock-title"><?php echo htmlspecialchars($portalTitleResolved, ENT_QUOTES, 'UTF-8'); ?></h1>
       <p class="lock-sub">
-        <?php if (!$portalEnabled): ?>
+        <?php if ($portalExpired): ?>
+          This shared on-site link expired on <?php echo htmlspecialchars((string) ($portalCfg['expires_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>. Contact an Administrator to extend access.
+        <?php elseif (!$portalEnabled): ?>
           This shared on-site link is currently disabled by an Administrator.
         <?php else: ?>
           Enter the shared crew access password to view Stock Managers, Gate Controllers, and fellow technicians currently on site.
         <?php endif; ?>
       </p>
+      <?php if ($portalBestFor !== '' || $portalPermsSummary !== ''): ?>
+      <div style="margin:0 0 12px;padding:8px 10px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-subtle);font-size:11.5px;line-height:1.45;text-align:left;">
+        <?php if ($portalBestFor !== ''): ?>
+        <div><strong>Best For:</strong> <?php echo htmlspecialchars($portalBestFor, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
+        <?php if ($portalPermsSummary !== ''): ?>
+        <div style="margin-top:3px;color:var(--text-secondary);"><strong>Limits:</strong> <?php echo htmlspecialchars($portalPermsSummary, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
 
       <?php if ($portalEnabled): ?>
       <form id="onsite-lock-form">
@@ -570,10 +600,16 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   <div id="portal-live-view" class="portal-shell" style="display: <?php echo $isAuthorized ? 'block' : 'none'; ?>;">
     <header class="topbar">
       <div class="brand-left">
-        <div class="brand-mark">aB</div>
+        <div class="brand-mark" style="overflow:hidden;padding:4px;"><img class="js-brand-logo-img" src="assets/brand-mark.svg" alt="aBility" style="width:100%;height:100%;object-fit:contain;" /></div>
         <div>
           <div style="font-size: 16px; font-weight: 800;"><?php echo htmlspecialchars($portalTitleResolved, ENT_QUOTES, 'UTF-8'); ?></div>
-          <div style="font-size: 12px; color: var(--text-secondary);">Stock Managers · Gate Controllers · Tech Leads · Technicians</div>
+          <div style="font-size: 12px; color: var(--text-secondary);">
+            Stock Managers · Gate Controllers · Tech Leads · Technicians
+            <?php if ($portalBestFor !== ''): ?> · <?php echo htmlspecialchars($portalBestFor, ENT_QUOTES, 'UTF-8'); ?><?php endif; ?>
+          </div>
+          <?php if ($portalPermsSummary !== ''): ?>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Limits: <?php echo htmlspecialchars($portalPermsSummary, ENT_QUOTES, 'UTF-8'); ?></div>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -910,6 +946,10 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       <?php if ($isAuthorized): ?>
       startFeedLoop();
       <?php endif; ?>
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
     })();
   </script>
 </body>

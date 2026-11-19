@@ -29,12 +29,21 @@ $isAdmin = false;
 $callerName = null;
 $callerRole = null;
 $callerBadge = null;
+$brandingHtml = '';
+$defaultBrandingTheme = null;
+$csrfToken = '';
 
-if (!empty($_SESSION['auth_user_id'])) {
-    try {
-        require_once __DIR__ . '/db.php';
-        $activeDb = '';
-        $pdo = getDbConnection($activeDb);
+try {
+    require_once __DIR__ . '/db.php';
+    $activeDb = '';
+    $pdo = getDbConnection($activeDb);
+    $csrfToken = getSessionCsrfToken();
+    $brandingHtml = renderBrandingHeadHtml($pdo);
+    $bCfg = getBrandingConfig($pdo);
+    if (!empty($bCfg['default_theme']) && in_array($bCfg['default_theme'], ['dark', 'light'], true)) {
+        $defaultBrandingTheme = $bCfg['default_theme'];
+    }
+    if (!empty($_SESSION['auth_user_id'])) {
         $stmt = $pdo->prepare("
             SELECT u.id, u.full_name, u.username, u.role, b.badge_code 
             FROM `users` u 
@@ -51,10 +60,15 @@ if (!empty($_SESSION['auth_user_id'])) {
                 $isAdmin = true;
             }
         }
-    } catch (Throwable $e) {}
+    }
+} catch (Throwable $e) {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    $csrfToken = (string) $_SESSION['csrf_token'];
 }
 
-$initialTheme = 'light';
+$initialTheme = $defaultBrandingTheme ?: 'light';
 if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
     $initialTheme = $_COOKIE['ability_theme'];
 }
@@ -63,7 +77,15 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
 <html lang="en" data-theme="<?php echo htmlspecialchars($initialTheme, ENT_QUOTES, 'UTF-8'); ?>">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="csrf-token" content="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="aBility Manager" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
+  <link rel="icon" type="image/png" href="assets/icons/icon-192.png" />
+  <?php echo $brandingHtml . "\n"; ?>
   <title>Sign In &amp; Sign Up — aBility Manager</title>
   <script>
     (function () {
@@ -891,6 +913,10 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
     <!-- Sign In Form Panel (Standard for All Users) -->
     <div class="form-container sign-in-container">
       <form id="signin-form">
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px;">
+          <img class="js-brand-logo-img" src="assets/brand-mark.svg" alt="aBility" style="width:28px;height:28px;border-radius:7px;object-fit:contain;" />
+          <strong class="brand-name" style="font-size:15px;">aBility</strong>
+        </div>
         <h1>Sign in</h1>
         <div class="social-container">
           <a href="javascript:void(0)" class="social js-social" data-provider="Facebook" title="Sign in with Facebook">f</a>
@@ -1020,6 +1046,29 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   </div>
 
 
+
+  <!-- Mandatory Password Update Modal (enforced when must_change_password = 1) -->
+  <div class="admin-pin-modal-backdrop" id="force-pwd-modal" style="display: none;">
+    <div class="admin-pin-modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h3 style="font-size: 14px; font-weight: 700; color: #20212a;">🔐 Password Update Required</h3>
+      </div>
+      <p style="font-size: 11px; color: #718096; line-height: 1.45; margin-bottom: 12px;">
+        Your account requires a personal password update before entering the operations console. Minimum 8 characters.
+      </p>
+      <form id="force-pwd-form" style="padding: 0; text-align: left; align-items: stretch;">
+        <div class="input-field-wrap" style="margin-bottom:8px;">
+          <input type="password" id="force-new-pwd" class="input-field" placeholder="New password (min 8 chars)" required minlength="8" autocomplete="new-password" style="height:38px;font-size:13px;" />
+        </div>
+        <div class="input-field-wrap">
+          <input type="password" id="force-confirm-pwd" class="input-field" placeholder="Confirm new password" required minlength="8" autocomplete="new-password" style="height:38px;font-size:13px;" />
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
+          <button type="submit" class="btn-submit-sm" id="force-pwd-submit">Update &amp; Continue</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script>
     (function () {
@@ -1188,6 +1237,64 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
               const role = (data.user && data.user.role) ? data.user.role.toLowerCase() : '';
               const isGateOnly = (role === 'stock_controller' || role === 'technician');
               const targetUrl = isGateOnly ? 'index.php#pane-kiosk' : 'index.php';
+              const metaCsrf = document.querySelector('meta[name="csrf-token"]');
+              if (metaCsrf && data.csrfToken) {
+                metaCsrf.setAttribute('content', data.csrfToken);
+              }
+
+              if (data.requires_password_change) {
+                const pwdModal = document.getElementById('force-pwd-modal');
+                const pwdForm = document.getElementById('force-pwd-form');
+                const newPwdInput = document.getElementById('force-new-pwd');
+                const confirmPwdInput = document.getElementById('force-confirm-pwd');
+                if (pwdModal && pwdForm) {
+                  pwdModal.style.display = 'flex';
+                  showToast('Please set your personal password to continue.', 'info', 4000);
+                  pwdForm.onsubmit = async (ev2) => {
+                    ev2.preventDefault();
+                    const np = newPwdInput ? newPwdInput.value : '';
+                    const cp = confirmPwdInput ? confirmPwdInput.value : '';
+                    if (np.length < 8) {
+                      showToast('New password must be at least 8 characters.', 'error');
+                      return;
+                    }
+                    if (np !== cp) {
+                      showToast('Passwords do not match.', 'error');
+                      return;
+                    }
+                    const btn2 = document.getElementById('force-pwd-submit');
+                    if (btn2) { btn2.disabled = true; btn2.textContent = 'Saving...'; }
+                    try {
+                      const csrfVal = (data.csrfToken || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '');
+                      const r2 = await fetch('api.php?action=change_own_password', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'X-CSRF-Token': csrfVal
+                        },
+                        body: JSON.stringify({
+                          current_password: password,
+                          new_password: np,
+                          confirm_password: cp,
+                          csrf_token: csrfVal
+                        })
+                      });
+                      const d2 = await r2.json();
+                      if (r2.ok && d2 && d2.ok) {
+                        showToast('Password updated! Entering workspace...', 'success', 2000);
+                        setTimeout(() => { window.location.href = targetUrl; }, 500);
+                      } else {
+                        showToast((d2 && d2.error) || 'Could not update password.', 'error');
+                        if (btn2) { btn2.disabled = false; btn2.textContent = 'Update & Continue'; }
+                      }
+                    } catch (err2) {
+                      showToast('Network error updating password.', 'error');
+                      if (btn2) { btn2.disabled = false; btn2.textContent = 'Update & Continue'; }
+                    }
+                  };
+                  return;
+                }
+              }
 
               if (isGateOnly) {
                 showToast(`Welcome back, ${name}! Redirecting to Staff ID Badges & Gate Terminal (#pane-kiosk)...`, 'success', 3500);
@@ -1232,9 +1339,13 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
           submitBtn.textContent = 'CREATING...';
 
           try {
+            const csrfHeader = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             const res = await fetch('api.php?action=register', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRF-Token': csrfHeader
+              },
               body: new URLSearchParams({
                 full_name: fullName,
                 username,
@@ -1242,6 +1353,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
                 role,
                 department,
                 password,
+                csrf_token: csrfHeader,
               }),
             });
             const data = await res.json();
@@ -1333,6 +1445,9 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
         }
       });
 
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
     })();
   </script>
 </body>

@@ -24,12 +24,34 @@ header("Cache-Control: no-cache, no-store, must-revalidate");
 header("Pragma: no-cache");
 header("Expires: 0");
 
-// Serve main app view with server-side theme preset & per-session CSRF meta tag
+// Serve main app view with server-side branding tokens, theme preset & per-session CSRF meta tag
+$brandingHtml = '';
+$defaultBrandingTheme = null;
+try {
+    require_once __DIR__ . '/db.php';
+    $activeDb = '';
+    $pdo = getDbConnection($activeDb);
+    $brandingHtml = renderBrandingHeadHtml($pdo);
+    $bCfg = getBrandingConfig($pdo);
+    if (!empty($bCfg['default_theme']) && in_array($bCfg['default_theme'], ['dark', 'light'], true)) {
+        $defaultBrandingTheme = $bCfg['default_theme'];
+    }
+} catch (Throwable $e) {
+    $brandingHtml = '';
+}
+
 $html = file_get_contents(__DIR__ . '/index.html');
 $csrfMeta = '<meta name="csrf-token" content="' . htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') . '" />';
-$html = str_replace('</head>', "  {$csrfMeta}\n</head>", $html);
-if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true)) {
-    $theme = htmlspecialchars($_COOKIE['ability_theme'], ENT_QUOTES, 'UTF-8');
+$headInject = "  {$csrfMeta}\n";
+if ($brandingHtml !== '') {
+    $headInject .= "  {$brandingHtml}\n";
+}
+$html = str_replace('</head>', $headInject . '</head>', $html);
+$cookieTheme = (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['dark', 'light'], true))
+    ? $_COOKIE['ability_theme']
+    : $defaultBrandingTheme;
+if ($cookieTheme !== null) {
+    $theme = htmlspecialchars($cookieTheme, ENT_QUOTES, 'UTF-8');
     $html = str_replace('<html lang="en">', '<html lang="en" data-theme="' . $theme . '">', $html);
 }
 echo $html;

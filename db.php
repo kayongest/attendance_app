@@ -7,6 +7,19 @@
 
 declare(strict_types=1);
 
+if (!function_exists('getSessionCsrfToken')) {
+    function getSessionCsrfToken(): string
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return '';
+        }
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return (string) $_SESSION['csrf_token'];
+    }
+}
+
 function getDbConnection(string &$activeDatabaseName = ''): PDO
 {
     $host = '127.0.0.1';
@@ -249,7 +262,19 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `image` VARCHAR(500) DEFAULT NULL");
     } catch (Throwable $e) {}
     try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `event_coordinator` VARCHAR(120) DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `assigned_roster_json` LONGTEXT DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `geofence_radius_m` INT NOT NULL DEFAULT 200");
+    } catch (Throwable $e) {}
+    try {
         $pdo->exec("UPDATE `events` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `geofence_radius_m` INT NOT NULL DEFAULT 200");
     } catch (Throwable $e) {}
     try {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `must_change_password` TINYINT(1) NOT NULL DEFAULT 0");
@@ -275,6 +300,7 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `outgoing_controller_id` INT DEFAULT NULL,
             `replacement_controller_id` INT NOT NULL,
             `reason_type` VARCHAR(40) NOT NULL DEFAULT 'shift_swap',
+            `relief_mode` VARCHAR(32) NOT NULL DEFAULT 'standard',
             `notes` TEXT DEFAULT NULL,
             `shift_start` DATETIME DEFAULT NULL,
             `shift_end` DATETIME DEFAULT NULL,
@@ -285,6 +311,46 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
+    try {
+        $pdo->exec("ALTER TABLE `controller_shift_requests` ADD COLUMN `relief_mode` VARCHAR(32) NOT NULL DEFAULT 'standard'");
+    } catch (Throwable $e) {}
+
+    // 4c. Geo-Fenced QR Temporary Relief Tokens & TOTP Authenticator Secrets
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `relief_qr_tokens` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `shift_request_id` INT NOT NULL,
+            `token_hash` CHAR(64) NOT NULL UNIQUE,
+            `checkpoint_type` VARCHAR(30) NOT NULL DEFAULT 'stock_warehouse',
+            `checkpoint_id` VARCHAR(64) NOT NULL,
+            `checkpoint_name` VARCHAR(160) NOT NULL,
+            `assigned_user_id` INT NOT NULL,
+            `require_totp` TINYINT(1) NOT NULL DEFAULT 1,
+            `require_geofence` TINYINT(1) NOT NULL DEFAULT 1,
+            `geofence_radius_m` INT NOT NULL DEFAULT 200,
+            `expires_at` DATETIME NOT NULL,
+            `redeemed_at` DATETIME DEFAULT NULL,
+            `redeemed_by_id` INT DEFAULT NULL,
+            `verified_lat` DECIMAL(10,6) DEFAULT NULL,
+            `verified_lng` DECIMAL(10,6) DEFAULT NULL,
+            `distance_m` INT DEFAULT NULL,
+            `override_used` TINYINT(1) NOT NULL DEFAULT 0,
+            `created_by_id` INT NOT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `user_totp_secrets` (
+            `user_id` INT PRIMARY KEY,
+            `secret_base32` VARCHAR(64) NOT NULL,
+            `is_enabled` TINYINT(1) NOT NULL DEFAULT 0,
+            `verified_at` DATETIME DEFAULT NULL,
+            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    ensureDepartmentsTable($pdo);
 
     // 5. Ensure `attendance_logs` table exists
     $pdo->exec("
@@ -722,6 +788,12 @@ function ensureStandalonePortalsTable(PDO $pdo): void
                 `wh_id` INT DEFAULT NULL,
                 `background_image` VARCHAR(255) DEFAULT NULL,
                 `overlay_opacity` DECIMAL(3,2) NOT NULL DEFAULT 0.78,
+                `best_for` TEXT DEFAULT NULL,
+                `permissions_summary` TEXT DEFAULT NULL,
+                `allow_scan` TINYINT(1) NOT NULL DEFAULT 1,
+                `mask_phones` TINYINT(1) NOT NULL DEFAULT 0,
+                `expires_at` DATETIME DEFAULT NULL,
+                `max_sessions` INT DEFAULT NULL,
                 `is_active` TINYINT(1) NOT NULL DEFAULT 1,
                 `is_system` TINYINT(1) NOT NULL DEFAULT 1,
                 `sort_order` INT NOT NULL DEFAULT 1,
@@ -730,23 +802,73 @@ function ensureStandalonePortalsTable(PDO $pdo): void
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         ");
 
+        foreach ([
+            "ALTER TABLE `standalone_portals` ADD COLUMN `best_for` TEXT DEFAULT NULL",
+            "ALTER TABLE `standalone_portals` ADD COLUMN `permissions_summary` TEXT DEFAULT NULL",
+            "ALTER TABLE `standalone_portals` ADD COLUMN `allow_scan` TINYINT(1) NOT NULL DEFAULT 1",
+            "ALTER TABLE `standalone_portals` ADD COLUMN `mask_phones` TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE `standalone_portals` ADD COLUMN `expires_at` DATETIME DEFAULT NULL",
+            "ALTER TABLE `standalone_portals` ADD COLUMN `max_sessions` INT DEFAULT NULL",
+        ] as $alterSql) {
+            try {
+                $pdo->exec($alterSql);
+            } catch (Throwable $e) {}
+        }
+
         $nderaRow = resolveStandaloneFacilityGate($pdo, 'ndera');
         $bkRow = resolveStandaloneFacilityGate($pdo, 'bk-arena');
         $kccRow = resolveStandaloneFacilityGate($pdo, 'kcc');
 
         $ins = $pdo->prepare("
             INSERT IGNORE INTO `standalone_portals`
-            (`portal_key`, `portal_type`, `title`, `subtitle`, `entry_url`, `wh_id`, `background_image`, `overlay_opacity`, `is_active`, `is_system`, `sort_order`)
-            VALUES (?, ?, ?, ?, ?, ?, NULL, 0.78, 1, 1, ?)
+            (`portal_key`, `portal_type`, `title`, `subtitle`, `entry_url`, `wh_id`, `background_image`, `overlay_opacity`, `best_for`, `permissions_summary`, `allow_scan`, `mask_phones`, `expires_at`, `max_sessions`, `is_active`, `is_system`, `sort_order`)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, 0.78, ?, ?, ?, ?, NULL, NULL, 1, 1, ?)
         ");
         $defaults = [
-            ['ndera', 'facility_gate', 'Ndera Warehouse Gate', 'Rwanda Events Gate Terminal · # Ndera Warehouse Gate', 'ndera-gate.php', $nderaRow ? (int) $nderaRow['id'] : null, 1],
-            ['bk-arena', 'facility_gate', 'BK Arena Gate', 'Rwanda Events Gate Terminal · # BK Arena Gate', 'bk-arena-gate.php', $bkRow ? (int) $bkRow['id'] : null, 2],
-            ['kcc', 'facility_gate', 'KCC Gate', 'Rwanda Events Gate Terminal · # KCC Gate', 'kcc-gate.php', $kccRow ? (int) $kccRow['id'] : null, 3],
-            ['onsite', 'onsite_portal', 'Live On-Site Crew Portal', 'Read-Only Live On-Site Directory · Stock Managers, Gate Controllers & Technicians', 'onsite.php', null, 4],
+            [
+                'ndera', 'facility_gate', 'Ndera Warehouse Gate',
+                'Rwanda Events Gate Terminal · # Ndera Warehouse Gate', 'ndera-gate.php',
+                $nderaRow ? (int) $nderaRow['id'] : null,
+                'Dedicated loading-bay kiosk laptops/tablets manned by Ndera Gate Controllers.',
+                'Can scan check-in/out & verify L2–L4 badges at Ndera only. Requires Ndera PIN; blocks L1 crew and user/role edits.',
+                1, 0, 1
+            ],
+            [
+                'bk-arena', 'facility_gate', 'BK Arena Gate',
+                'Rwanda Events Gate Terminal · # BK Arena Gate', 'bk-arena-gate.php',
+                $bkRow ? (int) $bkRow['id'] : null,
+                'Arena backstage & technical vault gate desks during live load-in and show days.',
+                'Can scan & transfer crew at BK Arena Gate only. Requires BK Arena PIN; isolated from admin dashboard.',
+                1, 0, 2
+            ],
+            [
+                'kcc', 'facility_gate', 'KCC Gate',
+                'Rwanda Events Gate Terminal · # KCC Gate', 'kcc-gate.php',
+                $kccRow ? (int) $kccRow['id'] : null,
+                'Kigali Convention Centre production gate check-in & contractor verification desks.',
+                'Can scan & verify L2–L4 badges at KCC Stock Gate only. Requires KCC PIN; cannot alter call-times or accounts.',
+                1, 0, 3
+            ],
+            [
+                'onsite', 'onsite_portal', 'Live On-Site Crew Portal',
+                'Read-Only Live On-Site Directory · Stock Managers, Gate Controllers & Technicians', 'onsite.php',
+                null,
+                'Roaming supervisors, coordinators, and technicians checking who is currently on site and calling department peers.',
+                'Strictly read-only live roster protected by shared crew password. Cannot scan badges, view admin logs, or edit staff.',
+                0, 0, 4
+            ],
         ];
         foreach ($defaults as $row) {
             $ins->execute($row);
+        }
+        $pdo->exec("UPDATE `standalone_portals` SET `allow_scan` = 0 WHERE `portal_type` = 'onsite_portal' AND `allow_scan` = 1");
+        foreach ($defaults as $row) {
+            $pdo->prepare("
+                UPDATE `standalone_portals`
+                SET `best_for` = COALESCE(NULLIF(`best_for`, ''), ?),
+                    `permissions_summary` = COALESCE(NULLIF(`permissions_summary`, ''), ?)
+                WHERE `portal_key` = ?
+            ")->execute([$row[6], $row[7], $row[0]]);
         }
     } catch (Throwable $e) {}
 }
@@ -765,6 +887,8 @@ function getStandalonePortalsList(PDO $pdo, bool $includePin = false): array
         ";
         foreach ($pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $bgUrl = resolvePortalBackgroundUrl($r['background_image'] ?? null);
+            $expiresAt = !empty($r['expires_at']) ? (string) $r['expires_at'] : null;
+            $isExpired = ($expiresAt !== null && strtotime($expiresAt) !== false && strtotime($expiresAt) < time());
             $item = [
                 'id' => (int) $r['id'],
                 'portal_key' => (string) $r['portal_key'],
@@ -781,6 +905,13 @@ function getStandalonePortalsList(PDO $pdo, bool $includePin = false): array
                 'has_pin' => trim((string) ($r['wh_terminal_pin'] ?? '')) !== '',
                 'background_image' => $bgUrl,
                 'overlay_opacity' => (float) ($r['overlay_opacity'] ?? 0.78),
+                'best_for' => (string) ($r['best_for'] ?? ''),
+                'permissions_summary' => (string) ($r['permissions_summary'] ?? ''),
+                'allow_scan' => (int) ($r['allow_scan'] ?? (($r['portal_type'] ?? '') === 'onsite_portal' ? 0 : 1)),
+                'mask_phones' => (int) ($r['mask_phones'] ?? 0),
+                'expires_at' => $expiresAt,
+                'is_expired' => $isExpired,
+                'max_sessions' => $r['max_sessions'] !== null ? (int) $r['max_sessions'] : null,
                 'is_active' => (int) ($r['is_active'] ?? 1),
                 'is_system' => (int) ($r['is_system'] ?? 0),
                 'sort_order' => (int) ($r['sort_order'] ?? 1),
@@ -819,4 +950,431 @@ function resolveStandalonePortalConfig(PDO $pdo, string $portalKey = '', int $wh
         }
     } catch (Throwable $e) {}
     return null;
+}
+
+function ensureDepartmentsTable(PDO $pdo): void
+{
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `departments` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `code` VARCHAR(32) NOT NULL UNIQUE,
+                `name` VARCHAR(100) NOT NULL,
+                `description` TEXT DEFAULT NULL,
+                `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+        $seedDepts = [
+            ['VID', 'Video', 'LED walls, SDI/fiber switching, cameras, and projection technicians.'],
+            ['SND', 'Sound', 'FOH audio arrays, monitor consoles, wireless RF, and sound engineering.'],
+            ['LGT', 'Lighting', 'DMX universes, moving fixtures, dimmers, and stage lighting control.'],
+            ['ELC', 'Electrical', 'Three-phase power distribution, generators, UPS, and stage power safety.'],
+            ['RIG', 'Rigging', 'Truss motors, overhead rigging, bridle loads, and fall-arrest safety.'],
+            ['INT', 'Interpretation', 'Simultaneous interpretation booths, Bosch/IR receivers, and language channels.'],
+            ['SUP', 'Support Staff', 'Stagehands, loaders, runners, and general event operations crew.'],
+            ['OPS', 'Operations', 'Project Managers, Event Coordinators, and Technical Leads.'],
+            ['WHS', 'Warehouse', 'Facility gate controllers, staging vaults, and logistics dispatch.'],
+            ['SEC', 'Security', 'Perimeter control, badge verification, and venue access enforcement.'],
+            ['EXC', 'Executive', 'Directors and executive all-access oversight.'],
+            ['LOG', 'Logistics', 'Fleet drivers and cross-site crew transport coordination.'],
+        ];
+        $ins = $pdo->prepare("INSERT IGNORE INTO `departments` (`code`, `name`, `description`, `is_active`) VALUES (?, ?, ?, 1)");
+        foreach ($seedDepts as $d) {
+            $ins->execute($d);
+        }
+    } catch (Throwable $e) {}
+}
+
+function expireStaleShiftAssignments(PDO $pdo): void
+{
+    try {
+        $pdo->exec("
+            UPDATE `users`
+            SET `assigned_checkpoint_type` = NULL,
+                `assigned_checkpoint_id` = NULL,
+                `assignment_expires_at` = NULL
+            WHERE `assignment_expires_at` IS NOT NULL
+              AND `assignment_expires_at` <= NOW()
+        ");
+    } catch (Throwable $e) {}
+}
+
+function getDefaultBrandingConfig(): array
+{
+    return [
+        'brand_name' => 'aBility',
+        'logo_path' => '',
+        'primary_color' => '#4f46e5',
+        'accent_color' => '#10b981',
+        'neutral_color' => '#64748b',
+        'light_primary' => '#4f46e5',
+        'light_accent' => '#10b981',
+        'dark_primary' => '#8b5cf6',
+        'dark_accent' => '#38bdf8',
+        'font_family' => 'Marvel',
+        'font_scale' => 1.0,
+        'text_align' => 'left',
+        'default_theme' => 'system',
+    ];
+}
+
+function resolveBrandingLogoUrl(?string $rawPath): string
+{
+    $rel = ltrim(str_replace('\\', '/', trim((string) $rawPath)), '/');
+    if ($rel === '' || strpos($rel, '..') !== false) {
+        return 'assets/brand-mark.svg';
+    }
+    $allowedExact = ['assets/brand-mark.svg', 'reLogo.png', 'reTransparentLogo.png'];
+    $allowedPrefix = (strpos($rel, 'uploads/branding/') === 0 || strpos($rel, 'assets/') === 0);
+    if (!$allowedPrefix && !in_array($rel, $allowedExact, true)) {
+        return 'assets/brand-mark.svg';
+    }
+    $abs = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+    return is_file($abs) ? $rel : 'assets/brand-mark.svg';
+}
+
+function getBuiltInBrandingFontPresets(): array
+{
+    return [
+        'Marvel' => '"Marvel", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif',
+        'Inter' => '"Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif',
+        'Plus Jakarta Sans' => '"Plus Jakarta Sans", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
+        'JetBrains Mono' => '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+        'Roboto' => '"Roboto", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
+        'System UI' => '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    ];
+}
+
+function ensureBrandingFontsTable(PDO $pdo): void
+{
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `branding_fonts` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `font_name` VARCHAR(80) NOT NULL UNIQUE,
+                `css_stack` VARCHAR(255) NOT NULL,
+                `font_url` VARCHAR(512) DEFAULT NULL,
+                `file_path` VARCHAR(255) DEFAULT NULL,
+                `font_format` VARCHAR(32) DEFAULT NULL,
+                `is_system` TINYINT(1) NOT NULL DEFAULT 0,
+                `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+        $chk = $pdo->prepare("SELECT COUNT(*) FROM `branding_fonts` WHERE `font_name` = ?");
+        $ins = $pdo->prepare("INSERT INTO `branding_fonts` (`font_name`, `css_stack`, `is_system`, `is_active`) VALUES (?, ?, 1, 1)");
+        foreach (getBuiltInBrandingFontPresets() as $fName => $stack) {
+            $chk->execute([$fName]);
+            if ((int) $chk->fetchColumn() === 0) {
+                $ins->execute([$fName, $stack]);
+            }
+        }
+    } catch (Throwable $e) {}
+}
+
+function getBrandingFontsList(PDO $pdo, bool $onlyActive = false): array
+{
+    ensureBrandingFontsTable($pdo);
+    $rows = [];
+    try {
+        $sql = "SELECT * FROM `branding_fonts`" . ($onlyActive ? " WHERE `is_active` = 1" : "") . " ORDER BY `is_system` DESC, `font_name` ASC, `id` ASC";
+        foreach ($pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $fp = ltrim(str_replace('\\', '/', trim((string) ($r['file_path'] ?? ''))), '/');
+            $fpValid = ($fp !== '' && strpos($fp, '..') === false && strpos($fp, 'uploads/branding/fonts/') === 0 && is_file(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $fp)));
+            $rows[] = [
+                'id' => (int) ($r['id'] ?? 0),
+                'font_name' => (string) ($r['font_name'] ?? ''),
+                'css_stack' => (string) ($r['css_stack'] ?? ''),
+                'font_url' => (string) ($r['font_url'] ?? ''),
+                'file_path' => $fpValid ? $fp : '',
+                'font_format' => (string) ($r['font_format'] ?? ''),
+                'is_system' => (int) ($r['is_system'] ?? 0),
+                'is_active' => (int) ($r['is_active'] ?? 1),
+            ];
+        }
+    } catch (Throwable $e) {}
+    if (empty($rows)) {
+        $idx = 1;
+        foreach (getBuiltInBrandingFontPresets() as $fName => $stack) {
+            $rows[] = [
+                'id' => $idx++,
+                'font_name' => $fName,
+                'css_stack' => $stack,
+                'font_url' => '',
+                'file_path' => '',
+                'font_format' => '',
+                'is_system' => 1,
+                'is_active' => 1,
+            ];
+        }
+    }
+    return $rows;
+}
+
+function getAllowedBrandingFonts(?PDO $pdo = null): array
+{
+    $map = getBuiltInBrandingFontPresets();
+    if ($pdo !== null) {
+        foreach (getBrandingFontsList($pdo, true) as $f) {
+            if ($f['font_name'] !== '' && $f['css_stack'] !== '') {
+                $map[$f['font_name']] = $f['css_stack'];
+            }
+        }
+    }
+    return $map;
+}
+
+function getBrandingConfig(PDO $pdo): array
+{
+    $defaults = getDefaultBrandingConfig();
+    try {
+        $st = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'branding_config' LIMIT 1");
+        $st->execute();
+        $raw = $st->fetchColumn();
+        if (is_string($raw) && $raw !== '') {
+            $dec = json_decode($raw, true);
+            if (is_array($dec)) {
+                $fonts = getAllowedBrandingFonts($pdo);
+                $safeHex = static fn($v, $fb) => (is_string($v) && preg_match('/^#[0-9a-fA-F]{6}$/', trim($v))) ? strtolower(trim($v)) : $fb;
+                $font = isset($dec['font_family'], $fonts[$dec['font_family']]) ? (string) $dec['font_family'] : $defaults['font_family'];
+                $scale = max(0.88, min(1.2, round((float) ($dec['font_scale'] ?? 1.0), 2)));
+                $align = in_array($dec['text_align'] ?? '', ['left', 'center', 'justify'], true) ? (string) $dec['text_align'] : 'left';
+                $defTheme = in_array($dec['default_theme'] ?? '', ['light', 'dark', 'system'], true) ? (string) $dec['default_theme'] : 'system';
+                $brandName = trim((string) ($dec['brand_name'] ?? $defaults['brand_name']));
+                $primary = $safeHex($dec['primary_color'] ?? ($dec['light_primary'] ?? ''), $defaults['primary_color']);
+                $accent = $safeHex($dec['accent_color'] ?? ($dec['light_accent'] ?? ''), $defaults['accent_color']);
+                $neutral = $safeHex($dec['neutral_color'] ?? '', $defaults['neutral_color']);
+                $logoPathRaw = trim((string) ($dec['logo_path'] ?? ''));
+                $logoResolved = $logoPathRaw !== '' ? resolveBrandingLogoUrl($logoPathRaw) : '';
+                return [
+                    'brand_name' => $brandName !== '' ? substr($brandName, 0, 48) : $defaults['brand_name'],
+                    'logo_path' => $logoResolved !== 'assets/brand-mark.svg' ? $logoResolved : ($logoPathRaw === 'assets/brand-mark.svg' ? 'assets/brand-mark.svg' : ''),
+                    'logo_url' => resolveBrandingLogoUrl($logoResolved),
+                    'primary_color' => $primary,
+                    'accent_color' => $accent,
+                    'neutral_color' => $neutral,
+                    'light_primary' => $safeHex($dec['light_primary'] ?? '', $primary),
+                    'light_accent' => $safeHex($dec['light_accent'] ?? '', $accent),
+                    'dark_primary' => $safeHex($dec['dark_primary'] ?? '', $defaults['dark_primary']),
+                    'dark_accent' => $safeHex($dec['dark_accent'] ?? '', $defaults['dark_accent']),
+                    'font_family' => $font,
+                    'font_scale' => $scale,
+                    'text_align' => $align,
+                    'default_theme' => $defTheme,
+                ];
+            }
+        }
+    } catch (Throwable $e) {}
+    $defaults['logo_url'] = 'assets/brand-mark.svg';
+    return $defaults;
+}
+
+function saveBrandingConfig(PDO $pdo, array $in): array
+{
+    $cur = getBrandingConfig($pdo);
+    $fonts = getAllowedBrandingFonts($pdo);
+    $safeHex = static fn($v, $fb) => (is_string($v) && preg_match('/^#[0-9a-fA-F]{6}$/', trim($v))) ? strtolower(trim($v)) : $fb;
+
+    $primary = $safeHex($in['primary_color'] ?? ($in['light_primary'] ?? ''), $cur['primary_color']);
+    $accent = $safeHex($in['accent_color'] ?? ($in['light_accent'] ?? ''), $cur['accent_color']);
+    $neutral = $safeHex($in['neutral_color'] ?? '', $cur['neutral_color']);
+    $logoPath = array_key_exists('logo_path', $in) ? trim((string) $in['logo_path']) : ($cur['logo_path'] ?? '');
+    if ($logoPath !== '') {
+        $resolved = resolveBrandingLogoUrl($logoPath);
+        $logoPath = $resolved === 'assets/brand-mark.svg' ? '' : $resolved;
+    }
+
+    $next = [
+        'brand_name' => trim((string) ($in['brand_name'] ?? $cur['brand_name'])) ?: 'aBility',
+        'logo_path' => $logoPath,
+        'primary_color' => $primary,
+        'accent_color' => $accent,
+        'neutral_color' => $neutral,
+        'light_primary' => $safeHex($in['light_primary'] ?? '', $primary),
+        'light_accent' => $safeHex($in['light_accent'] ?? '', $accent),
+        'dark_primary' => $safeHex($in['dark_primary'] ?? '', $cur['dark_primary']),
+        'dark_accent' => $safeHex($in['dark_accent'] ?? '', $cur['dark_accent']),
+        'font_family' => isset($in['font_family'], $fonts[$in['font_family']]) ? (string) $in['font_family'] : $cur['font_family'],
+        'font_scale' => max(0.88, min(1.2, round((float) ($in['font_scale'] ?? $cur['font_scale']), 2))),
+        'text_align' => in_array($in['text_align'] ?? '', ['left', 'center', 'justify'], true) ? (string) $in['text_align'] : $cur['text_align'],
+        'default_theme' => in_array($in['default_theme'] ?? '', ['light', 'dark', 'system'], true) ? (string) $in['default_theme'] : $cur['default_theme'],
+    ];
+    $next['brand_name'] = substr($next['brand_name'], 0, 48);
+
+    try {
+        $pdo->prepare("
+            INSERT INTO `app_settings` (`setting_key`, `setting_value`)
+            VALUES ('branding_config', ?)
+            ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`)
+        ")->execute([json_encode($next)]);
+    } catch (Throwable $e) {}
+
+    $next['logo_url'] = resolveBrandingLogoUrl($next['logo_path']);
+    return $next;
+}
+
+function renderBrandingHeadHtml(PDO $pdo): string
+{
+    $b = getBrandingConfig($pdo);
+    $fontsList = getBrandingFontsList($pdo, true);
+    $fonts = getAllowedBrandingFonts($pdo);
+    $fontStack = $fonts[$b['font_family']] ?? $fonts['Marvel'];
+    $scaleNum = number_format((float) $b['font_scale'], 2, '.', '');
+    $primary = htmlspecialchars($b['primary_color'], ENT_QUOTES, 'UTF-8');
+    $accent = htmlspecialchars($b['accent_color'], ENT_QUOTES, 'UTF-8');
+    $neutral = htmlspecialchars($b['neutral_color'], ENT_QUOTES, 'UTF-8');
+    $darkPrimary = htmlspecialchars($b['dark_primary'], ENT_QUOTES, 'UTF-8');
+    $darkAccent = htmlspecialchars($b['dark_accent'], ENT_QUOTES, 'UTF-8');
+    $align = htmlspecialchars($b['text_align'], ENT_QUOTES, 'UTF-8');
+    $defTheme = htmlspecialchars($b['default_theme'], ENT_QUOTES, 'UTF-8');
+    $brandNameJson = json_encode($b['brand_name']);
+    $logoUrl = resolveBrandingLogoUrl($b['logo_path'] ?? '');
+    $logoUrlJson = json_encode($logoUrl);
+
+    $lines = [
+        '  <link rel="manifest" href="manifest.webmanifest" />',
+        '  <meta name="theme-color" content="' . $primary . '" />',
+        '  <meta name="apple-mobile-web-app-capable" content="yes" />',
+        '  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />',
+        '  <meta name="apple-mobile-web-app-title" content="' . htmlspecialchars($b['brand_name'], ENT_QUOTES, 'UTF-8') . '" />',
+        '  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />',
+    ];
+
+    $fontFaceCss = '';
+    foreach ($fontsList as $fItem) {
+        $fUrl = trim((string) ($fItem['font_url'] ?? ''));
+        if ($fUrl !== '' && preg_match('#^https://#i', $fUrl)) {
+            $lines[] = '  <link rel="stylesheet" href="' . htmlspecialchars($fUrl, ENT_QUOTES, 'UTF-8') . '" />';
+        }
+        $fp = trim((string) ($fItem['file_path'] ?? ''));
+        if ($fp !== '') {
+            $safeFamily = preg_replace('/[^A-Za-z0-9 _-]/', '', $fItem['font_name']);
+            $fmt = in_array($fItem['font_format'], ['woff2', 'woff', 'truetype', 'opentype'], true) ? $fItem['font_format'] : 'woff2';
+            $fontFaceCss .= "@font-face{font-family:'{$safeFamily}';src:url('" . htmlspecialchars($fp, ENT_QUOTES, 'UTF-8') . "') format('{$fmt}');font-display:swap;}\n";
+        }
+    }
+    if ($fontFaceCss !== '') {
+        $lines[] = '  <style id="ability-branding-fonts">' . "\n" . $fontFaceCss . '  </style>';
+    }
+
+    $lines[] = '  <style id="ability-branding-vars">';
+    $lines[] = '    :root {';
+    $lines[] = '      --brand-primary: ' . $primary . ';';
+    $lines[] = '      --brand-accent: ' . $accent . ';';
+    $lines[] = '      --brand-neutral: ' . $neutral . ';';
+    $lines[] = '      --brand-purple: ' . $primary . ';';
+    $lines[] = '      --font-sans: ' . $fontStack . ';';
+    $lines[] = '      --brand-font-family: ' . $fontStack . ';';
+    $lines[] = '      --brand-font-scale: ' . $scaleNum . ';';
+    $lines[] = '      --app-font-scale: ' . $scaleNum . ';';
+    $lines[] = '      --brand-text-align: ' . $align . ';';
+    $lines[] = '      --app-text-align: ' . $align . ';';
+    $lines[] = '    }';
+    $lines[] = '    [data-theme="dark"] {';
+    $lines[] = '      --brand-primary: ' . $darkPrimary . ';';
+    $lines[] = '      --brand-accent: ' . $darkAccent . ';';
+    $lines[] = '      --brand-purple: ' . $darkPrimary . ';';
+    $lines[] = '    }';
+    $lines[] = '  </style>';
+    $lines[] = '  <script>';
+    $lines[] = '    window.__ABILITY_BRANDING__ = ' . json_encode($b) . ';';
+    $lines[] = '    window.__ABILITY_FONTS__ = ' . json_encode($fontsList) . ';';
+    $lines[] = '    (function(){try{var d=' . json_encode($defTheme) . ';var s=localStorage.getItem("ability_theme");if(!s&&(d==="dark"||d==="light")){document.documentElement.setAttribute("data-theme",d);}document.documentElement.setAttribute("data-text-align",' . json_encode($align) . ');var n=' . $brandNameJson . ';var lg=' . $logoUrlJson . ';document.addEventListener("DOMContentLoaded",function(){document.querySelectorAll(".brand-name,.js-brand-name").forEach(function(el){if(n)el.textContent=n;});if(lg){document.querySelectorAll("img.js-brand-logo-img, img[src*=\'brand-mark.svg\']").forEach(function(img){img.src=lg;if(n)img.alt=n;});}});}catch(e){}})();';
+    $lines[] = '  </script>';
+
+    return implode("\n", $lines);
+}
+
+function calculateHaversineMeters(float $lat1, float $lng1, float $lat2, float $lng2): float
+{
+    $earthR = 6371000.0;
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLng = deg2rad($lng2 - $lng1);
+    $a = sin($dLat / 2) * sin($dLat / 2) +
+        cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) * sin($dLng / 2);
+    $c = 2 * atan2(sqrt($a), sqrt(max(0.0, 1.0 - $a)));
+    return $earthR * $c;
+}
+
+function base32Encode(string $binary): string
+{
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $bits = '';
+    $len = strlen($binary);
+    for ($i = 0; $i < $len; $i++) {
+        $bits .= str_pad(decbin(ord($binary[$i])), 8, '0', STR_PAD_LEFT);
+    }
+    $out = '';
+    foreach (str_split($bits, 5) as $chunk) {
+        if (strlen($chunk) < 5) {
+            $chunk = str_pad($chunk, 5, '0', STR_PAD_RIGHT);
+        }
+        $out .= $alphabet[bindec($chunk)];
+    }
+    return $out;
+}
+
+function base32Decode(string $b32): string
+{
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $clean = strtoupper(preg_replace('/[^A-Z2-7]/', '', $b32));
+    $bits = '';
+    $len = strlen($clean);
+    for ($i = 0; $i < $len; $i++) {
+        $pos = strpos($alphabet, $clean[$i]);
+        if ($pos === false) continue;
+        $bits .= str_pad(decbin($pos), 5, '0', STR_PAD_LEFT);
+    }
+    $out = '';
+    foreach (str_split($bits, 8) as $byte) {
+        if (strlen($byte) === 8) {
+            $out .= chr(bindec($byte));
+        }
+    }
+    return $out;
+}
+
+function computeTotpCode(string $secretB32, ?int $timeSlice = null): string
+{
+    $slice = $timeSlice ?? (int) floor(time() / 30);
+    $secretKey = base32Decode($secretB32);
+    if ($secretKey === '') {
+        return '000000';
+    }
+    $timeBin = pack('N*', 0) . pack('N*', $slice);
+    $hash = hash_hmac('sha1', $timeBin, $secretKey, true);
+    $offset = ord($hash[strlen($hash) - 1]) & 0x0F;
+    $truncated = (
+        ((ord($hash[$offset]) & 0x7F) << 24) |
+        ((ord($hash[$offset + 1]) & 0xFF) << 16) |
+        ((ord($hash[$offset + 2]) & 0xFF) << 8) |
+        (ord($hash[$offset + 3]) & 0xFF)
+    );
+    return str_pad((string) ($truncated % 1000000), 6, '0', STR_PAD_LEFT);
+}
+
+function verifyTotpCode(string $secretB32, string $code, int $window = 1): bool
+{
+    $cleanCode = preg_replace('/\D/', '', trim($code));
+    if (strlen($cleanCode) !== 6) {
+        return false;
+    }
+    $curSlice = (int) floor(time() / 30);
+    for ($i = -$window; $i <= $window; $i++) {
+        if (hash_equals(computeTotpCode($secretB32, $curSlice + $i), $cleanCode)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function maskPhoneNumber(string $phone): string
+{
+    $trim = trim($phone);
+    if ($trim === '') return '';
+    if (strlen($trim) <= 6) return '***';
+    return substr($trim, 0, 4) . ' *** ' . substr($trim, -3);
 }
