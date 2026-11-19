@@ -110,6 +110,7 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
   <link rel="icon" type="image/png" href="assets/icons/favicon-64.png" />
+  <script src="assets/vendor/qrcode.js"></script>
   <?php echo $brandingHtml . "\n"; ?>
   <title>Rwanda Events Gate Terminal · <?php echo htmlspecialchars($gateDisplayLabel, ENT_QUOTES, 'UTF-8'); ?></title>
   <script>
@@ -833,7 +834,95 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
         justify-content: flex-end;
       }
       .auto-search-tag { display: none; }
+      .anti-shadow-grid { grid-template-columns: 1fr; }
     }
+    .anti-shadow-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .as-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 12px 14px;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+    }
+    .as-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 12.5px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+    .as-pill {
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      white-space: nowrap;
+    }
+    .as-pill.warn { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+    .as-qr-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .as-qr-box {
+      width: 124px;
+      height: 124px;
+      padding: 6px;
+      border-radius: 10px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .as-qr-box svg { width: 100%; height: 100%; display: block; }
+    .visual-match-box {
+      display: none;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #fffbeb;
+      border: 1.5px solid #f59e0b;
+    }
+    .visual-match-box.visible { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .vm-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: #1e293b;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 17px;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .gate-video-cam {
+      width: 100%;
+      max-height: 168px;
+      border-radius: 10px;
+      background: #0f172a;
+      display: none;
+      margin-top: 8px;
+      object-fit: cover;
+    }
+    .gate-video-cam.active { display: block; }
   </style>
 </head>
 <body>
@@ -965,6 +1054,60 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
       </div>
       <button type="button" class="btn-chip" id="fb-dismiss-btn">Dismiss</button>
     </div>
+
+    <!-- Anti-Shadowing QR & Camera Face-Match Deck -->
+    <section class="anti-shadow-grid" aria-label="Anti-Shadowing Venue QR and Pass Scanner">
+      <div class="as-card">
+        <div class="as-card-head">
+          <span>Self-Scan Venue QR (Anti-Shadowing)</span>
+          <span class="as-pill" id="gate-qr-policy-pill">Hybrid · Manual + QR</span>
+        </div>
+        <div class="as-qr-wrap">
+          <div class="as-qr-box" id="gate-venue-qr-box" aria-label="Rotating Gate Check-In QR">
+            <span style="font-size:11px;color:#64748b;">Loading QR...</span>
+          </div>
+          <div style="flex:1;min-width:170px;">
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:3px;" id="gate-vqr-cp"><?php echo htmlspecialchars($gateDisplayLabel, ENT_QUOTES, 'UTF-8'); ?></div>
+            <div style="font-size:11.5px;color:var(--text-muted);line-height:1.4;margin-bottom:6px;">
+              Staff scan this 20s rotating QR on their bound phone + GPS geo-fence. Screenshots cannot be reused.
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span class="as-pill warn" id="gate-vqr-timer">Rotating: 20s</span>
+              <button type="button" class="btn-chip" id="gate-vqr-refresh">Rotate Now</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="as-card">
+        <div class="as-card-head">
+          <span>Scan Crew Live Pass QR</span>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn-chip" id="gate-cam-toggle">Start Camera QR</button>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted);line-height:1.4;">
+          Scan a staff member's 30s rotating <code>ABPASS1</code> QR (or paste/type into Auto Search above). Mandatory visual face-match protects against photo forwarding.
+        </div>
+        <video id="gate-cam-video" class="gate-video-cam" playsinline muted></video>
+        <div id="gate-cam-status" style="font-size:11px;color:var(--text-muted);margin-top:4px;"></div>
+
+        <div id="gate-visual-match-card" class="visual-match-box" role="alertdialog" aria-label="Visual Face Match Confirmation">
+          <div style="display:flex;align-items:center;gap:10px;min-width:180px;">
+            <div class="vm-avatar" id="vm-avatar">CR</div>
+            <div>
+              <div style="font-size:11px;font-weight:800;color:#b45309;text-transform:uppercase;" id="vm-action-label">Verify Presenter Matches Photo</div>
+              <div style="font-size:13.5px;font-weight:800;color:#0f172a;" id="vm-name">—</div>
+              <div style="font-size:11.5px;color:#475569;" id="vm-meta">—</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="btn-chip" id="vm-confirm-btn" style="background:#059669;color:#ffffff;border-color:#059669;font-weight:800;">✓ Face Matches · Commit</button>
+            <button type="button" class="btn-chip" id="vm-cancel-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- Roster Panel (5 Items Per Page) -->
     <section class="roster-panel">
@@ -1182,6 +1325,9 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
         if (unlocked && searchInput) {
           setTimeout(() => searchInput.focus(), 60);
         }
+        if (unlocked && typeof refreshVenueQr === 'function') {
+          refreshVenueQr();
+        }
       }
 
       function showFeedback(type, badgeText, title, subtitle) {
@@ -1334,6 +1480,12 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
 
         if (syncLabel && data.generated_at) {
           syncLabel.textContent = 'Live · ' + data.generated_at;
+        }
+        const polPill = document.getElementById('gate-qr-policy-pill');
+        if (polPill && gateMeta) {
+          const pol = String(gateMeta.checkin_policy || 'hybrid').toLowerCase();
+          polPill.textContent = pol === 'qr_strict' ? 'Strict QR Required' : (pol === 'manual_allowed' ? 'Manual + QR Allowed' : 'Hybrid · Name + QR');
+          polPill.className = 'as-pill' + (pol === 'qr_strict' ? ' warn' : '');
         }
         renderList();
         renderRecentLogs();
@@ -1517,6 +1669,137 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
         }).join('');
       }
 
+      let pendingVisualPayload = null;
+      function showVisualMatchHold(data) {
+        const box = document.getElementById('gate-visual-match-card');
+        if (!box) return;
+        const b = data.badge || {};
+        pendingVisualPayload = {
+          scan_input: data.pending_pass_token,
+          scan_mode: data.action || 'auto',
+          visual_confirmed: 1,
+        };
+        const av = document.getElementById('vm-avatar');
+        if (av) {
+          av.innerHTML = b.profile_image_url
+            ? '<img src="' + escapeHtml(b.profile_image_url) + '" alt="" style="width:100%;height:100%;object-fit:cover;">'
+            : escapeHtml(b.initials || 'CR');
+        }
+        const lbl = document.getElementById('vm-action-label');
+        if (lbl) lbl.textContent = 'Face Match -> ' + String(data.action || 'check_in').replace('_', ' ').toUpperCase();
+        const nm = document.getElementById('vm-name');
+        if (nm) nm.textContent = b.full_name || 'Crew Member';
+        const mt = document.getElementById('vm-meta');
+        if (mt) mt.textContent = [b.role_display || '', b.badge_code || ''].filter(Boolean).join(' · ');
+        box.classList.add('visible');
+      }
+
+      function hideVisualMatchHold() {
+        pendingVisualPayload = null;
+        document.getElementById('gate-visual-match-card')?.classList.remove('visible');
+      }
+
+      document.getElementById('vm-confirm-btn')?.addEventListener('click', () => {
+        if (!pendingVisualPayload) return;
+        const p = Object.assign({}, pendingVisualPayload);
+        hideVisualMatchHold();
+        performGateScan(p, false);
+      });
+      document.getElementById('vm-cancel-btn')?.addEventListener('click', () => {
+        hideVisualMatchHold();
+        showFeedback('denied', 'CANCELLED', 'Visual identity match declined', 'Scan rejected because presenter did not match badge photo.');
+      });
+
+      let vqrCountdown = 20;
+      let vqrTimerHandle = null;
+      async function refreshVenueQr() {
+        if (!isAuthorized) return;
+        const box = document.getElementById('gate-venue-qr-box');
+        const timerEl = document.getElementById('gate-vqr-timer');
+        if (!box) return;
+        try {
+          const { status, data } = await apiPost('issue_venue_checkin_qr', {});
+          if (status === 401 || (data && data.authorized === false)) return;
+          if (!data || !data.ok || !data.token) {
+            if (timerEl) timerEl.textContent = 'QR unavailable';
+            return;
+          }
+          if (data.csrf_token) csrfToken = data.csrf_token;
+          const targetUrl = new URL(data.checkin_url, window.location.href).href;
+          if (window.AbilityQRCode && typeof window.AbilityQRCode.toSvg === 'function') {
+            box.innerHTML = window.AbilityQRCode.toSvg(targetUrl, 132);
+          } else {
+            box.textContent = data.token.slice(0, 12);
+          }
+          const cpEl = document.getElementById('gate-vqr-cp');
+          if (cpEl && data.checkpoint_name) cpEl.textContent = data.checkpoint_name;
+          vqrCountdown = 20;
+          if (vqrTimerHandle) clearInterval(vqrTimerHandle);
+          vqrTimerHandle = setInterval(() => {
+            if (!isAuthorized || document.hidden) return;
+            vqrCountdown--;
+            if (vqrCountdown <= 0) {
+              clearInterval(vqrTimerHandle);
+              refreshVenueQr();
+            } else if (timerEl) {
+              timerEl.textContent = 'Rotating: ' + vqrCountdown + 's';
+            }
+          }, 1000);
+          if (timerEl) timerEl.textContent = 'Rotating: 20s';
+        } catch (err) {}
+      }
+      document.getElementById('gate-vqr-refresh')?.addEventListener('click', refreshVenueQr);
+
+      let camStream = null;
+      let camLoopTimer = null;
+      let camBusy = false;
+      function stopGateCamera() {
+        if (camLoopTimer) { clearInterval(camLoopTimer); camLoopTimer = null; }
+        if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+        const vid = document.getElementById('gate-cam-video');
+        if (vid) { vid.srcObject = null; vid.classList.remove('active'); }
+        const btn = document.getElementById('gate-cam-toggle');
+        if (btn) btn.textContent = 'Start Camera QR';
+        const st = document.getElementById('gate-cam-status');
+        if (st) st.textContent = '';
+      }
+      async function startGateCamera() {
+        const vid = document.getElementById('gate-cam-video');
+        const st = document.getElementById('gate-cam-status');
+        const btn = document.getElementById('gate-cam-toggle');
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          if (st) st.textContent = 'Camera unavailable in this browser. Use a USB QR scanner or paste into Auto Search.';
+          return;
+        }
+        try {
+          camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          if (vid) { vid.srcObject = camStream; await vid.play(); vid.classList.add('active'); }
+          if (btn) btn.textContent = 'Stop Camera';
+          if (!('BarcodeDetector' in window)) {
+            if (st) st.textContent = 'Camera preview active (native BarcodeDetector unavailable in this browser; USB scanner/Auto Search works).';
+            return;
+          }
+          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          if (st) st.textContent = 'Camera scanning for live ABPASS1 staff QRs...';
+          camLoopTimer = setInterval(async () => {
+            if (camBusy || scanBusy || !vid || vid.readyState < 2) return;
+            try {
+              const codes = await detector.detect(vid);
+              if (codes && codes.length && codes[0].rawValue) {
+                camBusy = true;
+                await performGateScan({ scan_input: String(codes[0].rawValue).trim(), scan_mode: 'auto' }, false);
+                setTimeout(() => { camBusy = false; }, 2200);
+              }
+            } catch (e) {}
+          }, 420);
+        } catch (err) {
+          if (st) st.textContent = 'Camera permission denied or unavailable.';
+        }
+      }
+      document.getElementById('gate-cam-toggle')?.addEventListener('click', () => {
+        if (camStream) stopGateCamera(); else startGateCamera();
+      });
+
       async function performGateScan(payload, fromAutoSearchInput) {
         if (scanBusy) return;
         scanBusy = true;
@@ -1524,6 +1807,13 @@ if (!empty($_COOKIE['ability_theme']) && in_array($_COOKIE['ability_theme'], ['d
           const { status, data } = await apiPost('standalone_gate_scan', payload);
           if (status === 401 || (data && data.authorized === false)) {
             setTerminalUnlocked(false);
+            return;
+          }
+          if (data && data.visual_confirm_required && data.pending_pass_token) {
+            playTone('ok');
+            showVisualMatchHold(data);
+            showFeedback('granted', 'CONFIRM FACE', data.badge?.full_name || 'Presenter', 'Verify presenter face matches photo below to commit scan.');
+            if (data.feed) applyFeedData(data.feed);
             return;
           }
           if (!data || data.ok === false) {

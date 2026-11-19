@@ -7,6 +7,8 @@
 
 declare(strict_types=1);
 
+date_default_timezone_set('Africa/Kigali');
+
 if (!function_exists('getSessionCsrfToken')) {
     function getSessionCsrfToken(): string
     {
@@ -37,6 +39,9 @@ function getDbConnection(string &$activeDatabaseName = ''): PDO
             PDO::ATTR_EMULATE_PREPARES => false,
         ]
     );
+    try {
+        $pdo->exec("SET time_zone = '+02:00'");
+    } catch (Throwable $e) {}
 
     // Check if `ability_db` exists and has `users` table
     $hasAbilityDb = false;
@@ -271,10 +276,34 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `geofence_radius_m` INT NOT NULL DEFAULT 200");
     } catch (Throwable $e) {}
     try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `checkin_policy` VARCHAR(24) NOT NULL DEFAULT 'hybrid'");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `require_visual_match` TINYINT(1) NOT NULL DEFAULT 1");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `requirements_json` LONGTEXT DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `dispatch_status` VARCHAR(32) NOT NULL DEFAULT 'draft'");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `requirements_sent_by` INT DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `requirements_sent_at` DATETIME DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
         $pdo->exec("UPDATE `events` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
     } catch (Throwable $e) {}
     try {
         $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `geofence_radius_m` INT NOT NULL DEFAULT 200");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `checkin_policy` VARCHAR(24) NOT NULL DEFAULT 'hybrid'");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `require_visual_match` TINYINT(1) NOT NULL DEFAULT 1");
     } catch (Throwable $e) {}
     try {
         $pdo->exec("ALTER TABLE `users` ADD COLUMN `must_change_password` TINYINT(1) NOT NULL DEFAULT 0");
@@ -350,6 +379,140 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
+    // 4d. Anti-Shadowing QR Access: Trusted Device Bindings, Rotating Venue Challenges & Single-Use Nonces
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `user_trusted_devices` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `user_id` INT NOT NULL,
+            `device_token_hash` CHAR(64) NOT NULL UNIQUE,
+            `device_label` VARCHAR(120) DEFAULT 'Mobile Device',
+            `user_agent` VARCHAR(255) DEFAULT NULL,
+            `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+            `bound_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `last_seen_at` DATETIME DEFAULT NULL,
+            `revoked_by_id` INT DEFAULT NULL,
+            `revoked_at` DATETIME DEFAULT NULL,
+            INDEX `idx_utd_user` (`user_id`, `is_active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `venue_qr_challenges` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `token_hash` CHAR(64) NOT NULL UNIQUE,
+            `checkpoint_type` VARCHAR(30) NOT NULL DEFAULT 'event_venue',
+            `checkpoint_id` VARCHAR(64) NOT NULL,
+            `checkpoint_name` VARCHAR(160) NOT NULL,
+            `issued_by_id` INT DEFAULT 0,
+            `expires_at` DATETIME NOT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_vqc_exp` (`expires_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `qr_scan_nonces` (
+            `nonce_hash` CHAR(64) PRIMARY KEY,
+            `user_id` INT NOT NULL,
+            `token_kind` VARCHAR(24) NOT NULL DEFAULT 'pass',
+            `checkpoint_type` VARCHAR(30) DEFAULT NULL,
+            `checkpoint_id` VARCHAR(64) DEFAULT NULL,
+            `consumed_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `expires_at` DATETIME NOT NULL,
+            INDEX `idx_qsn_exp` (`expires_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    // 4e. Random Roll-Call Sessions & Entries
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `roll_call_sessions` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `checkpoint_type` VARCHAR(30) NOT NULL DEFAULT 'all',
+            `checkpoint_id` VARCHAR(64) DEFAULT 'all',
+            `checkpoint_name` VARCHAR(160) NOT NULL DEFAULT 'All Checkpoints',
+            `triggered_by_id` INT NOT NULL,
+            `selection_mode` VARCHAR(24) NOT NULL DEFAULT 'random_count',
+            `sample_value` INT NOT NULL DEFAULT 5,
+            `require_geo_or_qr` TINYINT(1) NOT NULL DEFAULT 1,
+            `auto_checkout_on_miss` TINYINT(1) NOT NULL DEFAULT 1,
+            `deadline_at` DATETIME NOT NULL,
+            `status` VARCHAR(24) NOT NULL DEFAULT 'active',
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `closed_at` DATETIME DEFAULT NULL,
+            INDEX `idx_rcs_status` (`status`, `deadline_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `roll_call_entries` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `session_id` INT NOT NULL,
+            `user_id` INT NOT NULL,
+            `checkpoint_type` VARCHAR(30) NOT NULL,
+            `checkpoint_id` VARCHAR(64) NOT NULL,
+            `checkpoint_name` VARCHAR(160) NOT NULL,
+            `status` VARCHAR(24) NOT NULL DEFAULT 'pending',
+            `verification_method` VARCHAR(32) DEFAULT NULL,
+            `verified_by_id` INT DEFAULT NULL,
+            `verified_lat` DECIMAL(10,6) DEFAULT NULL,
+            `verified_lng` DECIMAL(10,6) DEFAULT NULL,
+            `distance_m` INT DEFAULT NULL,
+            `auto_checkout_log_id` INT DEFAULT NULL,
+            `verified_at` DATETIME DEFAULT NULL,
+            `notes` VARCHAR(255) DEFAULT NULL,
+            UNIQUE KEY `uniq_rc_session_user` (`session_id`, `user_id`),
+            INDEX `idx_rce_user` (`user_id`, `status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    // 4f. Event Dispatch Handshake: Crew Confirmation, Support Staff Requests & Action Audit Logs
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `event_crew_assignments` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `event_id` VARCHAR(64) NOT NULL,
+            `user_id` INT NOT NULL,
+            `branch_dept` VARCHAR(48) NOT NULL DEFAULT 'Sound',
+            `role_slot` VARCHAR(80) DEFAULT NULL,
+            `assigned_by_id` INT DEFAULT 1,
+            `confirmation_status` VARCHAR(24) NOT NULL DEFAULT 'pending',
+            `decline_reason` VARCHAR(255) DEFAULT NULL,
+            `assigned_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `responded_at` DATETIME DEFAULT NULL,
+            UNIQUE KEY `uniq_eca_event_user` (`event_id`, `user_id`),
+            INDEX `idx_eca_user` (`user_id`, `confirmation_status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `event_support_requests` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `event_id` VARCHAR(64) NOT NULL,
+            `requested_by_id` INT NOT NULL,
+            `requested_roles_json` TEXT NOT NULL,
+            `notes` TEXT DEFAULT NULL,
+            `status` VARCHAR(24) NOT NULL DEFAULT 'pending',
+            `fulfilled_by_id` INT DEFAULT NULL,
+            `assigned_user_ids_json` TEXT DEFAULT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `fulfilled_at` DATETIME DEFAULT NULL,
+            INDEX `idx_esr_event` (`event_id`, `status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `event_dispatch_logs` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `event_id` VARCHAR(64) NOT NULL,
+            `actor_id` INT NOT NULL,
+            `actor_role` VARCHAR(50) NOT NULL,
+            `action_type` VARCHAR(50) NOT NULL,
+            `summary` VARCHAR(255) NOT NULL,
+            `payload_json` TEXT DEFAULT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_edl_event` (`event_id`, `id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
     ensureDepartmentsTable($pdo);
 
     // 5. Ensure `attendance_logs` table exists
@@ -368,6 +531,11 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `scanned_by` INT DEFAULT 1,
             `override_by` INT DEFAULT NULL,
             `override_reason` VARCHAR(255) DEFAULT NULL,
+            `checkin_method` VARCHAR(32) NOT NULL DEFAULT 'badge_scan',
+            `verified_lat` DECIMAL(10,6) DEFAULT NULL,
+            `verified_lng` DECIMAL(10,6) DEFAULT NULL,
+            `distance_m` INT DEFAULT NULL,
+            `device_id` INT DEFAULT NULL,
             `notes` VARCHAR(255) DEFAULT NULL,
             `scanned_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -380,6 +548,21 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         }
         if (!in_array('override_reason', $cols, true)) {
             $pdo->exec("ALTER TABLE `attendance_logs` ADD COLUMN `override_reason` VARCHAR(255) NULL AFTER `override_by`");
+        }
+        if (!in_array('checkin_method', $cols, true)) {
+            $pdo->exec("ALTER TABLE `attendance_logs` ADD COLUMN `checkin_method` VARCHAR(32) NOT NULL DEFAULT 'badge_scan' AFTER `override_reason`");
+        }
+        if (!in_array('verified_lat', $cols, true)) {
+            $pdo->exec("ALTER TABLE `attendance_logs` ADD COLUMN `verified_lat` DECIMAL(10,6) NULL AFTER `checkin_method`");
+        }
+        if (!in_array('verified_lng', $cols, true)) {
+            $pdo->exec("ALTER TABLE `attendance_logs` ADD COLUMN `verified_lng` DECIMAL(10,6) NULL AFTER `verified_lat`");
+        }
+        if (!in_array('distance_m', $cols, true)) {
+            $pdo->exec("ALTER TABLE `attendance_logs` ADD COLUMN `distance_m` INT NULL AFTER `verified_lng`");
+        }
+        if (!in_array('device_id', $cols, true)) {
+            $pdo->exec("ALTER TABLE `attendance_logs` ADD COLUMN `device_id` INT NULL AFTER `distance_m`");
         }
         $pdo->exec("ALTER TABLE `attendance_logs` MODIFY COLUMN `punctuality_status` VARCHAR(50) NOT NULL DEFAULT 'on_time'");
     } catch (Throwable $e) {}
@@ -1428,4 +1611,260 @@ function maskPhoneNumber(string $phone): string
     if ($trim === '') return '';
     if (strlen($trim) <= 6) return '***';
     return substr($trim, 0, 4) . ' *** ' . substr($trim, -3);
+}
+
+/**
+ * Retrieves or generates the server-side HMAC signing secret for rotating QR tokens.
+ */
+function getQrHmacSecret(PDO $pdo): string
+{
+    static $cached = null;
+    if ($cached !== null && $cached !== '') {
+        return $cached;
+    }
+    try {
+        $st = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'qr_hmac_secret' LIMIT 1");
+        $st->execute();
+        $val = trim((string) ($st->fetchColumn() ?: ''));
+        if ($val !== '') {
+            $cached = $val;
+            return $cached;
+        }
+        $secret = bin2hex(random_bytes(32));
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('qr_hmac_secret', ?) ON DUPLICATE KEY UPDATE `setting_value` = COALESCE(NULLIF(`setting_value`, ''), VALUES(`setting_value`))")
+            ->execute([$secret]);
+        $st->execute();
+        $cached = trim((string) ($st->fetchColumn() ?: $secret));
+        return $cached;
+    } catch (Throwable $e) {
+        return hash('sha256', __FILE__ . '::ability_qr_fallback');
+    }
+}
+
+/**
+ * Generates a short-lived HMAC-SHA256 signed personal pass token (`ABPASS1.<uid>.<slice>.<nonce>.<sig>`).
+ */
+function buildSignedDynamicPassToken(PDO $pdo, int $userId, int $ttlSlice = 30): array
+{
+    $ttlSlice = max(15, min(120, $ttlSlice));
+    $now = time();
+    $slice = (int) floor($now / $ttlSlice);
+    $nonce = bin2hex(random_bytes(5)); // 10 hex chars
+    $payload = "ABPASS1.{$userId}.{$slice}.{$nonce}";
+    $secret = getQrHmacSecret($pdo);
+    $sig = substr(hash_hmac('sha256', $payload, $secret), 0, 16);
+    $expiresIn = $ttlSlice - ($now % $ttlSlice);
+    return [
+        'token' => "{$payload}.{$sig}",
+        'slice' => $slice,
+        'ttl_seconds' => $ttlSlice,
+        'expires_in' => $expiresIn > 0 ? $expiresIn : $ttlSlice,
+    ];
+}
+
+/**
+ * Validates syntax, HMAC signature, and time window (±1 slice) of an `ABPASS1` QR pass token.
+ */
+function verifySignedDynamicPassToken(PDO $pdo, string $token, int $ttlSlice = 30): ?array
+{
+    $clean = trim($token);
+    if (strpos($clean, 'ABPASS1.') !== 0) {
+        return null;
+    }
+    $parts = explode('.', $clean);
+    if (count($parts) !== 5) {
+        return null;
+    }
+    [$prefix, $uidStr, $sliceStr, $nonce, $sig] = $parts;
+    if ($prefix !== 'ABPASS1' || !ctype_digit($uidStr) || !ctype_digit($sliceStr) || !preg_match('/^[a-f0-9]{8,24}$/i', $nonce) || !preg_match('/^[a-f0-9]{16}$/i', $sig)) {
+        return null;
+    }
+    $uid = (int) $uidStr;
+    $slice = (int) $sliceStr;
+    if ($uid <= 0) {
+        return null;
+    }
+    $secret = getQrHmacSecret($pdo);
+    $expected = substr(hash_hmac('sha256', "{$prefix}.{$uid}.{$slice}.{$nonce}", $secret), 0, 16);
+    if (!hash_equals(strtolower($expected), strtolower($sig))) {
+        return ['valid' => false, 'user_id' => $uid, 'error' => 'Forged or tampered QR pass signature.'];
+    }
+    $curSlice = (int) floor(time() / $ttlSlice);
+    if (abs($curSlice - $slice) > 1) {
+        return ['valid' => false, 'user_id' => $uid, 'error' => 'Dynamic Pass QR expired (screenshot > 60s old). Ask staff to refresh their live pass.'];
+    }
+    return [
+        'valid' => true,
+        'user_id' => $uid,
+        'slice' => $slice,
+        'nonce' => strtolower($nonce),
+    ];
+}
+
+/**
+ * Atomically consumes a single-use QR nonce to block screenshot replay inside the active TTL window.
+ */
+function consumeQrNonce(
+    PDO $pdo,
+    string $nonceRaw,
+    int $userId,
+    string $kind = 'pass',
+    string $cpType = '',
+    string $cpId = '',
+    int $ttlSeconds = 120
+): bool {
+    try {
+        $pdo->exec("DELETE FROM `qr_scan_nonces` WHERE `expires_at` < NOW()");
+    } catch (Throwable $e) {}
+    $hash = hash('sha256', $kind . ':' . $userId . ':' . strtolower(trim($nonceRaw)));
+    $expSql = date('Y-m-d H:i:s', time() + max(30, $ttlSeconds));
+    $st = $pdo->prepare("
+        INSERT IGNORE INTO `qr_scan_nonces` (`nonce_hash`, `user_id`, `token_kind`, `checkpoint_type`, `checkpoint_id`, `expires_at`)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ");
+    $st->execute([$hash, $userId, $kind, $cpType !== '' ? $cpType : null, $cpId !== '' ? $cpId : null, $expSql]);
+    return $st->rowCount() === 1;
+}
+
+/**
+ * Verifies or binds a user's physical device token to block proxy sign-ins from another user's phone.
+ */
+function verifyOrBindTrustedDevice(
+    PDO $pdo,
+    int $userId,
+    string $rawDeviceToken,
+    string $deviceLabel = 'Mobile / Browser',
+    bool $allowAutoBindFirst = true
+): array {
+    $cleanTok = trim($rawDeviceToken);
+    if ($cleanTok === '' || strlen($cleanTok) < 16) {
+        return ['ok' => false, 'error' => 'Missing device identity token. Enable cookies/storage on your own phone and retry.'];
+    }
+    $tokHash = hash('sha256', $cleanTok);
+    $ua = substr(trim((string) ($_SERVER['HTTP_USER_AGENT'] ?? '')), 0, 250);
+
+    // Prevent a single physical device from simultaneously pretending to be multiple users in the last 12 hours
+    $otherSt = $pdo->prepare("SELECT `user_id` FROM `user_trusted_devices` WHERE `device_token_hash` = ? AND `is_active` = 1 AND `user_id` != ? LIMIT 1");
+    $otherSt->execute([$tokHash, $userId]);
+    if ($otherSt->fetchColumn()) {
+        return ['ok' => false, 'error' => 'Anti-shadowing lock: this device is already bound to another staff member. An Admin or Site Manager must reset device bindings to switch owners.'];
+    }
+
+    $activeSt = $pdo->prepare("SELECT `id`, `device_token_hash`, `device_label` FROM `user_trusted_devices` WHERE `user_id` = ? AND `is_active` = 1 ORDER BY `id` DESC");
+    $activeSt->execute([$userId]);
+    $activeDevices = $activeSt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($activeDevices as $dev) {
+        if (hash_equals((string) $dev['device_token_hash'], $tokHash)) {
+            $pdo->prepare("UPDATE `user_trusted_devices` SET `last_seen_at` = NOW(), `user_agent` = ? WHERE `id` = ?")
+                ->execute([$ua, (int) $dev['id']]);
+            return ['ok' => true, 'device_id' => (int) $dev['id'], 'newly_bound' => false];
+        }
+    }
+
+    if (!empty($activeDevices)) {
+        return [
+            'ok' => false,
+            'device_mismatch' => true,
+            'error' => 'Device mismatch: your account is bound to another phone (' . ($activeDevices[0]['device_label'] ?: 'Registered Device') . '). Rebind using your 6-digit TOTP code or ask an Admin / Site Manager to reset your device lock.',
+        ];
+    }
+
+    if (!$allowAutoBindFirst) {
+        return ['ok' => false, 'error' => 'This device is not bound to your account yet.'];
+    }
+
+    $ins = $pdo->prepare("INSERT INTO `user_trusted_devices` (`user_id`, `device_token_hash`, `device_label`, `user_agent`, `is_active`, `last_seen_at`) VALUES (?, ?, ?, ?, 1, NOW())");
+    $ins->execute([$userId, $tokHash, substr(trim($deviceLabel) ?: 'Mobile / Browser', 0, 120), $ua]);
+    return ['ok' => true, 'device_id' => (int) $pdo->lastInsertId(), 'newly_bound' => true];
+}
+
+/**
+ * Records an event dispatch workflow action so the Dispatch Tree can display live actions per role.
+ */
+function logEventDispatchAction(
+    PDO $pdo,
+    string $eventId,
+    int $actorId,
+    string $actorRole,
+    string $actionType,
+    string $summary,
+    array $payload = []
+): void {
+    try {
+        $st = $pdo->prepare("
+            INSERT INTO `event_dispatch_logs` (`event_id`, `actor_id`, `actor_role`, `action_type`, `summary`, `payload_json`)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        $st->execute([
+            $eventId,
+            $actorId,
+            strtolower(trim($actorRole)),
+            $actionType,
+            substr($summary, 0, 250),
+            !empty($payload) ? json_encode($payload) : null,
+        ]);
+    } catch (Throwable $e) {}
+}
+
+/**
+ * Recomputes `events.dispatch_status` based on technical requirements and confirmed crew assignments.
+ */
+function recalculateEventDispatchStatus(PDO $pdo, string $eventId): string
+{
+    try {
+        $evSt = $pdo->prepare("SELECT `id`, `requirements_json`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evSt->execute([$eventId, $eventId]);
+        $ev = $evSt->fetch(PDO::FETCH_ASSOC);
+        if (!$ev) {
+            return 'draft';
+        }
+        $realId = (string) $ev['id'];
+        $reqs = json_decode((string) ($ev['requirements_json'] ?? ''), true);
+        $hasReq = is_array($reqs) && !empty(array_filter((array) ($reqs['branches'] ?? []), static fn($v) => (int) $v > 0));
+
+        $asgSt = $pdo->prepare("SELECT `branch_dept`, `confirmation_status` FROM `event_crew_assignments` WHERE `event_id` = ?");
+        $asgSt->execute([$realId]);
+        $rows = $asgSt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($rows)) {
+            $next = $hasReq ? 'requirements_sent' : 'draft';
+            $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
+            return $next;
+        }
+
+        $confirmedByBranch = [];
+        $hasPendingOrDeclined = false;
+        foreach ($rows as $r) {
+            $st = strtolower((string) ($r['confirmation_status'] ?? 'pending'));
+            $brRaw = (string) ($r['branch_dept'] ?? 'Sound');
+            $branches = array_filter(array_map('trim', explode('/', $brRaw)));
+            if (empty($branches)) {
+                $branches = ['Sound'];
+            }
+            if ($st === 'confirmed') {
+                foreach ($branches as $br) {
+                    $confirmedByBranch[$br] = ($confirmedByBranch[$br] ?? 0) + 1;
+                }
+            } else {
+                $hasPendingOrDeclined = true;
+            }
+        }
+
+        $allMet = !$hasPendingOrDeclined;
+        if ($allMet && $hasReq) {
+            foreach ((array) ($reqs['branches'] ?? []) as $brName => $needCnt) {
+                if ((int) $needCnt > 0 && ($confirmedByBranch[$brName] ?? 0) < (int) $needCnt) {
+                    $allMet = false;
+                    break;
+                }
+            }
+        }
+
+        $next = $allMet ? 'ready' : 'staffing_in_progress';
+        $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
+        return $next;
+    } catch (Throwable $e) {
+        return 'draft';
+    }
 }

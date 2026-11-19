@@ -185,7 +185,54 @@
     unreadNotifCount: 0,
     readNotifIds: new Set(),
     notifications: [],
+
+    // Anti-Shadowing QR, Random Roll-Call & Event Dispatch State
+    roleCapabilities: {},
+    rollCallSessions: [],
+    myPendingRollCall: null,
+    eventCrewAssignments: {},
+    eventSupportRequests: [],
+    myPendingAssignments: [],
+    eventDispatchLogs: [],
+    selectedDispatchTier: 'tier1_command',
+    pendingFaceMatchScan: null,
+    vqrTimer: null,
+    vqrSecondsLeft: 20,
+    passQrTimer: null,
+    passQrSlice: 0,
+    passQrUserId: 0,
+    passQrData: null,
   };
+
+  function getOrCreateClientDeviceToken() {
+    let devTok = '';
+    try { devTok = localStorage.getItem('ability_device_tok') || ''; } catch (e) {}
+    if (!devTok || devTok.length < 16) {
+      const m = document.cookie.match(/(?:^|;\s*)ability_device_tok=([^;]+)/);
+      if (m) devTok = decodeURIComponent(m[1]);
+    }
+    if (!devTok || devTok.length < 16) {
+      const arr = new Uint8Array(24);
+      if (window.crypto && crypto.getRandomValues) {
+        crypto.getRandomValues(arr);
+      } else {
+        for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
+      }
+      devTok = 'ABDEV-' + Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    try { localStorage.setItem('ability_device_tok', devTok); } catch (e) {}
+    document.cookie = `ability_device_tok=${encodeURIComponent(devTok)}; path=/; max-age=31536000; SameSite=Lax`;
+    return devTok;
+  }
+
+  function inferClientDeviceLabel() {
+    const ua = navigator.userAgent || '';
+    if (/Android/i.test(ua)) return 'Android Browser';
+    if (/iPhone|iPad/i.test(ua)) return 'iPhone / iPad';
+    if (/Windows/i.test(ua)) return 'Windows Terminal';
+    if (/Mac/i.test(ua)) return 'Mac Browser';
+    return 'Web Browser';
+  }
 
   // Attach per-session X-CSRF-Token automatically on mutating POST requests to api.php
   if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
@@ -507,6 +554,25 @@
     }
     if (Array.isArray(data.brandingFonts)) {
       state.brandingFonts = data.brandingFonts;
+    }
+    if (data.roleCapabilities && typeof data.roleCapabilities === 'object') {
+      state.roleCapabilities = data.roleCapabilities;
+    }
+    if (Array.isArray(data.rollCallSessions)) {
+      state.rollCallSessions = data.rollCallSessions;
+    }
+    state.myPendingRollCall = data.myPendingRollCall || null;
+    if (data.eventCrewAssignments && typeof data.eventCrewAssignments === 'object') {
+      state.eventCrewAssignments = data.eventCrewAssignments;
+    }
+    if (Array.isArray(data.eventSupportRequests)) {
+      state.eventSupportRequests = data.eventSupportRequests;
+    }
+    if (Array.isArray(data.myPendingAssignments)) {
+      state.myPendingAssignments = data.myPendingAssignments;
+    }
+    if (Array.isArray(data.eventDispatchLogs)) {
+      state.eventDispatchLogs = data.eventDispatchLogs;
     }
     if (data.brandingConfig && typeof data.brandingConfig === 'object') {
       applyBrandingConfigClient(data.brandingConfig, data.brandingFonts || null);
@@ -1260,7 +1326,7 @@
     }
   }
 
-  async function triggerGateScan(scanInput, forcedMode = null) {
+  async function triggerGateScan(scanInput, forcedMode = null, visualConfirmed = false) {
     if (state.terminalScreenLocked) {
       showToast('Terminal screen is LOCKED. Enter the warehouse PIN to unlock scanning.');
       const pinInp = document.getElementById('terminal-unlock-pin-input');
@@ -1291,6 +1357,7 @@
           checkpoint_type: state.checkpointType,
           checkpoint_id: state.checkpointId,
           scan_mode: modeToUse,
+          visual_confirmed: visualConfirmed ? 1 : 0,
         }),
       });
       const data = await res.json();
@@ -1300,6 +1367,33 @@
         return;
       }
 
+      if (data.visual_confirm_required && data.pending_pass_token) {
+        state.pendingFaceMatchScan = {
+          scan_input: data.pending_pass_token,
+          scan_mode: data.action || modeToUse,
+        };
+        data.confirmed = false;
+        if (data.badge && data.badge.user_id) {
+          state.selectedCrewId = Number(data.badge.user_id);
+        }
+        state.currentVerification = data;
+        const backdrop = document.getElementById('kiosk-modal-backdrop');
+        if (backdrop) {
+          backdrop.style.display = 'flex';
+          backdrop.setAttribute('aria-hidden', 'false');
+          document.body.style.overflow = 'hidden';
+        }
+        showVerificationCard();
+        renderVerificationDeck();
+        clearKioskCountdown();
+        const timeoutLabel = document.getElementById('kiosk-timeout-label');
+        if (timeoutLabel) timeoutLabel.textContent = 'Verify Face Match';
+        playKioskChime('approve');
+        showToast(`${data.badge ? data.badge.full_name : 'Presenter'}: Confirm photo matches person at gate.`);
+        return;
+      }
+
+      state.pendingFaceMatchScan = null;
       // Scan has already been recorded on the backend; do not re-prompt for approval
       data.confirmed = true;
 
@@ -1395,9 +1489,9 @@
     } else if (screenKey === 'stock-manager') {
       state.eventsHubTab = 'warehouses';
       screenKey = 'events';
-    } else if (screenKey === 'venue-security') {
+      } else if (screenKey === 'venue-security') {
       if (!canCurrentUserAssignEvents() && !isCurrentUserAdmin()) {
-        showToast('Access Restricted: Event Venues CRUD is reserved for Operations Managers, Tech Leads, and Administrators.');
+        showToast('Access Restricted: Event Venues CRUD is reserved for Operations Managers, Coordinators, Tech Leads, and Administrators.');
         screenKey = isCurrentUserStockController() || isCurrentUserTechnician() ? 'terminals' : 'overview';
         if (screenKey === 'terminals') scrollToId = 'pane-kiosk';
       } else {
@@ -1411,13 +1505,14 @@
       const isStockCtrl = rawRole === 'stock_controller';
       const isTech = rawRole === 'tech_lead' || rawRole === 'technical_lead';
       const isStockMgr = rawRole === 'stock_manager';
+      const isEvtCmd = rawRole === 'project_manager' || rawRole === 'event_coordinator';
 
       if (isStockCtrl) {
         showToast('Access Scoped: Gate Controllers are scoped to Gate Kiosk (#pane-kiosk) at their assigned terminal.');
         screenKey = 'terminals';
         scrollToId = 'pane-kiosk';
-      } else if (isTech) {
-        showToast('Access Scoped: Tech Leads are scoped to Gate Dashboard & Terminal only.');
+      } else if (isTech || isEvtCmd) {
+        showToast('Access Restricted: Section requires Administrator privileges.');
         screenKey = 'overview';
       } else if (isStockMgr) {
         showToast('Access Restricted: Section requires Administrator privileges.');
@@ -1693,7 +1788,10 @@
     renderOverviewCosView();
     renderActivityTimeline();
     renderTechLeadRosterCard();
+    renderMyRollCallAlertBanner();
+    renderMyAssignmentsInboxCard();
     renderCrewDigitalPassCard();
+    renderKioskVenueQrDeck();
     renderCrewTables();
     renderCheckpointsDirectory();
     renderBatchesAndMatrixScreen();
@@ -1707,6 +1805,9 @@
     }
     if (state.activeScreen === 'users') {
       switchUsersView(state.usersViewMode || 'personnel');
+    }
+    if (state.activeScreen === 'settings' && state.settingsTab === 'dispatch') {
+      renderSettingsDispatchSection();
     }
     applyNavigationRestrictions();
   }
@@ -1805,6 +1906,54 @@
       });
     }
 
+    // 5. Random Roll-Call Alert for current logged-in user
+    if (state.myPendingRollCall) {
+      const rc = state.myPendingRollCall;
+      const rcKey = `rollcall-ping-${rc.session_id}-${rc.entry_id}`;
+      items.unshift({
+        id: rcKey,
+        type: 'rollcall',
+        iconSvg: 'assets/metric-clock-3.svg',
+        title: `Random Roll-Call Check Required (${rc.checkpoint_name || 'On-Site'})`,
+        desc: 'Verify you are still inside the venue via GPS geo-fence or live Gate QR before deadline.',
+        time: `${Math.max(1, Math.ceil(Number(rc.seconds_left || 60) / 60))}m left`,
+        unread: !state.readNotifIds.has(rcKey),
+      });
+    }
+
+    // 6. Pending Event Dispatch Confirmation for Crew / Techs / Support
+    const pendingAssigns = (state.myPendingAssignments || []).filter((a) => String(a.confirmation_status) === 'pending');
+    if (pendingAssigns.length > 0) {
+      pendingAssigns.slice(0, 2).forEach((a) => {
+        const asgKey = `event-asg-pending-${a.event_id}-${a.id}`;
+        items.unshift({
+          id: asgKey,
+          type: 'dispatch',
+          iconSvg: 'assets/nav-events-inactive.svg',
+          title: `Confirm Event Assignment: ${a.event_title || a.event_id}`,
+          desc: `Branch: ${a.branch_dept || 'Crew'} · Call-time ${a.call_time || '08:00'}`,
+          time: a.event_date || 'Pending',
+          unread: !state.readNotifIds.has(asgKey),
+        });
+      });
+    }
+
+    // 7. Pending Tier 4 Support Staff Requests & Requirements alerts for Supervisors
+    const pendingSupport = (state.eventSupportRequests || []).filter((r) => String(r.status) === 'pending');
+    if (pendingSupport.length > 0 && (isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand() || isCurrentUserTechLead())) {
+      const firstSup = pendingSupport[0];
+      const supKey = `support-req-${firstSup.id}`;
+      items.unshift({
+        id: supKey,
+        type: 'dispatch',
+        iconSvg: 'assets/nav-team-members.svg',
+        title: `${pendingSupport.length} Support Staff Request(s) Pending`,
+        desc: `${firstSup.event_title}: requested by ${firstSup.requested_by_name}`,
+        time: 'Action needed',
+        unread: !state.readNotifIds.has(supKey),
+      });
+    }
+
     state.notifications = items;
     state.unreadNotifCount = items.filter((n) => n.unread).length;
   }
@@ -1837,6 +1986,12 @@
     return role === 'admin' || role === 'manager' || role === 'administrator';
   }
 
+  function isCurrentUserEventCommand() {
+    if (!state.currentUser) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return role === 'project_manager' || role === 'event_coordinator';
+  }
+
   function isCurrentUserTechLead() {
     if (!state.currentUser) return false;
     const role = (state.currentUser.role || '').toLowerCase();
@@ -1858,7 +2013,7 @@
   function isCurrentUserTechnician() {
     if (!state.currentUser) return false;
     const role = (state.currentUser.role || '').toLowerCase();
-    return role === 'technician' || (!isCurrentUserAdmin() && !isCurrentUserTechLead() && !isCurrentUserStockManager() && !isCurrentUserStockController());
+    return role === 'technician' || (!isCurrentUserAdmin() && !isCurrentUserEventCommand() && !isCurrentUserTechLead() && !isCurrentUserStockManager() && !isCurrentUserStockController());
   }
 
   function isScreenPermittedForCurrentUser(screenKey) {
@@ -1876,7 +2031,7 @@
     }
     const rawRole = (state.currentUser?.role || '').toLowerCase();
     const isAdmin = isCurrentUserAdmin();
-    const isManager = (rawRole === 'manager' || rawRole === 'project_manager') && !isAdmin;
+    const isManager = (rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator') && !isAdmin;
     const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isAdmin;
     const isStockMgr = (rawRole === 'stock_manager') && !isAdmin;
     const isStockCtrl = (rawRole === 'stock_controller');
@@ -1888,13 +2043,12 @@
       return ['events', 'terminals', 'attendees', 'shift-relief', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isTech) {
-      // Tech Lead: Gate Dashboard, Terminal, On-Site Roll-Call, Portals, and Settings/Flow
-      return ['overview', 'terminals', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
+      return ['overview', 'events', 'users', 'attendees', 'terminals', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isStockMgr) {
       return ['overview', 'events', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
-    // Field Crew / Technicians / Drivers / Decorators / Standard crew:
+    // Field Crew / Technicians / Support Staff:
     return ['attendees', 'terminals', 'rollcall'].includes(normalizedKey);
   }
 
@@ -1907,21 +2061,21 @@
   function canCurrentUserAddUser() {
     if (!state.currentUser) return false;
     const rawRole = (state.currentUser.role || '').toLowerCase();
-    const isManager = rawRole === 'manager' || rawRole === 'project_manager';
+    const isManager = rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator';
     return isCurrentUserAdmin() || isManager || isCurrentUserTechLead() || isCurrentUserStockManager();
   }
 
   function canCurrentUserAssignEvents() {
     if (!state.currentUser) return false;
     const rawRole = (state.currentUser.role || '').toLowerCase();
-    const isManager = rawRole === 'manager' || rawRole === 'project_manager';
+    const isManager = rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator';
     return isCurrentUserAdmin() || isManager || isCurrentUserTechLead();
   }
 
   function canCurrentUserSetCallTime() {
     if (!state.currentUser) return true; // Permit in kiosk/demo testing
     const rawRole = (state.currentUser.role || '').toLowerCase();
-    const isManager = rawRole === 'manager' || rawRole === 'project_manager';
+    const isManager = rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator';
     return isCurrentUserAdmin() || isManager || isCurrentUserTechLead() || isCurrentUserStockManager();
   }
 
@@ -1972,7 +2126,7 @@
     const rawRole = (state.currentUser?.role || '').toLowerCase();
     const clearance = (state.currentUser?.clearance_code || '').toUpperCase();
     const isAdmin = isCurrentUserAdmin();
-    const isManager = (rawRole === 'manager' || rawRole === 'project_manager') && !isAdmin;
+    const isManager = (rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator') && !isAdmin;
     const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isAdmin;
     const isStockMgr = (rawRole === 'stock_manager') && !isAdmin;
     const isStockCtrl = (rawRole === 'stock_controller');
@@ -2017,9 +2171,9 @@
 
     if (!state.navigationConfig || !Array.isArray(state.navigationConfig.items) || state.navigationConfig.items.length === 0) {
       setVis(navOverview, isAdmin || isManager || isTech || isStockMgr);
-      setVis(navEvents, isAdmin || isManager || isStockMgr || isStockCtrl);
-      setVis(navUsers, isAdmin || isManager);
-      setVis(navAttendees, !isTech);
+      setVis(navEvents, isAdmin || isManager || isTech || isStockMgr || isStockCtrl);
+      setVis(navUsers, isAdmin || isManager || isTech);
+      setVis(navAttendees, true);
       setVis(navTerminals, true);
     }
 
@@ -2049,8 +2203,8 @@
       cpNav.style.display = 'flex';
       // Shift Relief & Swaps: Admin, Manager, Stock Manager, Stock Controller
       setVis(btnShiftRelief, isAdmin || isManager || isStockMgr || isStockCtrl);
-      // Set Call Time: Admin, Manager, Stock Manager
-      setVis(btnCallTime, isAdmin || isManager || isStockMgr);
+      // Set Call Time: Admin, Manager, Project Manager, Event Coordinator, Tech Lead, Stock Manager
+      setVis(btnCallTime, isAdmin || isManager || isTech || isStockMgr);
       // On-Site Roll-Call: Read-only directory visible to all authenticated personnel
       setVis(btnRollCall, true);
       // Station Lock PIN: Admin ONLY
@@ -2884,6 +3038,47 @@
     return `<svg viewBox="0 0 ${size * 7} ${size * 7}" width="78" height="78" role="img" aria-label="Digital badge matrix for ${escapeHtml(str)}">${rects.join('')}</svg>`;
   }
 
+  async function fetchLiveDynamicPassQr(force = false) {
+    if (!state.currentUser || !state.currentUser.id) return;
+    const nowSlice = Math.floor(Date.now() / 30000);
+    if (!force && state.passQrData && Number(state.passQrUserId) === Number(state.currentUser.id) && Number(state.passQrSlice) === nowSlice) {
+      return;
+    }
+    try {
+      const res = await fetch('api.php?action=get_dynamic_pass_qr', { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok && data && data.ok && data.token) {
+        state.passQrData = data;
+        state.passQrSlice = Number(data.slice || nowSlice);
+        state.passQrUserId = Number(data.user_id || state.currentUser.id);
+        renderCrewDigitalPassQrOnly();
+      }
+    } catch (e) {}
+  }
+
+  function renderCrewDigitalPassQrOnly() {
+    const qrBox = document.getElementById('crew-pass-qr-box');
+    const timerEl = document.getElementById('crew-pass-rotate-label');
+    const tokenEl = document.getElementById('crew-pass-live-code');
+    if (!qrBox) return;
+    const tok = state.passQrData && state.passQrData.token ? String(state.passQrData.token) : '';
+    const meCrew = (state.crew || []).find((c) => Number(c.id) === Number(state.currentUser?.id)) || state.currentUser;
+    const fallbackCode = meCrew?.badge_code || `REW-BADGE-${String(meCrew?.id || 0).padStart(4, '0')}`;
+    const payloadStr = tok || fallbackCode;
+    if (window.AbilityQRCode && typeof window.AbilityQRCode.toSvg === 'function') {
+      qrBox.innerHTML = window.AbilityQRCode.toSvg(payloadStr, 140);
+    } else {
+      qrBox.innerHTML = buildBadgeQrSvg(payloadStr);
+    }
+    if (tokenEl) {
+      tokenEl.textContent = tok ? `${tok.slice(0, 18)}… (30s Dynamic)` : fallbackCode;
+    }
+    if (timerEl) {
+      const secs = Math.max(1, 30 - (Math.floor(Date.now() / 1000) % 30));
+      timerEl.textContent = tok ? `Anti-Shadowing QR · Rotates in ${secs}s` : 'Static Fallback Badge QR';
+    }
+  }
+
   function renderCrewDigitalPassCard() {
     const card = document.getElementById('crew-digital-pass-card');
     if (!card) return;
@@ -2910,9 +3105,10 @@
       ? 'status-in'
       : (dailyState === 'checked_out' ? 'status-out' : '');
     const kicker = isCurrentUserTechnician() ? 'MY DIGITAL CREW PASS' : 'PERSONAL DIGITAL ID PASS';
-    const avatarHtml = meCrew.photo_url
-      ? `<img src="${escapeHtml(meCrew.photo_url)}" alt="${escapeHtml(fullName)}" />`
+    const avatarHtml = meCrew.photo_url || meCrew.profile_image_url
+      ? `<img src="${escapeHtml(meCrew.photo_url || meCrew.profile_image_url)}" alt="${escapeHtml(fullName)}" />`
       : escapeHtml(initials);
+    const devCount = Number(state.passQrData?.trusted_device_count ?? meCrew.trusted_device_count ?? 0);
 
     card.style.display = 'flex';
     card.innerHTML = `
@@ -2926,18 +3122,141 @@
             <span class="crew-pass-pill ${statusClass}">${escapeHtml(statusLabel)}</span>
             <span class="crew-pass-pill">🔑 ${escapeHtml(clearance)}</span>
             <span class="crew-pass-pill">📍 ${escapeHtml(cpName)}</span>
+            <span class="crew-pass-pill">${devCount > 0 ? `📱 ${devCount} Bound Device` : '📱 Auto-binds on first QR scan'}</span>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary-32-sm" id="btn-refresh-dynamic-pass">↻ Rotate QR Now</button>
+            <button type="button" class="btn btn-secondary-32-sm" id="btn-rebind-device-totp">📱 Rebind Phone via TOTP</button>
           </div>
         </div>
       </div>
       <div class="crew-pass-qr-wrap">
-        <div class="crew-pass-qr-box">${buildBadgeQrSvg(badgeCode)}</div>
+        <div class="crew-pass-qr-box" id="crew-pass-qr-box">${buildBadgeQrSvg(badgeCode)}</div>
         <div class="crew-pass-code-col">
-          <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #64748b;">Scan at Gate Terminal</span>
+          <span id="crew-pass-rotate-label" style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #b45309;">Anti-Shadowing 30s QR</span>
           <span class="crew-pass-badge-code">${escapeHtml(badgeCode)}</span>
-          <span class="crew-pass-rfid">${escapeHtml(rfidUid)}</span>
+          <span class="crew-pass-rfid" id="crew-pass-live-code">${escapeHtml(rfidUid)}</span>
         </div>
       </div>
     `;
+
+    renderCrewDigitalPassQrOnly();
+    fetchLiveDynamicPassQr(false);
+
+    document.getElementById('btn-refresh-dynamic-pass')?.addEventListener('click', () => fetchLiveDynamicPassQr(true));
+    document.getElementById('btn-rebind-device-totp')?.addEventListener('click', async () => {
+      const totpCode = window.prompt('Enter your 6-digit Authenticator (TOTP) code to bind this device as your sole check-in phone:');
+      if (!totpCode) return;
+      try {
+        const res = await fetch('api.php?action=rebind_trusted_device_totp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'rebind_trusted_device_totp',
+            device_token: getOrCreateClientDeviceToken(),
+            device_label: inferClientDeviceLabel(),
+            totp_code: totpCode.trim(),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          showToast(data.error || 'Could not rebind device.');
+          return;
+        }
+        applyBootstrapPayload(data, true);
+        fetchLiveDynamicPassQr(true);
+        showToast(data.message || 'Trusted device updated.');
+      } catch (err) {
+        showToast('Network error rebinding device.');
+      }
+    });
+
+    if (!state.passQrTimer) {
+      state.passQrTimer = setInterval(() => {
+        if (document.hidden || !state.currentUser) return;
+        const box = document.getElementById('crew-pass-qr-box');
+        if (!box) return;
+        const secInSlice = Math.floor(Date.now() / 1000) % 30;
+        const timerEl = document.getElementById('crew-pass-rotate-label');
+        if (timerEl && state.passQrData?.token) {
+          timerEl.textContent = `Anti-Shadowing QR · Rotates in ${Math.max(1, 30 - secInSlice)}s`;
+        }
+        if (Math.floor(Date.now() / 30000) !== Number(state.passQrSlice)) {
+          fetchLiveDynamicPassQr(false);
+        }
+      }, 1000);
+    }
+  }
+
+  async function refreshKioskVenueQr() {
+    const box = document.getElementById('kiosk-venue-qr-box');
+    const countdownEl = document.getElementById('kiosk-vqr-countdown');
+    const policyPill = document.getElementById('kiosk-vqr-policy-pill');
+    const activeCp = state.activeCheckpoint || {};
+    if (policyPill) {
+      const pol = String(activeCp.checkin_policy || 'hybrid').toLowerCase();
+      policyPill.textContent = pol === 'qr_strict' ? 'Strict QR Policy' : (pol === 'manual_allowed' ? 'Manual + QR Allowed' : 'Hybrid · Name + QR');
+    }
+    if (!box || !state.currentUser || state.terminalScreenLocked) return;
+    try {
+      const res = await fetch(`api.php?action=issue_venue_checkin_qr&checkpoint_type=${encodeURIComponent(state.checkpointType)}&checkpoint_id=${encodeURIComponent(state.checkpointId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'issue_venue_checkin_qr',
+          checkpoint_type: state.checkpointType,
+          checkpoint_id: state.checkpointId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data || !data.ok || !data.token) {
+        if (countdownEl) countdownEl.textContent = data?.error ? 'QR restricted' : 'QR paused';
+        return;
+      }
+      state.vqrLastUrl = new URL(data.checkin_url, window.location.href).href;
+      state.vqrSecondsLeft = 20;
+      if (window.AbilityQRCode && typeof window.AbilityQRCode.toSvg === 'function') {
+        box.innerHTML = window.AbilityQRCode.toSvg(state.vqrLastUrl, 108);
+      } else {
+        box.textContent = data.token.slice(0, 12);
+      }
+      if (countdownEl) countdownEl.textContent = 'Rotating: 20s';
+    } catch (e) {}
+  }
+
+  function renderKioskVenueQrDeck() {
+    const deck = document.getElementById('kiosk-venue-qr-deck');
+    if (!deck) return;
+    const rawRole = String(state.currentUser?.role || '').toLowerCase();
+    const canOperateGate = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand() || isCurrentUserTechLead() || rawRole === 'stock_controller';
+    deck.style.display = (canOperateGate && !state.terminalScreenLocked) ? 'block' : 'none';
+    if (!canOperateGate || state.terminalScreenLocked) return;
+
+    const activeCp = state.activeCheckpoint || {};
+    const policyPill = document.getElementById('kiosk-vqr-policy-pill');
+    if (policyPill) {
+      const pol = String(activeCp.checkin_policy || 'hybrid').toLowerCase();
+      policyPill.textContent = pol === 'qr_strict' ? 'Strict QR Policy' : (pol === 'manual_allowed' ? 'Manual + QR Allowed' : 'Hybrid · Name + QR');
+    }
+    const cpTag = `${state.checkpointType}:${state.checkpointId}`;
+    if (state.vqrCpKey !== cpTag) {
+      state.vqrCpKey = cpTag;
+      refreshKioskVenueQr();
+    }
+    if (!state.vqrTimer) {
+      state.vqrTimer = setInterval(() => {
+        if (document.hidden || state.terminalScreenLocked || state.activeScreen !== 'terminals') return;
+        const deckEl = document.getElementById('kiosk-venue-qr-deck');
+        if (!deckEl || deckEl.style.display === 'none') return;
+        state.vqrSecondsLeft = Math.max(0, Number(state.vqrSecondsLeft || 0) - 1);
+        const cdEl = document.getElementById('kiosk-vqr-countdown');
+        if (state.vqrSecondsLeft <= 0) {
+          refreshKioskVenueQr();
+        } else if (cdEl) {
+          cdEl.textContent = `Rotating: ${state.vqrSecondsLeft}s`;
+        }
+      }, 1000);
+    }
   }
 
   function openWarehousePinModal() {
@@ -3169,6 +3488,7 @@
     const btnApproveIn = document.getElementById('kiosk-btn-approve-in');
     const btnApproveOut = document.getElementById('kiosk-btn-approve-out');
     const btnOverride = document.getElementById('kiosk-btn-override');
+    const btnConfirmFace = document.getElementById('kiosk-btn-confirm-face');
     const btnDecline = document.getElementById('kiosk-btn-decline');
     const pnlOverride = document.getElementById('kiosk-override-panel');
     const pnlDecline = document.getElementById('kiosk-decline-panel');
@@ -3180,29 +3500,39 @@
     const isLateArrival = !isCurrentlyCheckedIn && diff > 15;
     const isLockedLate = b.badge_status === 'disabled_late' || isLateArrival;
 
-    if (v.confirmed) {
+    if (v.visual_confirm_required && state.pendingFaceMatchScan) {
+      if (btnApproveIn) btnApproveIn.style.display = 'none';
+      if (btnApproveOut) btnApproveOut.style.display = 'none';
+      if (btnOverride) btnOverride.style.display = 'none';
+      if (btnConfirmFace) btnConfirmFace.style.display = 'inline-flex';
+      if (btnDecline) btnDecline.style.display = 'inline-flex';
+    } else if (v.confirmed) {
       // Just confirmed action: hide decision buttons while countdown ticks
       if (btnApproveIn) btnApproveIn.style.display = 'none';
       if (btnApproveOut) btnApproveOut.style.display = 'none';
       if (btnOverride) btnOverride.style.display = 'none';
+      if (btnConfirmFace) btnConfirmFace.style.display = 'none';
       if (btnDecline) btnDecline.style.display = 'none';
     } else if (isCurrentlyCheckedIn) {
       // Already inside -> Offer Check-Out and Decline
       if (btnApproveIn) btnApproveIn.style.display = 'none';
       if (btnApproveOut) btnApproveOut.style.display = 'inline-flex';
       if (btnOverride) btnOverride.style.display = 'none';
+      if (btnConfirmFace) btnConfirmFace.style.display = 'none';
       if (btnDecline) btnDecline.style.display = 'inline-flex';
     } else if (isLockedLate) {
       // Tardy / Locked -> Require Supervisor Override or Decline
       if (btnApproveIn) btnApproveIn.style.display = 'none';
       if (btnApproveOut) btnApproveOut.style.display = 'none';
       if (btnOverride) btnOverride.style.display = 'inline-flex';
+      if (btnConfirmFace) btnConfirmFace.style.display = 'none';
       if (btnDecline) btnDecline.style.display = 'inline-flex';
     } else {
       // Punctual Inbound -> Offer Approve In and Decline
       if (btnApproveIn) btnApproveIn.style.display = 'inline-flex';
       if (btnApproveOut) btnApproveOut.style.display = 'none';
       if (btnOverride) btnOverride.style.display = 'none';
+      if (btnConfirmFace) btnConfirmFace.style.display = 'none';
       if (btnDecline) btnDecline.style.display = 'inline-flex';
     }
 
@@ -5438,9 +5768,201 @@
     }
   }
 
+  function renderMyRollCallAlertBanner() {
+    const targets = [
+      document.getElementById('my-rollcall-alert-card'),
+      document.getElementById('page-rc-my-alert-card'),
+    ].filter(Boolean);
+    if (!targets.length) return;
+    const ping = state.myPendingRollCall;
+    if (!ping) {
+      targets.forEach((el) => { el.style.display = 'none'; el.innerHTML = ''; });
+      return;
+    }
+    const minsLeft = Math.max(1, Math.ceil(Number(ping.seconds_left || 60) / 60));
+    const html = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#b45309;">Random Premise Roll-Call Verification Required</div>
+          <div style="font-size:15px;font-weight:800;color:var(--text-primary);margin-top:2px;">Confirm you are currently inside ${escapeHtml(ping.checkpoint_name || 'your assigned site')}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">
+            Deadline: <strong>${escapeHtml(ping.deadline_at || '')}</strong> (~${minsLeft} min left) · ${Number(ping.auto_checkout_on_miss) === 1 ? 'Missed response triggers Auto Check-Out.' : 'Missed response flags Unaccounted.'}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="btn btn-primary-32 js-self-verify-rollcall-btn" data-entry-id="${Number(ping.entry_id)}" style="background:#059669;border-color:#059669;">📍 Verify On-Premise (GPS + Device)</button>
+          <button type="button" class="btn btn-secondary-32-sm js-self-qr-rollcall-btn" data-entry-id="${Number(ping.entry_id)}">📷 Verify with Gate QR Token</button>
+        </div>
+      </div>
+    `;
+    targets.forEach((el) => {
+      el.style.display = 'block';
+      el.innerHTML = html;
+      el.querySelector('.js-self-verify-rollcall-btn')?.addEventListener('click', () => handleSelfRespondRollCall(ping.entry_id, false));
+      el.querySelector('.js-self-qr-rollcall-btn')?.addEventListener('click', () => handleSelfRespondRollCall(ping.entry_id, true));
+    });
+  }
+
+  async function handleSelfRespondRollCall(entryId, askQrToken) {
+    let venueQrTok = '';
+    if (askQrToken) {
+      venueQrTok = (window.prompt('Paste the URL or challenge token from the live Gate Rotating QR screen:') || '').trim();
+      if (!venueQrTok) return;
+    }
+    const postVerify = async (coords) => {
+      try {
+        const res = await fetch('api.php?action=respond_roll_call', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'respond_roll_call',
+            entry_id: Number(entryId),
+            device_token: getOrCreateClientDeviceToken(),
+            device_label: inferClientDeviceLabel(),
+            venue_qr_token: venueQrTok,
+            lat: coords ? coords.lat : '',
+            lng: coords ? coords.lng : '',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data || !data.ok) {
+          showToast(data?.error || 'Could not verify Roll-Call presence.');
+          playKioskChime('decline');
+          return;
+        }
+        applyBootstrapPayload(data, true);
+        playKioskChime('approve');
+        showToast(data.message || 'Premise presence confirmed.');
+      } catch (e) {
+        showToast('Network error confirming presence.');
+      }
+    };
+    if (venueQrTok || !navigator.geolocation) {
+      await postVerify(null);
+      return;
+    }
+    showToast('Acquiring GPS coordinates for geo-fence verification...');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => postVerify({ lat: Number(pos.coords.latitude.toFixed(6)), lng: Number(pos.coords.longitude.toFixed(6)) }),
+      () => postVerify(null),
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 15000 }
+    );
+  }
+
+  function renderMyAssignmentsInboxCard() {
+    const card = document.getElementById('my-assignments-inbox-card');
+    if (!card) return;
+    const myAsg = Array.isArray(state.myPendingAssignments) ? state.myPendingAssignments : [];
+    const pendingSupReqs = (state.eventSupportRequests || []).filter((r) => String(r.status) === 'pending');
+    const canFulfillSupport = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand();
+    const showTechInbox = myAsg.length > 0;
+    const showSupInbox = canFulfillSupport && pendingSupReqs.length > 0;
+    if (!showTechInbox && !showSupInbox) {
+      card.style.display = 'none';
+      card.innerHTML = '';
+      return;
+    }
+    const asgRowsHtml = myAsg.map((a) => {
+      const st = String(a.confirmation_status || 'pending').toLowerCase();
+      return `
+        <div class="rc-entry-row">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <strong>${escapeHtml(a.event_title || 'Event')}</strong>
+              <span class="assign-status-pill ${escapeHtml(st)}">${escapeHtml(st)}</span>
+              <span class="status-badge status-badge-purple-sm">${escapeHtml(a.branch_dept || 'Crew')}</span>
+            </div>
+            <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px;">
+              ${escapeHtml(a.event_location || '')} · ${escapeHtml(a.event_date || '')} · Call-Time ${escapeHtml(a.call_time || '08:00')} · Lead: ${escapeHtml(a.tech_lead || 'Tech Lead')}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${st !== 'confirmed' ? `<button type="button" class="btn btn-primary-32 js-confirm-my-assignment" data-event-id="${escapeHtml(a.event_id)}" style="background:#059669;border-color:#059669;">✓ Confirm</button>` : ''}
+            ${st !== 'declined' ? `<button type="button" class="btn btn-secondary-32-sm js-decline-my-assignment" data-event-id="${escapeHtml(a.event_id)}" style="color:#dc2626;border-color:#fecaca;">✕ Decline</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+    const supRowsHtml = showSupInbox ? `
+      <div style="margin-top:${showTechInbox ? '12px' : '0'};padding-top:${showTechInbox ? '10px' : '0'};${showTechInbox ? 'border-top:1px solid var(--border-color);' : ''}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div>
+            <strong style="font-size:13px;">Pending Tier 4 Support Staff Requests (${pendingSupReqs.length})</strong>
+            <div style="font-size:11.5px;color:var(--text-secondary);">${pendingSupReqs.map((r) => `${r.event_title} (by ${r.requested_by_name})`).join(' · ')}</div>
+          </div>
+          <button type="button" class="btn btn-primary-32" id="inbox-open-dispatch-btn">Assign Support Staff →</button>
+        </div>
+      </div>
+    ` : '';
+
+    card.style.display = 'block';
+    card.innerHTML = `
+      ${showTechInbox ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+          <div>
+            <h3 class="directory-title-18" style="margin:0;font-size:15px;">My Event Dispatch Assignments</h3>
+            <p class="directory-desc" style="margin:0;font-size:11.5px;">Confirm or decline scheduled event deployments assigned by Command / Tech Lead.</p>
+          </div>
+        </div>
+        ${asgRowsHtml}
+      ` : ''}
+      ${supRowsHtml}
+    `;
+
+    card.querySelectorAll('.js-confirm-my-assignment').forEach((btn) => {
+      btn.addEventListener('click', () => respondMyEventAssignment(btn.getAttribute('data-event-id'), 'confirmed'));
+    });
+    card.querySelectorAll('.js-decline-my-assignment').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const reason = window.prompt('Optional reason for declining this event assignment:', 'Schedule conflict');
+        if (reason === null) return;
+        respondMyEventAssignment(btn.getAttribute('data-event-id'), 'declined', reason);
+      });
+    });
+    card.querySelector('#inbox-open-dispatch-btn')?.addEventListener('click', () => {
+      switchScreen('settings');
+      switchSettingsTab('dispatch');
+    });
+  }
+
+  async function respondMyEventAssignment(eventId, decision, declineReason = '') {
+    try {
+      const res = await fetch('api.php?action=respond_event_assignment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'respond_event_assignment',
+          event_id: String(eventId),
+          decision,
+          decline_reason: declineReason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data || !data.ok) {
+        showToast(data?.error || 'Could not update assignment response.');
+        return;
+      }
+      applyBootstrapPayload(data, true);
+      showToast(data.message || `Assignment ${decision}.`);
+    } catch (err) {
+      showToast('Network error responding to assignment.');
+    }
+  }
+
   function renderRollCallModalList() {
     const listEl = document.getElementById('rollcall-modal-list');
     if (!listEl) return;
+    const sumEl = document.getElementById('rollcall-modal-random-summary');
+    const activeSessions = (state.rollCallSessions || []).filter((s) => s.status === 'active' || s.status === 'awaiting_review');
+    if (sumEl) {
+      if (activeSessions.length > 0) {
+        const latest = activeSessions[0];
+        const c = latest.counts || {};
+        sumEl.textContent = `Active Roll-Call #${latest.id} (${latest.checkpoint_name}): ${c.present || 0} present · ${c.pending || 0} pending · ${c.timed_out || 0} auto-out.`;
+      } else {
+        sumEl.textContent = 'Run a random sample check to verify checked-in crew are still physically inside the premise.';
+      }
+    }
     listEl.innerHTML = buildRollCallListHtml(state.rollCallList);
   }
 
@@ -5506,6 +6028,7 @@
 
   function closeKioskModal() {
     clearKioskCountdown();
+    state.pendingFaceMatchScan = null;
     const backdrop = document.getElementById('kiosk-modal-backdrop');
     if (backdrop) {
       backdrop.style.display = 'none';
@@ -7452,6 +7975,9 @@
     if (isCurrentUserAdmin()) {
       return roleTokens.includes('admin') || roleTokens.includes('administrator') || roleTokens.includes('all');
     }
+    if (rawRole === 'technical_lead' && roleTokens.includes('tech_lead')) {
+      return true;
+    }
     return roleTokens.includes(rawRole);
   }
 
@@ -8182,6 +8708,18 @@
       if (radEl) radEl.value = String(venue.geofence_radius_m || 200);
       if (latEl) latEl.value = venue.lat !== null && venue.lat !== undefined ? String(venue.lat) : '';
       if (lngEl) lngEl.value = venue.lng !== null && venue.lng !== undefined ? String(venue.lng) : '';
+      const polEl = document.getElementById('venue-crud-checkin-policy');
+      const visEl = document.getElementById('venue-crud-visual-match');
+      if (polEl) polEl.value = venue.checkin_policy || 'hybrid';
+      if (visEl) visEl.checked = Number(venue.require_visual_match ?? 1) === 1;
+      const reqB = (venue.requirements && venue.requirements.branches) || {};
+      ['video', 'sound', 'lighting', 'electrical', 'rigging', 'interpretation'].forEach((k) => {
+        const inp = document.getElementById(`venue-req-${k}`);
+        const cap = k.charAt(0).toUpperCase() + k.slice(1);
+        if (inp) inp.value = String(reqB[cap] || 0);
+      });
+      const rNotes = document.getElementById('venue-req-notes');
+      if (rNotes) rNotes.value = (venue.requirements && venue.requirements.notes) || '';
       populateLeadershipSelect(tlEl, venue.tech_lead || venue.lead_name || '', 'techlead');
       populateLeadershipSelect(pmEl, venue.project_manager || '', 'pm');
       populateLeadershipSelect(coordEl, venue.event_coordinator || '', 'coordinator');
@@ -8199,6 +8737,16 @@
       if (radEl) radEl.value = '200';
       if (latEl) latEl.value = '';
       if (lngEl) lngEl.value = '';
+      const polEl = document.getElementById('venue-crud-checkin-policy');
+      const visEl = document.getElementById('venue-crud-visual-match');
+      if (polEl) polEl.value = 'hybrid';
+      if (visEl) visEl.checked = true;
+      ['video', 'sound', 'lighting', 'electrical', 'rigging', 'interpretation'].forEach((k) => {
+        const inp = document.getElementById(`venue-req-${k}`);
+        if (inp) inp.value = '0';
+      });
+      const rNotes = document.getElementById('venue-req-notes');
+      if (rNotes) rNotes.value = '';
       populateLeadershipSelect(tlEl, '', 'techlead');
       populateLeadershipSelect(pmEl, '', 'pm');
       populateLeadershipSelect(coordEl, '', 'coordinator');
@@ -8401,6 +8949,193 @@
     const listEl = document.getElementById('page-rollcall-list');
     if (listEl) {
       listEl.innerHTML = buildRollCallListHtml(filtered, rcList.length === 0 ? 'No crew members are currently checked in on-site.' : 'No on-site personnel match your selected role, checkpoint, or search filter.');
+    }
+
+    renderRandomRollCallPanel();
+  }
+
+  function renderRandomRollCallPanel() {
+    const scopeSel = document.getElementById('rc-scope-select');
+    const wrapEl = document.getElementById('random-rollcall-sessions-wrap');
+    const controlsBar = document.getElementById('rc-controls-bar');
+    const canManage = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand() || isCurrentUserTechLead() || isCurrentUserStockController();
+    if (controlsBar) controlsBar.style.display = canManage ? 'flex' : 'none';
+
+    if (scopeSel) {
+      const prev = scopeSel.value || 'all|all';
+      const cps = state.checkpoints?.directory || [];
+      scopeSel.innerHTML = '<option value="all|all">All Checkpoints</option>' +
+        cps.map((c) => `<option value="${escapeHtml(`${c.type}|${c.raw_id || c.id}`)}">${escapeHtml(c.name)}</option>`).join('');
+      if (Array.from(scopeSel.options).some((o) => o.value === prev)) {
+        scopeSel.value = prev;
+      }
+    }
+
+    if (!wrapEl) return;
+    const sessions = state.rollCallSessions || [];
+    if (!sessions.length) {
+      wrapEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No Random Roll-Call sessions launched yet. Click <strong>🎲 Trigger Random Roll-Call</strong> to randomly sample checked-in staff.</div>';
+      return;
+    }
+
+    wrapEl.innerHTML = sessions.slice(0, 4).map((sess) => {
+      const c = sess.counts || {};
+      const st = String(sess.status || 'active');
+      const statusBadge = st === 'active'
+        ? '<span class="status-badge status-badge-amber-sm">ACTIVE WINDOW</span>'
+        : (st === 'awaiting_review' ? '<span class="status-badge status-badge-red-sm">AWAITING REVIEW</span>' : '<span class="status-badge status-badge-green-sm">CLOSED</span>');
+      const entriesHtml = (sess.entries || []).map((ent) => {
+        const est = String(ent.status || 'pending');
+        const pillCls = est === 'present' ? 'confirmed' : ((est === 'pending' || est === 'excused') ? 'pending' : 'declined');
+        const metaInfo = [
+          ent.department || '',
+          ent.checkpoint_name || '',
+          ent.verification_method ? `Method: ${ent.verification_method}` : '',
+          ent.distance_m !== null && ent.distance_m !== undefined ? `${ent.distance_m}m` : '',
+        ].filter(Boolean).join(' · ');
+        const supActions = canManage ? `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${est !== 'present' ? `<button type="button" class="btn btn-secondary-32-sm js-rc-scan-pass" data-entry-id="${Number(ent.id)}" title="Scan presenter's live 30s Pass QR">📷 Scan Pass QR</button>` : ''}
+            ${est !== 'present' ? `<button type="button" class="btn btn-secondary-32-sm js-rc-resolve" data-entry-id="${Number(ent.id)}" data-decision="present" style="color:#047857;border-color:#a7f3d0;">✓ Present</button>` : ''}
+            ${est !== 'absent' ? `<button type="button" class="btn btn-secondary-32-sm js-rc-resolve" data-entry-id="${Number(ent.id)}" data-decision="absent" style="color:#dc2626;border-color:#fecaca;">✕ Absent &amp; Out</button>` : ''}
+            ${(est === 'timed_out' || est === 'absent') ? `<button type="button" class="btn btn-secondary-32-sm js-rc-resolve" data-entry-id="${Number(ent.id)}" data-decision="excused">↺ Restore IN</button>` : ''}
+          </div>
+        ` : '';
+        return `
+          <div class="rc-entry-row">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <strong style="font-size:12.5px;">${escapeHtml(ent.full_name)}</strong>
+                <span class="assign-status-pill ${pillCls}">${escapeHtml(est.replace('_', ' '))}</span>
+              </div>
+              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">${escapeHtml(metaInfo)}</div>
+            </div>
+            ${supActions}
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="rc-session-card">
+          <div class="rc-session-head">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <strong style="font-size:13.5px;">Roll-Call #${Number(sess.id)} · ${escapeHtml(sess.checkpoint_name)}</strong>
+                ${statusBadge}
+                <span style="font-size:11.5px;color:var(--text-secondary);">By ${escapeHtml(sess.triggered_by_name || 'Supervisor')}</span>
+              </div>
+              <div style="font-size:11.5px;color:var(--text-secondary);margin-top:3px;">
+                Present: <strong>${c.present || 0}</strong> · Pending: <strong>${c.pending || 0}</strong> · Timed Out / Auto-Out: <strong>${c.timed_out || 0}</strong> · Absent: <strong>${c.absent || 0}</strong> · Deadline: ${escapeHtml(sess.deadline_at || '')}
+              </div>
+            </div>
+            ${canManage && st !== 'closed' ? `<button type="button" class="btn btn-secondary-32-sm js-rc-close-session" data-session-id="${Number(sess.id)}">Close Session</button>` : ''}
+          </div>
+          ${entriesHtml}
+        </div>
+      `;
+    }).join('');
+
+    wrapEl.querySelectorAll('.js-rc-resolve').forEach((btn) => {
+      btn.addEventListener('click', () => resolveRollCallEntryApi(btn.getAttribute('data-entry-id'), btn.getAttribute('data-decision'), ''));
+    });
+    wrapEl.querySelectorAll('.js-rc-scan-pass').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tok = (window.prompt('Scan or paste staff member\'s live 30s ABPASS1 Pass QR token:') || '').trim();
+        if (tok) resolveRollCallEntryApi(btn.getAttribute('data-entry-id'), 'present', tok);
+      });
+    });
+    wrapEl.querySelectorAll('.js-rc-close-session').forEach((btn) => {
+      btn.addEventListener('click', () => closeRollCallSessionApi(btn.getAttribute('data-session-id')));
+    });
+  }
+
+  async function triggerRandomRollCallApi(overrides = null) {
+    const scopeRaw = overrides?.scope || document.getElementById('rc-scope-select')?.value || 'all|all';
+    const [cpType, cpId] = String(scopeRaw).split('|');
+    const selMode = overrides?.selection_mode || document.getElementById('rc-mode-select')?.value || 'random_count';
+    const sampleVal = Number(overrides?.sample_value || document.getElementById('rc-sample-value')?.value || 5);
+    const deadlineMins = Number(overrides?.deadline_minutes || document.getElementById('rc-deadline-mins')?.value || 10);
+    const autoOut = overrides?.auto_checkout_on_miss !== undefined
+      ? (overrides.auto_checkout_on_miss ? 1 : 0)
+      : (document.getElementById('rc-auto-checkout-chk')?.checked ? 1 : 0);
+    try {
+      const res = await fetch('api.php?action=start_random_roll_call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'start_random_roll_call',
+          checkpoint_type: cpType || 'all',
+          checkpoint_id: cpId || 'all',
+          selection_mode: selMode,
+          sample_value: sampleVal,
+          deadline_minutes: deadlineMins,
+          require_geo_or_qr: 1,
+          auto_checkout_on_miss: autoOut,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data || !data.ok) {
+        showToast(data?.error || 'Could not start Random Roll-Call.');
+        return;
+      }
+      applyBootstrapPayload(data, true);
+      showToast(data.message || 'Random Roll-Call started.');
+    } catch (err) {
+      showToast('Network error starting Random Roll-Call.');
+    }
+  }
+
+  async function resolveRollCallEntryApi(entryId, decision, passQrToken) {
+    try {
+      const res = await fetch('api.php?action=resolve_roll_call_entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'resolve_roll_call_entry',
+          entry_id: Number(entryId),
+          decision,
+          pass_qr_token: passQrToken || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data || !data.ok) {
+        showToast(data?.error || 'Could not update Roll-Call entry.');
+        return;
+      }
+      applyBootstrapPayload(data, true);
+      showToast(data.message || 'Roll-Call updated.');
+    } catch (err) {
+      showToast('Network error updating Roll-Call.');
+    }
+  }
+
+  async function closeRollCallSessionApi(sessionId) {
+    const { confirmed } = await showConfirmModal({
+      title: 'Close Random Roll-Call Session',
+      message: 'Check out any remaining unanswered personnel from this Roll-Call session now?',
+      confirmText: 'Auto Check-Out & Close',
+      tone: 'warning',
+    });
+    if (!confirmed) return;
+    try {
+      const res = await fetch('api.php?action=close_roll_call_session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'close_roll_call_session',
+          session_id: Number(sessionId),
+          auto_checkout_remaining: 1,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data || !data.ok) {
+        showToast(data?.error || 'Could not close session.');
+        return;
+      }
+      applyBootstrapPayload(data, true);
+      showToast(data.message || 'Session closed.');
+    } catch (err) {
+      showToast('Network error closing Roll-Call session.');
     }
   }
 
@@ -9210,41 +9945,62 @@
       return role === 'support_staff' || dep.includes('support') || role === 'user' || role === 'driver' || role === 'security';
     });
 
+    const caps = state.roleCapabilities || {};
+    const selTier = state.selectedDispatchTier || 'tier1_command';
+    const asgMap = (activeEv && state.eventCrewAssignments && state.eventCrewAssignments[String(activeEv.raw_id || activeEv.id)]) || {};
+    const formatMemberBadge = (m) => {
+      const rec = asgMap[String(m.id)];
+      if (!rec) return escapeHtml(m.full_name);
+      const st = String(rec.confirmation_status || 'pending');
+      const icon = st === 'confirmed' ? '✓' : (st === 'declined' ? '✕' : '⏳');
+      return `${escapeHtml(m.full_name)} <span class="assign-status-pill ${escapeHtml(st)}">${icon}</span>`;
+    };
+    const renderTierPermChips = (tierKey) => {
+      const spec = caps[tierKey];
+      if (!spec || !Array.isArray(spec.allowed_actions)) return '';
+      return `<div class="dispatch-perm-pills">${spec.allowed_actions.slice(0, 3).map((a) => `<span class="dispatch-perm-pill">${escapeHtml(a)}</span>`).join('')}</div>`;
+    };
+
     canvasEl.innerHTML = `
+      <div style="font-size:11.5px;color:var(--text-secondary);margin-bottom:4px;">Click any Role Tier below to inspect full permissions, workflow steps, and live executed actions.</div>
       <div class="dispatch-tier">
-        <div class="dispatch-node-card is-root">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Tier 1 · Command</div>
+        <div class="dispatch-node-card is-root is-clickable ${selTier === 'tier1_command' ? 'is-selected' : ''}" data-tier-key="tier1_command">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Tier 1 · Command ${activeEv ? `· Status: ${escapeHtml(String(activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase())}` : ''}</div>
           <div style="font-size:15px;font-weight:800;margin-top:2px;">Project Manager / Event Coordinator</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">PM: <strong>${escapeHtml(pmName)}</strong> · Coordinator: <strong>${escapeHtml(coordName)}</strong></div>
+          ${renderTierPermChips('tier1_command')}
         </div>
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-tier">
-        <div class="dispatch-node-card">
+        <div class="dispatch-node-card is-clickable ${selTier === 'tier2_tech_lead' ? 'is-selected' : ''}" data-tier-key="tier2_tech_lead">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 2 · Technical Supervision</div>
           <div style="font-size:14.5px;font-weight:800;margin-top:2px;">Tech Lead</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Lead: <strong>${escapeHtml(tlName)}</strong></div>
+          ${renderTierPermChips('tier2_tech_lead')}
         </div>
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-tier">
-        <div class="dispatch-node-card" style="min-width:220px;">
+        <div class="dispatch-node-card is-clickable ${selTier === 'tier3_technicians' ? 'is-selected' : ''}" data-tier-key="tier3_technicians" style="min-width:220px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 3 · Technical Execution</div>
           <div style="font-size:14px;font-weight:800;margin-top:2px;">Technicians (${deptNames.length} Specialty Branches)</div>
+          ${renderTierPermChips('tier3_technicians')}
         </div>
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-dept-grid">
         ${deptNames.map((dn) => {
           const members = pool.filter((c) => deptMatches(c, dn));
+          const reqNeed = Number(activeEv?.requirements?.branches?.[dn] || 0);
           return `
-            <div class="dispatch-dept-card">
+            <div class="dispatch-dept-card is-clickable" data-tier-key="tier3_technicians">
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <strong style="font-size:13px;">${escapeHtml(dn)}</strong>
-                <span class="status-badge status-badge-blue-sm">${members.length}</span>
+                <span class="status-badge status-badge-blue-sm">${members.length}${reqNeed > 0 ? ` / ${reqNeed} req` : ''}</span>
               </div>
               <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.45;">
-                ${members.length ? members.slice(0, 4).map((m) => escapeHtml(m.full_name)).join('<br>') + (members.length > 4 ? `<br>+${members.length - 4} more` : '') : '<em>Unassigned</em>'}
+                ${members.length ? members.slice(0, 4).map((m) => formatMemberBadge(m)).join('<br>') + (members.length > 4 ? `<br>+${members.length - 4} more` : '') : '<em>Unassigned</em>'}
               </div>
             </div>
           `;
@@ -9252,15 +10008,255 @@
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-tier">
-        <div class="dispatch-node-card" style="width:100%;max-width:640px;">
+        <div class="dispatch-node-card is-clickable ${selTier === 'tier4_support' ? 'is-selected' : ''}" data-tier-key="tier4_support" style="width:100%;max-width:640px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 4 · Operations Ground Support</div>
           <div style="font-size:14px;font-weight:800;margin-top:2px;">Support Staff (${supportList.length})</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">
-            ${supportList.length ? supportList.slice(0, 6).map((s) => escapeHtml(s.full_name)).join(' · ') : 'Assign runners, logistics drivers, or venue crew via Event Roster.'}
+            ${supportList.length ? supportList.slice(0, 6).map((s) => formatMemberBadge(s)).join(' · ') : 'Assign runners, logistics drivers, or venue crew via Event Roster or Support Requests below.'}
+          </div>
+          ${renderTierPermChips('tier4_support')}
+        </div>
+      </div>
+    `;
+
+    canvasEl.querySelectorAll('[data-tier-key]').forEach((el) => {
+      el.addEventListener('click', () => {
+        state.selectedDispatchTier = el.getAttribute('data-tier-key') || 'tier1_command';
+        renderSettingsDispatchSection();
+      });
+    });
+
+    renderDispatchRoleFlowDrawer(activeEv, pickedId);
+    renderDispatchWorkflowDeck(activeEv, pickedId);
+  }
+
+  function renderDispatchRoleFlowDrawer(activeEv, pickedId) {
+    const drawer = document.getElementById('dispatch-role-flow-drawer');
+    if (!drawer) return;
+    const caps = state.roleCapabilities || {};
+    const tierKeys = Object.keys(caps);
+    const activeKey = caps[state.selectedDispatchTier] ? state.selectedDispatchTier : (tierKeys[0] || 'tier1_command');
+    const spec = caps[activeKey];
+    if (!spec) {
+      drawer.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">Role capabilities loading...</div>';
+      return;
+    }
+
+    const roleSet = new Set((spec.roles || []).map((r) => String(r).toLowerCase()));
+    const dispatchLogs = (state.eventDispatchLogs || []).filter((l) => {
+      if (pickedId && String(l.event_id) !== String(pickedId)) return false;
+      return roleSet.has(String(l.actor_role || '').toLowerCase());
+    });
+    const scanLogs = (state.activityTimeline || []).filter((t) => {
+      const m = (state.crew || []).find((c) => Number(c.id) === Number(t.user_id));
+      return m && roleSet.has(String(m.role || '').toLowerCase());
+    }).slice(0, 6);
+
+    const tierTabs = tierKeys.map((k) => {
+      const sp = caps[k];
+      return `<button type="button" class="btn ${k === activeKey ? 'btn-primary-32' : 'btn-secondary-32-sm'} js-dispatch-tier-tab" data-tier-key="${escapeHtml(k)}">${escapeHtml(sp.tier_title || k)}</button>`;
+    }).join('');
+
+    const combinedActions = [
+      ...dispatchLogs.map((l) => `<div style="font-size:11.5px;padding:4px 0;border-bottom:1px dashed var(--border-color);"><strong>${escapeHtml(l.actor_name)}</strong> (${escapeHtml(l.action_type)}): ${escapeHtml(l.summary)} <span style="color:var(--text-muted);">· ${escapeHtml(String(l.created_at || '').slice(0, 16))}</span></div>`),
+      ...scanLogs.map((t) => `<div style="font-size:11.5px;padding:4px 0;border-bottom:1px dashed var(--border-color);"><strong>${escapeHtml(t.full_name)}</strong> (${escapeHtml(t.action || t.event_type)}): ${escapeHtml(t.checkpoint_name || '')} <span style="color:var(--text-muted);">· ${escapeHtml(t.time_formatted || t.time || '')}</span></div>`),
+    ];
+
+    drawer.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <div>
+          <strong style="font-size:14px;">Role Permissions &amp; Executed Flow Inspector — ${escapeHtml(spec.role_titles || spec.tier_title)}</strong>
+          <div style="font-size:11.5px;color:var(--text-secondary);">Clearance: <strong>${escapeHtml(spec.clearance || '')}</strong></div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">${tierTabs}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;">
+        <div>
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#047857;margin-bottom:4px;">Allowed Permissions</div>
+          <ul style="margin:0;padding-left:16px;font-size:12px;color:var(--text-primary);line-height:1.5;">
+            ${(spec.allowed_actions || []).map((x) => `<li>${escapeHtml(x)}</li>`).join('')}
+          </ul>
+          ${(spec.restricted_actions || []).length ? `<div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#b45309;margin:8px 0 3px 0;">Limitations</div><ul style="margin:0;padding-left:16px;font-size:11.5px;color:var(--text-secondary);">${spec.restricted_actions.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--brand-primary);margin-bottom:4px;">Role Operational Flow</div>
+          <ol style="margin:0;padding-left:18px;font-size:12px;color:var(--text-primary);line-height:1.55;">
+            ${(spec.flow_steps || []).map((s) => `<li>${escapeHtml(s.replace(/^\d+\.\s*/, ''))}</li>`).join('')}
+          </ol>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">Live Actions Executed by This Role</div>
+          <div style="max-height:150px;overflow-y:auto;">
+            ${combinedActions.length ? combinedActions.join('') : '<div style="font-size:11.5px;color:var(--text-muted);">No recent logged actions by this tier for the selected scope yet.</div>'}
           </div>
         </div>
       </div>
     `;
+
+    drawer.querySelectorAll('.js-dispatch-tier-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.selectedDispatchTier = btn.getAttribute('data-tier-key') || 'tier1_command';
+        renderSettingsDispatchSection();
+      });
+    });
+  }
+
+  function renderDispatchWorkflowDeck(activeEv, pickedId) {
+    const deck = document.getElementById('dispatch-workflow-deck');
+    if (!deck) return;
+    const evId = activeEv ? String(activeEv.raw_id || activeEv.id) : '';
+    const evTitle = activeEv ? (activeEv.title || activeEv.name) : 'Select an Event Venue';
+    const canSendReqs = isCurrentUserAdmin() || isCurrentUserEventCommand();
+    const canReqSupport = canSendReqs || isCurrentUserTechLead();
+    const canFulfillSupport = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand();
+
+    const deptNames = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
+    const reqBranches = (activeEv && activeEv.requirements && activeEv.requirements.branches) || {};
+    const reqNotes = (activeEv && activeEv.requirements && activeEv.requirements.notes) || '';
+
+    const supportPool = (state.crew || []).filter((c) => {
+      const r = String(c.role || '').toLowerCase();
+      const d = String(c.department || '').toLowerCase();
+      return ['driver', 'security', 'user', 'support_staff', 'operations', 'operations_crew', 'runner'].includes(r) || d.includes('support') || d.includes('logistic');
+    });
+    const supportReqs = (state.eventSupportRequests || []).filter((r) => !evId || String(r.event_id) === evId);
+    const evLogs = (state.eventDispatchLogs || []).filter((l) => !evId || String(l.event_id) === evId);
+
+    deck.innerHTML = `
+      <div class="dispatch-step-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <strong style="font-size:13.5px;">Step 1 &amp; 2 · Send Requirements to Tech Lead</strong>
+          <span class="status-badge status-badge-purple-sm">${escapeHtml(activeEv ? String(activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase() : 'NO EVENT')}</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-secondary);">Event: <strong>${escapeHtml(evTitle)}</strong> · Tech Lead: <strong>${escapeHtml(activeEv?.tech_lead || '—')}</strong></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+          ${deptNames.map((dn) => `
+            <label style="font-size:11px;color:var(--text-secondary);display:flex;flex-direction:column;gap:2px;">
+              <span>${escapeHtml(dn)}</span>
+              <input type="number" class="form-input js-dp-req-branch" data-branch="${escapeHtml(dn)}" min="0" max="99" value="${Number(reqBranches[dn] || 0)}" style="height:30px;padding:0 6px;font-size:12px;" ${!evId || !canSendReqs ? 'disabled' : ''} />
+            </label>
+          `).join('')}
+        </div>
+        <input type="text" id="dp-req-notes" class="form-input" value="${escapeHtml(reqNotes)}" placeholder="Gear & setup notes for Tech Lead..." style="height:32px;font-size:12px;" ${!evId || !canSendReqs ? 'disabled' : ''} />
+        ${evId && canSendReqs ? `<button type="button" class="btn btn-primary-32" id="dp-send-reqs-btn">Send Requirements to Tech Lead</button>` : ''}
+      </div>
+
+      <div class="dispatch-step-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <strong style="font-size:13.5px;">Step 3 · Tier 4 Support Staff Requests</strong>
+          <span class="status-badge status-badge-amber-sm">${supportReqs.filter((r) => r.status === 'pending').length} Pending</span>
+        </div>
+        ${evId && canReqSupport ? `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <input type="text" id="dp-sup-req-note" class="form-input" placeholder="Need e.g. 2x Runners, 1x Driver..." style="flex:1;min-width:140px;height:32px;font-size:12px;" />
+            <button type="button" class="btn btn-secondary-32-sm" id="dp-request-support-btn">+ Request Support</button>
+          </div>
+        ` : ''}
+        <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+          ${supportReqs.length ? supportReqs.map((sr) => {
+            const isPend = sr.status === 'pending';
+            const rolesStr = Object.entries(sr.requested_roles || {}).map(([k, v]) => `${v}x ${k}`).join(', ');
+            return `
+              <div style="padding:8px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:11.5px;">
+                <div style="display:flex;justify-content:space-between;gap:6px;">
+                  <strong>#${Number(sr.id)} · ${escapeHtml(rolesStr || 'Support Crew')}</strong>
+                  <span class="assign-status-pill ${isPend ? 'pending' : 'confirmed'}">${escapeHtml(sr.status)}</span>
+                </div>
+                <div style="color:var(--text-secondary);margin-top:2px;">By ${escapeHtml(sr.requested_by_name)}${sr.notes ? ` · ${escapeHtml(sr.notes)}` : ''}</div>
+                ${sr.assigned_names?.length ? `<div style="margin-top:4px;color:#047857;">Assigned: <strong>${escapeHtml(sr.assigned_names.join(', '))}</strong></div>` : ''}
+                ${isPend && canFulfillSupport ? `
+                  <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                      ${supportPool.map((sp) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;"><input type="checkbox" class="js-dp-sup-cb-${Number(sr.id)}" value="${Number(sp.id)}" /><span>${escapeHtml(sp.full_name)}</span></label>`).join('') || '<em>No support pool users</em>'}
+                    </div>
+                    <button type="button" class="btn btn-primary-32 js-dp-fulfill-btn" data-request-id="${Number(sr.id)}" style="height:28px;font-size:11px;">Fulfill Request #${Number(sr.id)}</button>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('') : '<div style="font-size:11.5px;color:var(--text-muted);">No Support Staff requests for this event yet.</div>'}
+        </div>
+      </div>
+
+      <div class="dispatch-step-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <strong style="font-size:13.5px;">Step 4 &amp; 5 · Readiness &amp; Live Dispatch Audit</strong>
+          <span class="status-badge status-badge-blue-sm">${evLogs.length} Actions</span>
+        </div>
+        <div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+          ${evLogs.length ? evLogs.slice(0, 12).map((l) => `
+            <div style="padding:6px 8px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:11.5px;">
+              <div><strong>${escapeHtml(l.actor_name)}</strong> <span style="color:var(--text-muted);">(${escapeHtml(l.actor_role)})</span></div>
+              <div style="margin-top:2px;">${escapeHtml(l.summary)}</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${escapeHtml(String(l.created_at || '').slice(0, 19))}</div>
+            </div>
+          `).join('') : '<div style="font-size:11.5px;color:var(--text-muted);">No dispatch actions recorded for this event yet.</div>'}
+        </div>
+      </div>
+    `;
+
+    deck.querySelector('#dp-send-reqs-btn')?.addEventListener('click', async () => {
+      if (!evId) return;
+      const branches = {};
+      deck.querySelectorAll('.js-dp-req-branch').forEach((inp) => {
+        branches[inp.getAttribute('data-branch')] = Math.max(0, Number(inp.value || 0));
+      });
+      const notes = (document.getElementById('dp-req-notes')?.value || '').trim();
+      try {
+        const res = await fetch('api.php?action=send_event_requirements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'send_event_requirements', event_id: evId, branches, notes }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) { showToast(data?.error || 'Failed to send requirements.'); return; }
+        applyBootstrapPayload(data, true);
+        showToast(data.message || 'Requirements sent to Tech Lead.');
+      } catch (e) { showToast('Network error sending requirements.'); }
+    });
+
+    deck.querySelector('#dp-request-support-btn')?.addEventListener('click', async () => {
+      if (!evId) return;
+      const noteText = (document.getElementById('dp-sup-req-note')?.value || '').trim();
+      try {
+        const res = await fetch('api.php?action=request_support_staff', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'request_support_staff',
+            event_id: evId,
+            requested_roles: { 'Support Crew': 2, 'Logistics / Runner': 1 },
+            notes: noteText || 'Requested from Dispatch Flow Workbench',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) { showToast(data?.error || 'Failed to request support staff.'); return; }
+        applyBootstrapPayload(data, true);
+        showToast(data.message || 'Support request submitted.');
+      } catch (e) { showToast('Network error submitting support request.'); }
+    });
+
+    deck.querySelectorAll('.js-dp-fulfill-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const reqId = Number(btn.getAttribute('data-request-id'));
+        const userIds = Array.from(deck.querySelectorAll(`.js-dp-sup-cb-${reqId}:checked`)).map((cb) => Number(cb.value));
+        if (!userIds.length) {
+          showToast('Select at least one Tier 4 Support Staff member first.');
+          return;
+        }
+        try {
+          const res = await fetch('api.php?action=fulfill_support_request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'fulfill_support_request', request_id: reqId, user_ids: userIds }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) { showToast(data?.error || 'Failed to fulfill support request.'); return; }
+          applyBootstrapPayload(data, true);
+          showToast(data.message || 'Support staff assigned.');
+        } catch (e) { showToast('Network error fulfilling support request.'); }
+      });
+    });
   }
 
   function renderSettingsLinksSection() {
@@ -10236,7 +11232,8 @@
             <div class="col-user-status" style="width: 90px;">
               ${statusBadge}
             </div>
-            <div class="col-user-actions" style="width: 130px; display: flex; justify-content: flex-end; align-items: center; gap: 6px;">
+            <div class="col-user-actions" style="width: 170px; display: flex; justify-content: flex-end; align-items: center; gap: 6px; flex-wrap: wrap;">
+              ${Number(c.trusted_device_count || 0) > 0 && (isCurrentUserAdmin() || isCurrentUserStockManager()) ? `<button type="button" class="btn btn-secondary-32-sm js-reset-device-btn" data-user-id="${c.id}" data-user-name="${escapeHtml(c.full_name)}" title="Reset bound phone/device lock">📱 Unbind</button>` : ''}
               <button type="button" class="btn btn-secondary-32-sm js-edit-user-btn" data-user-id="${c.id}" title="Edit User & Permissions">
                 Edit
               </button>
@@ -12096,7 +13093,15 @@
         return;
       }
 
-      // Phase 1: Kiosk Decision Action Buttons (Approve / Decline / Override)
+      // Phase 1: Kiosk Decision Action Buttons (Approve / Face Match / Decline / Override)
+      if (e.target.closest('#kiosk-btn-confirm-face')) {
+        if (state.pendingFaceMatchScan && state.pendingFaceMatchScan.scan_input) {
+          const p = state.pendingFaceMatchScan;
+          state.pendingFaceMatchScan = null;
+          await triggerGateScan(p.scan_input, p.scan_mode || 'auto', true);
+        }
+        return;
+      }
       if (e.target.closest('#kiosk-btn-approve-in')) {
         await confirmGateAction('approve_in');
         return;
@@ -12428,6 +13433,37 @@
         return;
       }
 
+      // 14b. User Management: Reset Trusted Device Lock
+      const resetDevBtn = e.target.closest('.js-reset-device-btn');
+      if (resetDevBtn) {
+        const uid = Number(resetDevBtn.getAttribute('data-user-id'));
+        const uName = resetDevBtn.getAttribute('data-user-name') || 'this user';
+        const { confirmed } = await showConfirmModal({
+          title: 'Unbind Trusted Device Lock',
+          message: `Revoke active phone/device lock for ${uName}? Their next Gate QR scan will bind their current device.`,
+          confirmText: 'Unbind Device',
+          tone: 'warning',
+        });
+        if (!confirmed) return;
+        try {
+          const res = await fetch('api.php?action=reset_user_trusted_device', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'reset_user_trusted_device', user_id: uid }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) {
+            showToast(data?.error || 'Could not unbind device.');
+            return;
+          }
+          applyBootstrapPayload(data, true);
+          showToast(data.message || 'Device lock reset.');
+        } catch (err) {
+          showToast('Network error resetting device lock.');
+        }
+        return;
+      }
+
       // 15. User Management: Edit User
       const editUserBtn = e.target.closest('.js-edit-user-btn');
       if (editUserBtn) {
@@ -12667,6 +13703,12 @@
             e.preventDefault();
             const btn = document.getElementById('kiosk-decline-confirm-btn');
             if (btn) btn.click();
+            return;
+          }
+          const btnFace = document.getElementById('kiosk-btn-confirm-face');
+          if (btnFace && btnFace.style.display !== 'none') {
+            e.preventDefault();
+            btnFace.click();
             return;
           }
           const btnOut = document.getElementById('kiosk-btn-approve-out');
@@ -12958,6 +14000,7 @@
         }
         if (pinInp) pinInp.value = '';
         renderCheckpointSelectors();
+        renderKioskVenueQrDeck();
         playKioskChime('approve');
         showToast(`🔓 Terminal Unlocked — ${state.activeCheckpoint?.name || 'Ready to scan'}`);
         const badgeInp = document.getElementById('kiosk-badge-input');
@@ -13306,6 +14349,19 @@
         fd.append('geofence_radius_m', document.getElementById('venue-crud-radius')?.value || '200');
         fd.append('lat', document.getElementById('venue-crud-lat')?.value || '');
         fd.append('lng', document.getElementById('venue-crud-lng')?.value || '');
+        fd.append('checkin_policy', document.getElementById('venue-crud-checkin-policy')?.value || 'hybrid');
+        fd.append('require_visual_match', document.getElementById('venue-crud-visual-match')?.checked ? '1' : '0');
+        const branchReqs = {};
+        let hasAnyReq = false;
+        ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'].forEach((cap) => {
+          const val = Math.max(0, Number(document.getElementById(`venue-req-${cap.toLowerCase()}`)?.value || 0));
+          branchReqs[cap] = val;
+          if (val > 0) hasAnyReq = true;
+        });
+        const rNotes = (document.getElementById('venue-req-notes')?.value || '').trim();
+        if (hasAnyReq || rNotes) {
+          fd.append('requirements', JSON.stringify({ branches: branchReqs, notes: rNotes }));
+        }
         fd.append('assigned_technicians', JSON.stringify(assignedTechs));
         const fileInput = document.getElementById('venue-modal-image');
         if (fileInput && fileInput.files && fileInput.files[0]) {
@@ -14582,21 +15638,45 @@
         populateLeadershipSelect(pmInput, facility.project_manager || '', 'pm');
         populateLeadershipSelect(coordInput, facility.event_coordinator || '', 'coordinator');
         populateLeadershipSelect(tlSelect, facility.tech_lead || facility.lead_name || '', 'techlead');
+        const hsBox = document.getElementById('roster-dispatch-handshake-box');
+        const stPill = document.getElementById('roster-dispatch-status-pill');
+        const reqSum = document.getElementById('roster-requirements-summary');
+        if (hsBox) hsBox.style.display = 'flex';
+        if (stPill) stPill.textContent = String(facility.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase();
+        if (reqSum) {
+          const br = (facility.requirements && facility.requirements.branches) || {};
+          const brParts = Object.keys(br).filter((k) => Number(br[k]) > 0).map((k) => `${k}: ${br[k]}`);
+          reqSum.textContent = brParts.length
+            ? `Requirements Brief: ${brParts.join(' · ')}${facility.requirements?.notes ? ` — ${facility.requirements.notes}` : ''}`
+            : 'No technical branch requirements sent yet (configure in Edit Event Venue or Settings → Dispatch Flow).';
+        }
+      } else {
+        const hsBox = document.getElementById('roster-dispatch-handshake-box');
+        if (hsBox) hsBox.style.display = 'none';
       }
 
       const assignedCrew = getFacilityCrewMembers(facility, state.crew || []);
       if (assignedCountEl) assignedCountEl.textContent = String(assignedCrew.length);
 
+      const evKeyRaw = String(facility.raw_id || facility.id || '');
+      const asgMap = (state.eventCrewAssignments && state.eventCrewAssignments[evKeyRaw]) || {};
       if (assignedListEl) {
         if (assignedCrew.length === 0) {
           assignedListEl.innerHTML = '<span style="font-size: 12px; color: var(--text-secondary);">No crew currently assigned to this stock or venue.</span>';
         } else {
-          assignedListEl.innerHTML = assignedCrew.map((member) => `
+          assignedListEl.innerHTML = assignedCrew.map((member) => {
+            const asg = asgMap[String(member.id)];
+            const stBadge = asg
+              ? `<span class="assign-status-pill ${escapeHtml(asg.confirmation_status || 'pending')}">${asg.confirmation_status === 'confirmed' ? '✓' : (asg.confirmation_status === 'declined' ? '✕' : '⏳')}</span>`
+              : '';
+            return `
             <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: var(--surface-subtle, #f1f5f9); border: 1px solid var(--border-color); font-size: 11.5px; font-weight: 600;">
               <span>${escapeHtml(member.full_name || 'Member #' + member.id)}</span>
+              ${stBadge}
               <button type="button" class="js-roster-unassign-btn" data-user-id="${Number(member.id)}" data-user-name="${escapeHtml(member.full_name || '')}" title="Unassign personnel" style="border: none; background: transparent; color: #dc2626; font-weight: 700; cursor: pointer; padding: 0 2px; line-height: 1;">✕</button>
             </span>
-          `).join('');
+          `;
+          }).join('');
         }
       }
 
@@ -14818,6 +15898,32 @@
           showToast('⚠️ Error saving event details.');
         } finally {
           rosterSaveEventBtn.disabled = false;
+        }
+      });
+    }
+
+    const rosterReqSupportBtn = document.getElementById('roster-request-support-btn');
+    if (rosterReqSupportBtn) {
+      rosterReqSupportBtn.addEventListener('click', async () => {
+        const facilityName = String(rosterTargetSelect ? rosterTargetSelect.value : '').trim();
+        const facility = findFacilityByLookupName(facilityName);
+        if (!facility || facility.type !== 'event_venue') {
+          showToast('Select an Event Venue first.');
+          return;
+        }
+        const evId = String(facility.raw_id || facility.id || '');
+        const noteTxt = (document.getElementById('roster-support-note')?.value || '').trim() || 'Requested from Event Roster modal';
+        rosterReqSupportBtn.disabled = true;
+        try {
+          await postRosterAction('request_support_staff', {
+            event_id: evId,
+            requested_roles: { 'Support Crew': 2, 'Logistics Driver': 1 },
+            notes: noteTxt,
+          }, 'Tier 4 Support Staff request sent.');
+          const noteEl = document.getElementById('roster-support-note');
+          if (noteEl) noteEl.value = '';
+        } finally {
+          rosterReqSupportBtn.disabled = false;
         }
       });
     }
@@ -17887,6 +18993,23 @@
     initShiftReliefControls();
     initPhase2Controls();
     initTourControls();
+    document.getElementById('kiosk-vqr-refresh-btn')?.addEventListener('click', refreshKioskVenueQr);
+    document.getElementById('kiosk-vqr-open-url-btn')?.addEventListener('click', () => {
+      if (state.vqrLastUrl) {
+        window.open(state.vqrLastUrl, '_blank', 'noopener');
+      } else {
+        showToast('Generating live Gate QR first...');
+        refreshKioskVenueQr();
+      }
+    });
+    document.getElementById('rc-trigger-random-btn')?.addEventListener('click', () => triggerRandomRollCallApi(null));
+    document.getElementById('rollcall-modal-quick-random-btn')?.addEventListener('click', () => {
+      triggerRandomRollCallApi({ selection_mode: 'random_count', sample_value: 5, deadline_minutes: 10, auto_checkout_on_miss: 1 });
+    });
+    document.getElementById('rollcall-modal-open-page-btn')?.addEventListener('click', () => {
+      closeAllModals();
+      switchScreen('rollcall');
+    });
     if (window.location.hash === '#pane-kiosk') {
       switchScreen('terminals', 'pane-kiosk');
     } else if (window.location.hash === '#rollcall') {

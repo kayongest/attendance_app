@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261119_v14" />
+  <link rel="stylesheet" href="styles.css?v=20261119_v15" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -1425,6 +1425,10 @@
           </div>
         </div>
 
+        <!-- Random Roll-Call Alert + My Event Assignments Inbox (Logged-In Staff Self-Service) -->
+        <section class="as-banner-card" id="my-rollcall-alert-card" style="display: none;"></section>
+        <section class="directory-card" id="my-assignments-inbox-card" style="display: none; padding: 16px 20px; margin-bottom: 14px;"></section>
+
         <!-- Dedicated Field Crew Digital ID Badge Pass -->
         <section class="crew-digital-pass-card" id="crew-digital-pass-card" style="display: none;"></section>
 
@@ -1784,6 +1788,29 @@
             </div>
             <div class="kiosk-camera-status" id="kiosk-camera-status">
               Point tablet or phone camera at a staff QR code or badge barcode...
+            </div>
+          </div>
+
+          <!-- Anti-Shadowing Rotating Venue Check-In QR & Policy Bar -->
+          <div class="kiosk-venue-qr-deck" id="kiosk-venue-qr-deck">
+            <div class="kiosk-vqr-left">
+              <div class="kiosk-vqr-box" id="kiosk-venue-qr-box" aria-label="20s Rotating Venue Check-In QR">
+                <span style="font-size: 11px; color: var(--text-muted);">Loading QR...</span>
+              </div>
+              <div class="kiosk-vqr-meta">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <strong style="font-size:13px;color:var(--text-primary);">Self-Scan Venue QR (Anti-Shadowing)</strong>
+                  <span class="status-badge status-badge-purple-sm" id="kiosk-vqr-policy-pill">Hybrid · Name + QR</span>
+                  <span class="status-badge status-badge-amber-sm" id="kiosk-vqr-countdown">Rotating: 20s</span>
+                </div>
+                <p style="font-size:11.5px;color:var(--text-secondary);margin:4px 0 6px 0;line-height:1.4;">
+                  Staff scan with their own device-locked phone + GPS geo-fence, or present their 30s rotating Pass QR above, or use Enter Name + Checkin.
+                </p>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <button type="button" class="btn btn-secondary-32-sm" id="kiosk-vqr-refresh-btn">Rotate QR Now</button>
+                  <button type="button" class="btn btn-secondary-32-sm" id="kiosk-vqr-open-url-btn">Open Self-Check-In Link</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2766,6 +2793,42 @@
           </div>
         </div>
 
+        <!-- Self Roll-Call Alert + Random Roll-Call Check-In / Check-Out Engine -->
+        <section class="as-banner-card" id="page-rc-my-alert-card" style="display: none;"></section>
+
+        <section class="directory-card" id="random-rollcall-card" style="padding: 18px 20px; margin-bottom: 16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+            <div>
+              <h2 class="directory-title-18" style="margin:0;">Random Premise Roll-Call Verification</h2>
+              <p class="directory-desc" style="margin-top:2px;">
+                Sample checked-in staff weighted by time since last verification. Missed checks past deadline auto check-out (or flag unaccounted) to prevent buddy punching.
+              </p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="rc-controls-bar">
+              <select id="rc-scope-select" class="form-input" style="height:34px;font-size:12px;min-width:170px;">
+                <option value="all|all">All Checkpoints</option>
+              </select>
+              <select id="rc-mode-select" class="form-input" style="height:34px;font-size:12px;">
+                <option value="random_count">Random Count</option>
+                <option value="random_percent">Random %</option>
+              </select>
+              <input type="number" id="rc-sample-value" class="form-input" min="1" max="100" value="5" style="width:74px;height:34px;font-size:12px;" title="Staff count or % to sample" />
+              <select id="rc-deadline-mins" class="form-input" style="height:34px;font-size:12px;">
+                <option value="5">5 min window</option>
+                <option value="10" selected>10 min window</option>
+                <option value="15">15 min window</option>
+                <option value="30">30 min window</option>
+              </select>
+              <label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text-secondary);cursor:pointer;">
+                <input type="checkbox" id="rc-auto-checkout-chk" checked />
+                <span>Auto Check-Out Misses</span>
+              </label>
+              <button type="button" class="btn btn-primary-32" id="rc-trigger-random-btn">🎲 Trigger Random Roll-Call</button>
+            </div>
+          </div>
+          <div id="random-rollcall-sessions-wrap" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </section>
+
         <section class="directory-card">
           <div class="directory-header">
             <div class="directory-heading">
@@ -3516,6 +3579,8 @@
               </div>
             </div>
             <div id="dispatch-hierarchy-canvas" class="dispatch-tree-wrap"></div>
+            <div id="dispatch-role-flow-drawer" class="dispatch-inspector-card" style="margin-top: 16px;"></div>
+            <div id="dispatch-workflow-deck" class="dispatch-workflow-grid" style="margin-top: 16px;"></div>
           </section>
         </div>
 
@@ -4030,6 +4095,12 @@
                 <kbd class="decision-btn-kbd">Space</kbd>
               </button>
 
+              <button type="button" class="kiosk-decision-btn btn-approve-in" id="kiosk-btn-confirm-face" style="display: none; background: #059669; border-color: #047857;">
+                <span class="decision-btn-icon">🛡</span>
+                <span class="decision-btn-label">Face Matches Photo · Commit Scan</span>
+                <kbd class="decision-btn-kbd">Enter ↵</kbd>
+              </button>
+
               <button type="button" class="kiosk-decision-btn btn-decline" id="kiosk-btn-decline">
                 <span class="decision-btn-icon">✕</span>
                 <span class="decision-btn-label">Decline Entry</span>
@@ -4386,6 +4457,17 @@
           </div>
         </div>
         <div id="roster-dept-filter-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
+        <div id="roster-dispatch-handshake-box" style="padding:10px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-subtle);margin-bottom:10px;display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:11.5px;font-weight:700;color:var(--text-primary);">Dispatch Brief &amp; Tier 4 Support Request</span>
+            <span id="roster-dispatch-status-pill" class="status-badge status-badge-purple-sm">Draft</span>
+          </div>
+          <div id="roster-requirements-summary" style="font-size:11px;color:var(--text-secondary);"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="text" id="roster-support-note" class="form-input" placeholder="Support request (e.g. 2x Runners, 1x Driver)" style="flex:1;min-width:180px;height:32px;font-size:12px;" />
+            <button type="button" class="btn btn-secondary-32-sm" id="roster-request-support-btn">Request Tier 4 Support</button>
+          </div>
+        </div>
         <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
           <button type="button" class="btn btn-secondary-38" id="roster-save-event-btn">Save Event &amp; Call-Time</button>
           <button type="button" class="btn btn-primary-38" id="roster-assign-crew-btn">Sync Checked Crew to Event</button>
@@ -4446,6 +4528,14 @@
         <span class="status-badge status-badge-green-md">
           <span class="js-stat-onsite">4</span> On-Site Now
         </span>
+      </div>
+
+      <div id="rollcall-modal-random-bar" style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-subtle); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+        <span id="rollcall-modal-random-summary" style="font-size: 12px; color: var(--text-secondary); font-weight: 600;">Verify random checked-in staff are still physically inside the premise.</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary-32-sm" id="rollcall-modal-quick-random-btn">🎲 Quick Random 5 Check</button>
+          <button type="button" class="btn btn-secondary-32-sm" id="rollcall-modal-open-page-btn">Open Full Roll-Call Console</button>
+        </div>
       </div>
 
       <div id="rollcall-modal-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto;"></div>
@@ -5692,6 +5782,38 @@
           <button type="button" class="btn btn-secondary-32" id="venue-capture-gps-btn">GPS</button>
         </div>
 
+        <!-- Anti-Shadowing Policy & Tier 1 -> Tier 2 Technical Branch Requirements -->
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; margin-bottom: 12px; padding: 10px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-subtle);">
+          <div class="form-field" style="margin: 0;">
+            <label class="form-label" for="venue-crud-checkin-policy">Gate Check-In Policy</label>
+            <select id="venue-crud-checkin-policy" class="form-input">
+              <option value="hybrid">Hybrid: Rotating Anti-Shadowing QR + Enter Name Checkin</option>
+              <option value="qr_strict">Strict QR Only (Supervisor Override PIN for Name Check-In)</option>
+              <option value="manual_allowed">Flexible Manual Name + Badge + QR</option>
+            </select>
+          </div>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-primary);padding-bottom:8px;cursor:pointer;">
+            <input type="checkbox" id="venue-crud-visual-match" checked />
+            <span>Require Face-Match Hold</span>
+          </label>
+        </div>
+
+        <div style="margin-bottom: 14px; padding: 10px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-subtle);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <label class="form-label" style="margin:0;">Technical Branch Requirements (For Tech Lead)</label>
+            <span style="font-size:10.5px;color:var(--text-muted);">Headcount needed per specialty</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:8px;">
+            <div><label class="form-label" for="venue-req-video" style="font-size:10px;">Video</label><input type="number" id="venue-req-video" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
+            <div><label class="form-label" for="venue-req-sound" style="font-size:10px;">Sound</label><input type="number" id="venue-req-sound" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
+            <div><label class="form-label" for="venue-req-lighting" style="font-size:10px;">Lighting</label><input type="number" id="venue-req-lighting" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
+            <div><label class="form-label" for="venue-req-electrical" style="font-size:10px;">Electrical</label><input type="number" id="venue-req-electrical" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
+            <div><label class="form-label" for="venue-req-rigging" style="font-size:10px;">Rigging</label><input type="number" id="venue-req-rigging" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
+            <div><label class="form-label" for="venue-req-interpretation" style="font-size:10px;">Interp.</label><input type="number" id="venue-req-interpretation" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
+          </div>
+          <input type="text" id="venue-req-notes" class="form-input" placeholder="Technical brief / gear notes for Tech Lead..." style="height:32px;font-size:12px;" />
+        </div>
+
         <div class="form-field" style="margin-bottom: 16px;">
           <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
             <span>Assigned Crew / Technicians</span>
@@ -5991,6 +6113,6 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261119_v14"></script>
+  <script src="app.js?v=20261119_v15"></script>
 </body>
 </html>

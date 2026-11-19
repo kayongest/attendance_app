@@ -575,7 +575,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,tech_lead,technical_lead,stock_manager',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager',
             'sort_order' => 1,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -592,7 +592,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'events',
             'badge_id' => 'sidebar-events-count',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
             'sort_order' => 2,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -609,7 +609,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'users',
             'badge_id' => 'sidebar-users-count',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator',
             'sort_order' => 3,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -626,7 +626,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,stock_controller,technician,sound_engineer,lighting_tech,video_director,stage_manager,rigging_lead,user,security,driver',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,stock_manager,stock_controller,technician,sound_engineer,lighting_tech,video_director,electrical_tech,interpretation_tech,stage_manager,rigging_lead,support_staff,user,security,driver',
             'sort_order' => 4,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -661,7 +661,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'shift_relief',
             'badge_id' => 'sidebar-shift-relief-badge',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,stock_manager,stock_controller',
             'sort_order' => 1,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -679,7 +679,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'calltime',
             'badge_id' => 'sidebar-active-calltime-pill',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager',
             'sort_order' => 2,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -715,7 +715,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'standalone_portals',
             'badge_id' => 'sidebar-portals-count',
             'badge_text' => '04',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,stock_manager,tech_lead,technical_lead,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,stock_manager,tech_lead,technical_lead,stock_controller',
             'sort_order' => 4,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -769,7 +769,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,tech_lead,technical_lead,stock_manager,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
             'sort_order' => 7,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -1006,13 +1006,24 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
         $migSettings = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_settings_flow_v1' LIMIT 1");
         $migSettings->execute();
         if (!$migSettings->fetchColumn()) {
-            $settingsRoles = 'admin,administrator,manager,project_manager,tech_lead,technical_lead,stock_manager,stock_controller';
+            $settingsRoles = 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller';
             $pdo->prepare("
                 INSERT IGNORE INTO `navigation_items`
                 (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
                 VALUES ('workspace', 'system_settings', 'Settings & Flow', 'settings', 'sidebar-settings-btn', '', 'assets/sliders-horizontal-13.svg', '', '', 'none', '', '', ?, 7, 1, 1)
             ")->execute([$settingsRoles]);
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_settings_flow_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+
+        // One-time migration: ensure event_coordinator & tech_lead & electrical/interpretation/support roles have synced system nav visibility
+        $migDispatch = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_dispatch_roles_v1' LIMIT 1");
+        $migDispatch->execute();
+        if (!$migDispatch->fetchColumn()) {
+            $upNavRoles = $pdo->prepare("UPDATE `navigation_items` SET `allowed_roles` = ? WHERE `is_system` = 1 AND `nav_key` = ?");
+            foreach (getDefaultNavigationItems() as $defNav) {
+                $upNavRoles->execute([$defNav['allowed_roles'], $defNav['nav_key']]);
+            }
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_dispatch_roles_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
     } catch (Throwable $e) {}
 }
@@ -1439,6 +1450,37 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             }
             break;
 
+        case 'send_event_requirements':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Sending Technical Requirements requires Project Manager, Event Coordinator, or Administrator privileges.'];
+            }
+            break;
+
+        case 'request_support_staff':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'technical_lead'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Requesting Support Staff requires Project Manager, Event Coordinator, Technical Lead, or Administrator privileges.'];
+            }
+            break;
+
+        case 'fulfill_support_request':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'stock_manager', 'project_manager', 'event_coordinator'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Fulfilling Support Staff requests requires Site Manager, Project Manager, Event Coordinator, or Administrator privileges.'];
+            }
+            break;
+
+        case 'start_random_roll_call':
+        case 'resolve_roll_call_entry':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'stock_manager', 'tech_lead', 'technical_lead', 'project_manager', 'event_coordinator', 'stock_controller'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Managing Random Roll-Call checks requires Supervisor, Tech Lead, Gate Controller, or Administrator privileges.'];
+            }
+            break;
+
+        case 'reset_user_trusted_device':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'stock_manager'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Resetting bound user devices requires Site Manager or Administrator privileges.'];
+            }
+            break;
+
         case 'save_attendance_log':
         case 'delete_attendance_log':
             if (!in_array($role, ['admin', 'administrator', 'manager', 'stock_manager'], true)) {
@@ -1472,6 +1514,128 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
     }
 
     return ['ok' => true];
+}
+
+/**
+ * Canonical role permission & flow metadata displayed in Settings -> Dispatch Flow & Roles Explorer.
+ */
+function getRoleCapabilitiesSpec(): array
+{
+    return [
+        'tier1_command' => [
+            'tier_key' => 'tier1_command',
+            'tier_title' => 'Tier 1 · Command',
+            'roles' => ['project_manager', 'event_coordinator'],
+            'role_titles' => 'Project Manager / Event Coordinator',
+            'clearance' => 'L4 · All-Access',
+            'allowed_actions' => [
+                'Create & edit event venues',
+                'Send technical branch requirements to Tech Lead',
+                'Request Tier 4 Support Staff',
+                'Set shift call-times & venue PINs',
+                'Approve controller shift relief & Geo-QR',
+                'Trigger & review Random Roll-Call',
+            ],
+            'restricted_actions' => [
+                'Cannot delete users or edit global L1–L4 matrix rules (Admin only)',
+            ],
+            'flow_steps' => [
+                '1. Create Event Venue & leadership roster',
+                '2. Send Technical Requirements (6 specialty counts + notes) to Tech Lead',
+                '3. Submit Support Staff Request for runners / drivers / security',
+                '4. Monitor confirmed readiness & oversee live gate roll-call',
+            ],
+        ],
+        'tier2_tech_lead' => [
+            'tier_key' => 'tier2_tech_lead',
+            'tier_title' => 'Tier 2 · Technical Supervision',
+            'roles' => ['tech_lead', 'technical_lead'],
+            'role_titles' => 'Technical Lead',
+            'clearance' => 'L4 · Technical Command',
+            'allowed_actions' => [
+                'Review event technical requirements from PM / Coordinator',
+                'Assign Technicians across 6 specialty branches',
+                'Adjust venue call-times & request Support Staff',
+                'Onboard technical crew (L1 / L2 only)',
+                'Operate gate terminals & run Random Roll-Call',
+            ],
+            'restricted_actions' => [
+                'Cannot elevate staff to L3 / L4 or approve controller relief swaps',
+            ],
+            'flow_steps' => [
+                '1. Receive event requirements brief from Tier 1 Command',
+                '2. Assign technicians per branch (Video, Sound, Lighting, Electrical, Rigging, Interpretation)',
+                '3. Track Technician confirmations & replace any declined slots',
+                '4. Adjust call-times & verify crew on-site via Random Roll-Call',
+            ],
+        ],
+        'tier3_technicians' => [
+            'tier_key' => 'tier3_technicians',
+            'tier_title' => 'Tier 3 · Technical Execution',
+            'roles' => ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'electrical_tech', 'interpretation_tech', 'stage_manager', 'rigging_lead'],
+            'role_titles' => 'Technicians (6 Specialty Branches)',
+            'clearance' => 'L2 · Technical & Stage',
+            'allowed_actions' => [
+                'Confirm or decline assigned event deployments',
+                'Present 30s rotating Pass QR or scan 20s Venue QR',
+                'Respond to Random Roll-Call presence checks (GPS / QR)',
+                'Enroll TOTP 2FA & view On-Site Roll-Call',
+            ],
+            'restricted_actions' => [
+                'Cannot scan other staff at gates, edit rosters, or alter call-times',
+            ],
+            'flow_steps' => [
+                '1. Receive assignment notification from Tech Lead',
+                '2. Click Confirm Assignment (or Decline with reason)',
+                '3. Check in at venue via Anti-Shadowing QR or Gate Terminal',
+                '4. Answer Random Roll-Call check on premise & Check out at shift end',
+            ],
+        ],
+        'tier4_support' => [
+            'tier_key' => 'tier4_support',
+            'tier_title' => 'Tier 4 · Operations Ground Support',
+            'roles' => ['support_staff', 'driver', 'security', 'user'],
+            'role_titles' => 'Support Staff (Runners, Drivers, Venue Crew)',
+            'clearance' => 'L1 · Event Venue Only',
+            'allowed_actions' => [
+                'Confirm or decline support deployment slots',
+                'Venue gate check-in / check-out via Anti-Shadowing QR',
+                'Respond to Random Roll-Call presence checks',
+                'View assigned venue status & personal Digital Crew Pass',
+            ],
+            'restricted_actions' => [
+                'Blocked from Stock Warehouses (L1 perimeter rule) & admin endpoints',
+            ],
+            'flow_steps' => [
+                '1. Fulfilled from Tier 1/2 Support Staff Request by Site Manager / Coordinator',
+                '2. Confirm assigned venue support shift',
+                '3. Check in at Event Venue gate (Warehouse gates auto-denied)',
+                '4. Verify presence on Random Roll-Call & Check out on departure',
+            ],
+        ],
+        'site_ops' => [
+            'tier_key' => 'site_ops',
+            'tier_title' => 'Site Operations · Gate & Logistics Governance',
+            'roles' => ['admin', 'administrator', 'manager', 'stock_manager', 'stock_controller'],
+            'role_titles' => 'Admin, Site Manager & Gate Controller',
+            'clearance' => 'L3–L4 · Gate & Facility Ops',
+            'allowed_actions' => [
+                'Fulfill Tier 4 Support Staff Requests (Admin / Site Manager)',
+                'Operate #pane-kiosk & standalone gate.php (Visual Match + Name Checkin)',
+                'Approve Shift Relief & Geo-Fenced Relief QR (Admin / Site Manager)',
+                'Reset bound device tokens & close Random Roll-Call sessions',
+            ],
+            'restricted_actions' => [
+                'Gate Controller (L3) is locked server-side to 1 assigned checkpoint',
+            ],
+            'flow_steps' => [
+                '1. Unlock Gate Terminal via site PIN',
+                '2. Scan 30s ABPASS1 QR (with Face-Match) or Name + Checkin',
+                '3. Display 20s Rotating Venue QR for bound-phone self-check-in',
+                '4. Reconcile Random Roll-Call & export attendance CSV',
+            ],
+        ],
+    ];
 }
 
 /**
@@ -1594,9 +1758,117 @@ function clearSecurityRateLimit(PDO $pdo, string $rateKey): void
     } catch (Throwable $e) {}
 }
 
+/**
+ * Checks whether a user currently has an open check_in (today or within the 18h overnight shift lookback).
+ */
+function isUserCurrentlyCheckedInDb(PDO $pdo, int $userId): bool
+{
+    try {
+        $cutoff = date('Y-m-d H:i:s', strtotime(date('Y-m-d') . ' 00:00:00') - 18 * 3600);
+        $st = $pdo->prepare("
+            SELECT `scan_action`
+            FROM `attendance_logs`
+            WHERE `user_id` = ? AND `scanned_at` >= ?
+              AND `access_status` = 'granted'
+              AND `scan_action` IN ('check_in', 'check_out')
+            ORDER BY `scanned_at` DESC, `id` DESC
+            LIMIT 1
+        ");
+        $st->execute([$userId, $cutoff]);
+        $last = (string) ($st->fetchColumn() ?: '');
+        return $last === 'check_in';
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Lazy deadline processor for active Random Roll-Call sessions:
+ * closes expired sessions and optionally auto-checks out missing staff.
+ */
+function processExpiredRollCallSessions(PDO $pdo): void
+{
+    try {
+        $expiredSt = $pdo->query("SELECT * FROM `roll_call_sessions` WHERE `status` = 'active' AND `deadline_at` < NOW()");
+        $expiredSessions = $expiredSt ? $expiredSt->fetchAll(PDO::FETCH_ASSOC) : [];
+        if (empty($expiredSessions)) {
+            return;
+        }
+        foreach ($expiredSessions as $sess) {
+            $sid = (int) $sess['id'];
+            $autoOut = ((int) ($sess['auto_checkout_on_miss'] ?? 1) === 1);
+            $deadlineSql = (string) ($sess['deadline_at'] ?: date('Y-m-d H:i:s'));
+
+            $pendingSt = $pdo->prepare("SELECT * FROM `roll_call_entries` WHERE `session_id` = ? AND `status` = 'pending'");
+            $pendingSt->execute([$sid]);
+            $pendingRows = $pendingSt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($pendingRows as $ent) {
+                $uid = (int) $ent['user_id'];
+                $eid = (int) $ent['id'];
+                if ($autoOut && isUserCurrentlyCheckedInDb($pdo, $uid)) {
+                    $bSt = $pdo->prepare("SELECT `badge_code` FROM `user_badges` WHERE `user_id` = ? LIMIT 1");
+                    $bSt->execute([$uid]);
+                    $bCode = (string) ($bSt->fetchColumn() ?: formatRewBadgeCode($uid, null));
+
+                    $cpType = in_array((string) $ent['checkpoint_type'], ['stock_warehouse', 'event_venue', 'main_office'], true)
+                        ? (string) $ent['checkpoint_type']
+                        : 'event_venue';
+                    $cpId = is_numeric((string) $ent['checkpoint_id']) ? (int) $ent['checkpoint_id'] : 1;
+                    $cpName = (string) ($ent['checkpoint_name'] ?: 'Site Checkpoint');
+                    $outSql = $deadlineSql;
+                    try {
+                        $lastInSt = $pdo->prepare("SELECT MAX(`scanned_at`) FROM `attendance_logs` WHERE `user_id` = ? AND `scan_action` = 'check_in' AND `access_status` = 'granted'");
+                        $lastInSt->execute([$uid]);
+                        $lastInSql = (string) ($lastInSt->fetchColumn() ?: '');
+                        if ($lastInSql !== '' && strtotime($deadlineSql) <= strtotime($lastInSql)) {
+                            $outSql = date('Y-m-d H:i:s', max(time(), strtotime($lastInSql) + 1));
+                        }
+                    } catch (Throwable $e) {}
+
+                    $insOut = $pdo->prepare("
+                        INSERT INTO `attendance_logs`
+                          (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `notes`, `scanned_at`)
+                        VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'rollcall_auto_out', ?, 'roll_call_auto_out', ?, ?)
+                    ");
+                    $insOut->execute([
+                        $uid,
+                        $bCode,
+                        $cpType,
+                        $cpId,
+                        $cpName,
+                        (int) ($sess['triggered_by_id'] ?: 1),
+                        "Auto Check-Out: Missed Random Roll-Call #{$sid}",
+                        $outSql,
+                    ]);
+                    $outLogId = (int) $pdo->lastInsertId();
+
+                    $pdo->prepare("
+                        UPDATE `roll_call_entries`
+                        SET `status` = 'timed_out', `verification_method` = 'timeout_auto_out', `auto_checkout_log_id` = ?, `verified_at` = NOW(), `notes` = ?
+                        WHERE `id` = ?
+                    ")->execute([$outLogId, "No in-premise response before deadline ({$deadlineSql})", $eid]);
+                } else {
+                    $nextSt = $autoOut ? 'timed_out' : 'unaccounted';
+                    $pdo->prepare("
+                        UPDATE `roll_call_entries`
+                        SET `status` = ?, `verification_method` = 'deadline_expired', `verified_at` = NOW(), `notes` = ?
+                        WHERE `id` = ?
+                    ")->execute([$nextSt, "Did not respond before {$deadlineSql}", $eid]);
+                }
+            }
+
+            $nextSessStatus = $autoOut ? 'closed' : 'awaiting_review';
+            $pdo->prepare("UPDATE `roll_call_sessions` SET `status` = ?, `closed_at` = CASE WHEN ? = 'closed' THEN NOW() ELSE NULL END WHERE `id` = ?")
+                ->execute([$nextSessStatus, $nextSessStatus, $sid]);
+        }
+    } catch (Throwable $e) {}
+}
+
 function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType = 'stock_warehouse', int $reqCheckpointId = 1): array
 {
     expireStaleShiftAssignments($pdo);
+    processExpiredRollCallSessions($pdo);
     $todayStr = date('Y-m-d');
     $sessionRole = strtolower(trim((string) ($_SESSION['auth_user_role'] ?? '')));
     if ($sessionRole === '' && !empty($_SESSION['auth_user_id'])) {
@@ -1658,6 +1930,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'assigned_technicians' => $whAssignedIds,
             'assigned_count' => count($whAssignedIds),
             'geofence_radius_m' => (int) ($sr['geofence_radius_m'] ?? 200),
+            'checkin_policy' => (string) ($sr['checkin_policy'] ?? 'hybrid'),
+            'require_visual_match' => (int) ($sr['require_visual_match'] ?? 1),
             'lat' => isset($sr['lat']) && $sr['lat'] !== null ? (float) $sr['lat'] : null,
             'lng' => isset($sr['lng']) && $sr['lng'] !== null ? (float) $sr['lng'] : null,
             'map_x' => isset($sr['map_x']) && $sr['map_x'] !== null ? (float) $sr['map_x'] : null,
@@ -1736,6 +2010,11 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'assigned_roster' => json_decode((string) ($er['assigned_roster_json'] ?? ''), true) ?: null,
             'assigned_count' => count($assignedIds),
             'geofence_radius_m' => (int) ($er['geofence_radius_m'] ?? 200),
+            'checkin_policy' => (string) ($er['checkin_policy'] ?? 'hybrid'),
+            'require_visual_match' => (int) ($er['require_visual_match'] ?? 1),
+            'requirements' => json_decode((string) ($er['requirements_json'] ?? ''), true) ?: null,
+            'dispatch_status' => (string) ($er['dispatch_status'] ?? 'draft'),
+            'requirements_sent_at' => $er['requirements_sent_at'] ?? null,
             'image' => resolveProfileImageUrl($er['image'] ?? null),
             'lat' => isset($er['lat']) && $er['lat'] !== null ? (float) $er['lat'] : null,
             'lng' => isset($er['lng']) && $er['lng'] !== null ? (float) $er['lng'] : null,
@@ -1885,6 +2164,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'last_checkpoint_id' => $oCpId,
             'last_checkpoint_name' => (string) ($olog['checkpoint_name'] ?? ''),
             'last_scanned_at' => (string) ($olog['scanned_at'] ?? ''),
+            'last_presence_verified_at' => (string) ($olog['scanned_at'] ?? ''),
             'denied_count' => 0,
             'last_denial_reason' => null,
         ];
@@ -1974,6 +2254,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
                 'last_checkpoint_id' => $cpId,
                 'last_checkpoint_name' => (string) ($log['checkpoint_name'] ?? ''),
                 'last_scanned_at' => (string) ($log['scanned_at'] ?? ''),
+                'last_presence_verified_at' => (string) ($log['scanned_at'] ?? ''),
                 'denied_count' => 0,
                 'last_denial_reason' => null,
             ];
@@ -1997,6 +2278,9 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             $userDailyMap[$uid]['last_checkpoint_id'] = $cpId;
             $userDailyMap[$uid]['last_checkpoint_name'] = (string) ($log['checkpoint_name'] ?? '');
             $userDailyMap[$uid]['last_scanned_at'] = (string) ($log['scanned_at'] ?? '');
+            $userDailyMap[$uid]['last_presence_verified_at'] = (string) ($log['scanned_at'] ?? '');
+        } elseif ($action === 'access_verify') {
+            $userDailyMap[$uid]['last_presence_verified_at'] = (string) ($log['scanned_at'] ?? '');
         } elseif ($action === 'check_out') {
             $userDailyMap[$uid]['state'] = 'checked_out';
             $userDailyMap[$uid]['check_out_short'] = date('h:i A', $ts);
@@ -2041,6 +2325,12 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         ORDER BY u.`id` ASC
     ";
     $userRows = $pdo->query($usersSql)->fetchAll();
+    $trustedDeviceCounts = [];
+    try {
+        foreach ($pdo->query("SELECT `user_id`, COUNT(*) AS `cnt` FROM `user_trusted_devices` WHERE `is_active` = 1 GROUP BY `user_id`")->fetchAll(PDO::FETCH_ASSOC) as $tdRow) {
+            $trustedDeviceCounts[(int) $tdRow['user_id']] = (int) $tdRow['cnt'];
+        }
+    } catch (Throwable $e) {}
 
     $crew = [];
     $crewById = [];
@@ -2134,6 +2424,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'last_checkpoint_type' => $uDaily['last_checkpoint_type'] ?? null,
             'last_checkpoint_id' => $uDaily['last_checkpoint_id'] ?? null,
             'last_checkpoint_name' => $uDaily['last_checkpoint_name'] ?? null,
+            'last_presence_verified_at' => $uDaily['last_presence_verified_at'] ?? null,
+            'trusted_device_count' => $trustedDeviceCounts[$uid] ?? 0,
             'is_active' => (int) ($ur['is_active'] ?? 1),
             'allowed_stock_ids' => json_decode((string) ($ur['allowed_stock_ids'] ?? '[]'), true) ?: [],
             'allowed_event_ids' => json_decode((string) ($ur['allowed_event_ids'] ?? '[]'), true) ?: [],
@@ -2156,8 +2448,10 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
                 'clearance_code' => $tier['code'],
                 'clearance_color' => $tier['color'],
                 'checkpoint_type' => $uDaily['last_checkpoint_type'] ?? 'event_venue',
+                'checkpoint_id' => $uDaily['last_checkpoint_id'] ?? $activeCpId,
                 'checkpoint_name' => $uDaily['last_checkpoint_name'] ?: $activeCpName,
                 'check_in_time' => $uDaily['check_in_short'] ?? '08:00 AM',
+                'last_presence_verified_at' => $uDaily['last_presence_verified_at'] ?? null,
                 'punctuality' => $uDaily['punctuality_label'] ?? 'ON TIME',
                 'initials' => $member['initials'],
                 'profile_image_url' => $member['profile_image_url'],
@@ -2271,34 +2565,42 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $cRole = strtolower(trim((string)($currentUser['role'] ?? 'user')));
         $cClearance = strtoupper(trim((string)($currentUser['clearance_code'] ?? 'L1')));
         $isAdmin = in_array($cRole, ['admin', 'manager', 'administrator'], true);
-        $isTechLead = $cRole === 'tech_lead' || $isAdmin;
+        $isEventCommand = in_array($cRole, ['project_manager', 'event_coordinator'], true) || $isAdmin;
+        $isTechLead = in_array($cRole, ['tech_lead', 'technical_lead'], true) || $isAdmin;
         $isStockMgr = $cRole === 'stock_manager' || $isAdmin;
         $isStockCtrl = $cRole === 'stock_controller';
 
         $currentUser['permissions'] = [
             'is_admin' => $isAdmin,
+            'is_event_command' => $isEventCommand,
             'is_tech_lead' => $isTechLead,
             'is_stock_manager' => $isStockMgr,
             'is_stock_controller' => $isStockCtrl,
-            'can_add_user' => $isAdmin || $isTechLead || $isStockMgr,
+            'can_add_user' => $isAdmin || $isEventCommand || $isTechLead || $isStockMgr,
             'can_delete_user' => $isAdmin,
             'can_edit_tiers' => $isAdmin,
-            'can_assign_event_crew' => $isTechLead || $isAdmin,
-            'can_set_call_time' => $isTechLead || $isAdmin || $isStockMgr,
+            'can_assign_event_crew' => $isTechLead || $isEventCommand || $isAdmin,
+            'can_send_event_requirements' => $isEventCommand || $isAdmin,
+            'can_request_support_staff' => $isEventCommand || $isTechLead || $isAdmin,
+            'can_fulfill_support_staff' => $isStockMgr || $isEventCommand || $isAdmin,
+            'can_set_call_time' => $isTechLead || $isEventCommand || $isAdmin || $isStockMgr,
             'can_manage_warehouses' => $isStockMgr || $isAdmin,
-            'can_approve_shift_requests' => $isAdmin || $isStockMgr,
-            'can_request_shift_relief' => $isAdmin || $isStockMgr || $isStockCtrl || $isTechLead,
+            'can_approve_shift_requests' => $isAdmin || $isStockMgr || $isEventCommand,
+            'can_request_shift_relief' => $isAdmin || $isEventCommand || $isStockMgr || $isStockCtrl || $isTechLead,
             'can_assign_controller_checkpoint' => $isAdmin || $isStockMgr,
+            'can_trigger_random_rollcall' => $isAdmin || $isEventCommand || $isTechLead || $isStockMgr || $isStockCtrl,
             'max_assignable_tier' => $isAdmin ? 'L4' : ($isStockMgr ? 'L3' : ($isTechLead ? 'L2' : 'none')),
             'delegation_summary' => $isAdmin
                 ? 'Full Administrator — All digital and physical systems unconstrained.'
-                : ($isTechLead
-                    ? 'Technical Lead — Authorized to set Call Times, assign event crew, and onboard technical personnel (L1/L2).'
-                    : ($isStockMgr
-                        ? 'Site Manager — Authorized for facility gates, controller relief approvals, and site crew/controller onboarding.'
-                        : ($isStockCtrl
-                            ? 'Gate Controller — Strictly locked to one assigned Gate Terminal; cross-gate relief requires Administrator or Site Manager approval.'
-                            : 'Standard Personnel — View personal profile and attendance.')))
+                : ($isEventCommand
+                    ? 'Event Command (PM / Coordinator) — Authorized to create events, send requirements to Tech Lead, request Support Staff, and manage rosters.'
+                    : ($isTechLead
+                        ? 'Technical Lead — Authorized to set Call Times, assign technicians across 6 branches, and onboard technical personnel (L1/L2).'
+                        : ($isStockMgr
+                            ? 'Site Manager — Authorized for facility gates, support fulfillment, controller relief approvals, and site crew onboarding.'
+                            : ($isStockCtrl
+                                ? 'Gate Controller — Strictly locked to one assigned Gate Terminal; cross-gate relief requires Administrator or Site Manager approval.'
+                                : 'Standard Personnel — Confirm event assignments, present rotating pass QR / scan venue QR, and respond to roll-call checks.')))),
         ];
     }
 
@@ -2396,6 +2698,191 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         } catch (Throwable $e) {}
     }
 
+    // 11. Load Random Roll-Call Sessions & Pending Challenge for Current User
+    $rollCallSessions = [];
+    $myPendingRollCall = null;
+    try {
+        $rcSessRows = $pdo->query("SELECT * FROM `roll_call_sessions` ORDER BY CASE WHEN `status` IN ('active','awaiting_review') THEN 0 ELSE 1 END, `id` DESC LIMIT 12")->fetchAll(PDO::FETCH_ASSOC);
+        $entryStmt = $pdo->prepare("SELECT * FROM `roll_call_entries` WHERE `session_id` = ? ORDER BY `id` ASC");
+        foreach ($rcSessRows as $rs) {
+            $sid = (int) $rs['id'];
+            $entryStmt->execute([$sid]);
+            $eRows = $entryStmt->fetchAll(PDO::FETCH_ASSOC);
+            $entriesOut = [];
+            $counts = ['total' => 0, 'present' => 0, 'pending' => 0, 'absent' => 0, 'timed_out' => 0, 'unaccounted' => 0, 'excused' => 0];
+            foreach ($eRows as $er) {
+                $eUid = (int) ($er['user_id'] ?? 0);
+                $eSt = strtolower((string) ($er['status'] ?? 'pending'));
+                $counts['total']++;
+                if (isset($counts[$eSt])) {
+                    $counts[$eSt]++;
+                }
+                $uObj = $crewById[$eUid] ?? null;
+                $eOut = [
+                    'id' => (int) $er['id'],
+                    'session_id' => $sid,
+                    'user_id' => $eUid,
+                    'full_name' => $uObj ? $uObj['full_name'] : ('User #' . $eUid),
+                    'role_display' => $uObj ? $uObj['role_display'] : '',
+                    'department' => $uObj ? $uObj['department'] : '',
+                    'badge_code' => $uObj ? $uObj['badge_code'] : formatRewBadgeCode($eUid, null),
+                    'initials' => $uObj ? $uObj['initials'] : 'CR',
+                    'profile_image_url' => $uObj ? $uObj['profile_image_url'] : null,
+                    'checkpoint_type' => (string) ($er['checkpoint_type'] ?? 'event_venue'),
+                    'checkpoint_id' => (string) ($er['checkpoint_id'] ?? '1'),
+                    'checkpoint_name' => (string) ($er['checkpoint_name'] ?? 'Site Checkpoint'),
+                    'status' => $eSt,
+                    'verification_method' => $er['verification_method'] ?: null,
+                    'distance_m' => $er['distance_m'] !== null ? (int) $er['distance_m'] : null,
+                    'verified_at' => $er['verified_at'] ?: null,
+                    'notes' => (string) ($er['notes'] ?? ''),
+                ];
+                $entriesOut[] = $eOut;
+
+                if ($authUserId > 0 && $eUid === $authUserId && $eSt === 'pending' && strtolower((string) $rs['status']) === 'active' && !$myPendingRollCall) {
+                    $myPendingRollCall = [
+                        'session_id' => $sid,
+                        'entry_id' => (int) $er['id'],
+                        'checkpoint_type' => (string) ($er['checkpoint_type'] ?? 'event_venue'),
+                        'checkpoint_id' => (string) ($er['checkpoint_id'] ?? '1'),
+                        'checkpoint_name' => (string) ($er['checkpoint_name'] ?? 'Site Checkpoint'),
+                        'require_geo_or_qr' => (int) ($rs['require_geo_or_qr'] ?? 1),
+                        'auto_checkout_on_miss' => (int) ($rs['auto_checkout_on_miss'] ?? 1),
+                        'deadline_at' => (string) $rs['deadline_at'],
+                        'seconds_left' => max(0, (strtotime((string) $rs['deadline_at']) ?: time()) - time()),
+                    ];
+                }
+            }
+            $trigUid = (int) ($rs['triggered_by_id'] ?? 0);
+            $rollCallSessions[] = [
+                'id' => $sid,
+                'checkpoint_type' => (string) ($rs['checkpoint_type'] ?? 'all'),
+                'checkpoint_id' => (string) ($rs['checkpoint_id'] ?? 'all'),
+                'checkpoint_name' => (string) ($rs['checkpoint_name'] ?? 'All Checkpoints'),
+                'triggered_by_id' => $trigUid,
+                'triggered_by_name' => isset($crewById[$trigUid]) ? $crewById[$trigUid]['full_name'] : 'Supervisor',
+                'selection_mode' => (string) ($rs['selection_mode'] ?? 'random_count'),
+                'sample_value' => (int) ($rs['sample_value'] ?? 5),
+                'require_geo_or_qr' => (int) ($rs['require_geo_or_qr'] ?? 1),
+                'auto_checkout_on_miss' => (int) ($rs['auto_checkout_on_miss'] ?? 1),
+                'deadline_at' => (string) ($rs['deadline_at'] ?? ''),
+                'seconds_left' => max(0, (strtotime((string) ($rs['deadline_at'] ?? '')) ?: time()) - time()),
+                'status' => strtolower((string) ($rs['status'] ?? 'active')),
+                'created_at' => (string) ($rs['created_at'] ?? ''),
+                'closed_at' => $rs['closed_at'] ?: null,
+                'counts' => $counts,
+                'entries' => $entriesOut,
+            ];
+        }
+    } catch (Throwable $e) {}
+
+    // 12. Load Event Crew Confirmations, Support Requests & Dispatch Action Logs
+    $eventCrewAssignments = [];
+    $myPendingAssignments = [];
+    $evByAnyId = [];
+    foreach ($eventVenues as $evObj) {
+        $evByAnyId[(string) $evObj['raw_id']] = $evObj;
+        $evByAnyId[(string) $evObj['id']] = $evObj;
+    }
+    try {
+        $ecaRows = $pdo->query("SELECT * FROM `event_crew_assignments` ORDER BY `id` DESC")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($ecaRows as $eca) {
+            $eId = (string) ($eca['event_id'] ?? '');
+            $uId = (int) ($eca['user_id'] ?? 0);
+            $uObj = $crewById[$uId] ?? null;
+            $asgBy = (int) ($eca['assigned_by_id'] ?? 0);
+            $rec = [
+                'id' => (int) $eca['id'],
+                'event_id' => $eId,
+                'user_id' => $uId,
+                'full_name' => $uObj ? $uObj['full_name'] : ('User #' . $uId),
+                'role_display' => $uObj ? $uObj['role_display'] : '',
+                'department' => $uObj ? $uObj['department'] : '',
+                'branch_dept' => (string) ($eca['branch_dept'] ?? 'Sound'),
+                'role_slot' => (string) ($eca['role_slot'] ?? ''),
+                'assigned_by_id' => $asgBy,
+                'assigned_by_name' => isset($crewById[$asgBy]) ? $crewById[$asgBy]['full_name'] : 'Supervisor',
+                'confirmation_status' => strtolower((string) ($eca['confirmation_status'] ?? 'pending')),
+                'decline_reason' => (string) ($eca['decline_reason'] ?? ''),
+                'assigned_at' => (string) ($eca['assigned_at'] ?? ''),
+                'responded_at' => $eca['responded_at'] ?: null,
+            ];
+            if (!isset($eventCrewAssignments[$eId])) {
+                $eventCrewAssignments[$eId] = [];
+            }
+            $eventCrewAssignments[$eId][(string) $uId] = $rec;
+
+            if ($authUserId > 0 && $uId === $authUserId) {
+                $evMeta = $evByAnyId[$eId] ?? null;
+                $myPendingAssignments[] = array_merge($rec, [
+                    'event_title' => $evMeta ? $evMeta['title'] : ('Event #' . $eId),
+                    'event_location' => $evMeta ? $evMeta['location'] : '',
+                    'event_date' => $evMeta ? $evMeta['date'] : '',
+                    'call_time' => $evMeta ? $evMeta['call_time'] : '08:00',
+                    'tech_lead' => $evMeta ? $evMeta['tech_lead'] : '',
+                    'project_manager' => $evMeta ? $evMeta['project_manager'] : '',
+                ]);
+            }
+        }
+    } catch (Throwable $e) {}
+
+    $eventSupportRequests = [];
+    try {
+        $esrRows = $pdo->query("SELECT * FROM `event_support_requests` ORDER BY CASE WHEN `status` = 'pending' THEN 0 ELSE 1 END, `id` DESC LIMIT 40")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($esrRows as $esr) {
+            $eId = (string) ($esr['event_id'] ?? '');
+            $reqUid = (int) ($esr['requested_by_id'] ?? 0);
+            $fulUid = (int) ($esr['fulfilled_by_id'] ?? 0);
+            $evMeta = $evByAnyId[$eId] ?? null;
+            $assignedUids = json_decode((string) ($esr['assigned_user_ids_json'] ?? '[]'), true) ?: [];
+            $assignedNames = [];
+            foreach ($assignedUids as $auid) {
+                if (isset($crewById[(int) $auid])) {
+                    $assignedNames[] = $crewById[(int) $auid]['full_name'];
+                }
+            }
+            $eventSupportRequests[] = [
+                'id' => (int) $esr['id'],
+                'event_id' => $eId,
+                'event_title' => $evMeta ? $evMeta['title'] : ('Event #' . $eId),
+                'requested_by_id' => $reqUid,
+                'requested_by_name' => isset($crewById[$reqUid]) ? $crewById[$reqUid]['full_name'] : 'Coordinator',
+                'requested_roles' => json_decode((string) ($esr['requested_roles_json'] ?? '{}'), true) ?: [],
+                'notes' => (string) ($esr['notes'] ?? ''),
+                'status' => strtolower((string) ($esr['status'] ?? 'pending')),
+                'fulfilled_by_id' => $fulUid > 0 ? $fulUid : null,
+                'fulfilled_by_name' => ($fulUid > 0 && isset($crewById[$fulUid])) ? $crewById[$fulUid]['full_name'] : null,
+                'assigned_user_ids' => array_map('intval', $assignedUids),
+                'assigned_names' => $assignedNames,
+                'created_at' => (string) ($esr['created_at'] ?? ''),
+                'fulfilled_at' => $esr['fulfilled_at'] ?: null,
+            ];
+        }
+    } catch (Throwable $e) {}
+
+    $eventDispatchLogs = [];
+    try {
+        $edlRows = $pdo->query("SELECT * FROM `event_dispatch_logs` ORDER BY `id` DESC LIMIT 80")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($edlRows as $edl) {
+            $aUid = (int) ($edl['actor_id'] ?? 0);
+            $eId = (string) ($edl['event_id'] ?? '');
+            $evMeta = $evByAnyId[$eId] ?? null;
+            $eventDispatchLogs[] = [
+                'id' => (int) $edl['id'],
+                'event_id' => $eId,
+                'event_title' => $evMeta ? $evMeta['title'] : ('Event #' . $eId),
+                'actor_id' => $aUid,
+                'actor_name' => isset($crewById[$aUid]) ? $crewById[$aUid]['full_name'] : 'System',
+                'actor_role' => (string) ($edl['actor_role'] ?? ''),
+                'actor_role_display' => formatRoleDisplay((string) ($edl['actor_role'] ?? '')),
+                'action_type' => (string) ($edl['action_type'] ?? ''),
+                'summary' => (string) ($edl['summary'] ?? ''),
+                'payload' => json_decode((string) ($edl['payload_json'] ?? 'null'), true),
+                'created_at' => (string) ($edl['created_at'] ?? ''),
+            ];
+        }
+    } catch (Throwable $e) {}
+
     return [
         'ok' => true,
         'dbSource' => $activeDb,
@@ -2403,6 +2890,13 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'currentUser' => $currentUser,
         'totpEnabled' => $totpEnabled,
         'reliefTokens' => $reliefTokens,
+        'roleCapabilities' => getRoleCapabilitiesSpec(),
+        'rollCallSessions' => $rollCallSessions,
+        'myPendingRollCall' => $myPendingRollCall,
+        'eventCrewAssignments' => $eventCrewAssignments,
+        'eventSupportRequests' => $eventSupportRequests,
+        'myPendingAssignments' => $myPendingAssignments,
+        'eventDispatchLogs' => $eventDispatchLogs,
         'brandingConfig' => getBrandingConfig($pdo),
         'brandingFonts' => getBrandingFontsList($pdo),
         'read_notif_ids' => $readNotifIds,
@@ -2489,6 +2983,117 @@ function findCrewMemberByScanInput(array $crew, string $scanInput): ?array
     return null;
 }
 
+function resolveScanInputWithAntiShadowing(
+    PDO $pdo,
+    array $crew,
+    array $activeCp,
+    string $scanInput,
+    string $scanMode,
+    bool $visualConfirmed = false,
+    bool $hasManualUserId = false,
+    bool $hasSupervisorPin = false
+): array {
+    $cleanInput = trim($scanInput);
+    $cpType = (string) ($activeCp['type'] ?? 'stock_warehouse');
+    $cpId = (string) ($activeCp['raw_id'] ?? $activeCp['id'] ?? '1');
+    $cpPolicy = strtolower((string) ($activeCp['checkin_policy'] ?? 'hybrid'));
+    $reqVisual = ((int) ($activeCp['require_visual_match'] ?? 1) === 1);
+
+    // 1. Dynamic Anti-Shadowing Pass QR (`ABPASS1.<uid>.<slice>.<nonce>.<sig>`)
+    if (strpos($cleanInput, 'ABPASS1.') === 0) {
+        $parsed = verifySignedDynamicPassToken($pdo, $cleanInput, 30);
+        if (!$parsed || empty($parsed['valid'])) {
+            return [
+                'ok' => false,
+                'allowed' => false,
+                'error' => ($parsed['error'] ?? 'Invalid or expired Dynamic Pass QR.'),
+                'reason' => 'Dynamic Pass QR rejected',
+            ];
+        }
+        $targetUid = (int) $parsed['user_id'];
+        $targetMember = null;
+        foreach ($crew as $cm) {
+            if ((int) $cm['id'] === $targetUid) {
+                $targetMember = $cm;
+                break;
+            }
+        }
+        if (!$targetMember) {
+            return [
+                'ok' => false,
+                'allowed' => false,
+                'error' => 'Dynamic QR belongs to an unknown or inactive staff member.',
+            ];
+        }
+
+        // If gate requires visual face-match confirmation before committing Check-In/Out
+        if ($reqVisual && !$visualConfirmed && $scanMode !== 'verify_only') {
+            $eval = evaluateCheckpointAccess($targetMember, $cpType, (int) ($activeCp['id'] ?? 1));
+            $wouldAction = ($scanMode === 'check_in' || $scanMode === 'check_out')
+                ? $scanMode
+                : (($targetMember['daily_state'] ?? 'ready') === 'checked_in' ? 'check_out' : 'check_in');
+            $preview = buildVerificationCardPayload($pdo, $targetMember, $cpType, (int) ($activeCp['id'] ?? 1), (string) ($activeCp['name'] ?? 'Gate'), [
+                'allowed' => (bool) $eval['allowed'],
+                'reason' => $eval['allowed']
+                    ? 'Live 30s QR verified — confirm presenter face matches photo to complete ' . strtoupper(str_replace('_', ' ', $wouldAction))
+                    : (string) $eval['reason'],
+                'action' => $wouldAction,
+            ]);
+            $preview['visual_confirm_required'] = (bool) $eval['allowed'];
+            $preview['pending_pass_token'] = $cleanInput;
+            $preview['checkin_method'] = 'dynamic_pass_qr';
+            return ['ok' => true, 'hold_preview' => $preview];
+        }
+
+        if ($scanMode !== 'verify_only') {
+            $consumed = consumeQrNonce($pdo, (string) $parsed['nonce'], $targetUid, 'pass', $cpType, $cpId, 120);
+            if (!$consumed) {
+                return [
+                    'ok' => false,
+                    'allowed' => false,
+                    'error' => 'Anti-shadowing lock: This 30-second Pass QR was already scanned. Ask the presenter to show their newly rotated QR.',
+                    'reason' => 'Duplicate QR screenshot replay blocked',
+                ];
+            }
+        }
+
+        return [
+            'ok' => true,
+            'member' => $targetMember,
+            'checkin_method' => 'dynamic_pass_qr',
+        ];
+    }
+
+    // 2. Manual Name / Static Badge Lookup ("Enter Name + Click Checkin" or RFID/Barcode)
+    $targetMember = findCrewMemberByScanInput($crew, $cleanInput);
+    if (!$targetMember) {
+        return [
+            'ok' => false,
+            'allowed' => false,
+            'error' => "No staff badge or crew member matched '{$cleanInput}'. Try scanning a live QR, REW-BADGE-0006, or staff name.",
+            'reason' => "Unrecognized Badge Code ({$cleanInput})",
+        ];
+    }
+
+    $looksLikeBadge = (stripos($cleanInput, 'REW-BADGE-') === 0 || stripos($cleanInput, 'RFID-') === 0 || stripos($cleanInput, 'ABL-') === 0);
+    $methodUsed = ($hasManualUserId || !$looksLikeBadge) ? 'manual_name' : 'badge_scan';
+
+    if ($cpPolicy === 'qr_strict' && !$hasSupervisorPin && $scanMode !== 'verify_only') {
+        return [
+            'ok' => false,
+            'allowed' => false,
+            'error' => "Strict QR Policy active at {$activeCp['name']}: scan the live anti-shadowing QR or provide a Supervisor Override PIN for manual Name Check-In.",
+            'reason' => 'Manual Name Check-In blocked under QR Strict policy',
+        ];
+    }
+
+    return [
+        'ok' => true,
+        'member' => $targetMember,
+        'checkin_method' => $methodUsed,
+    ];
+}
+
 function executeGateScan(
     PDO $pdo,
     string $activeDb,
@@ -2497,11 +3102,17 @@ function executeGateScan(
     string $scanMode = 'auto',
     int $scannedBy = 0,
     ?int $effectiveTs = null,
-    bool $isOfflineSync = false
+    bool $isOfflineSync = false,
+    array $auditMeta = []
 ): array {
     $effectiveTs = $effectiveTs ?? time();
     $effectiveScannedAtSql = date('Y-m-d H:i:s', $effectiveTs);
     $effectiveDateStr = date('Y-m-d', $effectiveTs);
+    $checkinMethod = trim((string) ($auditMeta['checkin_method'] ?? ($isOfflineSync ? 'offline_operator_visual' : 'badge_scan')));
+    $verifiedLat = isset($auditMeta['verified_lat']) && $auditMeta['verified_lat'] !== null ? (float) $auditMeta['verified_lat'] : null;
+    $verifiedLng = isset($auditMeta['verified_lng']) && $auditMeta['verified_lng'] !== null ? (float) $auditMeta['verified_lng'] : null;
+    $distanceM = isset($auditMeta['distance_m']) && $auditMeta['distance_m'] !== null ? (int) $auditMeta['distance_m'] : null;
+    $deviceId = isset($auditMeta['device_id']) && $auditMeta['device_id'] !== null ? (int) $auditMeta['device_id'] : null;
 
     $cpType = (string) ($activeCp['type'] ?? 'stock_warehouse');
     $cpId = (int) ($activeCp['id'] ?? 1);
@@ -2656,8 +3267,8 @@ function executeGateScan(
 
     $insStmt = $pdo->prepare("
         INSERT INTO `attendance_logs`
-          (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `verified_lat`, `verified_lng`, `distance_m`, `device_id`, `notes`, `scanned_at`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $insStmt->execute([
         (int) $targetMember['id'],
@@ -2670,6 +3281,11 @@ function executeGateScan(
         $denialReason,
         $punctuality,
         $scannedBy,
+        $checkinMethod,
+        $verifiedLat,
+        $verifiedLng,
+        $distanceM,
+        $deviceId,
         $noteText,
         $effectiveScannedAtSql,
     ]);
@@ -2724,6 +3340,8 @@ function buildStandaloneGateFeedPayload(array $fullPayload, array $whRow): array
             'call_time' => substr((string) ($whRow['open_time'] ?? '08:00:00'), 0, 5),
             'controller_name' => (string) ($whRow['controller_name'] ?? ''),
             'geofence_radius_m' => (int) ($whRow['geofence_radius_m'] ?? 200),
+            'checkin_policy' => (string) ($whRow['checkin_policy'] ?? 'hybrid'),
+            'require_visual_match' => (int) ($whRow['require_visual_match'] ?? 1),
             'on_site_now' => 0,
             'checked_in_today' => 0,
             'denied_today' => 0,
@@ -2760,6 +3378,7 @@ function buildStandaloneGateFeedPayload(array $fullPayload, array $whRow): array
             'last_checkpoint_type' => $c['last_checkpoint_type'] ?? null,
             'last_checkpoint_id' => $c['last_checkpoint_id'] ?? null,
             'last_checkpoint_name' => $c['last_checkpoint_name'] ?? null,
+            'trusted_device_count' => (int) ($c['trusted_device_count'] ?? 0),
             'punctuality' => (string) ($c['punctuality'] ?? 'READY'),
         ];
     }
@@ -2818,6 +3437,9 @@ try {
         'standalone_gate_lock',
         'standalone_gate_feed',
         'standalone_gate_scan',
+        'issue_venue_checkin_qr',
+        'get_venue_checkin_info',
+        'redeem_venue_checkin_qr',
         'get_relief_token_info',
         'redeem_relief_qr',
     ];
@@ -3185,17 +3807,30 @@ try {
 
         $currentPayload = buildFullPayload($pdo, $activeDb, 'stock_warehouse', $wid);
         $activeCp = $currentPayload['activeCheckpoint'];
+        $visualConfirmed = !empty($_POST['visual_confirmed']) || !empty($jsonBody['visual_confirmed']);
         $lookupKey = $reqUserId > 0 ? (string) $reqUserId : $scanInput;
-        $targetMember = findCrewMemberByScanInput($currentPayload['crew'], $lookupKey);
-        if (!$targetMember) {
-            echo json_encode([
-                'ok' => false,
-                'allowed' => false,
-                'error' => "No staff badge or crew member matched '{$lookupKey}'. Try REW-BADGE-0006, RFID UID, or staff name.",
-                'reason' => "Unrecognized Badge Code ({$lookupKey})",
-            ]);
+
+        $resolved = resolveScanInputWithAntiShadowing(
+            $pdo,
+            $currentPayload['crew'],
+            $activeCp,
+            $lookupKey,
+            $scanMode,
+            $visualConfirmed,
+            $reqUserId > 0,
+            false
+        );
+        if (empty($resolved['ok'])) {
+            echo json_encode($resolved);
             exit;
         }
+        if (!empty($resolved['hold_preview'])) {
+            $preview = $resolved['hold_preview'];
+            $preview['feed'] = buildStandaloneGateFeedPayload($currentPayload, $whRow);
+            echo json_encode($preview);
+            exit;
+        }
+        $targetMember = $resolved['member'];
 
         $scannedBy = !empty($_SESSION['auth_user_id']) ? (int) $_SESSION['auth_user_id'] : 1;
         $result = executeGateScan(
@@ -3206,7 +3841,8 @@ try {
             $scanMode,
             $scannedBy,
             $effectiveTs,
-            $isOfflineSync
+            $isOfflineSync,
+            ['checkin_method' => $isOfflineSync ? 'offline_operator_visual' : ($resolved['checkin_method'] ?? 'badge_scan')]
         );
 
         if (isset($result['bootstrap']) && is_array($result['bootstrap'])) {
@@ -3644,16 +4280,30 @@ try {
 
         $currentPayload = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $activeCp = $currentPayload['activeCheckpoint'];
-        $targetMember = findCrewMemberByScanInput($currentPayload['crew'], $scanInput);
-        if (!$targetMember) {
-            echo json_encode([
-                'ok' => false,
-                'allowed' => false,
-                'error' => "No staff badge or crew member matched '{$scanInput}'. Try REW-BADGE-0006, REW-BADGE-0004, or a staff name.",
-                'reason' => "Unrecognized Badge Code ({$scanInput})",
-            ]);
+        $visualConfirmed = !empty($_POST['visual_confirmed']) || !empty($jsonBody['visual_confirmed']);
+        $reqUserId = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
+        $lookupKey = $reqUserId > 0 ? (string) $reqUserId : $scanInput;
+        $supOverridePin = trim((string) ($_POST['supervisor_pin'] ?? $jsonBody['supervisor_pin'] ?? ''));
+
+        $resolved = resolveScanInputWithAntiShadowing(
+            $pdo,
+            $currentPayload['crew'],
+            $activeCp,
+            $lookupKey,
+            $scanMode,
+            $visualConfirmed,
+            $reqUserId > 0,
+            $supOverridePin !== ''
+        );
+        if (empty($resolved['ok'])) {
+            echo json_encode($resolved);
             exit;
         }
+        if (!empty($resolved['hold_preview'])) {
+            echo json_encode($resolved['hold_preview']);
+            exit;
+        }
+        $targetMember = $resolved['member'];
 
         $scannedBy = (int) ($caller['id'] ?? $_SESSION['auth_user_id'] ?? 1);
         $result = executeGateScan(
@@ -3664,7 +4314,8 @@ try {
             $scanMode,
             $scannedBy,
             $effectiveTs,
-            $isOfflineSync
+            $isOfflineSync,
+            ['checkin_method' => $isOfflineSync ? 'offline_operator_visual' : ($resolved['checkin_method'] ?? 'badge_scan')]
         );
 
         echo json_encode($result);
@@ -3891,8 +4542,8 @@ try {
                 $transitOutNotes = "Transit departure → Transferred to {$cpName}";
                 $transitOutStmt = $pdo->prepare("
                     INSERT INTO `attendance_logs`
-                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `notes`, `scanned_at`)
-                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'on_time', ?, ?, NOW())
+                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'on_time', ?, 'transit_transfer', ?, NOW())
                 ");
                 $transitOutStmt->execute([
                     (int) $targetMember['id'],
@@ -3913,10 +4564,14 @@ try {
             } catch (Throwable $e) {}
         }
 
+        $confirmMethod = ($decision === 'supervisor_override')
+            ? 'supervisor_override'
+            : (($decision === 'decline_in') ? 'manual_decline' : 'manual_confirm');
+
         $insStmt = $pdo->prepare("
             INSERT INTO `attendance_logs`
-              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `override_by`, `override_reason`, `notes`, `scanned_at`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `override_by`, `override_reason`, `checkin_method`, `notes`, `scanned_at`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ");
         $insStmt->execute([
             (int) $targetMember['id'],
@@ -3931,6 +4586,7 @@ try {
             $scannedBy,
             $overrideById,
             $savedOverrideReason,
+            $confirmMethod,
             $noteText,
         ]);
 
@@ -4358,6 +5014,33 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $latIn = $_POST['lat'] ?? $jsonBody['lat'] ?? null;
         $lngIn = $_POST['lng'] ?? $jsonBody['lng'] ?? null;
         $hasCoords = ($latIn !== null && $latIn !== '' && $lngIn !== null && $lngIn !== '' && is_numeric($latIn) && is_numeric($lngIn));
+        $hasPolicyIn = isset($_POST['checkin_policy']) || isset($jsonBody['checkin_policy']);
+        $checkinPolicyIn = strtolower(trim((string) ($_POST['checkin_policy'] ?? $jsonBody['checkin_policy'] ?? 'hybrid')));
+        if (!in_array($checkinPolicyIn, ['hybrid', 'qr_strict', 'manual_allowed'], true)) {
+            $checkinPolicyIn = 'hybrid';
+        }
+        $hasVisualIn = isset($_POST['require_visual_match']) || isset($jsonBody['require_visual_match']);
+        $reqVisualIn = ((int) ($_POST['require_visual_match'] ?? $jsonBody['require_visual_match'] ?? 1) === 1) ? 1 : 0;
+        $hasReqsIn = array_key_exists('requirements', $_POST) || array_key_exists('requirements', $jsonBody);
+        $reqsRawIn = $_POST['requirements'] ?? $jsonBody['requirements'] ?? null;
+        $reqsJsonIn = null;
+        if ($hasReqsIn) {
+            if (is_string($reqsRawIn)) {
+                $decReq = json_decode($reqsRawIn, true);
+                $reqsRawIn = is_array($decReq) ? $decReq : null;
+            }
+            if (is_array($reqsRawIn)) {
+                $cleanBranches = [];
+                foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'] as $bk) {
+                    $cleanBranches[$bk] = max(0, min(99, (int) ($reqsRawIn['branches'][$bk] ?? 0)));
+                }
+                $reqsJsonIn = json_encode([
+                    'branches' => $cleanBranches,
+                    'notes' => trim((string) ($reqsRawIn['notes'] ?? '')),
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+            }
+        }
 
         if ($eventPinRaw !== '' && !preg_match('/^[A-Za-z0-9]{4,12}$/', $eventPinRaw)) {
             echo json_encode(['ok' => false, 'error' => 'Venue Terminal PIN must be 4–12 letters or digits']);
@@ -4412,6 +5095,96 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                         $setStmt->execute([$realEventId, $uid]);
                     }
                 }
+            } catch (Throwable $e) {}
+        };
+
+        $syncDispatchAssignments = static function (string $realEventId, ?array $rosterArr, array $flatIds, int $actorId, string $actorRole, string $eventTitle) use ($pdo): void {
+            try {
+                // Build map user_id => list of branches from roster
+                $userBranches = [];
+                if (is_array($rosterArr)) {
+                    foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'] as $dk) {
+                        foreach ((array) ($rosterArr['departments'][$dk] ?? []) as $uRaw) {
+                            $uid = (int) $uRaw;
+                            if ($uid > 0) {
+                                $userBranches[$uid][] = $dk;
+                            }
+                        }
+                    }
+                    foreach ((array) ($rosterArr['support_staff'] ?? []) as $uRaw) {
+                        $uid = (int) $uRaw;
+                        if ($uid > 0 && empty($userBranches[$uid])) {
+                            $userBranches[$uid][] = 'Support Staff';
+                        }
+                    }
+                }
+                foreach ($flatIds as $fUid) {
+                    $uid = (int) $fUid;
+                    if ($uid > 0 && empty($userBranches[$uid])) {
+                        $dSt = $pdo->prepare("SELECT `department`, `role` FROM `users` WHERE `id` = ? LIMIT 1");
+                        $dSt->execute([$uid]);
+                        $uRow = $dSt->fetch(PDO::FETCH_ASSOC);
+                        $uDept = trim((string) ($uRow['department'] ?? ''));
+                        $uRole = strtolower(trim((string) ($uRow['role'] ?? '')));
+                        if (in_array($uRole, ['driver', 'operations_crew', 'operations', 'runner', 'venue_crew', 'security', 'cleaning', 'catering', 'logistics', 'support_staff', 'support'], true)) {
+                            $userBranches[$uid][] = 'Support Staff';
+                        } elseif (in_array($uDept, ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'], true)) {
+                            $userBranches[$uid][] = $uDept;
+                        } else {
+                            $userBranches[$uid][] = $uDept ?: 'Sound';
+                        }
+                    }
+                }
+
+                $targetIds = array_map('intval', array_keys($userBranches));
+                $existingSt = $pdo->prepare("SELECT `user_id` FROM `event_crew_assignments` WHERE `event_id` = ?");
+                $existingSt->execute([$realEventId]);
+                $existingIds = array_map('intval', $existingSt->fetchAll(PDO::FETCH_COLUMN));
+
+                $removedIds = array_diff($existingIds, $targetIds);
+                if (!empty($removedIds)) {
+                    $delSt = $pdo->prepare("DELETE FROM `event_crew_assignments` WHERE `event_id` = ? AND `user_id` = ?");
+                    foreach ($removedIds as $remId) {
+                        $delSt->execute([$realEventId, $remId]);
+                    }
+                }
+
+                $upsertSt = $pdo->prepare("
+                    INSERT INTO `event_crew_assignments` (`event_id`, `user_id`, `branch_dept`, `assigned_by_id`, `confirmation_status`)
+                    VALUES (?, ?, ?, ?, 'pending')
+                    ON DUPLICATE KEY UPDATE `branch_dept` = VALUES(`branch_dept`)
+                ");
+                $newlyAddedCount = 0;
+                foreach ($targetIds as $uid) {
+                    $brLabel = substr(implode(' / ', array_values(array_unique($userBranches[$uid]))), 0, 48);
+                    if (!in_array($uid, $existingIds, true)) {
+                        $newlyAddedCount++;
+                    }
+                    $upsertSt->execute([$realEventId, $uid, $brLabel, $actorId]);
+                }
+
+                if ($newlyAddedCount > 0) {
+                    logEventDispatchAction(
+                        $pdo,
+                        $realEventId,
+                        $actorId,
+                        $actorRole,
+                        'crew_assigned',
+                        "Assigned {$newlyAddedCount} crew member(s) to {$eventTitle} (awaiting confirmation)",
+                        ['assigned_count' => count($targetIds), 'newly_added' => $newlyAddedCount]
+                    );
+                } else {
+                    logEventDispatchAction(
+                        $pdo,
+                        $realEventId,
+                        $actorId,
+                        $actorRole,
+                        'event_updated',
+                        "Updated event roster/settings for {$eventTitle}",
+                        ['assigned_count' => count($targetIds)]
+                    );
+                }
+                recalculateEventDispatchStatus($pdo, $realEventId);
             } catch (Throwable $e) {}
         };
 
@@ -4472,6 +5245,19 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     $updParams[] = (float) $latIn;
                     $updParams[] = (float) $lngIn;
                 }
+                if ($hasPolicyIn) {
+                    $setClauses[] = "`checkin_policy` = ?";
+                    $updParams[] = $checkinPolicyIn;
+                }
+                if ($hasVisualIn) {
+                    $setClauses[] = "`require_visual_match` = ?";
+                    $updParams[] = $reqVisualIn;
+                }
+                if ($hasReqsIn && $reqsJsonIn !== null) {
+                    $setClauses[] = "`requirements_json` = ?, `dispatch_status` = 'requirements_sent', `requirements_sent_by` = ?, `requirements_sent_at` = NOW()";
+                    $updParams[] = $reqsJsonIn;
+                    $updParams[] = (int) ($caller['id'] ?? 1);
+                }
                 if ($uploadedEventImagePath !== null) {
                     $setClauses[] = "`image` = ?";
                     $updParams[] = $uploadedEventImagePath;
@@ -4480,6 +5266,16 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $stmtUpd = $pdo->prepare("UPDATE `events` SET " . implode(', ', $setClauses) . " WHERE `id` = ?");
                 $stmtUpd->execute($updParams);
                 $syncAssignedUsers($realEventId, $assignedTechsInt);
+                if ($hasRosterIn || !empty($assignedTechsInt) || $action === 'assign_event_crew') {
+                    $syncDispatchAssignments(
+                        $realEventId,
+                        is_array($assignedRosterIn) ? $assignedRosterIn : null,
+                        $assignedTechsInt,
+                        (int) ($caller['id'] ?? 1),
+                        (string) ($caller['role'] ?? 'admin'),
+                        $titleIn !== '' ? $titleIn : ('Event #' . $realEventId)
+                    );
+                }
             }
         } else {
             if ($titleIn === '') {
@@ -4497,9 +5293,10 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $newEventId = (string) ($maxId + 1);
             $newLoc = $locationIn !== '' ? $locationIn : 'Kigali Event Venue';
             $newPin = $eventPinRaw !== '' ? $eventPinRaw : '1234';
+            $initDispatchStatus = ($hasReqsIn && $reqsJsonIn !== null) ? 'requirements_sent' : 'draft';
             $stmtIns = $pdo->prepare("
-                INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`, `checkin_policy`, `require_visual_match`, `requirements_json`, `dispatch_status`, `requirements_sent_by`, `requirements_sent_at`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmtIns->execute([
                 $newEventId,
@@ -4517,9 +5314,34 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $hasCoords ? (float) $lngIn : null,
                 $newPin,
                 $uploadedEventImagePath,
+                $checkinPolicyIn,
+                $reqVisualIn,
+                $reqsJsonIn,
+                $initDispatchStatus,
+                ($hasReqsIn && $reqsJsonIn !== null) ? (int) ($caller['id'] ?? 1) : null,
+                ($hasReqsIn && $reqsJsonIn !== null) ? date('Y-m-d H:i:s') : null,
             ]);
             $eventId = $newEventId;
             $syncAssignedUsers($newEventId, $assignedTechsInt);
+            logEventDispatchAction(
+                $pdo,
+                $newEventId,
+                (int) ($caller['id'] ?? 1),
+                (string) ($caller['role'] ?? 'project_manager'),
+                'event_created',
+                "Created event venue \"{$titleIn}\" ({$newLoc}) at {$formattedTime}",
+                ['checkin_policy' => $checkinPolicyIn, 'has_requirements' => ($reqsJsonIn !== null)]
+            );
+            if (!empty($assignedTechsInt) || is_array($assignedRosterIn)) {
+                $syncDispatchAssignments(
+                    $newEventId,
+                    is_array($assignedRosterIn) ? $assignedRosterIn : null,
+                    $assignedTechsInt,
+                    (int) ($caller['id'] ?? 1),
+                    (string) ($caller['role'] ?? 'project_manager'),
+                    $titleIn
+                );
+            }
             $msg = "Event Venue \"{$titleIn}\" created successfully.";
         }
 
@@ -4562,6 +5384,9 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $crcVal = (string) (is_numeric($realId) ? (int) $realId : crc32($realId));
         try {
             $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)")->execute([$realId, $crcVal]);
+            $pdo->prepare("DELETE FROM `event_crew_assignments` WHERE `event_id` = ?")->execute([$realId]);
+            $pdo->prepare("DELETE FROM `event_support_requests` WHERE `event_id` = ?")->execute([$realId]);
+            $pdo->prepare("DELETE FROM `event_dispatch_logs` WHERE `event_id` = ?")->execute([$realId]);
         } catch (Throwable $e) {}
         $pdo->prepare("DELETE FROM `events` WHERE `id` = ?")->execute([$realId]);
 
@@ -4875,6 +5700,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $latIn = $_POST['lat'] ?? $jsonBody['lat'] ?? null;
         $lngIn = $_POST['lng'] ?? $jsonBody['lng'] ?? null;
         $hasCoords = ($latIn !== null && $latIn !== '' && $lngIn !== null && $lngIn !== '' && is_numeric($latIn) && is_numeric($lngIn));
+        $hasPolicyIn = isset($_POST['checkin_policy']) || isset($jsonBody['checkin_policy']);
+        $checkinPolicyIn = strtolower(trim((string) ($_POST['checkin_policy'] ?? $jsonBody['checkin_policy'] ?? 'hybrid')));
+        if (!in_array($checkinPolicyIn, ['hybrid', 'qr_strict', 'manual_allowed'], true)) {
+            $checkinPolicyIn = 'hybrid';
+        }
+        $hasVisualIn = isset($_POST['require_visual_match']) || isset($jsonBody['require_visual_match']);
+        $reqVisualIn = ((int) ($_POST['require_visual_match'] ?? $jsonBody['require_visual_match'] ?? 1) === 1) ? 1 : 0;
 
         if ($name === '') {
             echo json_encode(['ok' => false, 'error' => 'Warehouse name is required']);
@@ -4928,16 +5760,24 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $whParams[] = (float) $latIn;
                 $whParams[] = (float) $lngIn;
             }
+            if ($hasPolicyIn) {
+                $whSets[] = '`checkin_policy` = ?';
+                $whParams[] = $checkinPolicyIn;
+            }
+            if ($hasVisualIn) {
+                $whSets[] = '`require_visual_match` = ?';
+                $whParams[] = $reqVisualIn;
+            }
             $whParams[] = $id;
             $pdo->prepare("UPDATE `stock_locations` SET " . implode(', ', $whSets) . " WHERE `id` = ?")->execute($whParams);
         } else {
             $pinToInsert = $terminalPinRaw !== '' ? $terminalPinRaw : str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
             $stmt = $pdo->prepare("
                 INSERT INTO `stock_locations`
-                (`name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `controller_name`, `controller_phone`, `is_active`, `geofence_radius_m`, `lat`, `lng`, `image`, `terminal_pin`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (`name`, `code`, `location_code`, `location`, `open_time`, `close_time`, `controller_name`, `controller_phone`, `is_active`, `geofence_radius_m`, `lat`, `lng`, `image`, `terminal_pin`, `checkin_policy`, `require_visual_match`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $geofenceRadiusM, $hasCoords ? (float) $latIn : null, $hasCoords ? (float) $lngIn : null, $uploadedImagePath, $pinToInsert]);
+            $stmt->execute([$name, $code, $code, $location, $openTime, $closeTime, $controllerName, $controllerPhone, $isActive, $geofenceRadiusM, $hasCoords ? (float) $latIn : null, $hasCoords ? (float) $lngIn : null, $uploadedImagePath, $pinToInsert, $checkinPolicyIn, $reqVisualIn]);
             $id = (int) $pdo->lastInsertId();
         }
 
@@ -7802,6 +8642,1287 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             'override_used' => $overrideUsed,
             'redirect_url' => 'index.php',
         ]);
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // MODULE A: Anti-Shadowing Dynamic Pass QR, Rotating Gate QR & Device Lock
+    // -------------------------------------------------------------------------
+    if ($action === 'get_dynamic_pass_qr') {
+        $caller = requireAuthorizedCaller($pdo, [], 'Sign in required to load your personal pass.');
+        $uid = (int) $caller['id'];
+        $passTok = buildSignedDynamicPassToken($pdo, $uid, 30);
+
+        $bSt = $pdo->prepare("SELECT `badge_code` FROM `user_badges` WHERE `user_id` = ? LIMIT 1");
+        $bSt->execute([$uid]);
+        $badgeCode = (string) ($bSt->fetchColumn() ?: formatRewBadgeCode($uid, $caller['staff_code'] ?? null));
+
+        $devSt = $pdo->prepare("SELECT `id`, `device_label`, `last_seen_at`, `bound_at` FROM `user_trusted_devices` WHERE `user_id` = ? AND `is_active` = 1 ORDER BY `id` DESC");
+        $devSt->execute([$uid]);
+        $devices = $devSt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'ok' => true,
+            'user_id' => $uid,
+            'full_name' => (string) ($caller['full_name'] ?? ''),
+            'badge_code' => $badgeCode,
+            'token' => $passTok['token'],
+            'slice' => $passTok['slice'],
+            'ttl_seconds' => $passTok['ttl_seconds'],
+            'expires_in' => $passTok['expires_in'],
+            'trusted_device_count' => count($devices),
+            'trusted_devices' => $devices,
+        ]);
+        exit;
+    }
+
+    if ($action === 'issue_venue_checkin_qr') {
+        $siteKey = trim((string) ($_GET['site_key'] ?? $_POST['site_key'] ?? $jsonBody['site_key'] ?? ''));
+        $whIdIn = (int) ($_GET['wh_id'] ?? $_POST['wh_id'] ?? $jsonBody['wh_id'] ?? 0);
+        $caller = !empty($_SESSION['auth_user_id']) ? getCallerUser($pdo) : null;
+        $isStandaloneMode = ($siteKey !== '' || $whIdIn > 0);
+
+        $cpType = strtolower(trim((string) ($_GET['checkpoint_type'] ?? $_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? $reqCpType)));
+        if (!in_array($cpType, ['stock_warehouse', 'event_venue', 'main_office'], true)) {
+            $cpType = 'stock_warehouse';
+        }
+        $cpIdRaw = trim((string) ($_GET['checkpoint_id'] ?? $_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? $reqCpId));
+        $issuedById = 0;
+
+        if ($isStandaloneMode) {
+            $whRow = resolveStandaloneFacilityGate($pdo, $siteKey, $whIdIn);
+            if (!$whRow) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Facility gate location not found.']);
+                exit;
+            }
+            $portalCfg = resolveStandalonePortalConfig($pdo, $siteKey, (int) $whRow['id']);
+            if ($portalCfg && (((int) ($portalCfg['is_active'] ?? 1) === 0) || (!empty($portalCfg['expires_at']) && strtotime((string) $portalCfg['expires_at']) < time()))) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => 'This gate portal link is expired or disabled.']);
+                exit;
+            }
+            if (!isStandaloneGateAuthorized($pdo, $whRow)) {
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'authorized' => false, 'error' => 'Unlock gate PIN to display the rotating Check-In QR.']);
+                exit;
+            }
+            $cpType = 'stock_warehouse';
+            $cpIdRaw = (string) ((int) $whRow['id']);
+            $issuedById = $caller ? (int) $caller['id'] : 0;
+        } else {
+            $caller = requireAuthorizedCaller(
+                $pdo,
+                ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'stock_manager', 'tech_lead', 'technical_lead', 'stock_controller'],
+                'Permission denied: Displaying a rotating gate Check-In QR requires Gate Operator or Supervisor clearance.'
+            );
+            $lockCheck = assertControllerCheckpointLock($pdo, $cpType, $cpIdRaw);
+            if (!$lockCheck['ok']) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => $lockCheck['error']]);
+                exit;
+            }
+            $issuedById = (int) $caller['id'];
+        }
+
+        $cpName = 'Facility Gate';
+        $cpLat = null;
+        $cpLng = null;
+        $geoRadius = 200;
+        $storedCpId = $cpIdRaw;
+
+        if ($cpType === 'event_venue') {
+            $eSt = $pdo->prepare("SELECT `id`, `title`, `lat`, `lng`, `geofence_radius_m` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $eSt->execute([$cpIdRaw, $cpIdRaw]);
+            $eRow = $eSt->fetch(PDO::FETCH_ASSOC);
+            if (!$eRow) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Event venue checkpoint not found.']);
+                exit;
+            }
+            $storedCpId = (string) $eRow['id'];
+            $cpName = (string) ($eRow['title'] ?: 'Event Venue');
+            $cpLat = $eRow['lat'] !== null ? (float) $eRow['lat'] : null;
+            $cpLng = $eRow['lng'] !== null ? (float) $eRow['lng'] : null;
+            $geoRadius = (int) ($eRow['geofence_radius_m'] ?? 200);
+        } elseif ($cpType === 'main_office') {
+            $storedCpId = '1';
+            $cpName = 'Main Office HQ';
+        } else {
+            $wSt = $pdo->prepare("SELECT `id`, `name`, `lat`, `lng`, `geofence_radius_m` FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+            $wSt->execute([(int) $cpIdRaw]);
+            $wRow = $wSt->fetch(PDO::FETCH_ASSOC);
+            if (!$wRow) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Warehouse gate not found.']);
+                exit;
+            }
+            $storedCpId = (string) ((int) $wRow['id']);
+            $cpName = (string) ($wRow['name'] ?: 'Warehouse Gate');
+            $cpLat = $wRow['lat'] !== null ? (float) $wRow['lat'] : null;
+            $cpLng = $wRow['lng'] !== null ? (float) $wRow['lng'] : null;
+            $geoRadius = (int) ($wRow['geofence_radius_m'] ?? 200);
+        }
+
+        try {
+            $pdo->exec("DELETE FROM `venue_qr_challenges` WHERE `expires_at` < DATE_SUB(NOW(), INTERVAL 2 MINUTE)");
+        } catch (Throwable $e) {}
+
+        $rawChallenge = bin2hex(random_bytes(16));
+        $tokHash = hash('sha256', $rawChallenge);
+        $validTtl = 45; // Rotates on screen every 20s; valid 45s so mobile phone open + GPS permission completes cleanly
+        $expSql = date('Y-m-d H:i:s', time() + $validTtl);
+
+        $insCh = $pdo->prepare("
+            INSERT INTO `venue_qr_challenges` (`token_hash`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `issued_by_id`, `expires_at`)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        $insCh->execute([$tokHash, $cpType, $storedCpId, $cpName, $issuedById, $expSql]);
+
+        echo json_encode([
+            'ok' => true,
+            'token' => $rawChallenge,
+            'checkin_url' => 'venue-checkin.php?c=' . $rawChallenge,
+            'checkpoint_type' => $cpType,
+            'checkpoint_id' => $storedCpId,
+            'checkpoint_name' => $cpName,
+            'geofence_radius_m' => $geoRadius,
+            'has_geofence' => ($cpLat !== null && $cpLng !== null),
+            'ttl_seconds' => $validTtl,
+            'rotate_seconds' => 20,
+            'expires_at' => $expSql,
+            'csrf_token' => getSessionCsrfToken(),
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_venue_checkin_info') {
+        $rawTok = trim((string) ($_GET['c'] ?? $_GET['token'] ?? $_POST['token'] ?? $jsonBody['token'] ?? ''));
+        if ($rawTok === '' || !preg_match('/^[a-f0-9]{16,64}$/i', $rawTok)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid or missing rotating Gate QR token.']);
+            exit;
+        }
+        $tokHash = hash('sha256', $rawTok);
+        $st = $pdo->prepare("SELECT * FROM `venue_qr_challenges` WHERE `token_hash` = ? LIMIT 1");
+        $st->execute([$tokHash]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Venue Check-In QR not found or expired. Rescan the live gate screen.']);
+            exit;
+        }
+        $secondsLeft = max(0, (strtotime((string) $row['expires_at']) ?: 0) - time());
+
+        $cpLat = null;
+        $cpLng = null;
+        $geoRadius = 200;
+        if ($row['checkpoint_type'] === 'event_venue') {
+            $cSt = $pdo->prepare("SELECT `lat`, `lng`, `geofence_radius_m` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $cSt->execute([(string) $row['checkpoint_id'], (string) $row['checkpoint_id']]);
+            if ($cr = $cSt->fetch(PDO::FETCH_ASSOC)) {
+                $cpLat = $cr['lat'] !== null ? (float) $cr['lat'] : null;
+                $cpLng = $cr['lng'] !== null ? (float) $cr['lng'] : null;
+                $geoRadius = (int) ($cr['geofence_radius_m'] ?? 200);
+            }
+        } elseif ($row['checkpoint_type'] === 'stock_warehouse') {
+            $cSt = $pdo->prepare("SELECT `lat`, `lng`, `geofence_radius_m` FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+            $cSt->execute([(int) $row['checkpoint_id']]);
+            if ($cr = $cSt->fetch(PDO::FETCH_ASSOC)) {
+                $cpLat = $cr['lat'] !== null ? (float) $cr['lat'] : null;
+                $cpLng = $cr['lng'] !== null ? (float) $cr['lng'] : null;
+                $geoRadius = (int) ($cr['geofence_radius_m'] ?? 200);
+            }
+        }
+
+        $sessionUser = !empty($_SESSION['auth_user_id']) ? getCallerUser($pdo) : null;
+        $sessionUserSummary = null;
+        if ($sessionUser) {
+            $suId = (int) $sessionUser['id'];
+            $totpOn = false;
+            try {
+                $tSt = $pdo->prepare("SELECT `is_enabled` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+                $tSt->execute([$suId]);
+                $totpOn = ((int) $tSt->fetchColumn() === 1);
+            } catch (Throwable $e) {}
+            $devCnt = 0;
+            try {
+                $dSt = $pdo->prepare("SELECT COUNT(*) FROM `user_trusted_devices` WHERE `user_id` = ? AND `is_active` = 1");
+                $dSt->execute([$suId]);
+                $devCnt = (int) $dSt->fetchColumn();
+            } catch (Throwable $e) {}
+            $sessionUserSummary = [
+                'id' => $suId,
+                'full_name' => (string) $sessionUser['full_name'],
+                'username' => (string) $sessionUser['username'],
+                'role' => (string) $sessionUser['role'],
+                'department' => (string) ($sessionUser['department'] ?? ''),
+                'checked_in' => isUserCurrentlyCheckedInDb($pdo, $suId),
+                'totp_enabled' => $totpOn,
+                'trusted_device_count' => $devCnt,
+            ];
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'expired' => $secondsLeft <= 0,
+            'seconds_left' => $secondsLeft,
+            'checkpoint_type' => (string) $row['checkpoint_type'],
+            'checkpoint_id' => (string) $row['checkpoint_id'],
+            'checkpoint_name' => (string) $row['checkpoint_name'],
+            'geofence_radius_m' => $geoRadius,
+            'has_geofence' => ($cpLat !== null && $cpLng !== null),
+            'session_user' => $sessionUserSummary,
+            'csrf_token' => getSessionCsrfToken(),
+        ]);
+        exit;
+    }
+
+    if ($action === 'redeem_venue_checkin_qr') {
+        if (strtoupper((string) $method) !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['ok' => false, 'error' => 'Method not allowed.']);
+            exit;
+        }
+        $clientIp = trim((string) ($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0'));
+        $rateKey = 'venue_qr_' . $clientIp;
+        $rateCheck = checkSecurityRateLimit($pdo, $rateKey, 12, 600);
+        if (!$rateCheck['allowed']) {
+            http_response_code(429);
+            echo json_encode(['ok' => false, 'error' => $rateCheck['error']]);
+            exit;
+        }
+
+        $rawTok = trim((string) ($_POST['token'] ?? $_POST['c'] ?? $jsonBody['token'] ?? $jsonBody['c'] ?? ''));
+        $deviceToken = trim((string) ($_POST['device_token'] ?? $jsonBody['device_token'] ?? ($_COOKIE['ability_device_tok'] ?? '')));
+        $deviceLabel = trim((string) ($_POST['device_label'] ?? $jsonBody['device_label'] ?? 'Mobile Browser'));
+        $loginUsername = trim((string) ($_POST['username'] ?? $jsonBody['username'] ?? ''));
+        $loginPassword = (string) ($_POST['password'] ?? $jsonBody['password'] ?? '');
+        $latIn = $_POST['lat'] ?? $jsonBody['lat'] ?? null;
+        $lngIn = $_POST['lng'] ?? $jsonBody['lng'] ?? null;
+        $totpCode = trim((string) ($_POST['totp_code'] ?? $jsonBody['totp_code'] ?? ''));
+        $rebindWithTotp = !empty($_POST['rebind_with_totp']) || !empty($jsonBody['rebind_with_totp']);
+        $supervisorPin = trim((string) ($_POST['supervisor_pin'] ?? $jsonBody['supervisor_pin'] ?? ''));
+        $scanMode = strtolower(trim((string) ($_POST['scan_mode'] ?? $jsonBody['scan_mode'] ?? 'auto')));
+        if (!in_array($scanMode, ['auto', 'check_in', 'check_out'], true)) {
+            $scanMode = 'auto';
+        }
+
+        if ($rawTok === '' || !preg_match('/^[a-f0-9]{16,64}$/i', $rawTok)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid rotating Venue QR token. Scan the live QR at the gate screen.']);
+            exit;
+        }
+
+        $tokHash = hash('sha256', $rawTok);
+        $chSt = $pdo->prepare("SELECT * FROM `venue_qr_challenges` WHERE `token_hash` = ? LIMIT 1");
+        $chSt->execute([$tokHash]);
+        $challenge = $chSt->fetch(PDO::FETCH_ASSOC);
+        if (!$challenge) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Gate Check-In QR expired or missing. Point your camera at the current QR on the gate screen.']);
+            exit;
+        }
+        if ((strtotime((string) $challenge['expires_at']) ?: 0) < time()) {
+            http_response_code(410);
+            echo json_encode(['ok' => false, 'error' => 'This 45s Gate QR snapshot has expired (anti-shadowing timeout). Scan the fresh QR currently displayed at the gate.']);
+            exit;
+        }
+
+        // Authenticate target staff user (either active login session or submitted credentials)
+        $targetUser = null;
+        $sessionUid = (int) ($_SESSION['auth_user_id'] ?? 0);
+        if ($loginUsername !== '' && $loginPassword !== '') {
+            $uSt = $pdo->prepare("SELECT * FROM `users` WHERE (LOWER(`username`) = LOWER(?) OR LOWER(`email`) = LOWER(?)) AND `is_active` = 1 LIMIT 1");
+            $uSt->execute([$loginUsername, $loginUsername]);
+            $cand = $uSt->fetch(PDO::FETCH_ASSOC);
+            if (!$cand || !verifyUserPasswordRow($cand, $loginPassword)) {
+                recordFailedRateLimit($pdo, $rateKey, 12, 600, 60);
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'error' => 'Incorrect username or password.']);
+                exit;
+            }
+            $targetUser = $cand;
+        } elseif ($sessionUid > 0) {
+            $targetUser = getCallerUser($pdo);
+            if (!$targetUser || (int) ($targetUser['is_active'] ?? 1) === 0) {
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'error' => 'Signed-in account is inactive.']);
+                exit;
+            }
+        } else {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'auth_required' => true, 'error' => 'Sign in with your Ability staff username and password to verify your identity.']);
+            exit;
+        }
+        $targetUid = (int) $targetUser['id'];
+
+        // Check TOTP if user has 2FA enrolled
+        $tSt = $pdo->prepare("SELECT `secret_base32`, `is_enabled` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+        $tSt->execute([$targetUid]);
+        $totpRow = $tSt->fetch(PDO::FETCH_ASSOC);
+        $totpEnabled = ($totpRow && (int) $totpRow['is_enabled'] === 1);
+        if ($totpEnabled) {
+            if ($totpCode === '' || !verifyTotpCode((string) $totpRow['secret_base32'], $totpCode, 1)) {
+                recordFailedRateLimit($pdo, $rateKey, 12, 600, 60);
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'totp_required' => true, 'error' => 'Valid 6-digit Authenticator (TOTP) code is required for your account.']);
+                exit;
+            }
+        }
+
+        // Physical Device Lock verification (or TOTP self-rebind if previously checked)
+        $devCheck = verifyOrBindTrustedDevice($pdo, $targetUid, $deviceToken, $deviceLabel, true);
+        if (!$devCheck['ok']) {
+            if (!empty($devCheck['device_mismatch']) && $rebindWithTotp && $totpEnabled) {
+                // TOTP already verified above -> revoke old device(s) and bind this one safely
+                $tokDeviceHash = hash('sha256', trim($deviceToken));
+                $otherDev = $pdo->prepare("SELECT `user_id` FROM `user_trusted_devices` WHERE `device_token_hash` = ? AND `is_active` = 1 AND `user_id` != ? LIMIT 1");
+                $otherDev->execute([$tokDeviceHash, $targetUid]);
+                if ($otherDev->fetchColumn()) {
+                    http_response_code(403);
+                    echo json_encode(['ok' => false, 'error' => 'This phone is currently bound to another staff member and cannot be rebound without Admin reset.']);
+                    exit;
+                }
+                $pdo->prepare("UPDATE `user_trusted_devices` SET `is_active` = 0, `revoked_by_id` = ?, `revoked_at` = NOW() WHERE `user_id` = ? AND `is_active` = 1")
+                    ->execute([$targetUid, $targetUid]);
+                $devCheck = verifyOrBindTrustedDevice($pdo, $targetUid, $deviceToken, $deviceLabel, true);
+            }
+        }
+        if (!$devCheck['ok']) {
+            http_response_code(403);
+            echo json_encode([
+                'ok' => false,
+                'device_mismatch' => !empty($devCheck['device_mismatch']),
+                'totp_enabled' => $totpEnabled,
+                'error' => $devCheck['error'],
+            ]);
+            exit;
+        }
+
+        // Lookup checkpoint lat/lng/geofence_radius_m/pin
+        $cpType = (string) $challenge['checkpoint_type'];
+        $cpIdStr = (string) $challenge['checkpoint_id'];
+        $cpLat = null;
+        $cpLng = null;
+        $geoRadius = 200;
+        $expectedPin = '';
+        if ($cpType === 'event_venue') {
+            $cSt = $pdo->prepare("SELECT `id`, `lat`, `lng`, `geofence_radius_m`, `terminal_pin` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $cSt->execute([$cpIdStr, $cpIdStr]);
+            if ($cr = $cSt->fetch(PDO::FETCH_ASSOC)) {
+                $cpLat = $cr['lat'] !== null ? (float) $cr['lat'] : null;
+                $cpLng = $cr['lng'] !== null ? (float) $cr['lng'] : null;
+                $geoRadius = (int) ($cr['geofence_radius_m'] ?? 200);
+                $expectedPin = trim((string) ($cr['terminal_pin'] ?? ''));
+            }
+        } elseif ($cpType === 'stock_warehouse') {
+            $cSt = $pdo->prepare("SELECT * FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+            $cSt->execute([(int) $cpIdStr]);
+            if ($cr = $cSt->fetch(PDO::FETCH_ASSOC)) {
+                $cpLat = $cr['lat'] !== null ? (float) $cr['lat'] : null;
+                $cpLng = $cr['lng'] !== null ? (float) $cr['lng'] : null;
+                $geoRadius = (int) ($cr['geofence_radius_m'] ?? 200);
+                $expectedPin = resolveWarehouseTerminalPin($cr);
+            }
+        }
+
+        $hasGps = ($latIn !== null && $latIn !== '' && $lngIn !== null && $lngIn !== '' && is_numeric($latIn) && is_numeric($lngIn));
+        $distanceM = null;
+        if ($hasGps && $cpLat !== null && $cpLng !== null) {
+            $distanceM = (int) round(calculateHaversineMeters($cpLat, $cpLng, (float) $latIn, (float) $lngIn));
+        }
+
+        $overrideUsed = false;
+        if ($supervisorPin !== '') {
+            if ($expectedPin === '' || !verifyTerminalPinSecret($supervisorPin, $expectedPin)) {
+                recordFailedRateLimit($pdo, $rateKey, 12, 600, 60);
+                http_response_code(401);
+                echo json_encode(['ok' => false, 'error' => 'Incorrect Supervisor Override PIN for this gate.']);
+                exit;
+            }
+            $overrideUsed = true;
+        } elseif ($cpLat !== null && $cpLng !== null) {
+            if (!$hasGps) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => "GPS permission is required to confirm you are within {$geoRadius}m of {$challenge['checkpoint_name']}, or enter Gate Override PIN."]);
+                exit;
+            }
+            if ($distanceM > $geoRadius) {
+                recordFailedRateLimit($pdo, $rateKey, 12, 600, 60);
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'distance_m' => $distanceM, 'error' => "Geo-Fence blocked ({$distanceM}m away from {$challenge['checkpoint_name']}, max {$geoRadius}m). You must be physically at the gate."]);
+                exit;
+            }
+        }
+
+        // Single-use per user on this rotating Gate QR challenge
+        if (!consumeQrNonce($pdo, $tokHash, $targetUid, 'venue', $cpType, $cpIdStr, 180)) {
+            http_response_code(409);
+            echo json_encode(['ok' => false, 'error' => 'This Gate QR snapshot was already redeemed for your account. Wait 20s for the next rotating QR if checking out.']);
+            exit;
+        }
+
+        $numericCpId = is_numeric($cpIdStr) ? (int) $cpIdStr : crc32($cpIdStr);
+        $fullPayload = buildFullPayload($pdo, $activeDb, $cpType, $numericCpId);
+        $activeCp = $fullPayload['activeCheckpoint'];
+        $targetMember = findCrewMemberByScanInput($fullPayload['crew'], (string) $targetUid);
+        if (!$targetMember) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Staff profile not active in crew roster.']);
+            exit;
+        }
+
+        $scanResult = executeGateScan(
+            $pdo,
+            $activeDb,
+            $activeCp,
+            $targetMember,
+            $scanMode,
+            $targetUid,
+            time(),
+            false,
+            [
+                'checkin_method' => $overrideUsed ? 'supervisor_override' : 'dynamic_gate_qr',
+                'verified_lat' => $hasGps ? (float) $latIn : null,
+                'verified_lng' => $hasGps ? (float) $lngIn : null,
+                'distance_m' => $distanceM,
+                'device_id' => (int) ($devCheck['device_id'] ?? 0) ?: null,
+            ]
+        );
+        unset($scanResult['bootstrap']);
+        clearSecurityRateLimit($pdo, $rateKey);
+
+        if ($sessionUid <= 0 && !empty($scanResult['allowed'])) {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                @session_regenerate_id(true);
+            }
+            $_SESSION['auth_user_id'] = $targetUid;
+            $_SESSION['auth_user_role'] = strtolower((string) ($targetUser['role'] ?? 'user'));
+        }
+
+        $scanResult['distance_m'] = $distanceM;
+        $scanResult['newly_bound_device'] = !empty($devCheck['newly_bound']);
+        $scanResult['device_id'] = (int) ($devCheck['device_id'] ?? 0) ?: null;
+        $scanResult['checkpoint_name'] = (string) $challenge['checkpoint_name'];
+        echo json_encode($scanResult);
+        exit;
+    }
+
+    if ($action === 'rebind_trusted_device_totp') {
+        $caller = requireAuthorizedCaller($pdo, [], 'Sign in required to rebind your trusted device.');
+        $uid = (int) $caller['id'];
+        $deviceToken = trim((string) ($_POST['device_token'] ?? $jsonBody['device_token'] ?? ($_COOKIE['ability_device_tok'] ?? '')));
+        $deviceLabel = trim((string) ($_POST['device_label'] ?? $jsonBody['device_label'] ?? 'Verified Browser / Phone'));
+        $totpCode = trim((string) ($_POST['totp_code'] ?? $jsonBody['totp_code'] ?? ''));
+
+        if (strlen($deviceToken) < 16) {
+            echo json_encode(['ok' => false, 'error' => 'Missing device identity token.']);
+            exit;
+        }
+        $tSt = $pdo->prepare("SELECT `secret_base32`, `is_enabled` FROM `user_totp_secrets` WHERE `user_id` = ? LIMIT 1");
+        $tSt->execute([$uid]);
+        $totpRow = $tSt->fetch(PDO::FETCH_ASSOC);
+        if (!$totpRow || (int) $totpRow['is_enabled'] !== 1) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Authenticator (TOTP) is not enabled on your account. Ask an Admin or Site Manager to reset your device lock instead.']);
+            exit;
+        }
+        if (!verifyTotpCode((string) $totpRow['secret_base32'], $totpCode, 1)) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Invalid or expired 6-digit Authenticator (TOTP) code.']);
+            exit;
+        }
+
+        $tokHash = hash('sha256', $deviceToken);
+        $otherSt = $pdo->prepare("SELECT `user_id` FROM `user_trusted_devices` WHERE `device_token_hash` = ? AND `is_active` = 1 AND `user_id` != ? LIMIT 1");
+        $otherSt->execute([$tokHash, $uid]);
+        if ($otherSt->fetchColumn()) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'This device is already bound to a different user. Admin reset required.']);
+            exit;
+        }
+
+        $pdo->prepare("UPDATE `user_trusted_devices` SET `is_active` = 0, `revoked_by_id` = ?, `revoked_at` = NOW() WHERE `user_id` = ? AND `is_active` = 1")
+            ->execute([$uid, $uid]);
+        $devRes = verifyOrBindTrustedDevice($pdo, $uid, $deviceToken, $deviceLabel, true);
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => !empty($devRes['ok']), 'message' => !empty($devRes['ok']) ? 'Trusted device rebound via TOTP.' : ($devRes['error'] ?? 'Could not bind device.')]
+        ));
+        exit;
+    }
+
+    if ($action === 'reset_user_trusted_device') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('reset_user_trusted_device', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $targetUid = (int) ($_POST['user_id'] ?? $jsonBody['user_id'] ?? 0);
+        if ($targetUid <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Target user_id is required.']);
+            exit;
+        }
+        $upd = $pdo->prepare("UPDATE `user_trusted_devices` SET `is_active` = 0, `revoked_by_id` = ?, `revoked_at` = NOW() WHERE `user_id` = ? AND `is_active` = 1");
+        $upd->execute([(int) $caller['id'], $targetUid]);
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'revoked_count' => $upd->rowCount(), 'message' => 'Trusted device lock reset. Next phone scan will bind the staff member\'s current device.']
+        ));
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // MODULE B: Random Roll-Call (Check-In & Check-Out Reconciliation)
+    // -------------------------------------------------------------------------
+    if ($action === 'start_random_roll_call') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('start_random_roll_call', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $scopeCpType = trim((string) ($_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'all'));
+        $scopeCpId = trim((string) ($_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? 'all'));
+        if ($scopeCpType !== 'all' && $scopeCpId !== 'all') {
+            $lockCheck = assertControllerCheckpointLock($pdo, $scopeCpType, $scopeCpId);
+            if (!$lockCheck['ok']) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => $lockCheck['error']]);
+                exit;
+            }
+        }
+
+        $selMode = strtolower(trim((string) ($_POST['selection_mode'] ?? $jsonBody['selection_mode'] ?? 'random_count')));
+        if (!in_array($selMode, ['random_count', 'random_percent'], true)) {
+            $selMode = 'random_count';
+        }
+        $sampleVal = max(1, min(100, (int) ($_POST['sample_value'] ?? $jsonBody['sample_value'] ?? 5)));
+        $deadlineMinutes = max(2, min(120, (int) ($_POST['deadline_minutes'] ?? $jsonBody['deadline_minutes'] ?? 10)));
+        $reqGeoOrQr = isset($_POST['require_geo_or_qr']) || isset($jsonBody['require_geo_or_qr'])
+            ? (((int) ($_POST['require_geo_or_qr'] ?? $jsonBody['require_geo_or_qr']) === 1) ? 1 : 0)
+            : 1;
+        $autoOutOnMiss = isset($_POST['auto_checkout_on_miss']) || isset($jsonBody['auto_checkout_on_miss'])
+            ? (((int) ($_POST['auto_checkout_on_miss'] ?? $jsonBody['auto_checkout_on_miss']) === 1) ? 1 : 0)
+            : 1;
+        $deptFilter = trim((string) ($_POST['department_filter'] ?? $jsonBody['department_filter'] ?? ''));
+
+        $payloadBefore = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
+        $alreadyPendingUids = [];
+        try {
+            $pRows = $pdo->query("
+                SELECT e.`user_id`
+                FROM `roll_call_entries` e
+                INNER JOIN `roll_call_sessions` s ON s.`id` = e.`session_id`
+                WHERE s.`status` = 'active' AND e.`status` = 'pending'
+            ")->fetchAll(PDO::FETCH_COLUMN);
+            $alreadyPendingUids = array_map('intval', $pRows);
+        } catch (Throwable $e) {}
+
+        $scopeCpName = 'All Checkpoints';
+        $normScopeEventId = '';
+        if ($scopeCpType !== 'all' && $scopeCpId !== 'all') {
+            foreach (($payloadBefore['checkpoints']['all'] ?? []) as $cpItem) {
+                if ((string) $cpItem['type'] === $scopeCpType && ((string) $cpItem['id'] === $scopeCpId || (string) ($cpItem['raw_id'] ?? '') === $scopeCpId)) {
+                    $scopeCpName = (string) $cpItem['name'];
+                    $normScopeEventId = (string) ($cpItem['id'] ?? $scopeCpId);
+                    break;
+                }
+            }
+        }
+
+        $candidates = [];
+        foreach (($payloadBefore['rollCallList'] ?? []) as $rc) {
+            $rcUid = (int) ($rc['user_id'] ?? 0);
+            if ($rcUid <= 0 || in_array($rcUid, $alreadyPendingUids, true)) {
+                continue;
+            }
+            if ($scopeCpType !== 'all' && $scopeCpId !== 'all') {
+                $rcCpType = (string) ($rc['checkpoint_type'] ?? '');
+                $rcCpId = (string) ($rc['checkpoint_id'] ?? '');
+                if ($rcCpType !== $scopeCpType || ($rcCpId !== $scopeCpId && $rcCpId !== $normScopeEventId && (string) ((int) $rcCpId) !== (string) ((int) $scopeCpId))) {
+                    continue;
+                }
+            }
+            if ($deptFilter !== '' && strcasecmp((string) ($rc['department'] ?? ''), $deptFilter) !== 0) {
+                continue;
+            }
+            $lastVerTs = !empty($rc['last_presence_verified_at']) ? (strtotime((string) $rc['last_presence_verified_at']) ?: time()) : (time() - 7200);
+            $hoursSince = max(0.0, (time() - $lastVerTs) / 3600.0);
+            $weight = max(1, min(20, 1 + (int) floor($hoursSince * 3)));
+            $candidates[] = ['row' => $rc, 'weight' => $weight];
+        }
+
+        if (empty($candidates)) {
+            echo json_encode(['ok' => false, 'error' => 'No eligible checked-in personnel found for this Roll-Call scope (or they already have an active challenge).']);
+            exit;
+        }
+
+        $desiredCount = ($selMode === 'random_percent')
+            ? max(1, (int) ceil(count($candidates) * ($sampleVal / 100.0)))
+            : max(1, min(count($candidates), $sampleVal));
+        $desiredCount = min($desiredCount, count($candidates));
+
+        // Weighted random sampling without replacement using CSPRNG random_int()
+        $selected = [];
+        $pool = $candidates;
+        while (count($selected) < $desiredCount && !empty($pool)) {
+            $totalWeight = 0;
+            foreach ($pool as $item) {
+                $totalWeight += $item['weight'];
+            }
+            $pick = random_int(1, max(1, $totalWeight));
+            $running = 0;
+            $pickedIdx = 0;
+            foreach ($pool as $idx => $item) {
+                $running += $item['weight'];
+                if ($pick <= $running) {
+                    $pickedIdx = $idx;
+                    break;
+                }
+            }
+            $selected[] = $pool[$pickedIdx]['row'];
+            array_splice($pool, $pickedIdx, 1);
+        }
+
+        $deadlineAt = date('Y-m-d H:i:s', time() + ($deadlineMinutes * 60));
+        $insSess = $pdo->prepare("
+            INSERT INTO `roll_call_sessions` (`checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `triggered_by_id`, `selection_mode`, `sample_value`, `require_geo_or_qr`, `auto_checkout_on_miss`, `deadline_at`, `status`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+        ");
+        $insSess->execute([
+            $scopeCpType,
+            $scopeCpId,
+            $scopeCpName,
+            (int) $caller['id'],
+            $selMode,
+            $sampleVal,
+            $reqGeoOrQr,
+            $autoOutOnMiss,
+            $deadlineAt,
+        ]);
+        $sessionId = (int) $pdo->lastInsertId();
+
+        $insEntry = $pdo->prepare("
+            INSERT INTO `roll_call_entries` (`session_id`, `user_id`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `status`)
+            VALUES (?, ?, ?, ?, ?, 'pending')
+        ");
+        foreach ($selected as $sel) {
+            $insEntry->execute([
+                $sessionId,
+                (int) $sel['user_id'],
+                (string) ($sel['checkpoint_type'] ?? 'event_venue'),
+                (string) ($sel['checkpoint_id'] ?? '1'),
+                (string) ($sel['checkpoint_name'] ?: $scopeCpName),
+            ]);
+        }
+
+        if ($scopeCpType === 'event_venue' && $scopeCpId !== 'all') {
+            logEventDispatchAction(
+                $pdo,
+                $scopeCpId,
+                (int) $caller['id'],
+                (string) ($caller['role'] ?? 'supervisor'),
+                'roll_call_started',
+                "Started Random Roll-Call #{$sessionId} for " . count($selected) . " crew ({$deadlineMinutes}m window)",
+                ['session_id' => $sessionId, 'selected_count' => count($selected)]
+            );
+        }
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'session_id' => $sessionId,
+                'selected_count' => count($selected),
+                'deadline_at' => $deadlineAt,
+                'message' => 'Random Roll-Call #' . $sessionId . ' dispatched to ' . count($selected) . ' checked-in crew member(s) (' . $deadlineMinutes . ' min window).',
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'respond_roll_call') {
+        $caller = requireAuthorizedCaller($pdo, [], 'Sign in required to answer your Roll-Call verification.');
+        $uid = (int) $caller['id'];
+        $entryId = (int) ($_POST['entry_id'] ?? $jsonBody['entry_id'] ?? 0);
+        $deviceToken = trim((string) ($_POST['device_token'] ?? $jsonBody['device_token'] ?? ($_COOKIE['ability_device_tok'] ?? '')));
+        $deviceLabel = trim((string) ($_POST['device_label'] ?? $jsonBody['device_label'] ?? 'Mobile Browser'));
+        $venueQrTok = trim((string) ($_POST['venue_qr_token'] ?? $jsonBody['venue_qr_token'] ?? ''));
+        $latIn = $_POST['lat'] ?? $jsonBody['lat'] ?? null;
+        $lngIn = $_POST['lng'] ?? $jsonBody['lng'] ?? null;
+
+        processExpiredRollCallSessions($pdo);
+
+        if ($entryId > 0) {
+            $eSt = $pdo->prepare("SELECT e.*, s.`require_geo_or_qr`, s.`deadline_at`, s.`status` AS `sess_status` FROM `roll_call_entries` e INNER JOIN `roll_call_sessions` s ON s.`id` = e.`session_id` WHERE e.`id` = ? AND e.`user_id` = ? LIMIT 1");
+            $eSt->execute([$entryId, $uid]);
+        } else {
+            $eSt = $pdo->prepare("SELECT e.*, s.`require_geo_or_qr`, s.`deadline_at`, s.`status` AS `sess_status` FROM `roll_call_entries` e INNER JOIN `roll_call_sessions` s ON s.`id` = e.`session_id` WHERE e.`user_id` = ? AND e.`status` = 'pending' AND s.`status` = 'active' ORDER BY e.`id` DESC LIMIT 1");
+            $eSt->execute([$uid]);
+        }
+        $entry = $eSt->fetch(PDO::FETCH_ASSOC);
+        if (!$entry) {
+            echo json_encode(['ok' => false, 'error' => 'No active pending Roll-Call ping found for your account.']);
+            exit;
+        }
+        if (strtolower((string) $entry['sess_status']) !== 'active' || strtolower((string) $entry['status']) !== 'pending') {
+            echo json_encode(['ok' => false, 'error' => 'This Roll-Call challenge has already been closed or resolved.']);
+            exit;
+        }
+
+        // Device lock check
+        $devCheck = verifyOrBindTrustedDevice($pdo, $uid, $deviceToken, $deviceLabel, true);
+        if (!$devCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'device_mismatch' => !empty($devCheck['device_mismatch']), 'error' => $devCheck['error']]);
+            exit;
+        }
+
+        $cpType = (string) ($entry['checkpoint_type'] ?? 'event_venue');
+        $cpIdStr = (string) ($entry['checkpoint_id'] ?? '1');
+        $cpName = (string) ($entry['checkpoint_name'] ?? 'Site Checkpoint');
+        $reqProof = ((int) ($entry['require_geo_or_qr'] ?? 1) === 1);
+
+        $cpLat = null;
+        $cpLng = null;
+        $geoRadius = 200;
+        if ($cpType === 'event_venue') {
+            $cSt = $pdo->prepare("SELECT `lat`, `lng`, `geofence_radius_m` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $cSt->execute([$cpIdStr, $cpIdStr]);
+            if ($cr = $cSt->fetch(PDO::FETCH_ASSOC)) {
+                $cpLat = $cr['lat'] !== null ? (float) $cr['lat'] : null;
+                $cpLng = $cr['lng'] !== null ? (float) $cr['lng'] : null;
+                $geoRadius = (int) ($cr['geofence_radius_m'] ?? 200);
+            }
+        } elseif ($cpType === 'stock_warehouse') {
+            $cSt = $pdo->prepare("SELECT `lat`, `lng`, `geofence_radius_m` FROM `stock_locations` WHERE `id` = ? LIMIT 1");
+            $cSt->execute([(int) $cpIdStr]);
+            if ($cr = $cSt->fetch(PDO::FETCH_ASSOC)) {
+                $cpLat = $cr['lat'] !== null ? (float) $cr['lat'] : null;
+                $cpLng = $cr['lng'] !== null ? (float) $cr['lng'] : null;
+                $geoRadius = (int) ($cr['geofence_radius_m'] ?? 200);
+            }
+        }
+
+        $hasGps = ($latIn !== null && $latIn !== '' && $lngIn !== null && $lngIn !== '' && is_numeric($latIn) && is_numeric($lngIn));
+        $distanceM = ($hasGps && $cpLat !== null && $cpLng !== null)
+            ? (int) round(calculateHaversineMeters($cpLat, $cpLng, (float) $latIn, (float) $lngIn))
+            : null;
+
+        $verMethod = 'self_geo_device';
+        if ($venueQrTok !== '') {
+            // Accept either raw challenge hash URL query or challenge token directly
+            $extractedTok = $venueQrTok;
+            if (preg_match('/[?&]c=([a-f0-9]{16,64})/i', $venueQrTok, $m)) {
+                $extractedTok = $m[1];
+            }
+            $chHash = hash('sha256', trim($extractedTok));
+            $vSt = $pdo->prepare("SELECT * FROM `venue_qr_challenges` WHERE `token_hash` = ? AND `expires_at` >= NOW() LIMIT 1");
+            $vSt->execute([$chHash]);
+            $chRow = $vSt->fetch(PDO::FETCH_ASSOC);
+            if (!$chRow) {
+                http_response_code(400);
+                echo json_encode(['ok' => false, 'error' => 'Scanned Gate QR token is expired or invalid. Scan the live gate QR screen.']);
+                exit;
+            }
+            $verMethod = 'venue_qr';
+            $cpType = (string) $chRow['checkpoint_type'];
+            $cpIdStr = (string) $chRow['checkpoint_id'];
+            $cpName = (string) $chRow['checkpoint_name'];
+        } elseif ($reqProof) {
+            if ($cpLat !== null && $cpLng !== null) {
+                if (!$hasGps) {
+                    http_response_code(400);
+                    echo json_encode(['ok' => false, 'error' => "Enable GPS location to prove you are within {$geoRadius}m of {$cpName}, or show your Digital Pass QR to the gate supervisor."]);
+                    exit;
+                }
+                if ($distanceM > $geoRadius) {
+                    http_response_code(403);
+                    echo json_encode(['ok' => false, 'distance_m' => $distanceM, 'error' => "Outside premise geo-fence ({$distanceM}m from {$cpName}, max {$geoRadius}m). Return on-site or check out."]);
+                    exit;
+                }
+            }
+        }
+
+        $pdo->prepare("
+            UPDATE `roll_call_entries`
+            SET `status` = 'present', `verification_method` = ?, `verified_by_id` = ?, `verified_lat` = ?, `verified_lng` = ?, `distance_m` = ?, `verified_at` = NOW(), `notes` = ?
+            WHERE `id` = ?
+        ")->execute([
+            $verMethod,
+            $uid,
+            $hasGps ? (float) $latIn : null,
+            $hasGps ? (float) $lngIn : null,
+            $distanceM,
+            ($distanceM !== null ? "Verified on-premise ({$distanceM}m via {$verMethod})" : "Verified on-premise via {$verMethod}"),
+            (int) $entry['id'],
+        ]);
+
+        $bSt = $pdo->prepare("SELECT `badge_code` FROM `user_badges` WHERE `user_id` = ? LIMIT 1");
+        $bSt->execute([$uid]);
+        $bCode = (string) ($bSt->fetchColumn() ?: formatRewBadgeCode($uid, $caller['staff_code'] ?? null));
+        $numCpId = is_numeric($cpIdStr) ? (int) $cpIdStr : crc32($cpIdStr);
+
+        $pdo->prepare("
+            INSERT INTO `attendance_logs`
+              (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `verified_lat`, `verified_lng`, `distance_m`, `device_id`, `notes`, `scanned_at`)
+            VALUES (?, ?, ?, ?, ?, 'access_verify', 'granted', NULL, 'on_time', ?, 'roll_call_verify', ?, ?, ?, ?, ?, NOW())
+        ")->execute([
+            $uid,
+            $bCode,
+            in_array($cpType, ['stock_warehouse', 'event_venue', 'main_office'], true) ? $cpType : 'event_venue',
+            $numCpId,
+            $cpName,
+            $uid,
+            $hasGps ? (float) $latIn : null,
+            $hasGps ? (float) $lngIn : null,
+            $distanceM,
+            (int) ($devCheck['device_id'] ?? 0) ?: null,
+            "Random Roll-Call #{$entry['session_id']} verified present" . ($distanceM !== null ? " ({$distanceM}m)" : ''),
+        ]);
+
+        // Auto-close session if no remaining pending/unaccounted entries
+        $remSt = $pdo->prepare("SELECT COUNT(*) FROM `roll_call_entries` WHERE `session_id` = ? AND `status` IN ('pending', 'unaccounted')");
+        $remSt->execute([(int) $entry['session_id']]);
+        if ((int) $remSt->fetchColumn() === 0) {
+            $pdo->prepare("UPDATE `roll_call_sessions` SET `status` = 'closed', `closed_at` = NOW() WHERE `id` = ?")
+                ->execute([(int) $entry['session_id']]);
+        }
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'message' => "Presence verified at {$cpName}" . ($distanceM !== null ? " ({$distanceM}m)" : '') . '.']
+        ));
+        exit;
+    }
+
+    if ($action === 'resolve_roll_call_entry') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('resolve_roll_call_entry', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $entryId = (int) ($_POST['entry_id'] ?? $jsonBody['entry_id'] ?? 0);
+        $decision = strtolower(trim((string) ($_POST['decision'] ?? $jsonBody['decision'] ?? 'present')));
+        $passQrTok = trim((string) ($_POST['pass_qr_token'] ?? $jsonBody['pass_qr_token'] ?? ''));
+        $notesIn = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
+        if (!in_array($decision, ['present', 'absent', 'excused'], true) || $entryId <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Valid entry_id and decision (present/absent/excused) are required.']);
+            exit;
+        }
+
+        $eSt = $pdo->prepare("SELECT * FROM `roll_call_entries` WHERE `id` = ? LIMIT 1");
+        $eSt->execute([$entryId]);
+        $entry = $eSt->fetch(PDO::FETCH_ASSOC);
+        if (!$entry) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Roll-Call entry not found.']);
+            exit;
+        }
+        $targetUid = (int) $entry['user_id'];
+        $sid = (int) $entry['session_id'];
+        $cpType = in_array((string) $entry['checkpoint_type'], ['stock_warehouse', 'event_venue', 'main_office'], true)
+            ? (string) $entry['checkpoint_type']
+            : 'event_venue';
+        $cpIdStr = (string) ($entry['checkpoint_id'] ?? '1');
+        $numCpId = is_numeric($cpIdStr) ? (int) $cpIdStr : crc32($cpIdStr);
+        $cpName = (string) ($entry['checkpoint_name'] ?? 'Site Checkpoint');
+
+        $bSt = $pdo->prepare("SELECT `badge_code` FROM `user_badges` WHERE `user_id` = ? LIMIT 1");
+        $bSt->execute([$targetUid]);
+        $bCode = (string) ($bSt->fetchColumn() ?: formatRewBadgeCode($targetUid, null));
+
+        $verMethod = 'supervisor_spot';
+        if ($decision === 'present') {
+            if ($passQrTok !== '') {
+                $parsed = verifySignedDynamicPassToken($pdo, $passQrTok, 30);
+                if (!$parsed || empty($parsed['valid']) || (int) $parsed['user_id'] !== $targetUid) {
+                    echo json_encode(['ok' => false, 'error' => 'Scanned QR does not match this staff member\'s live 30s Pass QR.']);
+                    exit;
+                }
+                if (!consumeQrNonce($pdo, (string) $parsed['nonce'], $targetUid, 'rollcall', $cpType, $cpIdStr, 120)) {
+                    echo json_encode(['ok' => false, 'error' => 'Replay blocked: this 30s QR snapshot was already used. Ask the staff member for their fresh live pass.']);
+                    exit;
+                }
+                $verMethod = 'supervisor_qr';
+            }
+            $pdo->prepare("UPDATE `roll_call_entries` SET `status` = 'present', `verification_method` = ?, `verified_by_id` = ?, `verified_at` = NOW(), `notes` = ? WHERE `id` = ?")
+                ->execute([$verMethod, (int) $caller['id'], $notesIn ?: "Supervisor spot-verified via {$verMethod}", $entryId]);
+
+            $pdo->prepare("
+                INSERT INTO `attendance_logs`
+                  (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `notes`, `scanned_at`)
+                VALUES (?, ?, ?, ?, ?, 'access_verify', 'granted', NULL, 'on_time', ?, 'roll_call_verify', ?, NOW())
+            ")->execute([$targetUid, $bCode, $cpType, $numCpId, $cpName, (int) $caller['id'], "Roll-Call #{$sid} verified on-site ({$verMethod})"]);
+
+            if (!empty($entry['auto_checkout_log_id']) && !isUserCurrentlyCheckedInDb($pdo, $targetUid)) {
+                $pdo->prepare("
+                    INSERT INTO `attendance_logs`
+                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, ?, 'check_in', 'granted', NULL, 'rollcall_reinstated', ?, 'roll_call_restore', ?, NOW())
+                ")->execute([$targetUid, $bCode, $cpType, $numCpId, $cpName, (int) $caller['id'], "Reinstated on-site after Roll-Call #{$sid} confirmation"]);
+            }
+        } elseif ($decision === 'absent') {
+            $outLogId = $entry['auto_checkout_log_id'] ? (int) $entry['auto_checkout_log_id'] : null;
+            if (isUserCurrentlyCheckedInDb($pdo, $targetUid)) {
+                $insOut = $pdo->prepare("
+                    INSERT INTO `attendance_logs`
+                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'rollcall_manual_out', ?, 'roll_call_manual_out', ?, NOW())
+                ");
+                $insOut->execute([$targetUid, $bCode, $cpType, $numCpId, $cpName, (int) $caller['id'], $notesIn ?: "Checked Out: Confirmed absent during Roll-Call #{$sid}"]);
+                $outLogId = (int) $pdo->lastInsertId();
+            }
+            $pdo->prepare("UPDATE `roll_call_entries` SET `status` = 'absent', `verification_method` = 'supervisor_absent', `verified_by_id` = ?, `auto_checkout_log_id` = ?, `verified_at` = NOW(), `notes` = ? WHERE `id` = ?")
+                ->execute([(int) $caller['id'], $outLogId, $notesIn ?: 'Marked absent off-premise & checked out', $entryId]);
+        } else {
+            // excused
+            $pdo->prepare("UPDATE `roll_call_entries` SET `status` = 'excused', `verification_method` = 'supervisor_excused', `verified_by_id` = ?, `verified_at` = NOW(), `notes` = ? WHERE `id` = ?")
+                ->execute([(int) $caller['id'], $notesIn ?: 'Excused by Supervisor', $entryId]);
+            if (!empty($entry['auto_checkout_log_id']) && !isUserCurrentlyCheckedInDb($pdo, $targetUid)) {
+                $pdo->prepare("
+                    INSERT INTO `attendance_logs`
+                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, ?, 'check_in', 'granted', NULL, 'rollcall_excused_restore', ?, 'roll_call_restore', ?, NOW())
+                ")->execute([$targetUid, $bCode, $cpType, $numCpId, $cpName, (int) $caller['id'], "Check-in restored: Roll-Call #{$sid} excused"]);
+            }
+        }
+
+        $remSt = $pdo->prepare("SELECT COUNT(*) FROM `roll_call_entries` WHERE `session_id` = ? AND `status` IN ('pending', 'unaccounted')");
+        $remSt->execute([$sid]);
+        if ((int) $remSt->fetchColumn() === 0) {
+            $pdo->prepare("UPDATE `roll_call_sessions` SET `status` = 'closed', `closed_at` = NOW() WHERE `id` = ?")->execute([$sid]);
+        }
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'message' => 'Roll-Call entry updated (' . strtoupper($decision) . ').']
+        ));
+        exit;
+    }
+
+    if ($action === 'close_roll_call_session') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('resolve_roll_call_entry', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $sid = (int) ($_POST['session_id'] ?? $jsonBody['session_id'] ?? 0);
+        $autoOutRemaining = !empty($_POST['auto_checkout_remaining']) || !empty($jsonBody['auto_checkout_remaining']);
+        if ($sid <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'session_id is required.']);
+            exit;
+        }
+        $pendingSt = $pdo->prepare("SELECT * FROM `roll_call_entries` WHERE `session_id` = ? AND `status` IN ('pending', 'unaccounted')");
+        $pendingSt->execute([$sid]);
+        foreach ($pendingSt->fetchAll(PDO::FETCH_ASSOC) as $ent) {
+            $uid = (int) $ent['user_id'];
+            $eid = (int) $ent['id'];
+            $cpType = in_array((string) $ent['checkpoint_type'], ['stock_warehouse', 'event_venue', 'main_office'], true) ? (string) $ent['checkpoint_type'] : 'event_venue';
+            $numCpId = is_numeric((string) $ent['checkpoint_id']) ? (int) $ent['checkpoint_id'] : crc32((string) $ent['checkpoint_id']);
+            $cpName = (string) ($ent['checkpoint_name'] ?? 'Site Checkpoint');
+            if ($autoOutRemaining && isUserCurrentlyCheckedInDb($pdo, $uid)) {
+                $bSt = $pdo->prepare("SELECT `badge_code` FROM `user_badges` WHERE `user_id` = ? LIMIT 1");
+                $bSt->execute([$uid]);
+                $bCode = (string) ($bSt->fetchColumn() ?: formatRewBadgeCode($uid, null));
+                $insOut = $pdo->prepare("
+                    INSERT INTO `attendance_logs`
+                      (`user_id`, `badge_code`, `checkpoint_type`, `checkpoint_id`, `checkpoint_name`, `scan_action`, `access_status`, `denial_reason`, `punctuality_status`, `scanned_by`, `checkin_method`, `notes`, `scanned_at`)
+                    VALUES (?, ?, ?, ?, ?, 'check_out', 'granted', NULL, 'rollcall_auto_out', ?, 'roll_call_auto_out', ?, NOW())
+                ");
+                $insOut->execute([$uid, $bCode, $cpType, $numCpId, $cpName, (int) $caller['id'], "Checked Out when closing Roll-Call #{$sid}"]);
+                $pdo->prepare("UPDATE `roll_call_entries` SET `status` = 'timed_out', `verification_method` = 'session_closed_out', `auto_checkout_log_id` = ?, `verified_by_id` = ?, `verified_at` = NOW(), `notes` = 'Auto checked out on session close' WHERE `id` = ?")
+                    ->execute([(int) $pdo->lastInsertId(), (int) $caller['id'], $eid]);
+            } else {
+                $pdo->prepare("UPDATE `roll_call_entries` SET `status` = 'absent', `verification_method` = 'session_closed', `verified_by_id` = ?, `verified_at` = NOW(), `notes` = 'Marked absent when Roll-Call closed' WHERE `id` = ?")
+                    ->execute([(int) $caller['id'], $eid]);
+            }
+        }
+        $pdo->prepare("UPDATE `roll_call_sessions` SET `status` = 'closed', `closed_at` = NOW() WHERE `id` = ?")->execute([$sid]);
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'message' => "Roll-Call #{$sid} closed."]
+        ));
+        exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // MODULE C/D: Event Requirements -> Support Staff Requests -> Tech Confirm
+    // -------------------------------------------------------------------------
+    if ($action === 'send_event_requirements') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('send_event_requirements', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $evIdIn = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $branchesIn = $_POST['branches'] ?? $jsonBody['branches'] ?? [];
+        if (is_string($branchesIn)) {
+            $branchesIn = json_decode($branchesIn, true) ?: [];
+        }
+        $reqNotes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
+        if ($evIdIn === '') {
+            echo json_encode(['ok' => false, 'error' => 'event_id is required.']);
+            exit;
+        }
+
+        $chk = $pdo->prepare("SELECT `id`, `title`, `tech_lead` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $chk->execute([$evIdIn, $evIdIn]);
+        $evRow = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$evRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Event Venue not found.']);
+            exit;
+        }
+        $realId = (string) $evRow['id'];
+
+        $cleanBranches = [];
+        $summaryParts = [];
+        foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'] as $bk) {
+            $cnt = max(0, min(99, (int) ($branchesIn[$bk] ?? 0)));
+            $cleanBranches[$bk] = $cnt;
+            if ($cnt > 0) {
+                $summaryParts[] = "{$bk}:{$cnt}";
+            }
+        }
+        $reqObj = [
+            'branches' => $cleanBranches,
+            'notes' => $reqNotes,
+            'sent_by_name' => (string) ($caller['full_name'] ?? 'PM / Coordinator'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        $pdo->prepare("UPDATE `events` SET `requirements_json` = ?, `dispatch_status` = 'requirements_sent', `requirements_sent_by` = ?, `requirements_sent_at` = NOW() WHERE `id` = ?")
+            ->execute([json_encode($reqObj), (int) $caller['id'], $realId]);
+        recalculateEventDispatchStatus($pdo, $realId);
+
+        $briefSummary = !empty($summaryParts) ? implode(', ', $summaryParts) : 'Technical brief updated';
+        logEventDispatchAction(
+            $pdo,
+            $realId,
+            (int) $caller['id'],
+            (string) ($caller['role'] ?? 'project_manager'),
+            'requirements_sent',
+            "Sent branch requirements for {$evRow['title']} to Tech Lead ({$briefSummary})",
+            $reqObj
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'message' => "Technical branch requirements sent to Tech Lead ({$evRow['tech_lead']})."]
+        ));
+        exit;
+    }
+
+    if ($action === 'request_support_staff') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('request_support_staff', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $evIdIn = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $rolesIn = $_POST['requested_roles'] ?? $jsonBody['requested_roles'] ?? [];
+        if (is_string($rolesIn)) {
+            $rolesIn = json_decode($rolesIn, true) ?: [];
+        }
+        $reqNotes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? ''));
+        if ($evIdIn === '') {
+            echo json_encode(['ok' => false, 'error' => 'event_id is required.']);
+            exit;
+        }
+        $chk = $pdo->prepare("SELECT `id`, `title` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $chk->execute([$evIdIn, $evIdIn]);
+        $evRow = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$evRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Event Venue not found.']);
+            exit;
+        }
+        $realId = (string) $evRow['id'];
+
+        $cleanRoles = [];
+        $summaryParts = [];
+        foreach ((array) $rolesIn as $rKey => $rCnt) {
+            $kClean = trim((string) $rKey);
+            $vInt = max(0, min(50, (int) $rCnt));
+            if ($kClean !== '' && $vInt > 0) {
+                $cleanRoles[$kClean] = $vInt;
+                $summaryParts[] = "{$vInt}x {$kClean}";
+            }
+        }
+        if (empty($cleanRoles)) {
+            $cleanRoles = ['Support Crew' => 2];
+            $summaryParts[] = '2x Support Crew';
+        }
+
+        $ins = $pdo->prepare("
+            INSERT INTO `event_support_requests` (`event_id`, `requested_by_id`, `requested_roles_json`, `notes`, `status`)
+            VALUES (?, ?, ?, ?, 'pending')
+        ");
+        $ins->execute([$realId, (int) $caller['id'], json_encode($cleanRoles), $reqNotes]);
+        $reqId = (int) $pdo->lastInsertId();
+
+        logEventDispatchAction(
+            $pdo,
+            $realId,
+            (int) $caller['id'],
+            (string) ($caller['role'] ?? 'project_manager'),
+            'support_requested',
+            "Requested Tier 4 Support Staff for {$evRow['title']}: " . implode(', ', $summaryParts),
+            ['request_id' => $reqId, 'requested_roles' => $cleanRoles]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'request_id' => $reqId, 'message' => 'Support staff request submitted (' . implode(', ', $summaryParts) . ').']
+        ));
+        exit;
+    }
+
+    if ($action === 'fulfill_support_request') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('fulfill_support_request', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $reqId = (int) ($_POST['request_id'] ?? $jsonBody['request_id'] ?? 0);
+        $uIdsRaw = $_POST['user_ids'] ?? $jsonBody['user_ids'] ?? [];
+        if (is_string($uIdsRaw)) {
+            $uIdsRaw = json_decode($uIdsRaw, true) ?: [];
+        }
+        $uIds = array_values(array_unique(array_filter(array_map('intval', (array) $uIdsRaw))));
+        if ($reqId <= 0 || empty($uIds)) {
+            echo json_encode(['ok' => false, 'error' => 'Select at least one Tier 4 Support Staff member to fulfill this request.']);
+            exit;
+        }
+
+        $rSt = $pdo->prepare("SELECT * FROM `event_support_requests` WHERE `id` = ? LIMIT 1");
+        $rSt->execute([$reqId]);
+        $reqRow = $rSt->fetch(PDO::FETCH_ASSOC);
+        if (!$reqRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Support staff request not found.']);
+            exit;
+        }
+        $realEventId = (string) $reqRow['event_id'];
+
+        $evSt = $pdo->prepare("SELECT * FROM `events` WHERE `id` = ? LIMIT 1");
+        $evSt->execute([$realEventId]);
+        $evRow = $evSt->fetch(PDO::FETCH_ASSOC);
+        if (!$evRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Linked event venue no longer exists.']);
+            exit;
+        }
+
+        $pdo->prepare("UPDATE `event_support_requests` SET `status` = 'fulfilled', `fulfilled_by_id` = ?, `assigned_user_ids_json` = ?, `fulfilled_at` = NOW() WHERE `id` = ?")
+            ->execute([(int) $caller['id'], json_encode($uIds), $reqId]);
+
+        $rosterArr = json_decode((string) ($evRow['assigned_roster_json'] ?? ''), true);
+        if (!is_array($rosterArr)) {
+            $rosterArr = [
+                'project_manager' => (string) ($evRow['project_manager'] ?? ''),
+                'event_coordinator' => (string) ($evRow['event_coordinator'] ?? ''),
+                'tech_lead' => (string) ($evRow['tech_lead'] ?? ''),
+                'departments' => ['Video' => [], 'Sound' => [], 'Lighting' => [], 'Electrical' => [], 'Rigging' => [], 'Interpretation' => []],
+                'support_staff' => [],
+            ];
+        }
+        $rosterArr['support_staff'] = array_values(array_unique(array_merge(array_map('intval', (array) ($rosterArr['support_staff'] ?? [])), $uIds)));
+        $flatTechs = json_decode((string) ($evRow['assigned_technician'] ?? '[]'), true) ?: [];
+        $flatTechs = array_values(array_unique(array_merge(array_map('intval', (array) $flatTechs), $uIds)));
+
+        $pdo->prepare("UPDATE `events` SET `assigned_technician` = ?, `assigned_roster_json` = ? WHERE `id` = ?")
+            ->execute([json_encode($flatTechs), json_encode($rosterArr), $realEventId]);
+
+        $uUpd = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'event_venue', `assigned_checkpoint_id` = ? WHERE `id` = ?");
+        $ecaUpsert = $pdo->prepare("
+            INSERT INTO `event_crew_assignments` (`event_id`, `user_id`, `branch_dept`, `role_slot`, `assigned_by_id`, `confirmation_status`)
+            VALUES (?, ?, 'Support Staff', 'Support Crew', ?, 'pending')
+            ON DUPLICATE KEY UPDATE `branch_dept` = IF(`branch_dept` = '', 'Support Staff', `branch_dept`)
+        ");
+        foreach ($uIds as $suid) {
+            $uUpd->execute([$realEventId, $suid]);
+            $ecaUpsert->execute([$realEventId, $suid, (int) $caller['id']]);
+        }
+
+        recalculateEventDispatchStatus($pdo, $realEventId);
+        logEventDispatchAction(
+            $pdo,
+            $realEventId,
+            (int) $caller['id'],
+            (string) ($caller['role'] ?? 'stock_manager'),
+            'support_fulfilled',
+            "Assigned " . count($uIds) . " Tier 4 Support Staff member(s) to {$evRow['title']} (Request #{$reqId})",
+            ['request_id' => $reqId, 'assigned_user_ids' => $uIds]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'message' => 'Support request #' . $reqId . ' fulfilled with ' . count($uIds) . ' support staff member(s).']
+        ));
+        exit;
+    }
+
+    if ($action === 'respond_event_assignment') {
+        $caller = requireAuthorizedCaller($pdo, [], 'Sign in required to confirm your event assignment.');
+        $uid = (int) $caller['id'];
+        $evIdIn = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $decision = strtolower(trim((string) ($_POST['decision'] ?? $jsonBody['decision'] ?? 'confirmed')));
+        $declineReason = trim((string) ($_POST['decline_reason'] ?? $jsonBody['decline_reason'] ?? ''));
+        if (!in_array($decision, ['confirmed', 'declined'], true) || $evIdIn === '') {
+            echo json_encode(['ok' => false, 'error' => 'Valid event_id and decision (confirmed/declined) are required.']);
+            exit;
+        }
+
+        $evChk = $pdo->prepare("SELECT `id`, `title` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evChk->execute([$evIdIn, $evIdIn]);
+        $evRow = $evChk->fetch(PDO::FETCH_ASSOC);
+        $realEventId = $evRow ? (string) $evRow['id'] : $evIdIn;
+        $evTitle = $evRow ? (string) $evRow['title'] : ('Event #' . $evIdIn);
+
+        $asgChk = $pdo->prepare("SELECT * FROM `event_crew_assignments` WHERE `event_id` = ? AND `user_id` = ? LIMIT 1");
+        $asgChk->execute([$realEventId, $uid]);
+        $asgRow = $asgChk->fetch(PDO::FETCH_ASSOC);
+        if (!$asgRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'You do not have an active assignment row for this event.']);
+            exit;
+        }
+
+        $pdo->prepare("UPDATE `event_crew_assignments` SET `confirmation_status` = ?, `decline_reason` = ?, `responded_at` = NOW() WHERE `id` = ?")
+            ->execute([$decision, $decision === 'declined' ? ($declineReason ?: 'Unavailable for event schedule') : null, (int) $asgRow['id']]);
+
+        $newStatus = recalculateEventDispatchStatus($pdo, $realEventId);
+        logEventDispatchAction(
+            $pdo,
+            $realEventId,
+            $uid,
+            (string) ($caller['role'] ?? 'technician'),
+            $decision === 'confirmed' ? 'crew_confirmed' : 'crew_declined',
+            "{$caller['full_name']} ({$asgRow['branch_dept']}) {$decision} dispatch for {$evTitle}" . ($decision === 'declined' && $declineReason !== '' ? ": {$declineReason}" : ''),
+            ['branch_dept' => $asgRow['branch_dept'], 'decision' => $decision, 'dispatch_status' => $newStatus]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'decision' => $decision, 'dispatch_status' => $newStatus, 'message' => $decision === 'confirmed' ? "Assignment confirmed for {$evTitle}." : "Declined assignment for {$evTitle} — Tech Lead notified."]
+        ));
         exit;
     }
 
