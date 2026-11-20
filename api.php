@@ -632,6 +632,7 @@ function getDefaultNavigationItems(): array
             'is_system' => 1,
         ],
         [
+            'nav_group' => 'main',
             'nav_key' => 'terminals',
             'label' => 'Terminals',
             'nav_target' => 'terminals',
@@ -645,6 +646,42 @@ function getDefaultNavigationItems(): array
             'badge_text' => '',
             'allowed_roles' => 'all',
             'sort_order' => 5,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'main',
+            'nav_key' => 'create_event',
+            'label' => 'Create Event',
+            'nav_target' => 'create-event',
+            'dom_id' => 'nav-create-event-btn',
+            'node_id' => '',
+            'icon' => 'assets/calendar-days-15.svg',
+            'active_icon' => 'assets/nav-events-active.svg',
+            'icon_id' => 'nav-icon-create-event',
+            'badge_type' => 'events',
+            'badge_id' => 'sidebar-create-event-count',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead',
+            'sort_order' => 6,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'main',
+            'nav_key' => 'dispatch_flow',
+            'label' => 'Operational Command & Department Dispatch Flow',
+            'nav_target' => 'dispatch-flow',
+            'dom_id' => 'nav-dispatch-flow-btn',
+            'node_id' => '',
+            'icon' => 'assets/send-15.svg',
+            'active_icon' => 'assets/nav-analytics-active.svg',
+            'icon_id' => 'nav-icon-dispatch-flow',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'all',
+            'sort_order' => 7,
             'is_enabled' => 1,
             'is_system' => 1,
         ],
@@ -1024,6 +1061,54 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
                 $upNavRoles->execute([$defNav['allowed_roles'], $defNav['nav_key']]);
             }
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_dispatch_roles_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+
+        // One-time migration: add Main Navigation items for Create Event and Operational Command & Department Dispatch Flow
+        $migCreateDispatch = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_dispatch_create_event_v1' LIMIT 1");
+        $migCreateDispatch->execute();
+        if (!$migCreateDispatch->fetchColumn()) {
+            $insNavItem = $pdo->prepare("
+                INSERT INTO `navigation_items`
+                (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    `nav_group` = VALUES(`nav_group`),
+                    `label` = VALUES(`label`),
+                    `nav_target` = VALUES(`nav_target`),
+                    `dom_id` = VALUES(`dom_id`),
+                    `icon` = VALUES(`icon`),
+                    `active_icon` = VALUES(`active_icon`),
+                    `icon_id` = VALUES(`icon_id`),
+                    `badge_type` = VALUES(`badge_type`),
+                    `badge_id` = VALUES(`badge_id`),
+                    `allowed_roles` = VALUES(`allowed_roles`),
+                    `sort_order` = VALUES(`sort_order`),
+                    `is_enabled` = VALUES(`is_enabled`),
+                    `is_system` = VALUES(`is_system`)
+            ");
+            foreach (getDefaultNavigationItems() as $defNav) {
+                if (in_array((string) ($defNav['nav_key'] ?? ''), ['create_event', 'dispatch_flow'], true)) {
+                    $insNavItem->execute([
+                        $defNav['nav_group'] ?? 'main',
+                        $defNav['nav_key'],
+                        $defNav['label'],
+                        $defNav['nav_target'],
+                        $defNav['dom_id'] ?? '',
+                        $defNav['node_id'] ?? '',
+                        $defNav['icon'] ?? '',
+                        $defNav['active_icon'] ?? '',
+                        $defNav['icon_id'] ?? '',
+                        $defNav['badge_type'] ?? 'none',
+                        $defNav['badge_id'] ?? '',
+                        $defNav['badge_text'] ?? '',
+                        $defNav['allowed_roles'] ?? 'all',
+                        (int) ($defNav['sort_order'] ?? 10),
+                        (int) ($defNav['is_enabled'] ?? 1),
+                        (int) ($defNav['is_system'] ?? 1),
+                    ]);
+                }
+            }
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_dispatch_create_event_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
     } catch (Throwable $e) {}
 }
@@ -1944,7 +2029,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     }
 
     // 2. Load Event Venues
-    $eventRows = $pdo->query("SELECT * FROM `events` ORDER BY `date` DESC, `id` DESC LIMIT 12")->fetchAll();
+    $eventRows = $pdo->query("SELECT * FROM `events` ORDER BY CASE WHEN `id` REGEXP '^[0-9]+$' THEN CAST(`id` AS UNSIGNED) ELSE 0 END DESC, COALESCE(`start_date`, `date`) DESC, `id` DESC LIMIT 50")->fetchAll();
     $eventVenues = [];
     $fallbackIdx = 1001;
     foreach ($eventRows as $er) {
@@ -1990,6 +2075,29 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         }
         $assignedIds = array_values(array_unique($assignedIds));
 
+        $rawStart = trim((string) ($er['start_date'] ?? ''));
+        $rawDate = trim((string) ($er['date'] ?? $todayStr));
+        $startDateVal = preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawStart) ? $rawStart : (preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawDate) ? $rawDate : $todayStr);
+        $rawEnd = trim((string) ($er['end_date'] ?? ''));
+        $endDateVal = preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawEnd) ? $rawEnd : $startDateVal;
+        if ($endDateVal < $startDateVal) {
+            $endDateVal = $startDateVal;
+        }
+        $durDaysVal = (int) ($er['duration_days'] ?? 0);
+        if ($durDaysVal < 1) {
+            try {
+                $d1 = new DateTimeImmutable($startDateVal);
+                $d2 = new DateTimeImmutable($endDateVal);
+                $durDaysVal = max(1, (int) $d1->diff($d2)->days + 1);
+            } catch (Throwable $e) {
+                $durDaysVal = 1;
+            }
+        }
+        $durLabelVal = trim((string) ($er['duration_label'] ?? ''));
+        if ($durLabelVal === '') {
+            $durLabelVal = $durDaysVal === 1 ? '1 day' : ($durDaysVal . ' days');
+        }
+
         $evItem = [
             'id' => $numId,
             'raw_id' => $rawId,
@@ -1997,7 +2105,11 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'name' => $title . ($loc && stripos($title, $loc) === false ? ' — ' . $loc : ''),
             'title' => $title,
             'location' => $loc,
-            'date' => (string) ($er['date'] ?? $todayStr),
+            'date' => $startDateVal,
+            'start_date' => $startDateVal,
+            'end_date' => $endDateVal,
+            'duration_days' => $durDaysVal,
+            'duration_label' => $durLabelVal,
             'call_time' => $callTime,
             'project_manager' => $pm,
             'event_coordinator' => $ec,
@@ -2015,7 +2127,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'requirements' => json_decode((string) ($er['requirements_json'] ?? ''), true) ?: null,
             'dispatch_status' => (string) ($er['dispatch_status'] ?? 'draft'),
             'requirements_sent_at' => $er['requirements_sent_at'] ?? null,
-            'image' => resolveProfileImageUrl($er['image'] ?? null),
+            'image' => resolveProfileImageUrl(($er['image'] ?? '') !== '' ? $er['image'] : ($er['event_image'] ?? null)),
             'lat' => isset($er['lat']) && $er['lat'] !== null ? (float) $er['lat'] : null,
             'lng' => isset($er['lng']) && $er['lng'] !== null ? (float) $er['lng'] : null,
             'map_x' => isset($er['map_x']) && $er['map_x'] !== null ? (float) $er['map_x'] : null,
@@ -4996,6 +5108,17 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $titleIn = trim((string) ($_POST['title'] ?? $jsonBody['title'] ?? ''));
         $locationIn = trim((string) ($_POST['location'] ?? $jsonBody['location'] ?? ''));
         $dateIn = trim((string) ($_POST['date'] ?? $jsonBody['date'] ?? ''));
+        $startDateIn = trim((string) ($_POST['start_date'] ?? $jsonBody['start_date'] ?? ''));
+        $endDateIn = trim((string) ($_POST['end_date'] ?? $jsonBody['end_date'] ?? ''));
+        if ($startDateIn === '' && $dateIn !== '') {
+            $startDateIn = $dateIn;
+        }
+        $validStartIn = preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDateIn) ? $startDateIn : '';
+        $validEndIn = preg_match('/^\d{4}-\d{2}-\d{2}$/', $endDateIn) ? $endDateIn : '';
+        if ($validStartIn !== '' && $validEndIn !== '' && $validEndIn < $validStartIn) {
+            echo json_encode(['ok' => false, 'error' => 'Event end date cannot be earlier than the start date.']);
+            exit;
+        }
         $facilityName = trim((string) ($_POST['facility_name'] ?? $jsonBody['facility_name'] ?? $_POST['checkpoint_name'] ?? $jsonBody['checkpoint_name'] ?? ''));
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
@@ -5004,6 +5127,8 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $eventPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
         $assignedTechs = $_POST['assigned_technicians'] ?? $jsonBody['assigned_technicians'] ?? [];
         $hasRosterIn = array_key_exists('assigned_roster', $_POST) || array_key_exists('assigned_roster', $jsonBody);
+        $hasAssignedTechsIn = array_key_exists('assigned_technicians', $_POST) || array_key_exists('assigned_technicians', $jsonBody) || $hasRosterIn;
+        $removeImageIn = ((string) ($_POST['remove_image'] ?? $jsonBody['remove_image'] ?? '0')) === '1';
         $assignedRosterIn = $_POST['assigned_roster'] ?? $jsonBody['assigned_roster'] ?? null;
         if (is_string($assignedRosterIn) && $assignedRosterIn !== '') {
             $decodedRoster = json_decode($assignedRosterIn, true);
@@ -5083,7 +5208,24 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $mRaw = preg_replace('/\D/', '', $timeParts[1] ?? '00');
         $formattedTime = str_pad($hRaw !== '' ? $hRaw : '08', 2, '0', STR_PAD_LEFT) . ':' . str_pad(substr($mRaw !== '' ? $mRaw : '00', 0, 2), 2, '0', STR_PAD_LEFT);
 
-        $eventDateSafe = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIn) ? $dateIn : date('Y-m-d');
+        $eventDateSafe = $validStartIn !== '' ? $validStartIn : (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIn) ? $dateIn : date('Y-m-d'));
+        $eventEndDateSafe = $validEndIn !== '' ? $validEndIn : $eventDateSafe;
+        if ($eventEndDateSafe < $eventDateSafe) {
+            $eventEndDateSafe = $eventDateSafe;
+        }
+        $computeEventDuration = static function (string $sDate, string $eDate): array {
+            $days = 1;
+            try {
+                $d1 = new DateTimeImmutable($sDate);
+                $d2 = new DateTimeImmutable($eDate);
+                $days = max(1, (int) $d1->diff($d2)->days + 1);
+            } catch (Throwable $e) {
+                $days = 1;
+            }
+            $label = $days === 1 ? '1 day' : ($days . ' days');
+            return [$days, $label];
+        };
+        [$durationDaysVal, $durationLabelVal] = $computeEventDuration($eventDateSafe, $eventEndDateSafe);
         $syncAssignedUsers = static function (string $realEventId, array $techIds) use ($pdo): void {
             try {
                 $crcVal = (string) (is_numeric($realEventId) ? (int) $realEventId : crc32($realEventId));
@@ -5203,80 +5345,132 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             }
         }
 
-        $msg = 'Event venue updated successfully';
+        $msg = 'Event updated successfully';
         if ($eventId !== '') {
-            $chk = $pdo->prepare("SELECT `id` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $chk = $pdo->prepare("SELECT `id`, `title`, `date`, `start_date`, `end_date`, `image` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
             $chk->execute([$eventId, $eventId]);
-            $realEventId = $chk->fetchColumn();
-            if ($realEventId !== false && $realEventId !== null) {
-                $realEventId = (string) $realEventId;
-                $setClauses = [
-                    "`title` = CASE WHEN ? != '' THEN ? ELSE `title` END",
-                    "`location` = CASE WHEN ? != '' THEN ? ELSE `location` END",
-                    "`date` = CASE WHEN ? != '' THEN ? ELSE `date` END",
-                    "`call_time` = ?",
-                    "`tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END",
-                    "`project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END",
-                    "`event_coordinator` = CASE WHEN ? != '' THEN ? ELSE `event_coordinator` END",
-                    "`terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END",
-                    "`assigned_technician` = ?",
-                ];
-                $updParams = [
-                    $titleIn, $titleIn,
-                    $locationIn, $locationIn,
-                    ($dateIn !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIn)) ? $dateIn : '', ($dateIn !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateIn)) ? $dateIn : '',
-                    $formattedTime,
-                    $techLead, $techLead,
-                    $projectManager, $projectManager,
-                    $eventCoordinator, $eventCoordinator,
-                    $eventPinRaw, $eventPinRaw,
-                    json_encode($assignedTechsInt),
-                ];
-                if ($hasRosterIn && $assignedRosterJson !== null) {
-                    $setClauses[] = "`assigned_roster_json` = ?";
-                    $updParams[] = $assignedRosterJson;
+            $existingEvRow = $chk->fetch(PDO::FETCH_ASSOC);
+            if (!$existingEvRow) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'Event not found or already deleted.']);
+                exit;
+            }
+            $realEventId = (string) $existingEvRow['id'];
+            $evTitleFinal = $titleIn !== '' ? $titleIn : (string) ($existingEvRow['title'] ?? ('Event #' . $realEventId));
+            $existingStart = trim((string) ($existingEvRow['start_date'] ?? $existingEvRow['date'] ?? ''));
+            $existingEnd = trim((string) ($existingEvRow['end_date'] ?? ''));
+            $effStart = $validStartIn !== '' ? $validStartIn : (preg_match('/^\d{4}-\d{2}-\d{2}$/', $existingStart) ? $existingStart : $eventDateSafe);
+            $effEnd = $validEndIn !== '' ? $validEndIn : (preg_match('/^\d{4}-\d{2}-\d{2}$/', $existingEnd) ? $existingEnd : $effStart);
+            if ($validEndIn !== '' && $effEnd < $effStart) {
+                echo json_encode(['ok' => false, 'error' => 'Event end date cannot be earlier than the start date.']);
+                exit;
+            }
+            if ($effEnd < $effStart) {
+                $effEnd = $effStart;
+            }
+            [$effDurDays, $effDurLabel] = $computeEventDuration($effStart, $effEnd);
+            $setClauses = [
+                "`title` = CASE WHEN ? != '' THEN ? ELSE `title` END",
+                "`location` = CASE WHEN ? != '' THEN ? ELSE `location` END",
+                "`date` = ?",
+                "`start_date` = ?",
+                "`end_date` = ?",
+                "`duration_days` = ?",
+                "`duration_label` = ?",
+                "`call_time` = ?",
+                "`tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END",
+                "`project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END",
+                "`event_coordinator` = CASE WHEN ? != '' THEN ? ELSE `event_coordinator` END",
+                "`terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END",
+            ];
+            $updParams = [
+                $titleIn, $titleIn,
+                $locationIn, $locationIn,
+                $effStart,
+                $effStart,
+                $effEnd,
+                $effDurDays,
+                $effDurLabel,
+                $formattedTime,
+                $techLead, $techLead,
+                $projectManager, $projectManager,
+                $eventCoordinator, $eventCoordinator,
+                $eventPinRaw, $eventPinRaw,
+            ];
+            if ($hasAssignedTechsIn) {
+                $setClauses[] = "`assigned_technician` = ?";
+                $updParams[] = json_encode($assignedTechsInt);
+            }
+            if ($hasRosterIn && $assignedRosterJson !== null) {
+                $setClauses[] = "`assigned_roster_json` = ?";
+                $updParams[] = $assignedRosterJson;
+            }
+            if ($hasRadiusIn) {
+                $setClauses[] = "`geofence_radius_m` = ?";
+                $updParams[] = $geofenceRadiusM;
+            }
+            if ($hasCoords) {
+                $setClauses[] = "`lat` = ?, `lng` = ?";
+                $updParams[] = (float) $latIn;
+                $updParams[] = (float) $lngIn;
+            }
+            if ($hasPolicyIn) {
+                $setClauses[] = "`checkin_policy` = ?";
+                $updParams[] = $checkinPolicyIn;
+            }
+            if ($hasVisualIn) {
+                $setClauses[] = "`require_visual_match` = ?";
+                $updParams[] = $reqVisualIn;
+            }
+            if ($hasReqsIn && $reqsJsonIn !== null) {
+                $setClauses[] = "`requirements_json` = ?, `dispatch_status` = 'requirements_sent', `requirements_sent_by` = ?, `requirements_sent_at` = NOW()";
+                $updParams[] = $reqsJsonIn;
+                $updParams[] = (int) ($caller['id'] ?? 1);
+            }
+            if ($uploadedEventImagePath !== null) {
+                $oldImg = trim((string) ($existingEvRow['image'] ?? ''));
+                if ($oldImg !== '' && str_starts_with($oldImg, 'uploads/events/') && is_file(__DIR__ . '/' . $oldImg)) {
+                    @unlink(__DIR__ . '/' . $oldImg);
                 }
-                if ($hasRadiusIn) {
-                    $setClauses[] = "`geofence_radius_m` = ?";
-                    $updParams[] = $geofenceRadiusM;
+                $setClauses[] = "`image` = ?";
+                $updParams[] = $uploadedEventImagePath;
+            } elseif ($removeImageIn) {
+                $oldImg = trim((string) ($existingEvRow['image'] ?? ''));
+                if ($oldImg !== '' && str_starts_with($oldImg, 'uploads/events/') && is_file(__DIR__ . '/' . $oldImg)) {
+                    @unlink(__DIR__ . '/' . $oldImg);
                 }
-                if ($hasCoords) {
-                    $setClauses[] = "`lat` = ?, `lng` = ?";
-                    $updParams[] = (float) $latIn;
-                    $updParams[] = (float) $lngIn;
-                }
-                if ($hasPolicyIn) {
-                    $setClauses[] = "`checkin_policy` = ?";
-                    $updParams[] = $checkinPolicyIn;
-                }
-                if ($hasVisualIn) {
-                    $setClauses[] = "`require_visual_match` = ?";
-                    $updParams[] = $reqVisualIn;
-                }
-                if ($hasReqsIn && $reqsJsonIn !== null) {
-                    $setClauses[] = "`requirements_json` = ?, `dispatch_status` = 'requirements_sent', `requirements_sent_by` = ?, `requirements_sent_at` = NOW()";
-                    $updParams[] = $reqsJsonIn;
-                    $updParams[] = (int) ($caller['id'] ?? 1);
-                }
-                if ($uploadedEventImagePath !== null) {
-                    $setClauses[] = "`image` = ?";
-                    $updParams[] = $uploadedEventImagePath;
-                }
-                $updParams[] = $realEventId;
-                $stmtUpd = $pdo->prepare("UPDATE `events` SET " . implode(', ', $setClauses) . " WHERE `id` = ?");
-                $stmtUpd->execute($updParams);
+                $setClauses[] = "`image` = NULL";
+            }
+            $updParams[] = $realEventId;
+            $stmtUpd = $pdo->prepare("UPDATE `events` SET " . implode(', ', $setClauses) . " WHERE `id` = ?");
+            $stmtUpd->execute($updParams);
+            if ($hasAssignedTechsIn) {
                 $syncAssignedUsers($realEventId, $assignedTechsInt);
-                if ($hasRosterIn || !empty($assignedTechsInt) || $action === 'assign_event_crew') {
-                    $syncDispatchAssignments(
+            }
+            if ($hasRosterIn || ($hasAssignedTechsIn && !empty($assignedTechsInt)) || $action === 'assign_event_crew') {
+                $syncDispatchAssignments(
+                    $realEventId,
+                    is_array($assignedRosterIn) ? $assignedRosterIn : null,
+                    $assignedTechsInt,
+                    (int) ($caller['id'] ?? 1),
+                    (string) ($caller['role'] ?? 'admin'),
+                    $evTitleFinal
+                );
+            } else {
+                try {
+                    logEventDispatchAction(
+                        $pdo,
                         $realEventId,
-                        is_array($assignedRosterIn) ? $assignedRosterIn : null,
-                        $assignedTechsInt,
                         (int) ($caller['id'] ?? 1),
                         (string) ($caller['role'] ?? 'admin'),
-                        $titleIn !== '' ? $titleIn : ('Event #' . $realEventId)
+                        'event_updated',
+                        "Updated event \"{$evTitleFinal}\" ({$effStart} → {$effEnd}, {$effDurLabel})",
+                        ['start_date' => $effStart, 'end_date' => $effEnd, 'duration_days' => $effDurDays]
                     );
-                }
+                } catch (Throwable $e) {}
             }
+            $eventId = $realEventId;
+            $msg = "Event \"{$evTitleFinal}\" updated successfully.";
         } else {
             if ($titleIn === '') {
                 echo json_encode(['ok' => false, 'error' => 'Event Venue title is required.']);
@@ -5295,14 +5489,18 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $newPin = $eventPinRaw !== '' ? $eventPinRaw : '1234';
             $initDispatchStatus = ($hasReqsIn && $reqsJsonIn !== null) ? 'requirements_sent' : 'draft';
             $stmtIns = $pdo->prepare("
-                INSERT INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`, `checkin_policy`, `require_visual_match`, `requirements_json`, `dispatch_status`, `requirements_sent_by`, `requirements_sent_at`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO `events` (`id`, `title`, `location`, `date`, `start_date`, `end_date`, `duration_days`, `duration_label`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`, `checkin_policy`, `require_visual_match`, `requirements_json`, `dispatch_status`, `requirements_sent_by`, `requirements_sent_at`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmtIns->execute([
                 $newEventId,
                 $titleIn,
                 $newLoc,
                 $eventDateSafe,
+                $eventDateSafe,
+                $eventEndDateSafe,
+                $durationDaysVal,
+                $durationLabelVal,
                 $formattedTime,
                 $projectManager !== '' ? $projectManager : 'Operations PM',
                 $eventCoordinator,
@@ -5372,7 +5570,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             echo json_encode(['ok' => false, 'error' => 'Event Venue ID is required.']);
             exit;
         }
-        $chk = $pdo->prepare("SELECT `id`, `title` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $chk = $pdo->prepare("SELECT `id`, `title`, `image` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
         $chk->execute([$eventId, $eventId]);
         $row = $chk->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
@@ -5381,6 +5579,10 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
         $realId = (string) $row['id'];
+        $oldImg = trim((string) ($row['image'] ?? ''));
+        if ($oldImg !== '' && str_starts_with($oldImg, 'uploads/events/') && is_file(__DIR__ . '/' . $oldImg)) {
+            @unlink(__DIR__ . '/' . $oldImg);
+        }
         $crcVal = (string) (is_numeric($realId) ? (int) $realId : crc32($realId));
         try {
             $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)")->execute([$realId, $crcVal]);
@@ -5394,7 +5596,8 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
             [
                 'ok' => true,
-                'message' => 'Deleted Event Venue "' . (string) ($row['title'] ?? $realId) . '".',
+                'deleted_event_id' => $realId,
+                'message' => 'Deleted Event "' . (string) ($row['title'] ?? $realId) . '".',
             ]
         ));
         exit;
@@ -6342,6 +6545,26 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $username .= '_' . rand(10, 99);
         }
 
+        // Normalize email (NULL when empty to avoid UNIQUE index collision on '')
+        $hasEmailField = array_key_exists('email', $_POST) || array_key_exists('email', $jsonBody);
+        $emailDb = $email !== '' ? $email : null;
+        if ($id > 0 && !$hasEmailField) {
+            $existingEmailStmt = $pdo->prepare("SELECT `email` FROM `users` WHERE `id` = ? LIMIT 1");
+            $existingEmailStmt->execute([$id]);
+            $prevEmail = $existingEmailStmt->fetchColumn();
+            if ($prevEmail !== false && trim((string) $prevEmail) !== '') {
+                $emailDb = trim((string) $prevEmail);
+            }
+        }
+        if ($emailDb !== null) {
+            $checkEmail = $pdo->prepare("SELECT `id` FROM `users` WHERE `email` = ? AND `id` != ? LIMIT 1");
+            $checkEmail->execute([$emailDb, $id]);
+            if ($checkEmail->fetch()) {
+                echo json_encode(['ok' => false, 'error' => "Email '{$emailDb}' is already registered to another personnel account."]);
+                exit;
+            }
+        }
+
         // Handle profile photo upload
         $uploadedImagePath = null;
         if (!empty($_FILES['profile_image']['tmp_name']) && is_uploaded_file($_FILES['profile_image']['tmp_name'])) {
@@ -6375,14 +6598,14 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     SET `username` = ?, `full_name` = ?, `email` = ?, `phone` = ?, `role` = ?, `department` = ?, `profile_image` = ?, `is_active` = ?
                     WHERE `id` = ?
                 ");
-                $stmt->execute([$username, $fullName, $email, $phone, $role, $department, $uploadedImagePath, $isActive, $id]);
+                $stmt->execute([$username, $fullName, $emailDb, $phone, $role, $department, $uploadedImagePath, $isActive, $id]);
             } else {
                 $stmt = $pdo->prepare("
                     UPDATE `users`
                     SET `username` = ?, `full_name` = ?, `email` = ?, `phone` = ?, `role` = ?, `department` = ?, `is_active` = ?
                     WHERE `id` = ?
                 ");
-                $stmt->execute([$username, $fullName, $email, $phone, $role, $department, $isActive, $id]);
+                $stmt->execute([$username, $fullName, $emailDb, $phone, $role, $department, $isActive, $id]);
             }
             if ($userPass !== '') {
                 $pHash = password_hash($userPass, PASSWORD_BCRYPT);
@@ -6412,14 +6635,14 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     (`username`, `full_name`, `email`, `password_hash`, `password`, `phone`, `role`, `department`, `profile_image`, `assigned_checkpoint_type`, `assigned_checkpoint_id`, `is_active`, `must_change_password`)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                 ");
-                $stmt->execute([$username, $fullName, $email, $pHash, $pHash, $phone, $role, $department, $uploadedImagePath, $insCpType, $insCpId, $isActive]);
+                $stmt->execute([$username, $fullName, $emailDb, $pHash, $pHash, $phone, $role, $department, $uploadedImagePath, $insCpType, $insCpId, $isActive]);
             } else {
                 $stmt = $pdo->prepare("
                     INSERT INTO `users`
                     (`username`, `full_name`, `email`, `password_hash`, `phone`, `role`, `department`, `profile_image`, `assigned_checkpoint_type`, `assigned_checkpoint_id`, `is_active`, `must_change_password`)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                 ");
-                $stmt->execute([$username, $fullName, $email, $pHash, $phone, $role, $department, $uploadedImagePath, $insCpType, $insCpId, $isActive]);
+                $stmt->execute([$username, $fullName, $emailDb, $pHash, $phone, $role, $department, $uploadedImagePath, $insCpType, $insCpId, $isActive]);
             }
             $id = (int) $pdo->lastInsertId();
         }
@@ -6605,6 +6828,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
     }
 
     if ($action === 'save_department') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_department', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $name = trim((string) ($_POST['name'] ?? $jsonBody['name'] ?? ''));
         $code = strtoupper(trim((string) ($_POST['code'] ?? $jsonBody['code'] ?? '')));
@@ -6653,6 +6883,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
     }
 
     if ($action === 'delete_department') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('delete_department', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
         $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
         $stmt = $pdo->prepare("SELECT * FROM `departments` WHERE `id` = ?");
         $stmt->execute([$id]);

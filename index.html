@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261119_v15" />
+  <link rel="stylesheet" href="styles.css?v=20261120_v18" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -76,6 +76,17 @@
         <button type="button" class="nav-item" data-nav-target="terminals" id="nav-terminals-btn">
           <img src="assets/scan-line-13.svg" alt="" class="svg-icon" id="nav-icon-terminals" />
           <span class="nav-item-label">Terminals</span>
+        </button>
+
+        <button type="button" class="nav-item" data-nav-target="create-event" id="nav-create-event-btn">
+          <img src="assets/calendar-days-15.svg" alt="" class="svg-icon" id="nav-icon-create-event" />
+          <span class="nav-item-label">Create Event</span>
+          <span class="nav-item-count" id="sidebar-create-event-count">04</span>
+        </button>
+
+        <button type="button" class="nav-item" data-nav-target="dispatch-flow" id="nav-dispatch-flow-btn">
+          <img src="assets/send-15.svg" alt="" class="svg-icon" id="nav-icon-dispatch-flow" />
+          <span class="nav-item-label">Operational Command &amp; Department Dispatch Flow</span>
         </button>
       </nav>
 
@@ -3578,6 +3589,8 @@
                 <button type="button" class="btn btn-primary-32" id="dispatch-open-roster-btn">Assign Event Roster →</button>
               </div>
             </div>
+            <div class="flow-explorer-pipeline" id="settings-dispatch-flow-diagram" style="margin-bottom:14px;"></div>
+            <div class="flow-explorer-inspector" id="settings-dispatch-flow-inspector" style="margin-bottom:16px;"></div>
             <div id="dispatch-hierarchy-canvas" class="dispatch-tree-wrap"></div>
             <div id="dispatch-role-flow-drawer" class="dispatch-inspector-card" style="margin-top: 16px;"></div>
             <div id="dispatch-workflow-deck" class="dispatch-workflow-grid" style="margin-top: 16px;"></div>
@@ -3892,6 +3905,210 @@
                 </ol>
               </div>
             </div>
+          </section>
+        </div>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 13: CREATE EVENT WORKSPACE TAB                              -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-create-event">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <div class="page-title-with-badge">
+                <h1 class="page-title">Create an Event</h1>
+                <span class="status-badge status-badge-purple-sm" id="ce-screen-mode-badge">New Event</span>
+              </div>
+              <p class="page-subtitle">
+                Schedule a production event with automatic start-to-end duration calculation, location, custom cover background image upload, and a system-filtered Tech Lead.
+              </p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary-38" id="create-event-open-new-tab-btn" title="Open Create Event in a separate browser tab">
+                <img src="assets/arrow-up-right.svg" alt="" class="svg-icon" />
+                <span>Open in New Tab</span>
+              </button>
+              <button type="button" class="btn btn-secondary-38" id="create-event-open-dispatch-btn">
+                <img src="assets/send-15.svg" alt="" class="svg-icon" />
+                <span>Dispatch Flow →</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" id="create-event-reset-btn">
+                <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                <span>+ New Event</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="create-event-layout">
+            <!-- Left Column: Create Event Form -->
+            <section class="directory-card create-event-form-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
+                <div>
+                  <h2 class="directory-title-18" id="ce-form-heading" style="margin:0;">Create Event Details</h2>
+                  <p class="directory-desc" style="margin-top:2px;">Complete the fields below to publish an event workspace &amp; checkpoint.</p>
+                </div>
+                <span class="create-event-duration-pill" id="ce-duration-pill">1 day</span>
+              </div>
+
+              <form id="create-event-form">
+                <input type="hidden" id="ce-event-id" value="" />
+
+                <div class="form-field" style="margin-bottom: 12px;">
+                  <label class="form-label" for="ce-title">Event Name *</label>
+                  <input type="text" id="ce-title" class="form-input" placeholder="e.g. Kigali Global AI Summit 2026" required />
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                  <div class="form-field" style="margin: 0;">
+                    <label class="form-label" for="ce-start-date">Event Start Date *</label>
+                    <input type="date" id="ce-start-date" class="form-input" required />
+                  </div>
+                  <div class="form-field" style="margin: 0;">
+                    <label class="form-label" for="ce-end-date">Event End Date *</label>
+                    <input type="date" id="ce-end-date" class="form-input" required />
+                  </div>
+                  <div class="form-field" style="margin: 0;">
+                    <label class="form-label" for="ce-duration">Duration (Auto)</label>
+                    <input type="text" id="ce-duration" class="form-input" value="1 day" readonly style="background: var(--bg-subtle); font-weight: 700; color: var(--brand-primary);" />
+                  </div>
+                </div>
+
+                <div class="form-field" style="margin-bottom: 12px;">
+                  <label class="form-label" for="ce-location">Event Location *</label>
+                  <input type="text" id="ce-location" class="form-input" placeholder="e.g. Kigali Convention Centre — Auditorium A" required />
+                </div>
+
+                <div class="form-field" style="margin-bottom: 12px;">
+                  <label class="form-label" for="ce-techlead">
+                    Select Event Tech Lead *
+                    <span class="muted-text" style="font-weight: 400; font-size: 11px;">(Auto-filtered by system Tech Lead role)</span>
+                  </label>
+                  <select id="ce-techlead" class="form-input" required></select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                  <div class="form-field" style="margin: 0;">
+                    <label class="form-label" for="ce-calltime">Call Time (24h CAT)</label>
+                    <input type="time" id="ce-calltime" class="form-input" value="08:00" required />
+                  </div>
+                  <div class="form-field" style="margin: 0;">
+                    <label class="form-label" for="ce-pin">Terminal PIN (4–12 chars)</label>
+                    <input type="text" id="ce-pin" class="form-input" value="1234" minlength="4" maxlength="12" autocomplete="off" />
+                  </div>
+                </div>
+
+                <div class="form-field" style="margin-bottom: 12px;">
+                  <label class="form-label" for="ce-modal-image">Event Background Image (Upload)</label>
+                  <div class="image-upload-dropzone" id="ce-dropzone" style="padding: 12px;">
+                    <input type="file" id="ce-modal-image" accept="image/*" style="display: none;" />
+                    <div class="dropzone-prompt" id="ce-dropzone-prompt">
+                      <img src="assets/upload-15.svg" alt="" class="svg-icon" style="width: 18px; height: 18px; opacity: 0.7;" />
+                      <span style="font-size: 12px; font-weight: 600; margin-top: 4px;">Upload Event Background Cover</span>
+                      <span style="font-size: 11px; color: var(--text-muted);">Drag &amp; drop or click to choose JPG, PNG, or WEBP</span>
+                    </div>
+                    <div class="dropzone-preview" id="ce-dropzone-preview" style="display: none;">
+                      <img id="ce-preview-img" src="" alt="Preview" class="dropzone-thumb" />
+                      <div style="flex: 1; min-width: 0;">
+                        <span id="ce-preview-filename" class="dropzone-filename">cover.png</span>
+                        <button type="button" class="btn btn-secondary-32" id="ce-remove-image-btn" style="margin-top: 4px; height: 24px; font-size: 11px;">Replace Image</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="create-event-cover-preview" id="ce-cover-preview">
+                    <img id="ce-cover-preview-img" src="" alt="" style="display: none;" />
+                    <div class="create-event-cover-caption">
+                      <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.85;" id="ce-cover-preview-dates">Today · 1 day</span>
+                      <strong style="font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="ce-cover-preview-title">Event Cover Preview</strong>
+                      <span style="font-size: 11px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="ce-cover-preview-meta">Location &amp; Tech Lead will appear here</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px; margin-top: 14px;">
+                  <button type="button" class="btn btn-secondary-38" id="ce-cancel-edit-btn" style="display: none;">Cancel Edit</button>
+                  <button type="submit" class="btn btn-primary-38" id="ce-submit-btn" style="flex: 1;">
+                    <img src="assets/plus-white.svg" alt="" class="svg-icon" />
+                    <span>Save &amp; Create Event</span>
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <!-- Right Column: Created Events Showcase Grid -->
+            <section class="directory-card" style="padding: 20px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+                <div>
+                  <div class="directory-title-row">
+                    <h2 class="directory-title-18" style="margin:0;">Active Events &amp; Scheduled Production</h2>
+                    <span class="status-badge status-badge-purple-sm" id="ce-cards-count-badge">0 Events</span>
+                  </div>
+                  <p class="directory-desc" style="margin-top:2px;">Each card renders the uploaded background banner, start/end dates, calculated duration, location, and assigned Tech Lead.</p>
+                </div>
+                <label class="table-search-box" for="ce-cards-search" style="min-width: 220px; max-width: 300px;">
+                  <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                  <input type="text" id="ce-cards-search" class="table-search-input" placeholder="Search events, location, tech lead..." />
+                </label>
+              </div>
+              <div id="create-event-cards-grid" class="create-event-cards-grid"></div>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <!-- ================================================================== -->
+      <!-- SCREEN 14: OPERATIONAL COMMAND & DEPARTMENT DISPATCH FLOW          -->
+      <!-- ================================================================== -->
+      <main class="screen-view" id="screen-dispatch-flow">
+        <div class="overview-top-block">
+          <div class="page-intro">
+            <div class="page-intro-heading">
+              <div class="page-title-with-badge">
+                <h1 class="page-title">Operational Command &amp; Department Dispatch Flow</h1>
+                <span class="status-badge status-badge-purple-sm" id="dispatch-page-status-badge">5-Tier Pipeline</span>
+              </div>
+              <p class="page-subtitle">
+                Interactive command pipeline from Event Command &amp; Tech Lead Selection through 6 Technical Departments, Support Fulfilment &amp; Readiness Audit.
+              </p>
+            </div>
+            <div class="page-actions">
+              <select id="dispatch-page-event-select" class="form-input" style="min-width: 240px;"></select>
+              <button type="button" class="btn btn-secondary-38" id="dispatch-page-create-event-btn">
+                <img src="assets/calendar-days-15.svg" alt="" class="svg-icon" />
+                <span>Create Event</span>
+              </button>
+              <button type="button" class="btn btn-primary-38" id="dispatch-page-open-roster-btn">
+                <img src="assets/nav-team-members.svg" alt="" class="svg-icon" style="filter: brightness(0) invert(1);" />
+                <span>Assign Event Roster →</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Horizontal Flow Explorer Pipeline Card (Matches #settings-flow-diagram UI) -->
+          <section class="flow-explorer-card" id="dispatch-flow-explorer-card">
+            <div class="flow-explorer-header">
+              <div>
+                <h2 class="directory-title-18">Operational Command &amp; Department Dispatch Flow</h2>
+                <p class="directory-desc">Click any operational tier node below to inspect live leadership, role permissions, sequential dispatch handoffs, and department readiness.</p>
+              </div>
+              <span class="status-badge status-badge-green-sm" id="dispatch-flow-active-event-pill">Live Command Chain</span>
+            </div>
+
+            <div class="flow-explorer-pipeline" id="dispatch-flow-diagram"></div>
+            <div class="flow-explorer-inspector" id="dispatch-flow-inspector"></div>
+          </section>
+
+          <!-- Live 6-Department Hierarchy & Role Action Workbench -->
+          <section class="directory-card dispatch-pipeline-workbench-gap" style="padding: 20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+              <div>
+                <h2 class="directory-title-18" style="margin:0;">Live Event Tier Canvas &amp; 6-Department Dispatch Workbench</h2>
+                <p class="directory-desc" style="margin-top:2px;">Real-time leadership chain, department headcounts, crew confirmations, and support manpower fulfillment for the selected event.</p>
+              </div>
+            </div>
+            <div id="dispatch-page-hierarchy-canvas" class="dispatch-tree-wrap"></div>
+            <div id="dispatch-page-role-flow-drawer" class="dispatch-inspector-card" style="margin-top: 16px;"></div>
+            <div id="dispatch-page-workflow-deck" class="dispatch-workflow-grid" style="margin-top: 16px;"></div>
           </section>
         </div>
       </main>
@@ -5724,6 +5941,7 @@
       </div>
       <form id="venue-crud-form">
         <input type="hidden" id="venue-crud-id" value="" />
+        <input type="hidden" id="venue-crud-remove-image" value="0" />
 
         <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-field">
@@ -5738,9 +5956,20 @@
 
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
           <div class="form-field">
-            <label class="form-label" for="venue-crud-date">Event Date</label>
+            <label class="form-label" for="venue-crud-date">Start Date</label>
             <input type="date" id="venue-crud-date" class="form-input" />
           </div>
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-end-date">End Date</label>
+            <input type="date" id="venue-crud-end-date" class="form-input" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="venue-crud-duration">Duration (Auto)</label>
+            <input type="text" id="venue-crud-duration" class="form-input" value="1 day" readonly style="background: var(--bg-subtle); font-weight: 600;" />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
           <div class="form-field">
             <label class="form-label" for="venue-crud-calltime">Call Time (24h CAT)</label>
             <input type="time" id="venue-crud-calltime" class="form-input" value="08:00" required />
@@ -5841,14 +6070,20 @@
                 <span id="venue-preview-filename" class="dropzone-filename">venue.jpg</span>
                 <span style="font-size: 10px; color: #16a34a; font-weight: 600;">Image Selected</span>
               </div>
-              <button type="button" class="btn btn-secondary-32-sm" id="venue-remove-image-btn">Change</button>
+              <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                <button type="button" class="btn btn-secondary-32-sm" id="venue-remove-image-btn">Change</button>
+                <button type="button" class="btn btn-secondary-32-sm" id="venue-clear-image-btn" style="color: #dc2626; border-color: #fecaca;">Remove</button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="modal-actions">
-          <button type="button" class="btn btn-secondary-38 js-close-venue-crud-modal">Cancel</button>
-          <button type="submit" class="btn btn-primary-38" id="venue-crud-submit-btn">Save Event Venue</button>
+        <div class="modal-actions" style="justify-content: space-between; width: 100%; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary-38" id="venue-crud-delete-btn" style="color: #dc2626; border-color: #fecaca; display: none;">Delete Event</button>
+          <div style="display: flex; gap: 8px; margin-left: auto;">
+            <button type="button" class="btn btn-secondary-38 js-close-venue-crud-modal">Cancel</button>
+            <button type="submit" class="btn btn-primary-38" id="venue-crud-submit-btn">Save Event Venue</button>
+          </div>
         </div>
       </form>
     </div>
@@ -6108,11 +6343,11 @@
     </div>
   </div>
 
-  <!-- Toast Notification -->
-  <div class="toast-notification" id="toast-notification" role="status" aria-live="polite"></div>
+  <!-- Toast Notification Stack -->
+  <div class="toast-stack" id="toast-notification" role="status" aria-live="polite" aria-atomic="false"></div>
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261119_v15"></script>
+  <script src="app.js?v=20261120_v18"></script>
 </body>
 </html>

@@ -85,6 +85,8 @@
     navFilterGroup: 'all',
     navFilterStatus: 'all',
     srFilterStatus: 'all',
+    createEventSearch: '',
+    selectedDispatchEventId: '',
     rollCallSearch: '',
     rollCallCpFilter: 'all',
     rollCallRoleFilter: 'all',
@@ -479,16 +481,63 @@
       .replace(/'/g, '&#039;');
   }
 
-  let toastTimer = null;
-  function showToast(message) {
-    const toast = document.getElementById('toast-notification');
-    if (!toast) return;
-    toast.textContent = message;
-    toast.classList.add('visible');
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      toast.classList.remove('visible');
-    }, 3200);
+  function resolveToastTone(message, toneOrOpts) {
+    if (toneOrOpts && typeof toneOrOpts === 'string' && toneOrOpts !== 'auto') {
+      return toneOrOpts;
+    }
+    if (toneOrOpts && typeof toneOrOpts === 'object' && toneOrOpts.tone) {
+      return toneOrOpts.tone;
+    }
+    const lower = String(message || '').toLowerCase();
+    if (/(failed|error|denied|invalid|cannot|blocked|rejected|mismatch|unable)/.test(lower)) return 'error';
+    if (/(adjusted|warning|locked|offline|removed|cleared|expired)/.test(lower)) return 'warning';
+    if (/(created|updated|saved|deleted|approved|granted|assigned|fulfilled|unlocked|captured|copied|ready|enabled|disabled|reset)/.test(lower)) return 'success';
+    return 'info';
+  }
+
+  function showToast(message, toneOrOpts = 'auto') {
+    const container = document.getElementById('toast-notification');
+    if (!container || !message) return;
+    const tone = resolveToastTone(message, toneOrOpts);
+    const titleMap = {
+      success: 'Saved & Applied',
+      error: 'Action Failed',
+      warning: 'Notice',
+      info: 'Update',
+    };
+    const iconMap = {
+      success: '✓',
+      error: '!',
+      warning: '⚠',
+      info: 'i',
+    };
+    const customTitle = (toneOrOpts && typeof toneOrOpts === 'object' && toneOrOpts.title) ? toneOrOpts.title : (titleMap[tone] || 'Update');
+    const duration = (toneOrOpts && typeof toneOrOpts === 'object' && Number(toneOrOpts.duration)) || 4000;
+
+    while (container.children.length >= 4) {
+      container.firstElementChild?.remove();
+    }
+
+    const toastEl = document.createElement('div');
+    toastEl.className = `toast-item tone-${escapeHtml(tone)}`;
+    toastEl.innerHTML = `
+      <span class="toast-item-icon" aria-hidden="true">${iconMap[tone] || 'i'}</span>
+      <div class="toast-item-body">
+        <div class="toast-item-title">${escapeHtml(customTitle)}</div>
+        <div class="toast-item-msg">${escapeHtml(message)}</div>
+      </div>
+      <button type="button" class="toast-item-close" aria-label="Dismiss notification">×</button>
+    `;
+
+    const dismiss = () => {
+      toastEl.classList.remove('visible');
+      setTimeout(() => toastEl.remove(), 220);
+    };
+    toastEl.querySelector('.toast-item-close')?.addEventListener('click', dismiss);
+
+    container.appendChild(toastEl);
+    requestAnimationFrame(() => toastEl.classList.add('visible'));
+    setTimeout(dismiss, duration);
   }
 
   function applyBootstrapPayload(data, preserveCurrentVerification = false) {
@@ -1500,7 +1549,7 @@
       }
     }
 
-    if (!isScreenPermittedForCurrentUser(screenKey)) {
+    if (state.currentUser && !isScreenPermittedForCurrentUser(screenKey)) {
       const rawRole = (state.currentUser?.role || '').toLowerCase();
       const isStockCtrl = rawRole === 'stock_controller';
       const isTech = rawRole === 'tech_lead' || rawRole === 'technical_lead';
@@ -1538,6 +1587,8 @@
     const screens = {
       overview: document.getElementById('screen-overview'),
       events: document.getElementById('screen-events'),
+      'create-event': document.getElementById('screen-create-event'),
+      'dispatch-flow': document.getElementById('screen-dispatch-flow'),
       users: document.getElementById('screen-users'),
       attendees: document.getElementById('screen-attendees'),
       terminals: document.getElementById('screen-terminals'),
@@ -1594,6 +1645,8 @@
     const pageTitles = {
       overview: 'Gate Operations Dashboard',
       events: 'Checkpoints & Venues',
+      'create-event': 'Create Event',
+      'dispatch-flow': 'Operational Command & Department Dispatch Flow',
       users: 'Staff, Technicians & Role Management',
       attendees: 'Staff ID Badges',
       terminals: 'Terminals (#pane-kiosk)',
@@ -2037,19 +2090,19 @@
     const isStockCtrl = (rawRole === 'stock_controller');
 
     if (isManager) {
-      return ['overview', 'events', 'users', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
+      return ['overview', 'events', 'create-event', 'dispatch-flow', 'users', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isStockCtrl) {
-      return ['events', 'terminals', 'attendees', 'shift-relief', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
+      return ['events', 'dispatch-flow', 'terminals', 'attendees', 'shift-relief', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isTech) {
-      return ['overview', 'events', 'users', 'attendees', 'terminals', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
+      return ['overview', 'events', 'create-event', 'dispatch-flow', 'users', 'attendees', 'terminals', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isStockMgr) {
-      return ['overview', 'events', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
+      return ['overview', 'events', 'dispatch-flow', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     // Field Crew / Technicians / Support Staff:
-    return ['attendees', 'terminals', 'rollcall'].includes(normalizedKey);
+    return ['dispatch-flow', 'attendees', 'terminals', 'rollcall'].includes(normalizedKey);
   }
 
   function canCurrentUserManageWarehouses() {
@@ -6650,23 +6703,89 @@
   }
 
   /**
-   * Populates a Technical Lead or Project Manager / Event Coordinator `<select>` from loaded personnel.
+   * Computes inclusive calendar day duration between two YYYY-MM-DD dates in UTC (DST-safe).
+   */
+  function computeEventDuration(startStr, endStr) {
+    const s = String(startStr || '').trim();
+    const e = String(endStr || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      return { days: 1, label: '1 day', valid: false };
+    }
+    const effEnd = /^\d{4}-\d{2}-\d{2}$/.test(e) ? e : s;
+    const [sy, sm, sd] = s.split('-').map(Number);
+    const [ey, em, ed] = effEnd.split('-').map(Number);
+    const utcStart = Date.UTC(sy, sm - 1, sd);
+    const utcEnd = Date.UTC(ey, em - 1, ed);
+    if (utcEnd < utcStart) {
+      return { days: 0, label: 'Invalid dates', valid: false };
+    }
+    const days = Math.max(1, Math.round((utcEnd - utcStart) / 86400000) + 1);
+    return {
+      days,
+      label: days === 1 ? '1 day' : `${days} days`,
+      valid: true,
+    };
+  }
+
+  /**
+   * Checks whether a user holds the system-assigned Tech Lead role (from state.roles / user.role).
+   */
+  function isUserAssignedTechLeadRole(u) {
+    if (!u || Number(u.is_active ?? 1) === 0) return false;
+    const techLeadRoleKeys = new Set(['tech_lead', 'technical_lead']);
+    (state.roles || []).forEach((r) => {
+      const rKey = String(r?.role_key || '').trim().toLowerCase();
+      const rTitle = String(r?.title || '').trim().toLowerCase();
+      if (rKey === 'tech_lead' || rKey === 'technical_lead' || rTitle.includes('tech lead') || rTitle.includes('technical lead')) {
+        techLeadRoleKeys.add(rKey);
+      }
+    });
+    const userRole = String(u.role || '').trim().toLowerCase();
+    const userRoleDisplay = String(u.role_display || '').trim().toLowerCase();
+    return techLeadRoleKeys.has(userRole) || userRoleDisplay === 'tech lead' || userRoleDisplay === 'technical lead';
+  }
+
+  /**
+   * Populates a Technical Lead (strict system role filter) or Project Manager / Event Coordinator `<select>`.
    */
   function populateLeadershipSelect(selectEl, currentVal = '', mode = 'pm') {
     if (!selectEl) return;
     const isPm = mode === 'pm';
     const isCoord = mode === 'coordinator';
+    const isTechLeadMode = mode === 'techlead';
     const placeholder = isCoord
       ? '-- Select Event Coordinator --'
-      : (isPm ? '-- Select Project Manager --' : '-- Select Technical Lead --');
-    const preferredRoles = (isPm || isCoord)
-      ? new Set(['project_manager', 'event_coordinator', 'manager', 'admin', 'administrator'])
-      : new Set(['tech_lead', 'technical_lead', 'stage_manager', 'sound_engineer', 'rigging_lead']);
-    const preferredDepts = (isPm || isCoord)
-      ? new Set(['operations', 'executive', 'production'])
-      : new Set(['video', 'audio', 'sound', 'lighting', 'electrical', 'rigging', 'interpretation', 'production']);
+      : (isPm ? '-- Select Project Manager --' : '-- Select Event Tech Lead --');
 
     const crewList = (state.crew || []).filter((u) => u && (u.full_name || u.username));
+    const targetLower = String(currentVal || '').trim().toLowerCase();
+    let matched = false;
+    const buildOpt = (u) => {
+      const name = String(u.full_name || u.username || '').trim();
+      const roleLabel = u.role_display || u.role || 'Staff';
+      const isSel = targetLower !== '' && name.toLowerCase() === targetLower;
+      if (isSel) matched = true;
+      return `<option value="${escapeHtml(name)}" ${isSel ? 'selected' : ''}>${escapeHtml(name)} (${escapeHtml(roleLabel)})</option>`;
+    };
+
+    if (isTechLeadMode) {
+      const roleFiltered = crewList.filter((u) => isUserAssignedTechLeadRole(u));
+      let html = `<option value="">${placeholder}</option>`;
+      if (roleFiltered.length > 0) {
+        html += `<optgroup label="System-Assigned Tech Leads">${roleFiltered.map(buildOpt).join('')}</optgroup>`;
+      } else {
+        html += '<option value="" disabled>-- No active users assigned the Tech Lead role --</option>';
+      }
+      if (currentVal && !matched) {
+        html += `<option value="${escapeHtml(currentVal)}" selected>${escapeHtml(currentVal)} (Current)</option>`;
+      }
+      selectEl.innerHTML = html;
+      return;
+    }
+
+    const preferredRoles = new Set(['project_manager', 'event_coordinator', 'manager', 'admin', 'administrator']);
+    const preferredDepts = new Set(['operations', 'executive', 'production']);
+
     const preferred = [];
     const others = [];
     crewList.forEach((u) => {
@@ -6679,19 +6798,9 @@
       }
     });
 
-    const targetLower = String(currentVal || '').trim().toLowerCase();
-    let matched = false;
-    const buildOpt = (u) => {
-      const name = String(u.full_name || u.username || '').trim();
-      const roleLabel = u.role_display || u.role || 'Staff';
-      const isSel = targetLower !== '' && name.toLowerCase() === targetLower;
-      if (isSel) matched = true;
-      return `<option value="${escapeHtml(name)}" ${isSel ? 'selected' : ''}>${escapeHtml(name)} (${escapeHtml(roleLabel)})</option>`;
-    };
-
     let html = `<option value="">${placeholder}</option>`;
     if (preferred.length > 0) {
-      html += `<optgroup label="${isCoord ? 'Event Coordinators &amp; PMs' : (isPm ? 'Project Managers &amp; Coordinators' : 'Technical Leads')}">${preferred.map(buildOpt).join('')}</optgroup>`;
+      html += `<optgroup label="${isCoord ? 'Event Coordinators &amp; PMs' : 'Project Managers &amp; Coordinators'}">${preferred.map(buildOpt).join('')}</optgroup>`;
     }
     if (others.length > 0) {
       html += `<optgroup label="All Team Members">${others.map(buildOpt).join('')}</optgroup>`;
@@ -6740,16 +6849,16 @@
 
   async function confirmAndDeleteEventVenue(vid, vTitle) {
     if (!canCurrentUserAssignEvents()) {
-      showToast('Permission Denied: Deleting Event Venues requires Tech Lead, PM, or Administrator privileges.');
-      return;
+      showToast('Permission Denied: Deleting Event Venues requires Tech Lead, PM, or Administrator privileges.', 'error');
+      return false;
     }
     const { confirmed } = await showConfirmModal({
-      title: 'Delete Event Venue',
-      message: `Delete Event Venue "${vTitle}"? Any crew assignments pointing to this venue will be cleared.`,
-      confirmText: 'Delete Venue',
+      title: 'Delete Event',
+      message: `Delete Event "${vTitle}"? Any crew assignments pointing to this event will be cleared.`,
+      confirmText: 'Delete Event',
       tone: 'danger',
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
     try {
       const res = await fetch('api.php?action=delete_event', {
         method: 'POST',
@@ -6758,14 +6867,20 @@
       });
       const data = await res.json();
       if (res.ok && data && data.ok) {
+        if (String(state.selectedDispatchEventId || '') === String(vid)) {
+          state.selectedDispatchEventId = '';
+        }
         applyBootstrapPayload(data, true);
         renderAll();
-        showToast(data.message || `Deleted Event Venue "${vTitle}".`);
+        showToast(data.message || `Deleted Event "${vTitle}".`, 'success');
+        return true;
       } else {
-        showToast((data && data.error) || 'Failed to delete Event Venue.');
+        showToast((data && data.error) || 'Failed to delete Event.', 'error');
+        return false;
       }
     } catch (err) {
-      showToast('Network error deleting Event Venue.');
+      showToast('Network error deleting Event.', 'error');
+      return false;
     }
   }
 
@@ -7887,6 +8002,13 @@
 
   function getNavBadgeValueAndId(item) {
     const type = String(item.badge_type || 'none');
+    if (type === 'event_venues' || item.nav_key === 'create_event') {
+      const evOnlyCount = state.checkpoints?.event_venues?.length || 0;
+      return {
+        id: item.badge_id || 'sidebar-create-event-count',
+        text: String(evOnlyCount).padStart(2, '0'),
+      };
+    }
     if (type === 'events') {
       const evCount = (state.checkpoints?.event_venues?.length || 0) + (state.checkpoints?.stock_warehouses?.length || 0);
       return {
@@ -8545,13 +8667,17 @@
       const thumbStrip = v.image
         ? `<div style="height: 88px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: #312e81;"><img src="${escapeHtml(v.image)}" alt="${escapeHtml(v.title || v.name)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.display='none';" /></div>`
         : '';
+      const sDate = v.start_date || v.date || '';
+      const eDate = v.end_date || sDate;
+      const durLbl = v.duration_label || computeEventDuration(sDate, eDate).label;
+      const dateSpanText = sDate ? (sDate === eDate ? `${sDate} · ${durLbl}` : `${sDate} → ${eDate} · ${durLbl}`) : '';
       return `
         <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; background: var(--surface-white); display: flex; flex-direction: column; gap: 10px;">
           ${thumbStrip}
           <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
             <div>
               <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(v.title || v.name)}</strong>
-              <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(v.location || v.venue_location || 'Kigali Event Venue')}${v.date ? ' · ' + escapeHtml(v.date) : ''}</div>
+              <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(v.location || v.venue_location || 'Kigali Event Venue')}${dateSpanText ? ' · ' + escapeHtml(dateSpanText) : ''}</div>
             </div>
             <span class="status-badge ${onsiteCount > 0 ? 'status-badge-green-sm' : 'status-badge-purple-sm'}">${onsiteCount} On-Site</span>
           </div>
@@ -8676,6 +8802,8 @@
     const titleEl = document.getElementById('venue-crud-title');
     const locEl = document.getElementById('venue-crud-location');
     const dateEl = document.getElementById('venue-crud-date');
+    const endDateEl = document.getElementById('venue-crud-end-date');
+    const durEl = document.getElementById('venue-crud-duration');
     const ctEl = document.getElementById('venue-crud-calltime');
     const pinEl = document.getElementById('venue-crud-pin');
     const tlEl = document.getElementById('venue-crud-techlead');
@@ -8697,14 +8825,31 @@
     }
 
     resetDropzone('venue');
+    const rmImgEl = document.getElementById('venue-crud-remove-image');
+    const delModalBtn = document.getElementById('venue-crud-delete-btn');
+    const subModalBtn = document.getElementById('venue-crud-submit-btn');
+    if (rmImgEl) rmImgEl.value = '0';
+    const todayIso = new Date().toISOString().slice(0, 10);
     if (venue) {
-      if (titleHead) titleHead.textContent = `Edit Event Venue: ${venue.title || venue.name}`;
+      const startIso = venue.start_date || venue.date || todayIso;
+      const endIso = venue.end_date || startIso;
+      if (titleHead) titleHead.textContent = `Edit Event: ${venue.title || venue.name}`;
       if (idEl) idEl.value = String(venue.raw_id || venue.id || '');
       if (titleEl) titleEl.value = venue.title || venue.name || '';
       if (locEl) locEl.value = venue.location || '';
-      if (dateEl) dateEl.value = venue.date || new Date().toISOString().slice(0, 10);
+      if (dateEl) dateEl.value = startIso;
+      if (endDateEl) {
+        endDateEl.min = startIso;
+        endDateEl.value = endIso;
+      }
+      if (durEl) durEl.value = venue.duration_label || computeEventDuration(startIso, endIso).label;
       if (ctEl) ctEl.value = venue.call_time || '08:00';
-      if (pinEl) pinEl.value = venue.terminal_pin || '';
+      if (pinEl) {
+        pinEl.value = venue.terminal_pin || '';
+        pinEl.placeholder = 'Leave blank to keep existing PIN';
+      }
+      if (subModalBtn) subModalBtn.textContent = 'Save Event Changes';
+      if (delModalBtn) delModalBtn.style.display = canCurrentUserAssignEvents() ? 'inline-flex' : 'none';
       if (radEl) radEl.value = String(venue.geofence_radius_m || 200);
       if (latEl) latEl.value = venue.lat !== null && venue.lat !== undefined ? String(venue.lat) : '';
       if (lngEl) lngEl.value = venue.lng !== null && venue.lng !== undefined ? String(venue.lng) : '';
@@ -8731,9 +8876,19 @@
       if (idEl) idEl.value = '';
       if (titleEl) titleEl.value = '';
       if (locEl) locEl.value = '';
-      if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+      if (dateEl) dateEl.value = todayIso;
+      if (endDateEl) {
+        endDateEl.min = todayIso;
+        endDateEl.value = todayIso;
+      }
+      if (durEl) durEl.value = '1 day';
       if (ctEl) ctEl.value = '08:00';
-      if (pinEl) pinEl.value = '1234';
+      if (pinEl) {
+        pinEl.value = '1234';
+        pinEl.placeholder = 'e.g. 1234';
+      }
+      if (subModalBtn) subModalBtn.textContent = 'Save Event Venue';
+      if (delModalBtn) delModalBtn.style.display = 'none';
       if (radEl) radEl.value = '200';
       if (latEl) latEl.value = '';
       if (lngEl) lngEl.value = '';
@@ -8751,12 +8906,18 @@
       populateLeadershipSelect(pmEl, '', 'pm');
       populateLeadershipSelect(coordEl, '', 'coordinator');
     }
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
     modal.style.display = 'flex';
   }
 
   function closeVenueCrudModal() {
     const modal = document.getElementById('venue-crud-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      modal.style.display = 'none';
+    }
   }
 
   function renderShiftReliefPage() {
@@ -9898,24 +10059,20 @@
     }
   }
 
-  function renderSettingsDispatchSection() {
-    const selEl = document.getElementById('dispatch-event-select');
-    const canvasEl = document.getElementById('dispatch-hierarchy-canvas');
-    const events = state.checkpoints?.event_venues || [];
-    if (selEl) {
-      const curVal = selEl.value;
-      selEl.innerHTML = '<option value="">All Crew Department Pool</option>' +
-        events.map((ev) => `<option value="${escapeHtml(String(ev.raw_id || ev.id))}">${escapeHtml(ev.title || ev.name)}</option>`).join('');
-      if (curVal && events.some((ev) => String(ev.raw_id || ev.id) === curVal)) {
-        selEl.value = curVal;
-      } else if (events[0]) {
-        selEl.value = String(events[0].raw_id || events[0].id);
-      }
-    }
-    if (!canvasEl) return;
+  function renderDispatchViews() {
+    renderSettingsDispatchSection();
+    renderDispatchFlowPage();
+  }
 
-    const pickedId = selEl ? selEl.value : '';
-    const activeEv = events.find((ev) => String(ev.raw_id || ev.id) === pickedId) || null;
+  function getDispatchContextData(pickedId = '') {
+    const events = state.checkpoints?.event_venues || [];
+    const resolvedId = pickedId && events.some((ev) => String(ev.raw_id || ev.id) === String(pickedId))
+      ? String(pickedId)
+      : (state.selectedDispatchEventId && events.some((ev) => String(ev.raw_id || ev.id) === String(state.selectedDispatchEventId))
+        ? String(state.selectedDispatchEventId)
+        : (events[0] ? String(events[0].raw_id || events[0].id) : ''));
+
+    const activeEv = events.find((ev) => String(ev.raw_id || ev.id) === resolvedId) || null;
     const assignedSet = activeEv && Array.isArray(activeEv.assigned_technicians)
       ? new Set(activeEv.assigned_technicians.map(Number))
       : null;
@@ -9925,7 +10082,7 @@
 
     const pmName = activeEv?.project_manager || ((state.crew || []).find((c) => c.role === 'project_manager')?.full_name || 'Project Manager');
     const coordName = activeEv?.event_coordinator || ((state.crew || []).find((c) => c.role === 'event_coordinator')?.full_name || 'Event Coordinator');
-    const tlName = activeEv?.tech_lead || activeEv?.lead_name || ((state.crew || []).find((c) => c.role === 'tech_lead')?.full_name || 'Technical Lead');
+    const tlName = activeEv?.tech_lead || activeEv?.lead_name || ((state.crew || []).find((c) => isUserAssignedTechLeadRole(c))?.full_name || 'Technical Lead');
 
     const deptNames = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
     const deptMatches = (c, d) => {
@@ -9939,14 +10096,13 @@
       if (d === 'Interpretation') return dep.includes('interp') || role.includes('interp');
       return dep === d.toLowerCase();
     };
+    const techDeptMemberCount = deptNames.reduce((acc, dn) => acc + pool.filter((c) => deptMatches(c, dn)).length, 0);
     const supportList = pool.filter((c) => {
       const dep = String(c.department || '').toLowerCase();
       const role = String(c.role || '').toLowerCase();
       return role === 'support_staff' || dep.includes('support') || role === 'user' || role === 'driver' || role === 'security';
     });
 
-    const caps = state.roleCapabilities || {};
-    const selTier = state.selectedDispatchTier || 'tier1_command';
     const asgMap = (activeEv && state.eventCrewAssignments && state.eventCrewAssignments[String(activeEv.raw_id || activeEv.id)]) || {};
     const formatMemberBadge = (m) => {
       const rec = asgMap[String(m.id)];
@@ -9955,6 +10111,201 @@
       const icon = st === 'confirmed' ? '✓' : (st === 'declined' ? '✕' : '⏳');
       return `${escapeHtml(m.full_name)} <span class="assign-status-pill ${escapeHtml(st)}">${icon}</span>`;
     };
+
+    const evId = activeEv ? String(activeEv.raw_id || activeEv.id) : '';
+    const supportReqs = (state.eventSupportRequests || []).filter((r) => !evId || String(r.event_id) === evId);
+    const evLogs = (state.eventDispatchLogs || []).filter((l) => !evId || String(l.event_id) === evId);
+    const pendingSupportCount = supportReqs.filter((r) => r.status === 'pending').length;
+    const confirmedCount = Object.values(asgMap).filter((rec) => String(rec?.confirmation_status || '') === 'confirmed').length;
+    const durLabel = activeEv?.duration_label || computeEventDuration(activeEv?.start_date || activeEv?.date, activeEv?.end_date).label;
+
+    const nodes = [
+      {
+        tierKey: 'tier1_command',
+        step: 'TIER 1 · COMMAND',
+        tone: 'chip',
+        short: activeEv ? (activeEv.title || activeEv.name) : 'Create Event & Command',
+        summary: `PM: ${pmName} · ${durLabel}`,
+        title: `Tier 1 · Command Initiation (${pmName} / ${coordName})`,
+        source: activeEv ? `${activeEv.location || 'Venue'} · ${activeEv.start_date || activeEv.date || ''} → ${activeEv.end_date || activeEv.start_date || activeEv.date || ''} (${durLabel})` : 'Create Event & Dispatch Initiation',
+        route: 'Create Event (Dates & Auto Duration, Cover, Tech Lead) → Send Branch Targets',
+        detail: 'Project Managers and Event Coordinators create events, set call times & duration, assign the system-filtered Tech Lead, and issue department headcount requirements.',
+        outcome: activeEv ? `Status: ${String(activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase()}` : 'Ready for Event Creation',
+        jumpScreen: 'create-event',
+        jumpLabel: 'Open Create Event Tab',
+      },
+      {
+        tierKey: 'tier2_tech_lead',
+        step: 'TIER 2 · TECH LEAD',
+        tone: activeEv?.tech_lead ? 'ok' : 'warn',
+        short: tlName,
+        summary: 'System Role-Filtered Tech Lead',
+        title: `Tier 2 · Technical Supervision (${tlName})`,
+        source: 'Filtered from users assigned Tech Lead system role',
+        route: 'Review Requirements → Allocate 6 Dept Technicians → Request Support Manpower',
+        detail: 'The Tech Lead receives production targets from Tier 1, staffs specialists across Video, Sound, Lighting, Electrical, Rigging, and Interpretation, and submits Tier 4 support requests.',
+        outcome: activeEv?.tech_lead ? `Assigned Lead: ${tlName}` : 'Assign Tech Lead in Create Event',
+        jumpScreen: 'create-event',
+        jumpLabel: 'Edit Event & Tech Lead',
+      },
+      {
+        tierKey: 'tier3_technicians',
+        step: 'TIER 3 · 6 DEPTS',
+        tone: techDeptMemberCount > 0 ? 'ok' : 'warn',
+        short: '6 Tech Departments',
+        summary: `Video · Sound · Light · Power · Rig · Interp (${techDeptMemberCount})`,
+        title: `Tier 3 · 6 Technical Branches (${techDeptMemberCount} Assigned)`,
+        source: 'Video · Sound · Lighting · Electrical · Rigging · Interpretation',
+        route: 'Confirm Deployment Slot → Anti-Shadowing Gate Check-In → Respond to Roll-Call',
+        detail: 'Specialty branch technicians view shift call times, confirm deployment readiness, and verify attendance at the event venue checkpoint via QR or supervisor gate check-in.',
+        outcome: `${techDeptMemberCount} Technical Crew Assigned`,
+      },
+      {
+        tierKey: 'tier4_support',
+        step: 'TIER 4 · SUPPORT',
+        tone: pendingSupportCount > 0 ? 'warn' : (supportList.length > 0 ? 'ok' : 'chip'),
+        short: `Support Staff (${supportList.length})`,
+        summary: pendingSupportCount > 0 ? `${pendingSupportCount} Pending Request(s)` : 'Logistics, Runners & Security Pool',
+        title: `Tier 4 · Ground Support & Fulfillment (${supportList.length} Assigned)`,
+        source: 'Operations Drivers, Runners & Venue Security',
+        route: 'Request Submitted by Tier 1/2 → Fulfilled by Site Manager → Venue Gate Access Only',
+        detail: 'Support crew fulfill general logistics and staging runs at assigned event venues while L1 perimeter rules automatically block unauthorized warehouse entry.',
+        outcome: pendingSupportCount > 0 ? `${pendingSupportCount} Request(s) Pending` : `${supportList.length} Support Members Ready`,
+      },
+      {
+        tierKey: 'site_ops',
+        step: 'TIER 5 · AUDIT',
+        tone: confirmedCount > 0 || evLogs.length > 0 ? 'ok' : 'chip',
+        short: 'Readiness & Gate Sync',
+        summary: `${confirmedCount} Confirmed · ${evLogs.length} Audit Logs`,
+        title: 'Tier 5 · Readiness Audit & Gate Checkpoint Sync',
+        source: 'Live Gate Terminals, Confirmation Pills & Audit Log',
+        route: 'Crew Confirmations → Gate Check-In Sync → Random Roll-Call & Export',
+        detail: 'Aggregates crew confirmation statuses, terminal check-in telemetry, and chronological dispatch audit trail across all leadership tiers and checkpoints.',
+        outcome: `${confirmedCount} Confirmed · ${evLogs.length} Logged Actions`,
+        jumpScreen: 'terminals',
+        jumpLabel: 'Launch Gate Terminal',
+      },
+    ];
+
+    return {
+      events,
+      resolvedId,
+      activeEv,
+      pool,
+      pmName,
+      coordName,
+      tlName,
+      deptNames,
+      deptMatches,
+      techDeptMemberCount,
+      supportList,
+      asgMap,
+      formatMemberBadge,
+      evLogs,
+      supportReqs,
+      confirmedCount,
+      nodes,
+    };
+  }
+
+  function syncDispatchEventSelect(selEl, ctx) {
+    if (!selEl) return;
+    selEl.innerHTML = '<option value="">All Crew Department Pool</option>' +
+      ctx.events.map((ev) => `<option value="${escapeHtml(String(ev.raw_id || ev.id))}">${escapeHtml(ev.title || ev.name)}</option>`).join('');
+    if (ctx.resolvedId) {
+      selEl.value = ctx.resolvedId;
+    }
+  }
+
+  function renderDispatchPipelineInto(diagramEl, inspectorEl, statusPillEl, ctx) {
+    if (!diagramEl) return;
+    const selTier = state.selectedDispatchTier || 'tier1_command';
+    let activeIdx = ctx.nodes.findIndex((n) => n.tierKey === selTier);
+    if (activeIdx < 0) activeIdx = 0;
+    const activeNode = ctx.nodes[activeIdx];
+
+    if (statusPillEl) {
+      statusPillEl.textContent = ctx.activeEv
+        ? `${ctx.activeEv.title || ctx.activeEv.name} · ${ctx.activeEv.duration_label || '1 day'}`
+        : 'All Events Pool';
+    }
+
+    diagramEl.innerHTML = ctx.nodes.map((n, idx) => `
+      <button type="button" class="flow-pipeline-node${idx === activeIdx ? ' is-active' : ''}" data-node-idx="${idx}" data-dispatch-tier="${escapeHtml(n.tierKey)}">
+        <div class="flow-node-top">
+          <span class="flow-step-badge tone-${escapeHtml(n.tone)}">${escapeHtml(n.step)}</span>
+          <span class="flow-node-arrow">${idx < ctx.nodes.length - 1 ? '→' : '●'}</span>
+        </div>
+        <div class="flow-node-short">${escapeHtml(n.short)}</div>
+        <div class="flow-node-summary">${escapeHtml(n.summary)}</div>
+      </button>
+    `).join('');
+
+    diagramEl.querySelectorAll('.flow-pipeline-node').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.selectedDispatchTier = btn.getAttribute('data-dispatch-tier') || 'tier1_command';
+        renderDispatchViews();
+      });
+    });
+
+    if (inspectorEl) {
+      const canJump = Boolean(activeNode.jumpScreen && isScreenPermittedForCurrentUser(activeNode.jumpScreen));
+      inspectorEl.innerHTML = `
+        <div class="flow-inspector-top">
+          <div>
+            <span class="flow-step-badge tone-${escapeHtml(activeNode.tone)}">${escapeHtml(activeNode.step)}</span>
+            <h3 class="flow-inspector-title" style="margin-top:6px;">${escapeHtml(activeNode.title)}</h3>
+          </div>
+          <span class="flow-inspector-counter">Step ${activeIdx + 1} of ${ctx.nodes.length}</span>
+        </div>
+        <div class="flow-inspector-meta">
+          <div class="flow-meta-chip">
+            <span class="flow-meta-label">OWNER / SCOPE</span>
+            <span class="flow-meta-value">${escapeHtml(activeNode.source)}</span>
+          </div>
+          <div class="flow-meta-chip">
+            <span class="flow-meta-label">DISPATCH HANDOFF</span>
+            <span class="flow-meta-value">${escapeHtml(activeNode.route)}</span>
+          </div>
+        </div>
+        <p class="flow-inspector-detail">${escapeHtml(activeNode.detail)}</p>
+        <div class="flow-inspector-footer">
+          <div class="flow-inspector-outcome">
+            <span class="flow-meta-label">LIVE STATUS</span>
+            <span class="flow-outcome-pill tone-${escapeHtml(activeNode.tone)}">${escapeHtml(activeNode.outcome)}</span>
+          </div>
+          <div class="flow-inspector-actions">
+            ${canJump ? `<button type="button" class="btn btn-primary-32 js-df-jump-btn" data-jump-screen="${escapeHtml(activeNode.jumpScreen)}">${escapeHtml(activeNode.jumpLabel || 'Open')} →</button>` : ''}
+            <button type="button" class="btn btn-secondary-32 js-df-prev-btn" ${activeIdx === 0 ? 'disabled' : ''}>← Prev Tier</button>
+            <button type="button" class="btn btn-secondary-32 js-df-next-btn" ${activeIdx >= ctx.nodes.length - 1 ? 'disabled' : ''}>Next Tier →</button>
+          </div>
+        </div>
+      `;
+
+      inspectorEl.querySelector('.js-df-prev-btn')?.addEventListener('click', () => {
+        if (activeIdx > 0) {
+          state.selectedDispatchTier = ctx.nodes[activeIdx - 1].tierKey;
+          renderDispatchViews();
+        }
+      });
+      inspectorEl.querySelector('.js-df-next-btn')?.addEventListener('click', () => {
+        if (activeIdx < ctx.nodes.length - 1) {
+          state.selectedDispatchTier = ctx.nodes[activeIdx + 1].tierKey;
+          renderDispatchViews();
+        }
+      });
+      inspectorEl.querySelector('.js-df-jump-btn')?.addEventListener('click', (e) => {
+        const targetScreen = e.currentTarget.getAttribute('data-jump-screen');
+        if (targetScreen) switchScreen(targetScreen);
+      });
+    }
+  }
+
+  function renderDispatchHierarchyCanvasInto(canvasEl, ctx) {
+    if (!canvasEl) return;
+    const caps = state.roleCapabilities || {};
+    const selTier = state.selectedDispatchTier || 'tier1_command';
     const renderTierPermChips = (tierKey) => {
       const spec = caps[tierKey];
       if (!spec || !Array.isArray(spec.allowed_actions)) return '';
@@ -9962,12 +10313,12 @@
     };
 
     canvasEl.innerHTML = `
-      <div style="font-size:11.5px;color:var(--text-secondary);margin-bottom:4px;">Click any Role Tier below to inspect full permissions, workflow steps, and live executed actions.</div>
+      <div style="font-size:11.5px;color:var(--text-secondary);margin-bottom:4px;">Click any Role Tier card below to synchronize with the Flow Explorer Pipeline and inspect permissions.</div>
       <div class="dispatch-tier">
         <div class="dispatch-node-card is-root is-clickable ${selTier === 'tier1_command' ? 'is-selected' : ''}" data-tier-key="tier1_command">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Tier 1 · Command ${activeEv ? `· Status: ${escapeHtml(String(activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase())}` : ''}</div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Tier 1 · Command ${ctx.activeEv ? `· Status: ${escapeHtml(String(ctx.activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase())}` : ''}</div>
           <div style="font-size:15px;font-weight:800;margin-top:2px;">Project Manager / Event Coordinator</div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">PM: <strong>${escapeHtml(pmName)}</strong> · Coordinator: <strong>${escapeHtml(coordName)}</strong></div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">PM: <strong>${escapeHtml(ctx.pmName)}</strong> · Coordinator: <strong>${escapeHtml(ctx.coordName)}</strong></div>
           ${renderTierPermChips('tier1_command')}
         </div>
       </div>
@@ -9976,7 +10327,7 @@
         <div class="dispatch-node-card is-clickable ${selTier === 'tier2_tech_lead' ? 'is-selected' : ''}" data-tier-key="tier2_tech_lead">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 2 · Technical Supervision</div>
           <div style="font-size:14.5px;font-weight:800;margin-top:2px;">Tech Lead</div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Lead: <strong>${escapeHtml(tlName)}</strong></div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Lead: <strong>${escapeHtml(ctx.tlName)}</strong></div>
           ${renderTierPermChips('tier2_tech_lead')}
         </div>
       </div>
@@ -9984,15 +10335,15 @@
       <div class="dispatch-tier">
         <div class="dispatch-node-card is-clickable ${selTier === 'tier3_technicians' ? 'is-selected' : ''}" data-tier-key="tier3_technicians" style="min-width:220px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 3 · Technical Execution</div>
-          <div style="font-size:14px;font-weight:800;margin-top:2px;">Technicians (${deptNames.length} Specialty Branches)</div>
+          <div style="font-size:14px;font-weight:800;margin-top:2px;">Technicians (${ctx.deptNames.length} Specialty Branches)</div>
           ${renderTierPermChips('tier3_technicians')}
         </div>
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-dept-grid">
-        ${deptNames.map((dn) => {
-          const members = pool.filter((c) => deptMatches(c, dn));
-          const reqNeed = Number(activeEv?.requirements?.branches?.[dn] || 0);
+        ${ctx.deptNames.map((dn) => {
+          const members = ctx.pool.filter((c) => ctx.deptMatches(c, dn));
+          const reqNeed = Number(ctx.activeEv?.requirements?.branches?.[dn] || 0);
           return `
             <div class="dispatch-dept-card is-clickable" data-tier-key="tier3_technicians">
               <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -10000,7 +10351,7 @@
                 <span class="status-badge status-badge-blue-sm">${members.length}${reqNeed > 0 ? ` / ${reqNeed} req` : ''}</span>
               </div>
               <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.45;">
-                ${members.length ? members.slice(0, 4).map((m) => formatMemberBadge(m)).join('<br>') + (members.length > 4 ? `<br>+${members.length - 4} more` : '') : '<em>Unassigned</em>'}
+                ${members.length ? members.slice(0, 4).map((m) => ctx.formatMemberBadge(m)).join('<br>') + (members.length > 4 ? `<br>+${members.length - 4} more` : '') : '<em>Unassigned</em>'}
               </div>
             </div>
           `;
@@ -10010,9 +10361,9 @@
       <div class="dispatch-tier">
         <div class="dispatch-node-card is-clickable ${selTier === 'tier4_support' ? 'is-selected' : ''}" data-tier-key="tier4_support" style="width:100%;max-width:640px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 4 · Operations Ground Support</div>
-          <div style="font-size:14px;font-weight:800;margin-top:2px;">Support Staff (${supportList.length})</div>
+          <div style="font-size:14px;font-weight:800;margin-top:2px;">Support Staff (${ctx.supportList.length})</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">
-            ${supportList.length ? supportList.slice(0, 6).map((s) => formatMemberBadge(s)).join(' · ') : 'Assign runners, logistics drivers, or venue crew via Event Roster or Support Requests below.'}
+            ${ctx.supportList.length ? ctx.supportList.slice(0, 6).map((s) => ctx.formatMemberBadge(s)).join(' · ') : 'Assign runners, logistics drivers, or venue crew via Event Roster or Support Requests below.'}
           </div>
           ${renderTierPermChips('tier4_support')}
         </div>
@@ -10022,16 +10373,12 @@
     canvasEl.querySelectorAll('[data-tier-key]').forEach((el) => {
       el.addEventListener('click', () => {
         state.selectedDispatchTier = el.getAttribute('data-tier-key') || 'tier1_command';
-        renderSettingsDispatchSection();
+        renderDispatchViews();
       });
     });
-
-    renderDispatchRoleFlowDrawer(activeEv, pickedId);
-    renderDispatchWorkflowDeck(activeEv, pickedId);
   }
 
-  function renderDispatchRoleFlowDrawer(activeEv, pickedId) {
-    const drawer = document.getElementById('dispatch-role-flow-drawer');
+  function renderDispatchRoleFlowDrawerInto(drawer, ctx) {
     if (!drawer) return;
     const caps = state.roleCapabilities || {};
     const tierKeys = Object.keys(caps);
@@ -10042,6 +10389,7 @@
       return;
     }
 
+    const pickedId = ctx.resolvedId;
     const roleSet = new Set((spec.roles || []).map((r) => String(r).toLowerCase()));
     const dispatchLogs = (state.eventDispatchLogs || []).filter((l) => {
       if (pickedId && String(l.event_id) !== String(pickedId)) return false;
@@ -10096,21 +10444,21 @@
     drawer.querySelectorAll('.js-dispatch-tier-tab').forEach((btn) => {
       btn.addEventListener('click', () => {
         state.selectedDispatchTier = btn.getAttribute('data-tier-key') || 'tier1_command';
-        renderSettingsDispatchSection();
+        renderDispatchViews();
       });
     });
   }
 
-  function renderDispatchWorkflowDeck(activeEv, pickedId) {
-    const deck = document.getElementById('dispatch-workflow-deck');
+  function renderDispatchWorkflowDeckInto(deck, ctx) {
     if (!deck) return;
+    const activeEv = ctx.activeEv;
     const evId = activeEv ? String(activeEv.raw_id || activeEv.id) : '';
     const evTitle = activeEv ? (activeEv.title || activeEv.name) : 'Select an Event Venue';
     const canSendReqs = isCurrentUserAdmin() || isCurrentUserEventCommand();
     const canReqSupport = canSendReqs || isCurrentUserTechLead();
     const canFulfillSupport = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand();
 
-    const deptNames = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
+    const deptNames = ctx.deptNames;
     const reqBranches = (activeEv && activeEv.requirements && activeEv.requirements.branches) || {};
     const reqNotes = (activeEv && activeEv.requirements && activeEv.requirements.notes) || '';
 
@@ -10119,8 +10467,8 @@
       const d = String(c.department || '').toLowerCase();
       return ['driver', 'security', 'user', 'support_staff', 'operations', 'operations_crew', 'runner'].includes(r) || d.includes('support') || d.includes('logistic');
     });
-    const supportReqs = (state.eventSupportRequests || []).filter((r) => !evId || String(r.event_id) === evId);
-    const evLogs = (state.eventDispatchLogs || []).filter((l) => !evId || String(l.event_id) === evId);
+    const supportReqs = ctx.supportReqs;
+    const evLogs = ctx.evLogs;
 
     deck.innerHTML = `
       <div class="dispatch-step-panel">
@@ -10137,8 +10485,8 @@
             </label>
           `).join('')}
         </div>
-        <input type="text" id="dp-req-notes" class="form-input" value="${escapeHtml(reqNotes)}" placeholder="Gear & setup notes for Tech Lead..." style="height:32px;font-size:12px;" ${!evId || !canSendReqs ? 'disabled' : ''} />
-        ${evId && canSendReqs ? `<button type="button" class="btn btn-primary-32" id="dp-send-reqs-btn">Send Requirements to Tech Lead</button>` : ''}
+        <input type="text" class="form-input js-dp-req-notes" value="${escapeHtml(reqNotes)}" placeholder="Gear & setup notes for Tech Lead..." style="height:32px;font-size:12px;" ${!evId || !canSendReqs ? 'disabled' : ''} />
+        ${evId && canSendReqs ? `<button type="button" class="btn btn-primary-32 js-dp-send-reqs-btn">Send Requirements to Tech Lead</button>` : ''}
       </div>
 
       <div class="dispatch-step-panel">
@@ -10148,8 +10496,8 @@
         </div>
         ${evId && canReqSupport ? `
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <input type="text" id="dp-sup-req-note" class="form-input" placeholder="Need e.g. 2x Runners, 1x Driver..." style="flex:1;min-width:140px;height:32px;font-size:12px;" />
-            <button type="button" class="btn btn-secondary-32-sm" id="dp-request-support-btn">+ Request Support</button>
+            <input type="text" class="form-input js-dp-sup-req-note" placeholder="Need e.g. 2x Runners, 1x Driver..." style="flex:1;min-width:140px;height:32px;font-size:12px;" />
+            <button type="button" class="btn btn-secondary-32-sm js-dp-request-support-btn">+ Request Support</button>
           </div>
         ` : ''}
         <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
@@ -10195,13 +10543,13 @@
       </div>
     `;
 
-    deck.querySelector('#dp-send-reqs-btn')?.addEventListener('click', async () => {
+    deck.querySelector('.js-dp-send-reqs-btn')?.addEventListener('click', async () => {
       if (!evId) return;
       const branches = {};
       deck.querySelectorAll('.js-dp-req-branch').forEach((inp) => {
         branches[inp.getAttribute('data-branch')] = Math.max(0, Number(inp.value || 0));
       });
-      const notes = (document.getElementById('dp-req-notes')?.value || '').trim();
+      const notes = (deck.querySelector('.js-dp-req-notes')?.value || '').trim();
       try {
         const res = await fetch('api.php?action=send_event_requirements', {
           method: 'POST',
@@ -10215,9 +10563,9 @@
       } catch (e) { showToast('Network error sending requirements.'); }
     });
 
-    deck.querySelector('#dp-request-support-btn')?.addEventListener('click', async () => {
+    deck.querySelector('.js-dp-request-support-btn')?.addEventListener('click', async () => {
       if (!evId) return;
-      const noteText = (document.getElementById('dp-sup-req-note')?.value || '').trim();
+      const noteText = (deck.querySelector('.js-dp-sup-req-note')?.value || '').trim();
       try {
         const res = await fetch('api.php?action=request_support_staff', {
           method: 'POST',
@@ -10255,6 +10603,257 @@
           applyBootstrapPayload(data, true);
           showToast(data.message || 'Support staff assigned.');
         } catch (e) { showToast('Network error fulfilling support request.'); }
+      });
+    });
+  }
+
+  function renderSettingsDispatchSection() {
+    const selEl = document.getElementById('dispatch-event-select');
+    const ctx = getDispatchContextData(selEl?.value || state.selectedDispatchEventId || '');
+    if (ctx.resolvedId && !state.selectedDispatchEventId) {
+      state.selectedDispatchEventId = ctx.resolvedId;
+    }
+    syncDispatchEventSelect(selEl, ctx);
+    renderDispatchPipelineInto(
+      document.getElementById('settings-dispatch-flow-diagram'),
+      document.getElementById('settings-dispatch-flow-inspector'),
+      null,
+      ctx
+    );
+    renderDispatchHierarchyCanvasInto(document.getElementById('dispatch-hierarchy-canvas'), ctx);
+    renderDispatchRoleFlowDrawerInto(document.getElementById('dispatch-role-flow-drawer'), ctx);
+    renderDispatchWorkflowDeckInto(document.getElementById('dispatch-workflow-deck'), ctx);
+  }
+
+  function renderDispatchFlowPage() {
+    const selEl = document.getElementById('dispatch-page-event-select');
+    const ctx = getDispatchContextData(selEl?.value || state.selectedDispatchEventId || '');
+    if (ctx.resolvedId && !state.selectedDispatchEventId) {
+      state.selectedDispatchEventId = ctx.resolvedId;
+    }
+    syncDispatchEventSelect(selEl, ctx);
+    renderDispatchPipelineInto(
+      document.getElementById('dispatch-flow-diagram'),
+      document.getElementById('dispatch-flow-inspector'),
+      document.getElementById('dispatch-flow-active-event-pill'),
+      ctx
+    );
+    renderDispatchHierarchyCanvasInto(document.getElementById('dispatch-page-hierarchy-canvas'), ctx);
+    renderDispatchRoleFlowDrawerInto(document.getElementById('dispatch-page-role-flow-drawer'), ctx);
+    renderDispatchWorkflowDeckInto(document.getElementById('dispatch-page-workflow-deck'), ctx);
+  }
+
+  // =========================================================================
+  // CREATE EVENT WORKSPACE TAB (#screen-create-event)
+  // =========================================================================
+
+  function updateCreateEventLivePreview() {
+    const titleVal = document.getElementById('ce-title')?.value.trim() || 'Event Cover Preview';
+    const locVal = document.getElementById('ce-location')?.value.trim() || 'Location pending';
+    const tlVal = document.getElementById('ce-techlead')?.value.trim() || 'Unassigned';
+    const sDate = document.getElementById('ce-start-date')?.value || new Date().toISOString().slice(0, 10);
+    const eDate = document.getElementById('ce-end-date')?.value || sDate;
+    const dur = computeEventDuration(sDate, eDate);
+
+    const durEl = document.getElementById('ce-duration');
+    const pillEl = document.getElementById('ce-duration-pill');
+    if (durEl) durEl.value = dur.label;
+    if (pillEl) pillEl.textContent = dur.label;
+
+    const pTitle = document.getElementById('ce-cover-preview-title');
+    const pDates = document.getElementById('ce-cover-preview-dates');
+    const pMeta = document.getElementById('ce-cover-preview-meta');
+    if (pTitle) pTitle.textContent = titleVal;
+    if (pDates) pDates.textContent = sDate === eDate ? `${sDate} · ${dur.label}` : `${sDate} → ${eDate} · ${dur.label}`;
+    if (pMeta) pMeta.textContent = `${locVal} · Tech Lead: ${tlVal}`;
+
+    const dropPreviewVisible = document.getElementById('ce-dropzone-preview')?.style.display !== 'none';
+    const dropImgSrc = document.getElementById('ce-preview-img')?.getAttribute('src') || '';
+    const coverImg = document.getElementById('ce-cover-preview-img');
+    if (coverImg) {
+      if (dropPreviewVisible && dropImgSrc) {
+        coverImg.src = dropImgSrc;
+        coverImg.style.display = 'block';
+      } else {
+        coverImg.removeAttribute('src');
+        coverImg.style.display = 'none';
+      }
+    }
+  }
+
+  function resetCreateEventForm() {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const idEl = document.getElementById('ce-event-id');
+    const titleEl = document.getElementById('ce-title');
+    const locEl = document.getElementById('ce-location');
+    const startEl = document.getElementById('ce-start-date');
+    const endEl = document.getElementById('ce-end-date');
+    const ctEl = document.getElementById('ce-calltime');
+    const pinEl = document.getElementById('ce-pin');
+    const tlEl = document.getElementById('ce-techlead');
+    const modeBadge = document.getElementById('ce-screen-mode-badge');
+    const heading = document.getElementById('ce-form-heading');
+    const cancelBtn = document.getElementById('ce-cancel-edit-btn');
+    const submitLabel = document.querySelector('#ce-submit-btn span');
+
+    if (idEl) idEl.value = '';
+    if (titleEl) titleEl.value = '';
+    if (locEl) locEl.value = '';
+    if (startEl) startEl.value = todayIso;
+    if (endEl) endEl.value = todayIso;
+    if (ctEl) ctEl.value = '08:00';
+    if (pinEl) pinEl.value = '1234';
+    if (modeBadge) modeBadge.textContent = 'New Event';
+    if (heading) heading.textContent = 'Create Event Details';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (submitLabel) submitLabel.textContent = 'Save & Create Event';
+    resetDropzone('ce');
+    populateLeadershipSelect(tlEl, '', 'techlead');
+    updateCreateEventLivePreview();
+  }
+
+  function loadEventIntoCreateEventForm(ev) {
+    if (!ev) return;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const startIso = ev.start_date || ev.date || todayIso;
+    const endIso = ev.end_date || startIso;
+    const idEl = document.getElementById('ce-event-id');
+    const titleEl = document.getElementById('ce-title');
+    const locEl = document.getElementById('ce-location');
+    const startEl = document.getElementById('ce-start-date');
+    const endEl = document.getElementById('ce-end-date');
+    const ctEl = document.getElementById('ce-calltime');
+    const pinEl = document.getElementById('ce-pin');
+    const tlEl = document.getElementById('ce-techlead');
+    const modeBadge = document.getElementById('ce-screen-mode-badge');
+    const heading = document.getElementById('ce-form-heading');
+    const cancelBtn = document.getElementById('ce-cancel-edit-btn');
+    const submitLabel = document.querySelector('#ce-submit-btn span');
+
+    if (idEl) idEl.value = String(ev.raw_id || ev.id || '');
+    if (titleEl) titleEl.value = ev.title || ev.name || '';
+    if (locEl) locEl.value = ev.location || '';
+    if (startEl) startEl.value = startIso;
+    if (endEl) endEl.value = endIso;
+    if (ctEl) ctEl.value = ev.call_time || '08:00';
+    if (pinEl) pinEl.value = ev.terminal_pin || '1234';
+    if (modeBadge) modeBadge.textContent = 'Editing Event';
+    if (heading) heading.textContent = `Edit Event: ${ev.title || ev.name}`;
+    if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+    if (submitLabel) submitLabel.textContent = 'Save Event Changes';
+    resetDropzone('ce');
+    if (ev.image) {
+      setDropzonePreview('ce', ev.image, ev.image.split('/').pop());
+    }
+    populateLeadershipSelect(tlEl, ev.tech_lead || '', 'techlead');
+    updateCreateEventLivePreview();
+    document.getElementById('create-event-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function renderCreateEventPage() {
+    const startEl = document.getElementById('ce-start-date');
+    const endEl = document.getElementById('ce-end-date');
+    const tlEl = document.getElementById('ce-techlead');
+    const gridEl = document.getElementById('create-event-cards-grid');
+    const countBadge = document.getElementById('ce-cards-count-badge');
+
+    const todayIso = new Date().toISOString().slice(0, 10);
+    if (startEl && !startEl.value) startEl.value = todayIso;
+    if (endEl && !endEl.value) endEl.value = startEl?.value || todayIso;
+
+    if (tlEl) {
+      const preservedVal = tlEl.value || '';
+      populateLeadershipSelect(tlEl, preservedVal, 'techlead');
+    }
+    updateCreateEventLivePreview();
+
+    if (!gridEl) return;
+    const allEvents = state.checkpoints?.event_venues || [];
+    const q = String(state.createEventSearch || '').trim().toLowerCase();
+    const filtered = allEvents.filter((ev) => {
+      if (!q) return true;
+      const hay = `${ev.title || ''} ${ev.location || ''} ${ev.tech_lead || ''} ${ev.start_date || ev.date || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+
+    if (countBadge) {
+      countBadge.textContent = `${filtered.length} Event${filtered.length === 1 ? '' : 's'}`;
+    }
+
+    if (!filtered.length) {
+      gridEl.innerHTML = '<div style="grid-column:1/-1;padding:28px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:12px;">No events match the filter yet. Use the form on the left to create an event.</div>';
+      return;
+    }
+
+    const canManage = isCurrentUserAdmin() || isCurrentUserEventCommand() || isCurrentUserTechLead();
+    gridEl.innerHTML = filtered.map((ev) => {
+      const evIdStr = String(ev.raw_id || ev.id);
+      const startDate = ev.start_date || ev.date || todayIso;
+      const endDate = ev.end_date || startDate;
+      const durLabel = ev.duration_label || computeEventDuration(startDate, endDate).label;
+      const heroStyle = ev.image ? ` style="background-image: url('${escapeHtml(ev.image)}');"` : '';
+      const statusText = String(ev.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase();
+      return `
+        <article class="event-showcase-card" data-ce-card-id="${escapeHtml(evIdStr)}">
+          <div class="event-showcase-hero"${heroStyle}>
+            <div class="event-showcase-top">
+              <span class="event-showcase-pill">${escapeHtml(durLabel)}</span>
+              <span class="event-showcase-pill">${escapeHtml(statusText)}</span>
+            </div>
+            <div>
+              <h3 style="margin:0;font-size:15px;font-weight:800;line-height:1.25;">${escapeHtml(ev.title || ev.name)}</h3>
+              <div style="font-size:11.5px;opacity:0.9;margin-top:2px;">${escapeHtml(ev.location || 'Kigali Venue')}</div>
+            </div>
+          </div>
+          <div class="event-showcase-body">
+            <div class="event-showcase-meta">
+              <div class="event-showcase-meta-item">
+                <span class="event-showcase-meta-label">Start Date</span>
+                <span class="event-showcase-meta-val">${escapeHtml(startDate)}</span>
+              </div>
+              <div class="event-showcase-meta-item">
+                <span class="event-showcase-meta-label">End Date</span>
+                <span class="event-showcase-meta-val">${escapeHtml(endDate)}</span>
+              </div>
+              <div class="event-showcase-meta-item">
+                <span class="event-showcase-meta-label">Event Tech Lead</span>
+                <span class="event-showcase-meta-val">${escapeHtml(ev.tech_lead || '—')}</span>
+              </div>
+              <div class="event-showcase-meta-item">
+                <span class="event-showcase-meta-label">Call Time · Crew</span>
+                <span class="event-showcase-meta-val">${escapeHtml(ev.call_time || '08:00')} · ${Number(ev.assigned_count || 0)} crew</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;">
+              ${canManage ? `<button type="button" class="btn btn-secondary-32-sm js-ce-edit-btn" data-event-id="${escapeHtml(evIdStr)}">Edit</button>` : ''}
+              <button type="button" class="btn btn-primary-32 js-ce-dispatch-btn" data-event-id="${escapeHtml(evIdStr)}" style="flex:1;height:30px;font-size:11.5px;">Dispatch Flow →</button>
+              ${canCurrentUserAssignEvents() ? `<button type="button" class="btn btn-secondary-32-sm js-ce-delete-btn" data-event-id="${escapeHtml(evIdStr)}" data-event-title="${escapeHtml(ev.title || ev.name)}" style="color:#dc2626;border-color:#fecaca;">Delete</button>` : ''}
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('');
+
+    gridEl.querySelectorAll('.js-ce-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const eid = btn.getAttribute('data-event-id');
+        const found = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === String(eid));
+        if (found) openVenueCrudModal(found);
+      });
+    });
+
+    gridEl.querySelectorAll('.js-ce-dispatch-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.selectedDispatchEventId = String(btn.getAttribute('data-event-id') || '');
+        switchScreen('dispatch-flow');
+      });
+    });
+
+    gridEl.querySelectorAll('.js-ce-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const eid = btn.getAttribute('data-event-id');
+        const title = btn.getAttribute('data-event-title') || 'Event';
+        await confirmAndDeleteEventVenue(eid, title);
       });
     });
   }
@@ -11020,6 +11619,8 @@
 
   function renderDedicatedNavPages(onlyScreen = null) {
     if (!onlyScreen || onlyScreen === 'events') renderVenueSecurityPage();
+    if (!onlyScreen || onlyScreen === 'create-event') renderCreateEventPage();
+    if (!onlyScreen || onlyScreen === 'dispatch-flow') renderDispatchFlowPage();
     if (!onlyScreen || onlyScreen === 'shift-relief') renderShiftReliefPage();
     if (!onlyScreen || onlyScreen === 'calltime') renderCallTimePage();
     if (!onlyScreen || onlyScreen === 'rollcall') renderRollCallPage();
@@ -11318,6 +11919,9 @@
     if (previewEl) previewEl.style.display = 'none';
     if (previewImg) previewImg.src = '';
     if (filenameEl) filenameEl.textContent = '';
+    if (prefix === 'ce' && typeof updateCreateEventLivePreview === 'function') {
+      updateCreateEventLivePreview();
+    }
   }
 
   function setDropzonePreview(prefix, imgSrc, filename) {
@@ -11330,6 +11934,9 @@
     if (previewEl) previewEl.style.display = 'flex';
     if (previewImg) previewImg.src = imgSrc;
     if (filenameEl) filenameEl.textContent = filename || 'Existing image';
+    if (prefix === 'ce' && typeof updateCreateEventLivePreview === 'function') {
+      updateCreateEventLivePreview();
+    }
   }
 
   function setupDropzoneEvents(prefix) {
@@ -11373,12 +11980,19 @@
 
     function handleFileSelect(file) {
       if (!file.type.startsWith('image/')) {
-        showToast('Please select a valid image file (JPG, PNG, WEBP)');
+        showToast('Please select a valid image file (JPG, PNG, WEBP)', 'error');
         return;
+      }
+      if (prefix === 'venue') {
+        const rmEl = document.getElementById('venue-crud-remove-image');
+        if (rmEl) rmEl.value = '0';
       }
       const reader = new FileReader();
       reader.onload = (e) => {
         setDropzonePreview(prefix, e.target.result, file.name);
+        if (prefix === 'ce' || prefix === 'venue') {
+          showToast(`Cover image selected: ${file.name}`, 'info');
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -12275,21 +12889,161 @@
       });
     }
 
-    // Settings Tab: Dispatch Hierarchy
+    // Settings Tab & Dedicated Screen: Dispatch Hierarchy
     const dispatchEvSel = document.getElementById('dispatch-event-select');
     if (dispatchEvSel) {
-      dispatchEvSel.addEventListener('change', renderSettingsDispatchSection);
+      dispatchEvSel.addEventListener('change', () => {
+        state.selectedDispatchEventId = dispatchEvSel.value || '';
+        renderDispatchViews();
+      });
     }
+    const dispatchPageEvSel = document.getElementById('dispatch-page-event-select');
+    if (dispatchPageEvSel) {
+      dispatchPageEvSel.addEventListener('change', () => {
+        state.selectedDispatchEventId = dispatchPageEvSel.value || '';
+        renderDispatchViews();
+      });
+    }
+    const openRosterForEvent = (selId) => {
+      const evId = document.getElementById(selId)?.value || state.selectedDispatchEventId || '';
+      const evObj = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === evId);
+      if (typeof window.openScheduleRosterModalForFacility === 'function' && evObj) {
+        window.openScheduleRosterModalForFacility(evObj.name);
+      } else {
+        const btn = document.getElementById('open-schedule-roster-btn');
+        if (btn) btn.click();
+      }
+    };
     const dispatchOpenRoster = document.getElementById('dispatch-open-roster-btn');
     if (dispatchOpenRoster) {
-      dispatchOpenRoster.addEventListener('click', () => {
-        const evId = document.getElementById('dispatch-event-select')?.value || '';
-        const evObj = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === evId);
-        if (typeof window.openScheduleRosterModalForFacility === 'function' && evObj) {
-          window.openScheduleRosterModalForFacility(evObj.name);
-        } else {
-          const btn = document.getElementById('open-schedule-roster-btn');
-          if (btn) btn.click();
+      dispatchOpenRoster.addEventListener('click', () => openRosterForEvent('dispatch-event-select'));
+    }
+    const dispatchPageOpenRoster = document.getElementById('dispatch-page-open-roster-btn');
+    if (dispatchPageOpenRoster) {
+      dispatchPageOpenRoster.addEventListener('click', () => openRosterForEvent('dispatch-page-event-select'));
+    }
+    const dispatchPageCreateEvBtn = document.getElementById('dispatch-page-create-event-btn');
+    if (dispatchPageCreateEvBtn) {
+      dispatchPageCreateEvBtn.addEventListener('click', () => {
+        resetCreateEventForm();
+        switchScreen('create-event');
+      });
+    }
+
+    // Create Event Workspace Tab Listeners & Auto-Duration Sync
+    const bindDateRangeDuration = (startId, endId, durId, pillId, onUpdated) => {
+      const sEl = document.getElementById(startId);
+      const eEl = document.getElementById(endId);
+      const dEl = document.getElementById(durId);
+      const pEl = pillId ? document.getElementById(pillId) : null;
+      if (!sEl || !eEl) return;
+      const syncDur = (changedSource, isExplicitChange = false) => {
+        const sVal = sEl.value;
+        let eVal = eEl.value;
+        let adjusted = false;
+        if (sVal && (!eVal || eVal < sVal)) {
+          if (changedSource === 'end' && eVal && eVal < sVal) {
+            adjusted = true;
+            showToast('End date adjusted: it cannot be earlier than start date.', 'warning');
+          }
+          eVal = sVal;
+          eEl.value = sVal;
+        }
+        eEl.min = sVal || '';
+        const dur = computeEventDuration(sVal, eVal);
+        if (dEl) dEl.value = dur.label;
+        if (pEl) pEl.textContent = dur.label;
+        if (typeof onUpdated === 'function') onUpdated();
+        if (isExplicitChange && !adjusted && dur.valid) {
+          showToast(`Event duration updated to ${dur.label} (${sVal}${eVal !== sVal ? ` → ${eVal}` : ''}).`, 'info');
+        }
+      };
+      sEl.addEventListener('change', () => syncDur('start', true));
+      sEl.addEventListener('input', () => syncDur('start', false));
+      eEl.addEventListener('change', () => syncDur('end', true));
+      eEl.addEventListener('input', () => syncDur('end', false));
+    };
+
+    bindDateRangeDuration('ce-start-date', 'ce-end-date', 'ce-duration', 'ce-duration-pill', updateCreateEventLivePreview);
+    bindDateRangeDuration('venue-crud-date', 'venue-crud-end-date', 'venue-crud-duration', null, null);
+
+    ['ce-title', 'ce-location', 'ce-techlead'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', updateCreateEventLivePreview);
+        el.addEventListener('change', updateCreateEventLivePreview);
+      }
+    });
+
+    document.getElementById('ce-cards-search')?.addEventListener('input', (e) => {
+      state.createEventSearch = e.target.value || '';
+      renderCreateEventPage();
+    });
+
+    document.getElementById('create-event-reset-btn')?.addEventListener('click', resetCreateEventForm);
+    document.getElementById('ce-cancel-edit-btn')?.addEventListener('click', resetCreateEventForm);
+    document.getElementById('create-event-open-dispatch-btn')?.addEventListener('click', () => switchScreen('dispatch-flow'));
+    document.getElementById('create-event-open-new-tab-btn')?.addEventListener('click', () => {
+      window.open('index.php#create-event', '_blank', 'noopener');
+    });
+
+    const createEventForm = document.getElementById('create-event-form');
+    if (createEventForm) {
+      createEventForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const titleVal = document.getElementById('ce-title')?.value.trim() || '';
+        const startVal = document.getElementById('ce-start-date')?.value || '';
+        const endVal = document.getElementById('ce-end-date')?.value || startVal;
+        const locVal = document.getElementById('ce-location')?.value.trim() || '';
+        const tlVal = document.getElementById('ce-techlead')?.value.trim() || '';
+        if (!titleVal || !startVal || !endVal || !locVal || !tlVal) {
+          showToast('Please complete Event Name, Start & End Dates, Location, and Event Tech Lead.');
+          return;
+        }
+        const durCheck = computeEventDuration(startVal, endVal);
+        if (!durCheck.valid) {
+          showToast('Event end date cannot be earlier than start date.');
+          return;
+        }
+
+        const subBtn = document.getElementById('ce-submit-btn');
+        const subLbl = subBtn?.querySelector('span');
+        const prevBtnText = subLbl ? subLbl.textContent : 'Save & Create Event';
+        if (subBtn) subBtn.disabled = true;
+        if (subLbl) subLbl.textContent = 'Saving Event...';
+
+        const fd = new FormData();
+        fd.append('event_id', document.getElementById('ce-event-id')?.value.trim() || '');
+        fd.append('title', titleVal);
+        fd.append('date', startVal);
+        fd.append('start_date', startVal);
+        fd.append('end_date', endVal);
+        fd.append('location', locVal);
+        fd.append('tech_lead', tlVal);
+        fd.append('call_time', document.getElementById('ce-calltime')?.value || '08:00');
+        fd.append('terminal_pin', document.getElementById('ce-pin')?.value.trim() || '1234');
+        const ceImgInput = document.getElementById('ce-modal-image');
+        if (ceImgInput && ceImgInput.files && ceImgInput.files[0]) {
+          fd.append('image', ceImgInput.files[0]);
+        }
+
+        try {
+          const res = await fetch('api.php?action=save_event', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (res.ok && data && data.ok) {
+            if (data.event_id) state.selectedDispatchEventId = String(data.event_id);
+            resetCreateEventForm();
+            applyBootstrapPayload(data, true);
+            renderAll();
+            showToast(data.message || `Event "${titleVal}" saved (${durCheck.label}).`, 'success');
+          } else {
+            showToast((data && data.error) || 'Failed to save event.', 'error');
+          }
+        } catch (err) {
+          showToast('Network error saving event.', 'error');
+        } finally {
+          if (subBtn) subBtn.disabled = false;
+          if (subLbl) subLbl.textContent = prevBtnText;
         }
       });
     }
@@ -14326,10 +15080,34 @@
     }
 
     const venueCrudForm = document.getElementById('venue-crud-form');
+    document.getElementById('venue-clear-image-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rmEl = document.getElementById('venue-crud-remove-image');
+      if (rmEl) rmEl.value = '1';
+      resetDropzone('venue');
+      showToast('Event cover image marked for removal when you save.', 'warning');
+    });
+    document.getElementById('venue-crud-delete-btn')?.addEventListener('click', async () => {
+      const evId = document.getElementById('venue-crud-id')?.value.trim() || '';
+      const evTitle = document.getElementById('venue-crud-title')?.value.trim() || 'this Event';
+      if (!evId) return;
+      const deleted = await confirmAndDeleteEventVenue(evId, evTitle);
+      if (deleted) closeVenueCrudModal();
+    });
+
     if (venueCrudForm) {
       venueCrudForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const modalStartDate = document.getElementById('venue-crud-date')?.value || '';
+        const modalEndDate = document.getElementById('venue-crud-end-date')?.value || modalStartDate;
+        const durCheck = computeEventDuration(modalStartDate, modalEndDate);
+        if (!durCheck.valid) {
+          showToast('Event end date cannot be earlier than start date.', 'error');
+          return;
+        }
         const btn = document.getElementById('venue-crud-submit-btn');
+        const editingEventId = document.getElementById('venue-crud-id')?.value.trim() || '';
+        const defaultBtnText = editingEventId ? 'Save Event Changes' : 'Save Event Venue';
         if (btn) {
           btn.disabled = true;
           btn.textContent = 'Saving...';
@@ -14337,10 +15115,12 @@
         const assignedTechs = Array.from(document.querySelectorAll('#venue-crud-crew-list .js-venue-crud-crew-cb:checked'))
           .map((cb) => Number(cb.value));
         const fd = new FormData();
-        fd.append('event_id', document.getElementById('venue-crud-id')?.value.trim() || '');
+        fd.append('event_id', editingEventId);
         fd.append('title', document.getElementById('venue-crud-title')?.value.trim() || '');
         fd.append('location', document.getElementById('venue-crud-location')?.value.trim() || '');
-        fd.append('date', document.getElementById('venue-crud-date')?.value || '');
+        fd.append('date', modalStartDate);
+        fd.append('start_date', modalStartDate);
+        fd.append('end_date', modalEndDate);
         fd.append('call_time', document.getElementById('venue-crud-calltime')?.value || '08:00');
         fd.append('terminal_pin', document.getElementById('venue-crud-pin')?.value.trim() || '');
         fd.append('tech_lead', document.getElementById('venue-crud-techlead')?.value.trim() || '');
@@ -14351,6 +15131,7 @@
         fd.append('lng', document.getElementById('venue-crud-lng')?.value || '');
         fd.append('checkin_policy', document.getElementById('venue-crud-checkin-policy')?.value || 'hybrid');
         fd.append('require_visual_match', document.getElementById('venue-crud-visual-match')?.checked ? '1' : '0');
+        fd.append('remove_image', document.getElementById('venue-crud-remove-image')?.value || '0');
         const branchReqs = {};
         let hasAnyReq = false;
         ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'].forEach((cap) => {
@@ -14374,19 +15155,20 @@
           });
           const data = await res.json();
           if (res.ok && data && data.ok) {
+            if (data.event_id) state.selectedDispatchEventId = String(data.event_id);
             closeVenueCrudModal();
             applyBootstrapPayload(data, true);
             renderAll();
-            showToast(data.message || 'Event Venue saved successfully.');
+            showToast(data.message || 'Event changes saved successfully.', 'success');
           } else {
-            showToast((data && data.error) || 'Failed to save Event Venue.');
+            showToast((data && data.error) || 'Failed to save Event changes.', 'error');
           }
         } catch (err) {
-          showToast('Network error saving Event Venue.');
+          showToast('Network error saving Event changes.', 'error');
         } finally {
           if (btn) {
             btn.disabled = false;
-            btn.textContent = 'Save Event Venue';
+            btn.textContent = defaultBtnText;
           }
         }
       });
@@ -17539,6 +18321,7 @@
     setupDropzoneEvents('wh');
     setupDropzoneEvents('user');
     setupDropzoneEvents('venue');
+    setupDropzoneEvents('ce');
 
     // User Management Modal Triggers & Controls
     const openAddUserBtn = document.getElementById('open-add-user-btn');
@@ -19014,6 +19797,10 @@
       switchScreen('terminals', 'pane-kiosk');
     } else if (window.location.hash === '#rollcall') {
       switchScreen('rollcall');
+    } else if (window.location.hash === '#create-event') {
+      switchScreen('create-event');
+    } else if (window.location.hash === '#dispatch-flow') {
+      switchScreen('dispatch-flow');
     } else if (window.location.hash === '#settings' || window.location.hash === '#flow-explorer') {
       switchScreen('settings');
     }
@@ -19025,6 +19812,10 @@
     startLiveGateSync();
     if (window.location.hash === '#rollcall' && isScreenPermittedForCurrentUser('rollcall')) {
       switchScreen('rollcall');
+    } else if (window.location.hash === '#create-event' && isScreenPermittedForCurrentUser('create-event')) {
+      switchScreen('create-event');
+    } else if (window.location.hash === '#dispatch-flow' && isScreenPermittedForCurrentUser('dispatch-flow')) {
+      switchScreen('dispatch-flow');
     } else if ((window.location.hash === '#settings' || window.location.hash === '#flow-explorer') && isScreenPermittedForCurrentUser('settings')) {
       switchScreen('settings');
     } else if (isCurrentUserStockController()) {

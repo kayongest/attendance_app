@@ -248,6 +248,10 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `title` VARCHAR(160) NOT NULL,
             `location` VARCHAR(160) DEFAULT 'Kigali Convention Centre',
             `date` DATE DEFAULT NULL,
+            `start_date` DATE DEFAULT NULL,
+            `end_date` DATE DEFAULT NULL,
+            `duration_days` INT DEFAULT 1,
+            `duration_label` VARCHAR(64) DEFAULT NULL,
             `call_time` VARCHAR(32) DEFAULT '08:00',
             `project_manager` VARCHAR(120) DEFAULT 'Operations PM',
             `tech_lead` VARCHAR(120) DEFAULT 'Tech Lead',
@@ -256,6 +260,49 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `image` VARCHAR(500) DEFAULT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
+
+    foreach ([
+        "ALTER TABLE `events` ADD COLUMN `start_date` DATE DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `end_date` DATE DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `duration_days` INT DEFAULT 1",
+        "ALTER TABLE `events` ADD COLUMN `duration_label` VARCHAR(64) DEFAULT NULL",
+    ] as $alterSql) {
+        try {
+            $pdo->exec($alterSql);
+        } catch (Throwable $e) {
+            // Column already exists
+        }
+    }
+    try {
+        $pdo->exec("
+            UPDATE `events`
+            SET `start_date` = COALESCE(`start_date`, `date`),
+                `end_date` = COALESCE(`end_date`, `start_date`, `date`),
+                `duration_days` = CASE
+                    WHEN `duration_days` IS NOT NULL AND `duration_days` > 0 THEN `duration_days`
+                    WHEN COALESCE(`start_date`, `date`) IS NOT NULL AND COALESCE(`end_date`, `start_date`, `date`) IS NOT NULL
+                        THEN GREATEST(1, DATEDIFF(COALESCE(`end_date`, `start_date`, `date`), COALESCE(`start_date`, `date`)) + 1)
+                    ELSE 1
+                END
+            WHERE `date` IS NOT NULL AND (`start_date` IS NULL OR `end_date` IS NULL OR `duration_days` IS NULL OR `duration_days` < 1)
+        ");
+        $pdo->exec("
+            UPDATE `events`
+            SET `duration_label` = CASE
+                WHEN COALESCE(`duration_days`, 1) = 1 THEN '1 day'
+                ELSE CONCAT(COALESCE(`duration_days`, 1), ' days')
+            END
+            WHERE (`duration_label` IS NULL OR `duration_label` = '')
+        ");
+    } catch (Throwable $e) {}
+    try {
+        $emailColStmt = $pdo->query("SHOW COLUMNS FROM `users` LIKE 'email'");
+        $emailCol = $emailColStmt ? $emailColStmt->fetch(PDO::FETCH_ASSOC) : null;
+        if ($emailCol && strtoupper((string) ($emailCol['Null'] ?? 'NO')) === 'NO') {
+            $pdo->exec("ALTER TABLE `users` MODIFY COLUMN `email` VARCHAR(160) NULL DEFAULT NULL");
+            $pdo->exec("UPDATE `users` SET `email` = NULL WHERE `email` = ''");
+        }
+    } catch (Throwable $e) {}
 
     try {
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `assigned_technician` TEXT DEFAULT NULL");
