@@ -932,7 +932,23 @@ function getDefaultNavigationItems(): array
 
 function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
 {
+    static $navVerifiedDbs = [];
     try {
+        $currentDb = (string) ($pdo->query("SELECT DATABASE()")->fetchColumn() ?: 'default');
+        if (!$forceReset && !empty($navVerifiedDbs[$currentDb])) {
+            return;
+        }
+        if (!$forceReset) {
+            try {
+                $vSt = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_schema_version' LIMIT 1");
+                $vSt->execute();
+                if ((string) ($vSt->fetchColumn() ?: '') === '20261123_v28') {
+                    $navVerifiedDbs[$currentDb] = true;
+                    return;
+                }
+            } catch (Throwable $e) {}
+        }
+
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `app_settings` (
                 `setting_key` VARCHAR(64) PRIMARY KEY,
@@ -1260,6 +1276,8 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
             }
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_settings_subitems_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_schema_version', '20261123_v28') ON DUPLICATE KEY UPDATE `setting_value` = '20261123_v28'")->execute();
+        $navVerifiedDbs[$currentDb] = true;
     } catch (Throwable $e) {}
 }
 
@@ -1899,7 +1917,23 @@ function getDefaultOverviewWidgetItems(): array
 
 function ensureOverviewWidgetsTables(PDO $pdo, bool $forceReset = false): void
 {
+    static $owVerifiedDbs = [];
     try {
+        $currentDb = (string) ($pdo->query("SELECT DATABASE()")->fetchColumn() ?: 'default');
+        if (!$forceReset && !empty($owVerifiedDbs[$currentDb])) {
+            return;
+        }
+        if (!$forceReset) {
+            try {
+                $vSt = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'overview_widgets_schema_ver' LIMIT 1");
+                $vSt->execute();
+                if ((string) ($vSt->fetchColumn() ?: '') === '20261123_v28') {
+                    $owVerifiedDbs[$currentDb] = true;
+                    return;
+                }
+            } catch (Throwable $e) {}
+        }
+
         $pdo->exec("
             CREATE TABLE IF NOT EXISTS `overview_widget_controls` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -1955,6 +1989,8 @@ function ensureOverviewWidgetsTables(PDO $pdo, bool $forceReset = false): void
             }
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('overview_widgets_seeded_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('overview_widgets_schema_ver', '20261123_v28') ON DUPLICATE KEY UPDATE `setting_value` = '20261123_v28'")->execute();
+        $owVerifiedDbs[$currentDb] = true;
     } catch (Throwable $e) {}
 }
 
@@ -4345,6 +4381,27 @@ try {
             'error' => 'Invalid or expired security token. Refresh the page and try again.',
         ]);
         exit;
+    }
+
+    // Release PHP exclusive session file lock immediately for all actions that do not write to $_SESSION,
+    // preventing background polling from blocking user saves/toggles.
+    $sessionWriteActions = [
+        'login',
+        'register',
+        'logout',
+        'switch_user',
+        'onsite_portal_login',
+        'onsite_portal_logout',
+        'standalone_gate_unlock',
+        'standalone_gate_lock',
+        'redeem_relief_qr',
+        'redeem_venue_checkin_qr',
+    ];
+    if (!in_array($action, $sessionWriteActions, true) && session_status() === PHP_SESSION_ACTIVE) {
+        if (function_exists('getSessionCsrfToken') && (!empty($_SESSION['auth_user_id']) || $action === 'bootstrap' || $action === 'auth_status')) {
+            getSessionCsrfToken();
+        }
+        @session_write_close();
     }
 
     if ($action === 'bootstrap') {

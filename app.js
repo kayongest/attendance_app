@@ -836,7 +836,10 @@
     });
   }
 
+  let isBootstrapInFlight = false;
   async function fetchBootstrap(preserveVerification = false) {
+    if (isBootstrapInFlight) return;
+    isBootstrapInFlight = true;
     try {
       const url = `api.php?action=bootstrap&checkpoint_type=${encodeURIComponent(state.checkpointType)}&checkpoint_id=${encodeURIComponent(state.checkpointId)}`;
       const res = await fetch(url, { cache: 'no-store' });
@@ -853,6 +856,8 @@
       }
     } catch (err) {
       console.warn('Bootstrap fetch fallback:', err);
+    } finally {
+      isBootstrapInFlight = false;
     }
   }
 
@@ -861,11 +866,13 @@
   function startLiveGateSync() {
     if (liveGateSyncTimer) clearInterval(liveGateSyncTimer);
     liveGateSyncTimer = setInterval(async () => {
-      // Don't refresh if user is currently typing in an input or has an open editing modal
-      const hasModal = document.querySelector('.modal.open');
+      // Don't refresh if user is currently typing in an input, a fetch is running, or any modal is open
+      const hasModal = Array.from(document.querySelectorAll('.modal-backdrop, .kiosk-modal-backdrop')).some((el) => {
+        return el.classList.contains('open') || el.style.display === 'flex' || el.style.display === 'block';
+      });
       const activeEl = document.activeElement;
-      const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
-      if (hasModal || isTyping) return;
+      const isTyping = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT' || activeEl.isContentEditable);
+      if (hasModal || isTyping || isBootstrapInFlight) return;
 
       try {
         await fetchBootstrap(true);
@@ -9092,6 +9099,22 @@
   function closeOverviewWidgetModal() {
     const modal = document.getElementById('overview-widget-crud-modal');
     if (modal) modal.style.display = 'none';
+  }
+
+  function closeAllModals() {
+    if (typeof closeKioskModal === 'function') {
+      closeKioskModal();
+    }
+    if (typeof closeTimelineDetailModal === 'function') {
+      closeTimelineDetailModal();
+    }
+    document.querySelectorAll('.modal-backdrop, .kiosk-modal-backdrop').forEach((el) => {
+      el.classList.remove('open');
+      if (el.style.display && el.style.display !== 'none') {
+        el.style.display = 'none';
+      }
+    });
+    document.body.style.overflow = '';
   }
 
   // =========================================================================

@@ -77,15 +77,13 @@ function getDbConnection(string &$activeDatabaseName = ''): PDO
         $pdo->exec("SET time_zone = '+02:00'");
     } catch (Throwable $e) {}
 
-    // Check if `ability_db` exists and has `users` table
+    // Fast direct check if `ability_db` exists and has `users` table (avoids slow INFORMATION_SCHEMA scans)
     $hasAbilityDb = false;
     try {
-        $stmt = $pdo->query("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'ability_db'");
-        if ($stmt && $stmt->fetchColumn()) {
-            $tblCheck = $pdo->query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'ability_db' AND TABLE_NAME = 'users'");
-            if ($tblCheck && $tblCheck->fetchColumn()) {
-                $hasAbilityDb = true;
-            }
+        $pdo->exec("USE `ability_db`");
+        $tblCheck = $pdo->query("SELECT 1 FROM `users` LIMIT 1");
+        if ($tblCheck !== false) {
+            $hasAbilityDb = true;
         }
     } catch (Throwable $e) {
         $hasAbilityDb = false;
@@ -93,7 +91,6 @@ function getDbConnection(string &$activeDatabaseName = ''): PDO
 
     if ($hasAbilityDb) {
         $activeDatabaseName = 'ability_db';
-        $pdo->exec("USE `ability_db`");
         ensureAbilitySchemaAndSeed($pdo, false);
     } else {
         $activeDatabaseName = 'attendance_app';
@@ -191,6 +188,26 @@ function getFourTierMatrixSpec(): array
 
 function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
 {
+    static $schemaVerifiedDbs = [];
+    $currentDb = 'default';
+    try {
+        $currentDb = (string) ($pdo->query("SELECT DATABASE()")->fetchColumn() ?: 'default');
+    } catch (Throwable $e) {}
+
+    if (!$forceReset && !empty($schemaVerifiedDbs[$currentDb])) {
+        return;
+    }
+    if (!$forceReset) {
+        try {
+            $verSt = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'ability_schema_version' LIMIT 1");
+            $verSt->execute();
+            if ((string) ($verSt->fetchColumn() ?: '') === '20261123_v28') {
+                $schemaVerifiedDbs[$currentDb] = true;
+                return;
+            }
+        } catch (Throwable $e) {}
+    }
+
     // 1. Ensure `users` table exists (if running in standalone `attendance_app` DB)
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS `users` (
@@ -920,6 +937,10 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         }
     }
     // Attendance logs are never auto-seeded on connection so resets persist permanently.
+    try {
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('ability_schema_version', '20261123_v28') ON DUPLICATE KEY UPDATE `setting_value` = '20261123_v28'")->execute();
+        $schemaVerifiedDbs[$currentDb] = true;
+    } catch (Throwable $e) {}
 }
 
 function seedSampleAttendanceLogs(PDO $pdo, array $users = []): void
