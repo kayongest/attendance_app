@@ -1,8 +1,8 @@
 /* aBility Manager — Service Worker (Offline Shell + Static Asset Cache) */
-const CACHE_NAME = 'ability-pwa-v20261122-24';
+const CACHE_NAME = 'ability-pwa-v20261122-27';
 const CORE_ASSETS = [
-  './styles.css?v=20261122_v24',
-  './app.js?v=20261122_v24',
+  './styles.css?v=20261122_v27',
+  './app.js?v=20261122_v27',
   './assets/vendor/qrcode.js',
   './assets/vendor/driver/driver.css',
   './assets/vendor/driver/driver.js.iife.js',

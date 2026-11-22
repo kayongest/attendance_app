@@ -11491,6 +11491,98 @@ html[data-reduced-motion="1"] *::after {
   margin-top: 16px;
 }
 
+/* ========================================================================== */
+/* GATE DASHBOARD (#screen-overview) ELEMENT VISIBILITY & MANAGER STYLES      */
+/* ========================================================================== */
+[data-widget-hidden="true"] {
+  display: none !important;
+}
+
+#screen-overview .metrics-grid .metric-card-overview {
+  flex: 1 1 200px;
+  min-width: 190px;
+}
+
+#screen-overview .split-row.is-single-col > .timeline-card-overview,
+#screen-overview .split-row.is-single-col > .overview-right-stack {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+}
+
+.ow-group-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  overflow: hidden;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+
+.ow-group-card.is-disabled {
+  opacity: 0.7;
+}
+
+.ow-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+}
+
+.ow-group-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.ow-group-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ow-children-list {
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+  padding: 8px 14px 10px 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ow-child-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+}
+
+.ow-child-row.is-disabled {
+  opacity: 0.62;
+}
+
+.ow-code-chip {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
 
 
 

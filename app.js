@@ -84,6 +84,22 @@
     navSearch: '',
     navFilterGroup: 'all',
     navFilterStatus: 'all',
+    navPage: 1,
+    navPageSize: 5,
+    overviewWidgetsConfig: {
+      enabled: true,
+      items: [],
+    },
+    owSearch: '',
+    owFilterCategory: 'all',
+    owFilterStatus: 'all',
+    owPage: 1,
+    owPageSize: 5,
+    owExpandedGroups: {
+      overview_metrics_grid: true,
+      overview_timeline_card: true,
+      overview_allocation_card: true,
+    },
     srFilterStatus: 'all',
     createEventSearch: '',
     selectedDispatchEventId: '',
@@ -640,6 +656,16 @@
       };
       try {
         localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig));
+      } catch (e) {}
+    }
+
+    if (data.overviewWidgetsConfig && Array.isArray(data.overviewWidgetsConfig.items)) {
+      state.overviewWidgetsConfig = {
+        enabled: data.overviewWidgetsConfig.enabled !== false,
+        items: data.overviewWidgetsConfig.items,
+      };
+      try {
+        localStorage.setItem('ability_overview_widgets_config', JSON.stringify(state.overviewWidgetsConfig));
       } catch (e) {}
     }
 
@@ -1526,6 +1552,24 @@
     }
 
     // Redirect merged routes cleanly into consolidated hubs before permission checks
+    if (String(screenKey || '').startsWith('settings:')) {
+      const reqSection = String(screenKey).slice('settings:'.length) || 'flow';
+      if (!isSettingsSectionPermittedForCurrentUser(reqSection)) {
+        showToast('Access Restricted: This Settings section is disabled or restricted for your role.');
+        const fallbackSec = getFirstPermittedSettingsSection();
+        if (fallbackSec) {
+          state.settingsTab = fallbackSec;
+          screenKey = 'settings';
+        } else {
+          screenKey = (isCurrentUserStockController() || isCurrentUserTechnician()) ? 'terminals' : 'overview';
+          if (screenKey === 'terminals') scrollToId = 'pane-kiosk';
+        }
+      } else {
+        state.settingsTab = reqSection;
+        screenKey = 'settings';
+      }
+    }
+
     if (screenKey === 'analytics' || screenKey === 'access-matrix') {
       if (!isCurrentUserAdmin()) {
         showToast('Access Restricted: Security Clearance Matrix requires Administrator privileges.');
@@ -1678,6 +1722,9 @@
       renderUsersScreen();
       switchUsersView(state.usersViewMode || 'personnel');
     }
+    if (resolvedKey === 'settings') {
+      renderSettingsScreen();
+    }
     if (activeDomKey === 'custom-nav-page') {
       state.customNavScreenKey = screenKey;
     }
@@ -1721,7 +1768,9 @@
 
   function renderTechLeadRosterCard() {
     const cardEl = document.getElementById('tech-lead-roster-overview-card');
-    if (!cardEl || !isCurrentUserTechLead()) return;
+    const hasOwConfig = Array.isArray(state.overviewWidgetsConfig?.items) && state.overviewWidgetsConfig.items.some((it) => it.widget_key === 'overview_techlead_card');
+    const tlPermitted = hasOwConfig ? isOverviewWidgetPermitted('overview_techlead_card') : isCurrentUserTechLead();
+    if (!cardEl || (!isCurrentUserTechLead() && !tlPermitted) || (hasOwConfig && !tlPermitted)) return;
 
     const allFacilities = getAllFacilitiesList();
     const allCrew = state.crew || [];
@@ -2309,10 +2358,12 @@
     const tabMatrix = document.getElementById('view-tab-matrix');
     const tabDepts = document.getElementById('view-tab-departments');
     const tabNav = document.getElementById('view-tab-navigation');
+    const tabOw = document.getElementById('view-tab-overview-widgets');
     if (tabRoles) tabRoles.style.display = isAdmin ? 'inline-flex' : 'none';
     if (tabMatrix) tabMatrix.style.display = isAdmin ? 'inline-flex' : 'none';
     if (tabDepts) tabDepts.style.display = isAdmin ? 'inline-flex' : 'none';
     if (tabNav) tabNav.style.display = isAdmin ? 'inline-flex' : 'none';
+    if (tabOw) tabOw.style.display = isAdmin ? 'inline-flex' : 'none';
 
     // 4. User Dropdown & Topbar Administrative Controls (ONLY ADMIN)
     const helpWrap = document.getElementById('topbar-help-wrap');
@@ -2457,6 +2508,8 @@
     if (scheduleRosterBtn) {
       scheduleRosterBtn.style.display = canCurrentUserAssignEvents() ? 'inline-flex' : 'none';
     }
+
+    applyOverviewWidgetVisibility();
   }
 
   function openAuthModal(defaultTab = 'login') {
@@ -5081,7 +5134,8 @@
     let htmlContent = '';
     const canManageTimeline = isCurrentUserAdmin() || isCurrentUserStockManager();
     document.querySelectorAll('.js-open-create-timeline-btn').forEach((btn) => {
-      btn.style.display = canManageTimeline ? 'inline-flex' : 'none';
+      const owAllowed = btn.closest('#screen-overview') ? isOverviewWidgetPermitted('overview_timeline_add_btn') : true;
+      btn.style.display = (canManageTimeline && owAllowed) ? 'inline-flex' : 'none';
     });
 
     if (pageItems.length === 0) {
@@ -5723,7 +5777,7 @@
 
   function switchUsersView(mode) {
     const isAdmin = isCurrentUserAdmin();
-    const safeMode = (!isAdmin && ['roles', 'matrix', 'departments', 'navigation'].includes(mode))
+    const safeMode = (!isAdmin && ['roles', 'matrix', 'departments', 'navigation', 'overview-widgets'].includes(mode))
       ? 'personnel'
       : mode;
     state.usersViewMode = safeMode;
@@ -5734,11 +5788,13 @@
     const tabMatrix = document.getElementById('view-tab-matrix');
     const tabDepts = document.getElementById('view-tab-departments');
     const tabNav = document.getElementById('view-tab-navigation');
+    const tabOw = document.getElementById('view-tab-overview-widgets');
     const personnelView = document.getElementById('personnel-view-container');
     const rolesView = document.getElementById('roles-view-container');
     const matrixView = document.getElementById('matrix-view-container');
     const deptsView = document.getElementById('departments-view-container');
     const navView = document.getElementById('navigation-view-container');
+    const owView = document.getElementById('overview-widgets-view-container');
     const addStaffBtn = document.getElementById('open-add-user-btn');
     const addRoleBtn = document.getElementById('open-add-role-btn');
     const addTierTopBtn = document.getElementById('open-add-tier-top-btn');
@@ -5752,6 +5808,7 @@
       { el: tabMatrix, active: mode === 'matrix' },
       { el: tabDepts, active: mode === 'departments' },
       { el: tabNav, active: mode === 'navigation' },
+      { el: tabOw, active: mode === 'overview-widgets' },
     ];
 
     tabs.forEach(({ el, active }) => {
@@ -5772,6 +5829,7 @@
     if (matrixView) matrixView.style.display = mode === 'matrix' ? 'block' : 'none';
     if (deptsView) deptsView.style.display = mode === 'departments' ? 'block' : 'none';
     if (navView) navView.style.display = mode === 'navigation' ? 'block' : 'none';
+    if (owView) owView.style.display = mode === 'overview-widgets' ? 'block' : 'none';
 
     if (addStaffBtn) addStaffBtn.style.display = mode === 'personnel' ? 'inline-flex' : 'none';
     if (addRoleBtn) addRoleBtn.style.display = mode === 'roles' ? 'inline-flex' : 'none';
@@ -5788,6 +5846,8 @@
       renderDepartmentsScreen();
     } else if (mode === 'navigation') {
       renderNavigationManagerScreen();
+    } else if (mode === 'overview-widgets') {
+      renderOverviewWidgetsManagerScreen();
     } else {
       renderUsersScreen();
     }
@@ -8131,8 +8191,54 @@
     return roleTokens.includes(rawRole);
   }
 
+  const DEFAULT_SETTINGS_SUBSECTIONS = [
+    { key: 'flow', label: 'Flow' },
+    { key: 'relief', label: 'Relief & Geo-QR' },
+    { key: 'dispatch', label: 'Dispatch Hierarchy' },
+    { key: 'links', label: 'Shared Links' },
+    { key: 'branding', label: 'Branding & Mode' },
+    { key: 'accounts', label: 'Accounts & Offline' },
+    { key: 'pwa', label: 'PWA (Android & iOS)' },
+    { key: 'controls', label: 'Config Shortcuts' },
+  ];
+
+  function getConfiguredSettingsSubItems() {
+    const allItems = Array.isArray(state.navigationConfig?.items) ? state.navigationConfig.items : [];
+    const sortByOrder = (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || Number(a.id || 0) - Number(b.id || 0);
+    return allItems.filter((it) => String(it.nav_target || '').startsWith('settings:')).sort(sortByOrder);
+  }
+
+  function isSettingsSectionPermittedForCurrentUser(sectionKey) {
+    const key = String(sectionKey || 'flow').trim();
+    const subItems = getConfiguredSettingsSubItems();
+    if (subItems.length === 0) return true;
+    const match = subItems.find((it) => String(it.nav_target || '') === `settings:${key}`);
+    if (!match) return true;
+    return isNavItemPermittedForCurrentUser(match);
+  }
+
+  function getFirstPermittedSettingsSection(preferredKey = '') {
+    if (preferredKey && isSettingsSectionPermittedForCurrentUser(preferredKey)) {
+      return preferredKey;
+    }
+    const subItems = getConfiguredSettingsSubItems();
+    if (subItems.length > 0) {
+      for (const item of subItems) {
+        if (isNavItemPermittedForCurrentUser(item)) {
+          return String(item.nav_target || '').slice('settings:'.length) || 'flow';
+        }
+      }
+      return null;
+    }
+    const firstDef = DEFAULT_SETTINGS_SUBSECTIONS.find((s) => isSettingsSectionPermittedForCurrentUser(s.key));
+    return firstDef ? firstDef.key : null;
+  }
+
   function buildSidebarNavButtonHtml(item) {
     const target = String(item.nav_target || 'overview');
+    if (target.startsWith('settings:')) {
+      return '';
+    }
     const isShortcut = target.startsWith('action:');
     const isCustomUrl = target.startsWith('http://') || target.startsWith('https://') || target.startsWith('#') || target.endsWith('.html') || target.endsWith('.php');
     const isActive = !isShortcut && !isCustomUrl && (
@@ -8154,29 +8260,37 @@
     if (target === 'settings') {
       const settingsOpen = state.activeScreen === 'settings';
       const sec = state.settingsTab || 'flow';
-      const sections = [
-        ['flow', 'Flow'],
-        ['relief', 'Relief & Geo-QR'],
-        ['dispatch', 'Dispatch Hierarchy'],
-        ['links', 'Shared Links'],
-        ['branding', 'Branding & Mode'],
-        ['accounts', 'Accounts & Offline'],
-        ['pwa', 'PWA (Android & iOS)'],
-        ['controls', 'Config Shortcuts'],
-      ];
+      const configuredSubs = getConfiguredSettingsSubItems();
+      const subItems = configuredSubs.length > 0
+        ? configuredSubs
+        : DEFAULT_SETTINGS_SUBSECTIONS.map((s, idx) => ({
+            id: 0,
+            nav_key: `settings_${s.key}`,
+            label: s.label,
+            nav_target: `settings:${s.key}`,
+            allowed_roles: 'all',
+            is_enabled: 1,
+            sort_order: idx + 8,
+          }));
+      const parentLabel = item.label === 'Settings & Flow' ? 'Settings' : (item.label || 'Settings');
       return `
         <div class="sidebar-settings-group${settingsOpen ? ' is-open' : ''}" id="sidebar-settings-group" style="display: ${visible ? 'flex' : 'none'};">
           <button type="button" class="nav-item sidebar-settings-toggle${isActive ? ' active' : ''}" ${idAttr} ${targetAttr} data-nav-group="${escapeHtml(item.nav_group || 'workspace')}" data-nav-key="${escapeHtml(item.nav_key)}" data-nav-id="${Number(item.id)}" ${nodeAttr} aria-expanded="${settingsOpen ? 'true' : 'false'}" title="Settings > Flow &amp; Platform Configuration" style="display: ${visible ? 'flex' : 'none'}; opacity: 1; filter: none; cursor: pointer;" ${visible ? '' : 'data-restricted="true" tabindex="-1"'}>
             ${renderNavItemIconHtml(item, isActive)}
-            <span class="nav-item-label">Settings</span>
+            <span class="nav-item-label">${escapeHtml(parentLabel)}</span>
             <span class="sidebar-settings-chevron" id="sidebar-settings-chevron" aria-hidden="true">▾</span>
           </button>
           <div class="sidebar-settings-submenu" id="sidebar-settings-submenu" style="display: ${settingsOpen ? 'flex' : 'none'};">
-            ${sections.map(([key, lbl]) => `
-              <button type="button" class="nav-subitem${sec === key ? ' active' : ''}" data-settings-section="${key}">
-                <span>${escapeHtml(lbl)}</span>
-              </button>
-            `).join('')}
+            ${subItems.map((sub) => {
+              const subKey = String(sub.nav_target || '').slice('settings:'.length) || 'flow';
+              const subPermitted = Number(sub.id || 0) > 0 ? isNavItemPermittedForCurrentUser(sub) : true;
+              const subActive = sec === subKey;
+              return `
+                <button type="button" class="nav-subitem${subActive ? ' active' : ''}" data-settings-section="${escapeHtml(subKey)}" data-nav-key="${escapeHtml(sub.nav_key || '')}" data-nav-id="${Number(sub.id || 0)}" style="display: ${subPermitted ? 'flex' : 'none'};" ${subPermitted ? '' : 'data-restricted="true" tabindex="-1"'}>
+                  <span>${escapeHtml(sub.label || subKey)}</span>
+                </button>
+              `;
+            }).join('')}
           </div>
         </div>
       `;
@@ -8212,7 +8326,9 @@
     }
 
     if (wsGroup) {
-      const wsItems = allItems.filter((it) => it.nav_group === 'workspace').sort(sortByOrder);
+      const wsItems = allItems
+        .filter((it) => it.nav_group === 'workspace' && !String(it.nav_target || '').startsWith('settings:'))
+        .sort(sortByOrder);
       let anyWsVisible = false;
       if (wsItems.length > 0) {
         anyWsVisible = wsItems.some((it) => isNavItemPermittedForCurrentUser(it));
@@ -8245,10 +8361,11 @@
     const labels = [];
     if (tokens.some((t) => t === 'admin' || t === 'administrator')) labels.push('Admin');
     if (tokens.some((t) => t === 'manager' || t === 'project_manager')) labels.push('Manager');
+    if (tokens.includes('event_coordinator')) labels.push('Coord');
     if (tokens.some((t) => t === 'tech_lead' || t === 'technical_lead')) labels.push('Tech Lead');
     if (tokens.includes('stock_manager')) labels.push('Site Mgr');
     if (tokens.includes('stock_controller')) labels.push('Gate Ctrl');
-    if (tokens.some((t) => ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'stage_manager', 'rigging_lead', 'user', 'security', 'driver'].includes(t))) {
+    if (tokens.some((t) => ['technician', 'sound_engineer', 'lighting_tech', 'video_director', 'stage_manager', 'rigging_lead', 'electrical_tech', 'interpretation_tech', 'support_staff', 'user', 'security', 'driver'].includes(t))) {
       labels.push('Crew');
     }
     if (labels.length === 0) {
@@ -8325,17 +8442,73 @@
       return true;
     });
 
-    if (filtered.length === 0) {
+    // Pagination (5 items per page)
+    state.navPage = state.navPage || 1;
+    state.navPageSize = 5;
+    const totalFiltered = filtered.length;
+    const totalPages = Math.ceil(totalFiltered / state.navPageSize) || 1;
+    if (state.navPage > totalPages) state.navPage = totalPages;
+    if (state.navPage < 1) state.navPage = 1;
+
+    const startIdx = (state.navPage - 1) * state.navPageSize;
+    const endIdx = Math.min(startIdx + state.navPageSize, totalFiltered);
+    const paged = filtered.slice(startIdx, startIdx + state.navPageSize);
+
+    const footerCountEl = document.getElementById('nav-results-footer');
+    if (footerCountEl) {
+      footerCountEl.textContent = totalFiltered === 0
+        ? 'Showing 0 of 0 navigation items'
+        : `Showing ${startIdx + 1}–${endIdx} of ${totalFiltered} navigation items (Page ${state.navPage} of ${totalPages})`;
+    }
+
+    const pageControlsEl = document.getElementById('nav-page-controls');
+    if (pageControlsEl) {
+      if (totalPages <= 1) {
+        pageControlsEl.innerHTML = '';
+      } else {
+        const pageNums = typeof getPaginationPageNumbers === 'function'
+          ? getPaginationPageNumbers(state.navPage, totalPages)
+          : Array.from({ length: totalPages }, (_, i) => i + 1);
+        let controlsHtml = `
+          <button type="button" class="btn btn-secondary-32 js-nav-prev-page" ${state.navPage <= 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            &larr; Prev
+          </button>
+        `;
+        pageNums.forEach((p) => {
+          if (p === '...') {
+            controlsHtml += '<span class="pagination-ellipsis" style="padding: 0 4px; color: var(--text-secondary);">…</span>';
+            return;
+          }
+          const isActPage = p === state.navPage;
+          controlsHtml += `
+            <button type="button" class="btn ${isActPage ? 'btn-primary-32' : 'btn-secondary-32'} js-nav-page-num" data-page="${p}" style="min-width: 32px; padding: 0 8px; font-weight: 600;">
+              ${p}
+            </button>
+          `;
+        });
+        controlsHtml += `
+          <button type="button" class="btn btn-secondary-32 js-nav-next-page" ${state.navPage >= totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            Next &rarr;
+          </button>
+        `;
+        pageControlsEl.innerHTML = controlsHtml;
+      }
+    }
+
+    if (paged.length === 0) {
       rowsEl.innerHTML = `<div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px;">No navigation items match the current filter.</div>`;
       return;
     }
 
-    rowsEl.innerHTML = filtered.map((it) => {
+    rowsEl.innerHTML = paged.map((it) => {
       const enabled = Number(it.is_enabled) === 1;
       const isWs = it.nav_group === 'workspace';
-      const groupBadge = isWs
-        ? '<span class="status-badge" style="background: rgba(124, 58, 237, 0.12); color: #7c3aed; font-size: 10.5px;">Checkpoint</span>'
-        : '<span class="status-badge status-badge-blue-sm" style="font-size: 10.5px;">Main Nav</span>';
+      const isSettingsSub = String(it.nav_target || '').startsWith('settings:');
+      const groupBadge = isSettingsSub
+        ? '<span class="status-badge" style="background: rgba(79, 70, 229, 0.12); color: #4f46e5; font-size: 10.5px;">Settings Sub</span>'
+        : isWs
+          ? '<span class="status-badge" style="background: rgba(124, 58, 237, 0.12); color: #7c3aed; font-size: 10.5px;">Checkpoint</span>'
+          : '<span class="status-badge status-badge-blue-sm" style="font-size: 10.5px;">Main Nav</span>';
       const badgeLabel = it.badge_type && it.badge_type !== 'none'
         ? (it.badge_type === 'custom' ? (it.badge_text || 'Custom') : it.badge_type)
         : 'None';
@@ -8414,9 +8587,11 @@
     const enabledEl = document.getElementById('nav-crud-enabled');
 
     const knownTargets = [
-      'overview', 'events', 'users', 'attendees', 'terminals', 'venue-security',
+      'overview', 'events', 'create-event', 'dispatch-flow', 'users', 'attendees', 'terminals', 'venue-security',
       'stock-manager', 'access-matrix',
-      'shift-relief', 'calltime', 'rollcall', 'station-lock', 'reset-scans', 'standalone-portals',
+      'shift-relief', 'calltime', 'rollcall', 'station-lock', 'reset-scans', 'standalone-portals', 'settings',
+      'settings:flow', 'settings:relief', 'settings:dispatch', 'settings:links',
+      'settings:branding', 'settings:accounts', 'settings:pwa', 'settings:controls',
       'action:shift-relief', 'action:calltime', 'action:rollcall', 'action:station-lock', 'action:reset-scans', 'action:onsite-share',
     ];
 
@@ -8495,6 +8670,427 @@
 
   function closeNavItemModal() {
     const modal = document.getElementById('nav-item-crud-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  // =========================================================================
+  // GATE DASHBOARD (#screen-overview) ELEMENT & ID VISIBILITY ENGINE
+  // =========================================================================
+
+  function syncOverviewWidgetsStateAndApply(nextCfg) {
+    if (nextCfg && Array.isArray(nextCfg.items)) {
+      state.overviewWidgetsConfig = {
+        enabled: nextCfg.enabled !== false,
+        items: nextCfg.items,
+      };
+      try {
+        localStorage.setItem('ability_overview_widgets_config', JSON.stringify(state.overviewWidgetsConfig));
+      } catch (e) {}
+    }
+    applyOverviewWidgetVisibility();
+    if (state.activeScreen === 'users' && state.usersViewMode === 'overview-widgets') {
+      renderOverviewWidgetsManagerScreen();
+    }
+  }
+
+  function isOverviewRoleMatch(allowedRolesStr) {
+    const allowedRaw = String(allowedRolesStr || 'all').trim().toLowerCase();
+    if (!allowedRaw || allowedRaw === 'all') return true;
+    const rawRole = String(state.currentUser?.role || '').trim().toLowerCase();
+    const roleTokens = allowedRaw.split(',').map((r) => r.trim()).filter(Boolean);
+    if (isCurrentUserAdmin()) {
+      return roleTokens.includes('admin') || roleTokens.includes('administrator') || roleTokens.includes('all');
+    }
+    if ((rawRole === 'technical_lead' && roleTokens.includes('tech_lead')) || (rawRole === 'tech_lead' && roleTokens.includes('technical_lead'))) {
+      return true;
+    }
+    return roleTokens.includes(rawRole);
+  }
+
+  function isOverviewWidgetPermitted(widgetKey, visited = null) {
+    const cfg = state.overviewWidgetsConfig || { enabled: true, items: [] };
+    const items = Array.isArray(cfg.items) ? cfg.items : [];
+    if (items.length === 0) return true;
+    if (cfg.enabled === false) return false;
+
+    const seen = visited || new Set();
+    if (seen.has(widgetKey)) return true;
+    seen.add(widgetKey);
+
+    const item = items.find((it) => String(it.widget_key) === String(widgetKey));
+    if (!item) return true;
+    if (item.parent_key && !isOverviewWidgetPermitted(item.parent_key, seen)) {
+      return false;
+    }
+    if (Number(item.is_enabled) !== 1) return false;
+    return isOverviewRoleMatch(item.allowed_roles);
+  }
+
+  function resolveOverviewWidgetElements(item) {
+    if (!item) return [];
+    const sel = String(item.selector || '').trim();
+    const domId = String(item.dom_id || '').trim();
+    const found = sel
+      ? Array.from(document.querySelectorAll(sel))
+      : (domId ? [document.getElementById(domId)].filter(Boolean) : []);
+    return found.filter((el) => el && el.closest('#screen-overview'));
+  }
+
+  function applyOverviewWidgetVisibility() {
+    const overviewScreen = document.getElementById('screen-overview');
+    if (!overviewScreen) return;
+
+    const customBtn = document.getElementById('overview-customize-widgets-btn');
+    if (customBtn) {
+      customBtn.style.display = isCurrentUserAdmin() ? 'inline-flex' : 'none';
+    }
+
+    const items = Array.isArray(state.overviewWidgetsConfig?.items) ? state.overviewWidgetsConfig.items : [];
+    const pillOwEl = document.getElementById('pill-overview-widgets-count');
+    if (pillOwEl && items.length > 0) {
+      pillOwEl.textContent = String(items.length);
+    }
+    if (items.length === 0) return;
+
+    items.forEach((item) => {
+      const permitted = isOverviewWidgetPermitted(item.widget_key);
+      const els = resolveOverviewWidgetElements(item);
+      els.forEach((el) => {
+        if (!permitted) {
+          el.setAttribute('data-widget-hidden', 'true');
+        } else {
+          el.removeAttribute('data-widget-hidden');
+          if (item.widget_key === 'overview_techlead_card') {
+            el.style.display = 'flex';
+          }
+          if (item.widget_key === 'overview_schedule_roster_btn') {
+            el.style.display = 'inline-flex';
+          }
+          if (item.widget_key === 'overview_crew_roster' && el.style.display === 'none') {
+            el.style.display = '';
+          }
+        }
+      });
+    });
+
+    // Rebalance .metrics-grid if all 4 KPI cards are individually hidden
+    const metricsGrid = overviewScreen.querySelector('.overview-top-block > .metrics-grid');
+    if (metricsGrid) {
+      const anyCardVisible = ['overview_kpi_badges', 'overview_kpi_onsite', 'overview_kpi_checkins', 'overview_kpi_exceptions']
+        .some((k) => isOverviewWidgetPermitted(k));
+      if (!isOverviewWidgetPermitted('overview_metrics_grid') || !anyCardVisible) {
+        metricsGrid.setAttribute('data-widget-hidden', 'true');
+      } else {
+        metricsGrid.removeAttribute('data-widget-hidden');
+      }
+    }
+
+    // Sub-view fallback inside #overview-allocation-card
+    const chartPermitted = isOverviewWidgetPermitted('overview_traffic_chart_view');
+    const cosPermitted = isOverviewWidgetPermitted('overview_cos_view');
+    if (isOverviewWidgetPermitted('overview_allocation_card')) {
+      if (state.mapViewMode === 'chart' && !chartPermitted && cosPermitted && typeof setAllocationMapView === 'function') {
+        state.mapViewMode = 'cos';
+        const cosView = document.getElementById('overview-cos-view');
+        const chartView = document.getElementById('overview-traffic-chart-view');
+        const btnChart = document.getElementById('toggle-view-chart');
+        const btnCos = document.getElementById('toggle-view-cos');
+        if (chartView) chartView.style.display = 'none';
+        if (cosView) cosView.style.display = 'block';
+        if (btnChart) btnChart.classList.remove('active');
+        if (btnCos) btnCos.classList.add('active');
+        if (typeof renderOverviewCosView === 'function') renderOverviewCosView();
+      } else if (state.mapViewMode === 'cos' && !cosPermitted && chartPermitted) {
+        state.mapViewMode = 'chart';
+        const cosView = document.getElementById('overview-cos-view');
+        const chartView = document.getElementById('overview-traffic-chart-view');
+        const btnChart = document.getElementById('toggle-view-chart');
+        const btnCos = document.getElementById('toggle-view-cos');
+        if (cosView) cosView.style.display = 'none';
+        if (chartView) chartView.style.display = 'block';
+        if (btnCos) btnCos.classList.remove('active');
+        if (btnChart) btnChart.classList.add('active');
+        if (typeof renderHourlyTrafficChart === 'function') renderHourlyTrafficChart();
+      }
+    }
+
+    // Responsive .split-row reflow when Timeline or Right Stack is completely hidden
+    const splitRow = overviewScreen.querySelector('.split-row');
+    if (splitRow) {
+      const timelineVisible = isOverviewWidgetPermitted('overview_timeline_card');
+      const techLeadVisible = isOverviewWidgetPermitted('overview_techlead_card');
+      const allocVisible = isOverviewWidgetPermitted('overview_allocation_card');
+      const rightStack = splitRow.querySelector('.overview-right-stack');
+      const rightVisible = techLeadVisible || allocVisible;
+      if (rightStack) {
+        if (rightVisible) {
+          rightStack.removeAttribute('data-widget-hidden');
+        } else {
+          rightStack.setAttribute('data-widget-hidden', 'true');
+        }
+      }
+      if (!timelineVisible && !rightVisible) {
+        splitRow.setAttribute('data-widget-hidden', 'true');
+        splitRow.classList.remove('is-single-col');
+      } else {
+        splitRow.removeAttribute('data-widget-hidden');
+        splitRow.classList.toggle('is-single-col', timelineVisible !== rightVisible);
+      }
+    }
+  }
+
+  function renderOverviewWidgetsManagerScreen() {
+    const cfg = state.overviewWidgetsConfig || { enabled: true, items: [] };
+    const items = Array.isArray(cfg.items) ? cfg.items : [];
+    const isMasterEnabled = cfg.enabled !== false;
+
+    const masterToggle = document.getElementById('overview-widgets-master-toggle');
+    const masterBadge = document.getElementById('overview-widgets-master-status-badge');
+    if (masterToggle) masterToggle.checked = isMasterEnabled;
+    if (masterBadge) {
+      masterBadge.textContent = isMasterEnabled ? 'Enabled' : 'Disabled';
+      masterBadge.className = isMasterEnabled ? 'status-badge status-badge-green-sm' : 'status-badge';
+      masterBadge.style.background = isMasterEnabled ? '' : '#fee2e2';
+      masterBadge.style.color = isMasterEnabled ? '' : '#dc2626';
+    }
+
+    const parentItems = items.filter((it) => !it.parent_key).sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+    const childMap = new Map();
+    items.filter((it) => Boolean(it.parent_key)).forEach((ch) => {
+      const pk = String(ch.parent_key);
+      if (!childMap.has(pk)) childMap.set(pk, []);
+      childMap.get(pk).push(ch);
+    });
+    childMap.forEach((arr) => arr.sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)));
+
+    // Recursively gather descendant items for multi-level sections (e.g. Shift Report Toolbar children inside Timeline)
+    const getDescendants = (rootKey) => {
+      const direct = childMap.get(rootKey) || [];
+      const out = [];
+      direct.forEach((d) => {
+        out.push(d);
+        const sub = getDescendants(d.widget_key);
+        sub.forEach((s) => out.push(s));
+      });
+      return out;
+    };
+
+    const totalCount = items.length;
+    const enabledCount = items.filter((i) => Number(i.is_enabled) === 1).length;
+    const disabledCount = totalCount - enabledCount;
+    const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
+    setTxt('ow-kpi-total', totalCount);
+    setTxt('ow-kpi-parents', parentItems.length);
+    setTxt('ow-kpi-enabled', enabledCount);
+    setTxt('ow-kpi-disabled', disabledCount);
+    setTxt('ow-badge-count', `${parentItems.length} Sections · ${totalCount} IDs`);
+    setTxt('pill-overview-widgets-count', totalCount);
+
+    const listEl = document.getElementById('overview-widgets-list');
+    if (!listEl) return;
+
+    const q = (state.owSearch || '').trim().toLowerCase();
+    const catFilter = state.owFilterCategory || 'all';
+    const stFilter = state.owFilterStatus || 'all';
+
+    const matchesItem = (it) => {
+      if (catFilter !== 'all' && String(it.category) !== catFilter) return false;
+      const en = Number(it.is_enabled) === 1;
+      if (stFilter === 'enabled' && !en) return false;
+      if (stFilter === 'disabled' && en) return false;
+      if (q) {
+        const hay = `${it.label} ${it.widget_key} ${it.selector} ${it.dom_id} ${it.node_id} ${it.allowed_roles} ${it.description}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    };
+
+    const groupedRows = [];
+    parentItems.forEach((parent) => {
+      const descendants = getDescendants(parent.widget_key);
+      const matchingChildren = descendants.filter(matchesItem);
+      const parentMatches = matchesItem(parent);
+      if (parentMatches || matchingChildren.length > 0) {
+        groupedRows.push({
+          parent,
+          children: (q || stFilter !== 'all') ? matchingChildren : descendants,
+          forceExpand: Boolean(q || stFilter !== 'all'),
+        });
+      }
+    });
+
+    // Pagination (5 parent sections per page)
+    state.owPage = state.owPage || 1;
+    state.owPageSize = 5;
+    const totalFiltered = groupedRows.length;
+    const totalPages = Math.ceil(totalFiltered / state.owPageSize) || 1;
+    if (state.owPage > totalPages) state.owPage = totalPages;
+    if (state.owPage < 1) state.owPage = 1;
+
+    const startIdx = (state.owPage - 1) * state.owPageSize;
+    const endIdx = Math.min(startIdx + state.owPageSize, totalFiltered);
+    const pagedGroups = groupedRows.slice(startIdx, startIdx + state.owPageSize);
+
+    const footerCountEl = document.getElementById('ow-results-footer');
+    if (footerCountEl) {
+      footerCountEl.textContent = totalFiltered === 0
+        ? 'Showing 0 of 0 dashboard sections'
+        : `Showing ${startIdx + 1}–${endIdx} of ${totalFiltered} sections (Page ${state.owPage} of ${totalPages})`;
+    }
+
+    const pageControlsEl = document.getElementById('ow-page-controls');
+    if (pageControlsEl) {
+      if (totalPages <= 1) {
+        pageControlsEl.innerHTML = '';
+      } else {
+        const pageNums = typeof getPaginationPageNumbers === 'function'
+          ? getPaginationPageNumbers(state.owPage, totalPages)
+          : Array.from({ length: totalPages }, (_, i) => i + 1);
+        let controlsHtml = `
+          <button type="button" class="btn btn-secondary-32 js-ow-prev-page" ${state.owPage <= 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            &larr; Prev
+          </button>
+        `;
+        pageNums.forEach((p) => {
+          if (p === '...') {
+            controlsHtml += '<span class="pagination-ellipsis" style="padding: 0 4px; color: var(--text-secondary);">…</span>';
+            return;
+          }
+          const isAct = p === state.owPage;
+          controlsHtml += `
+            <button type="button" class="btn ${isAct ? 'btn-primary-32' : 'btn-secondary-32'} js-ow-page-num" data-page="${p}" style="min-width: 32px; padding: 0 8px; font-weight: 600;">
+              ${p}
+            </button>
+          `;
+        });
+        controlsHtml += `
+          <button type="button" class="btn btn-secondary-32 js-ow-next-page" ${state.owPage >= totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+            Next &rarr;
+          </button>
+        `;
+        pageControlsEl.innerHTML = controlsHtml;
+      }
+    }
+
+    if (pagedGroups.length === 0) {
+      listEl.innerHTML = `<div style="padding: 28px; text-align: center; color: var(--text-muted); font-size: 13px;">No Gate Dashboard sections or IDs match the current filter.</div>`;
+      return;
+    }
+
+    const formatIdChips = (it) => {
+      const chips = [];
+      if (it.dom_id) chips.push(`<span class="ow-code-chip">#${escapeHtml(it.dom_id)}</span>`);
+      if (it.node_id) chips.push(`<span class="ow-code-chip">node ${escapeHtml(it.node_id)}</span>`);
+      if (!it.dom_id && !it.node_id && it.selector) chips.push(`<span class="ow-code-chip">${escapeHtml(it.selector.replace(/^#screen-overview\s+/, ''))}</span>`);
+      return chips.join(' ');
+    };
+
+    listEl.innerHTML = pagedGroups.map(({ parent, children, forceExpand }) => {
+      const pEnabled = Number(parent.is_enabled) === 1;
+      const isExpanded = forceExpand || Boolean(state.owExpandedGroups && state.owExpandedGroups[parent.widget_key]);
+      const childCount = children.length;
+      const childHtml = isExpanded && childCount > 0
+        ? `
+          <div class="ow-children-list">
+            ${children.map((ch) => {
+              const chEn = Number(ch.is_enabled) === 1;
+              return `
+                <div class="ow-child-row ${chEn ? '' : 'is-disabled'}">
+                  <div style="display: flex; flex-direction: column; gap: 3px; flex: 1 1 260px; min-width: 0;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                      <strong style="font-size: 12.5px; color: var(--text-primary);">${escapeHtml(ch.label)}</strong>
+                      ${formatIdChips(ch)}
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted);">${escapeHtml(ch.description || ch.selector)}</div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <div style="display: flex; flex-wrap: wrap; align-items: center;">${formatNavRolesSummary(ch.allowed_roles)}</div>
+                    <button type="button" class="btn btn-secondary-32 js-edit-overview-widget" data-ow-id="${Number(ch.id)}" title="Edit Allowed Roles" style="height: 28px; padding: 0 9px; font-size: 11px;">Roles</button>
+                    <label class="nav-toggle-switch" title="${chEn ? 'Disable' : 'Enable'} ${escapeHtml(ch.label)}">
+                      <input type="checkbox" class="js-toggle-overview-widget" data-ow-id="${Number(ch.id)}" ${chEn ? 'checked' : ''} />
+                      <span class="nav-toggle-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `
+        : '';
+
+      return `
+        <div class="ow-group-card ${pEnabled ? '' : 'is-disabled'}">
+          <div class="ow-group-header">
+            <div class="ow-group-left">
+              <button type="button" class="btn btn-secondary-32 js-ow-expand-group" data-group-key="${escapeHtml(parent.widget_key)}" title="${isExpanded ? 'Collapse' : 'Expand'} sub-controls" style="height: 28px; padding: 0 9px; font-size: 11px; flex-shrink: 0;">
+                ${isExpanded ? '▾' : '▸'} ${childCount} IDs
+              </button>
+              <div style="min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <strong style="font-size: 13.5px; color: var(--text-primary);">${escapeHtml(parent.label)}</strong>
+                  ${formatIdChips(parent)}
+                </div>
+                <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(parent.description || parent.selector)}</div>
+              </div>
+            </div>
+            <div class="ow-group-right">
+              <div style="display: flex; flex-wrap: wrap; align-items: center;">${formatNavRolesSummary(parent.allowed_roles)}</div>
+              <button type="button" class="btn btn-secondary-32 js-edit-overview-widget" data-ow-id="${Number(parent.id)}" title="Edit Section Roles" style="height: 30px; padding: 0 10px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px;">
+                <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
+                <span>Roles</span>
+              </button>
+              <label class="nav-toggle-switch" title="${pEnabled ? 'Disable' : 'Enable'} ${escapeHtml(parent.label)}">
+                <input type="checkbox" class="js-toggle-overview-widget" data-ow-id="${Number(parent.id)}" ${pEnabled ? 'checked' : ''} />
+                <span class="nav-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          ${childHtml}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function openOverviewWidgetModal(item) {
+    const modal = document.getElementById('overview-widget-crud-modal');
+    if (!modal || !item) return;
+    const idEl = document.getElementById('ow-crud-id');
+    const titleEl = document.getElementById('ow-crud-modal-title');
+    const labelEl = document.getElementById('ow-crud-label');
+    const previewEl = document.getElementById('ow-crud-selector-preview');
+    const enabledEl = document.getElementById('ow-crud-enabled');
+    const rolesAllEl = document.getElementById('ow-crud-roles-all');
+    const roleCbs = Array.from(document.querySelectorAll('#ow-crud-roles-list .js-ow-role-cb'));
+
+    if (idEl) idEl.value = String(item.id || 0);
+    if (titleEl) titleEl.textContent = `Configure: ${item.label}`;
+    if (labelEl) labelEl.value = item.label || '';
+    if (previewEl) {
+      const parts = [item.selector || '', item.dom_id ? `#${item.dom_id}` : '', item.node_id ? `data-node-id="${item.node_id}"` : ''].filter(Boolean);
+      previewEl.textContent = parts.join(' · ');
+    }
+    if (enabledEl) enabledEl.checked = Number(item.is_enabled) === 1;
+
+    const allowedRaw = String(item.allowed_roles || 'all').toLowerCase().trim();
+    const isAll = !allowedRaw || allowedRaw === 'all';
+    if (rolesAllEl) rolesAllEl.checked = isAll;
+    const tokens = allowedRaw.split(',').map((t) => t.trim()).filter(Boolean);
+    roleCbs.forEach((cb) => {
+      if (isAll) {
+        cb.checked = true;
+        cb.disabled = true;
+      } else {
+        cb.disabled = false;
+        const cbTokens = cb.value.split(',').map((t) => t.trim());
+        cb.checked = cbTokens.some((t) => tokens.includes(t));
+      }
+    });
+
+    modal.style.display = 'flex';
+  }
+
+  function closeOverviewWidgetModal() {
+    const modal = document.getElementById('overview-widget-crud-modal');
     if (modal) modal.style.display = 'none';
   }
 
@@ -10576,14 +11172,27 @@
     }
   }
 
-  function switchSettingsTab(tab = 'flow') {
-    const nextTab = SETTINGS_SECTIONS.includes(tab) ? tab : 'flow';
+  function switchSettingsTab(tab = 'flow', silent = false) {
+    let nextTab = SETTINGS_SECTIONS.includes(tab) ? tab : 'flow';
+    if (!isSettingsSectionPermittedForCurrentUser(nextTab)) {
+      const fallback = getFirstPermittedSettingsSection();
+      if (!fallback) {
+        if (!silent) showToast('Access Restricted: All Settings sections are disabled or restricted for your role.');
+        return;
+      }
+      if (!silent && nextTab !== fallback) {
+        showToast('Access Restricted: This Settings section is disabled or restricted for your role.');
+      }
+      nextTab = fallback;
+    }
     state.settingsTab = nextTab;
     SETTINGS_SECTIONS.forEach((key) => {
+      const permitted = isSettingsSectionPermittedForCurrentUser(key);
       const btn = document.getElementById(`settings-tab-${key}`);
       const pane = document.getElementById(`settings-pane-${key}`);
-      const isAct = nextTab === key;
+      const isAct = permitted && nextTab === key;
       if (btn) {
+        btn.style.display = permitted ? 'inline-flex' : 'none';
         btn.className = isAct ? 'btn btn-primary-32 js-settings-tab-btn active-subtab' : 'btn btn-secondary-32 js-settings-tab-btn';
         const ic = btn.querySelector('img');
         if (ic) ic.style.filter = isAct ? 'brightness(0) invert(1)' : 'none';
@@ -10593,8 +11202,13 @@
       }
     });
     const secSelect = document.getElementById('settings-section-select');
-    if (secSelect && secSelect.value !== nextTab) {
-      secSelect.value = nextTab;
+    if (secSelect) {
+      Array.from(secSelect.options).forEach((opt) => {
+        const ok = isSettingsSectionPermittedForCurrentUser(opt.value);
+        opt.hidden = !ok;
+        opt.disabled = !ok;
+      });
+      if (secSelect.value !== nextTab) secSelect.value = nextTab;
     }
     const flowSubSel = document.getElementById('settings-flow-subselect');
     const flowSubSep = document.getElementById('settings-flow-subsep');
@@ -12016,15 +12630,32 @@
   }
 
   function renderSettingsScreen() {
-    const activeTab = SETTINGS_SECTIONS.includes(state.settingsTab) ? state.settingsTab : 'flow';
+    let activeTab = SETTINGS_SECTIONS.includes(state.settingsTab) ? state.settingsTab : 'flow';
+    if (!isSettingsSectionPermittedForCurrentUser(activeTab)) {
+      activeTab = getFirstPermittedSettingsSection() || activeTab;
+      state.settingsTab = activeTab;
+    }
+    const anyPermitted = SETTINGS_SECTIONS.some((k) => isSettingsSectionPermittedForCurrentUser(k));
     SETTINGS_SECTIONS.forEach((key) => {
+      const permitted = isSettingsSectionPermittedForCurrentUser(key);
+      const isAct = anyPermitted && permitted && activeTab === key;
       const pane = document.getElementById(`settings-pane-${key}`);
-      if (pane) pane.style.display = activeTab === key ? 'block' : 'none';
+      if (pane) pane.style.display = isAct ? 'block' : 'none';
       const btn = document.getElementById(`settings-tab-${key}`);
-      if (btn) btn.className = activeTab === key ? 'btn btn-primary-32 js-settings-tab-btn active-subtab' : 'btn btn-secondary-32 js-settings-tab-btn';
+      if (btn) {
+        btn.style.display = permitted ? 'inline-flex' : 'none';
+        btn.className = isAct ? 'btn btn-primary-32 js-settings-tab-btn active-subtab' : 'btn btn-secondary-32 js-settings-tab-btn';
+      }
     });
     const secSelect = document.getElementById('settings-section-select');
-    if (secSelect && secSelect.value !== activeTab) secSelect.value = activeTab;
+    if (secSelect) {
+      Array.from(secSelect.options).forEach((opt) => {
+        const ok = isSettingsSectionPermittedForCurrentUser(opt.value);
+        opt.hidden = !ok;
+        opt.disabled = !ok;
+      });
+      if (anyPermitted && secSelect.value !== activeTab) secSelect.value = activeTab;
+    }
     const flowSubSel = document.getElementById('settings-flow-subselect');
     const flowSubSep = document.getElementById('settings-flow-subsep');
     if (flowSubSel) {
@@ -13122,6 +13753,10 @@
         const subBtn = e.target.closest('.nav-subitem[data-settings-section]');
         if (subBtn) {
           const sec = subBtn.getAttribute('data-settings-section') || 'flow';
+          if (!isSettingsSectionPermittedForCurrentUser(sec)) {
+            showToast('Access Restricted: This Settings section is disabled or restricted for your role.');
+            return;
+          }
           if (state.activeScreen !== 'settings') {
             state.settingsTab = sec;
             switchScreen('settings');
@@ -18136,6 +18771,7 @@
     const tabMatrix = document.getElementById('view-tab-matrix');
     const tabDepts = document.getElementById('view-tab-departments');
     const tabNav = document.getElementById('view-tab-navigation');
+    const tabOw = document.getElementById('view-tab-overview-widgets');
     const addRoleBtn = document.getElementById('open-add-role-btn');
     const addDeptTopBtn = document.getElementById('open-add-dept-top-btn');
 
@@ -18144,6 +18780,16 @@
     if (tabMatrix) tabMatrix.addEventListener('click', () => switchUsersView('matrix'));
     if (tabDepts) tabDepts.addEventListener('click', () => switchUsersView('departments'));
     if (tabNav) tabNav.addEventListener('click', () => switchUsersView('navigation'));
+    if (tabOw) tabOw.addEventListener('click', () => switchUsersView('overview-widgets'));
+
+    const overviewCustomWidgetsBtn = document.getElementById('overview-customize-widgets-btn');
+    if (overviewCustomWidgetsBtn) {
+      overviewCustomWidgetsBtn.addEventListener('click', () => {
+        if (!isCurrentUserAdmin()) return;
+        state.usersViewMode = 'overview-widgets';
+        switchScreen('users');
+      });
+    }
 
     // Open Add Role Modal
     if (addRoleBtn) {
@@ -18603,6 +19249,7 @@
     if (navSearchInp) {
       navSearchInp.addEventListener('input', (e) => {
         state.navSearch = e.target.value;
+        state.navPage = 1;
         renderNavigationManagerScreen();
       });
     }
@@ -18610,6 +19257,7 @@
     if (navFilterGroupSel) {
       navFilterGroupSel.addEventListener('change', (e) => {
         state.navFilterGroup = e.target.value;
+        state.navPage = 1;
         renderNavigationManagerScreen();
       });
     }
@@ -18618,7 +19266,29 @@
     if (navFilterSel) {
       navFilterSel.addEventListener('change', (e) => {
         state.navFilterStatus = e.target.value;
+        state.navPage = 1;
         renderNavigationManagerScreen();
+      });
+    }
+
+    const navPageControlsEl = document.getElementById('nav-page-controls');
+    if (navPageControlsEl) {
+      navPageControlsEl.addEventListener('click', (e) => {
+        const numBtn = e.target.closest('.js-nav-page-num');
+        if (numBtn) {
+          state.navPage = Number(numBtn.getAttribute('data-page')) || 1;
+          renderNavigationManagerScreen();
+          return;
+        }
+        if (e.target.closest('.js-nav-prev-page') && (state.navPage || 1) > 1) {
+          state.navPage = (state.navPage || 1) - 1;
+          renderNavigationManagerScreen();
+          return;
+        }
+        if (e.target.closest('.js-nav-next-page')) {
+          state.navPage = (state.navPage || 1) + 1;
+          renderNavigationManagerScreen();
+        }
       });
     }
 
@@ -18806,6 +19476,235 @@
             }
           } catch (err) {
             showToast('Network error deleting navigation item.');
+          }
+        }
+      });
+    }
+
+    // =========================================================================
+    // GATE DASHBOARD (#screen-overview) WIDGETS & ID VISIBILITY LISTENERS
+    // =========================================================================
+    const owMasterToggle = document.getElementById('overview-widgets-master-toggle');
+    if (owMasterToggle) {
+      owMasterToggle.addEventListener('change', async (e) => {
+        const enabled = e.target.checked ? 1 : 0;
+        try {
+          const res = await fetch('api.php?action=toggle_overview_widgets_master', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.overviewWidgetsConfig) {
+            syncOverviewWidgetsStateAndApply(data.overviewWidgetsConfig);
+            showToast(data.message || 'Updated Gate Dashboard controls.');
+          } else {
+            e.target.checked = !enabled;
+            showToast((data && data.error) || 'Failed to update master Gate Dashboard setting.');
+          }
+        } catch (err) {
+          e.target.checked = !enabled;
+          showToast('Network error updating Gate Dashboard controls.');
+        }
+      });
+    }
+
+    const owExpandAllBtn = document.getElementById('overview-widgets-expand-all-btn');
+    if (owExpandAllBtn) {
+      owExpandAllBtn.addEventListener('click', () => {
+        const parentKeys = (state.overviewWidgetsConfig?.items || [])
+          .filter((it) => !it.parent_key)
+          .map((it) => it.widget_key);
+        const allOpen = parentKeys.length > 0 && parentKeys.every((k) => state.owExpandedGroups[k]);
+        parentKeys.forEach((k) => {
+          state.owExpandedGroups[k] = !allOpen;
+        });
+        owExpandAllBtn.textContent = allOpen ? 'Expand All Sub-Controls' : 'Collapse Sub-Controls';
+        renderOverviewWidgetsManagerScreen();
+      });
+    }
+
+    const owResetDefaultsBtn = document.getElementById('overview-widgets-reset-defaults-btn');
+    if (owResetDefaultsBtn) {
+      owResetDefaultsBtn.addEventListener('click', async () => {
+        const { confirmed } = await showConfirmModal({
+          title: 'Restore Default Gate Dashboard Layout',
+          message: 'Re-enable all Gate Dashboard sections, KPI cards, Activity Timeline tools, Allocation Card, Crew Roster, and default role scoping?',
+          confirmText: 'Restore Defaults',
+          tone: 'warning',
+        });
+        if (!confirmed) return;
+        try {
+          const res = await fetch('api.php?action=reset_overview_widgets_defaults', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.overviewWidgetsConfig) {
+            syncOverviewWidgetsStateAndApply(data.overviewWidgetsConfig);
+            applyNavigationRestrictions();
+            showToast(data.message || 'Gate Dashboard layout restored.');
+          } else {
+            showToast((data && data.error) || 'Failed to restore Gate Dashboard defaults.');
+          }
+        } catch (err) {
+          showToast('Network error restoring defaults.');
+        }
+      });
+    }
+
+    const owSearchInp = document.getElementById('ow-search-input');
+    if (owSearchInp) {
+      owSearchInp.addEventListener('input', (e) => {
+        state.owSearch = e.target.value;
+        state.owPage = 1;
+        renderOverviewWidgetsManagerScreen();
+      });
+    }
+
+    const owCatSel = document.getElementById('ow-filter-category');
+    if (owCatSel) {
+      owCatSel.addEventListener('change', (e) => {
+        state.owFilterCategory = e.target.value;
+        state.owPage = 1;
+        renderOverviewWidgetsManagerScreen();
+      });
+    }
+
+    const owStatusSel = document.getElementById('ow-filter-status');
+    if (owStatusSel) {
+      owStatusSel.addEventListener('change', (e) => {
+        state.owFilterStatus = e.target.value;
+        state.owPage = 1;
+        renderOverviewWidgetsManagerScreen();
+      });
+    }
+
+    const owPageControlsEl = document.getElementById('ow-page-controls');
+    if (owPageControlsEl) {
+      owPageControlsEl.addEventListener('click', (e) => {
+        const numBtn = e.target.closest('.js-ow-page-num');
+        if (numBtn) {
+          state.owPage = Number(numBtn.getAttribute('data-page')) || 1;
+          renderOverviewWidgetsManagerScreen();
+          return;
+        }
+        if (e.target.closest('.js-ow-prev-page') && (state.owPage || 1) > 1) {
+          state.owPage = (state.owPage || 1) - 1;
+          renderOverviewWidgetsManagerScreen();
+          return;
+        }
+        if (e.target.closest('.js-ow-next-page')) {
+          state.owPage = (state.owPage || 1) + 1;
+          renderOverviewWidgetsManagerScreen();
+        }
+      });
+    }
+
+    const owListEl = document.getElementById('overview-widgets-list');
+    if (owListEl) {
+      owListEl.addEventListener('change', async (e) => {
+        const toggleCb = e.target.closest('.js-toggle-overview-widget');
+        if (!toggleCb) return;
+        const oid = Number(toggleCb.getAttribute('data-ow-id') || 0);
+        const is_enabled = toggleCb.checked ? 1 : 0;
+        try {
+          const res = await fetch('api.php?action=toggle_overview_widget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: oid, is_enabled }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.overviewWidgetsConfig) {
+            syncOverviewWidgetsStateAndApply(data.overviewWidgetsConfig);
+            showToast(data.message || 'Updated widget status.');
+          } else {
+            toggleCb.checked = !is_enabled;
+            showToast((data && data.error) || 'Failed to update widget status.');
+          }
+        } catch (err) {
+          toggleCb.checked = !is_enabled;
+          showToast('Network error updating widget status.');
+        }
+      });
+
+      owListEl.addEventListener('click', (e) => {
+        const expBtn = e.target.closest('.js-ow-expand-group');
+        if (expBtn) {
+          const gk = expBtn.getAttribute('data-group-key');
+          if (gk) {
+            state.owExpandedGroups[gk] = !state.owExpandedGroups[gk];
+            renderOverviewWidgetsManagerScreen();
+          }
+          return;
+        }
+        const editBtn = e.target.closest('.js-edit-overview-widget');
+        if (editBtn) {
+          const oid = Number(editBtn.getAttribute('data-ow-id') || 0);
+          const item = (state.overviewWidgetsConfig?.items || []).find((x) => Number(x.id) === oid);
+          if (item) openOverviewWidgetModal(item);
+        }
+      });
+    }
+
+    document.querySelectorAll('.js-close-ow-crud-modal').forEach((btn) => {
+      btn.addEventListener('click', closeOverviewWidgetModal);
+    });
+    const owCrudModalEl = document.getElementById('overview-widget-crud-modal');
+    if (owCrudModalEl) {
+      owCrudModalEl.addEventListener('click', (e) => {
+        if (e.target === owCrudModalEl) closeOverviewWidgetModal();
+      });
+    }
+    const owRolesAllEl = document.getElementById('ow-crud-roles-all');
+    if (owRolesAllEl) {
+      owRolesAllEl.addEventListener('change', (e) => {
+        const isAll = e.target.checked;
+        document.querySelectorAll('#ow-crud-roles-list .js-ow-role-cb').forEach((cb) => {
+          cb.checked = isAll;
+          cb.disabled = isAll;
+        });
+      });
+    }
+    const owCrudForm = document.getElementById('overview-widget-crud-form');
+    if (owCrudForm) {
+      owCrudForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = Number(document.getElementById('ow-crud-id')?.value || 0);
+        const label = document.getElementById('ow-crud-label')?.value.trim() || '';
+        const is_enabled = document.getElementById('ow-crud-enabled')?.checked ? 1 : 0;
+        const allRoles = document.getElementById('ow-crud-roles-all')?.checked;
+        let allowed_roles = 'all';
+        if (!allRoles) {
+          const picked = Array.from(document.querySelectorAll('#ow-crud-roles-list .js-ow-role-cb:checked')).map((cb) => cb.value);
+          allowed_roles = picked.length > 0 ? picked.join(',') : 'admin,administrator';
+        }
+        const submitBtn = document.getElementById('ow-crud-submit-btn');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Saving...';
+        }
+        try {
+          const res = await fetch('api.php?action=save_overview_widget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, label, allowed_roles, is_enabled }),
+          });
+          const data = await res.json();
+          if (res.ok && data && data.ok && data.overviewWidgetsConfig) {
+            closeOverviewWidgetModal();
+            syncOverviewWidgetsStateAndApply(data.overviewWidgetsConfig);
+            showToast(data.message || `Saved settings for "${label}".`);
+          } else {
+            showToast((data && data.error) || 'Failed to save widget control.');
+          }
+        } catch (err) {
+          showToast('Network error saving widget control.');
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save Control';
           }
         }
       });

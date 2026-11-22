@@ -783,6 +783,150 @@ function getDefaultNavigationItems(): array
             'is_enabled' => 1,
             'is_system' => 1,
         ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'settings_flow',
+            'label' => 'Flow',
+            'nav_target' => 'settings:flow',
+            'dom_id' => 'sidebar-settings-sub-flow',
+            'node_id' => '',
+            'icon' => 'assets/sliders-horizontal-13.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
+            'sort_order' => 8,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'settings_relief',
+            'label' => 'Relief & Geo-QR',
+            'nav_target' => 'settings:relief',
+            'dom_id' => 'sidebar-settings-sub-relief',
+            'node_id' => '',
+            'icon' => 'assets/refresh-cw.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
+            'sort_order' => 9,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'settings_dispatch',
+            'label' => 'Dispatch Hierarchy',
+            'nav_target' => 'settings:dispatch',
+            'dom_id' => 'sidebar-settings-sub-dispatch',
+            'node_id' => '',
+            'icon' => 'assets/map-grid.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager',
+            'sort_order' => 10,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'settings_links',
+            'label' => 'Shared Links',
+            'nav_target' => 'settings:links',
+            'dom_id' => 'sidebar-settings-sub-links',
+            'node_id' => '',
+            'icon' => 'assets/key-round-13.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,stock_manager',
+            'sort_order' => 11,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'settings_branding',
+            'label' => 'Branding & Mode',
+            'nav_target' => 'settings:branding',
+            'dom_id' => 'sidebar-settings-sub-branding',
+            'node_id' => '',
+            'icon' => 'assets/sparkles.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator',
+            'sort_order' => 12,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'settings_accounts',
+            'label' => 'Accounts & Offline',
+            'nav_target' => 'settings:accounts',
+            'dom_id' => 'sidebar-settings-sub-accounts',
+            'node_id' => '',
+            'icon' => 'assets/shield-lock.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,stock_manager',
+            'sort_order' => 13,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'settings_pwa',
+            'label' => 'PWA (Android & iOS)',
+            'nav_target' => 'settings:pwa',
+            'dom_id' => 'sidebar-settings-sub-pwa',
+            'node_id' => '',
+            'icon' => 'assets/globe-12.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
+            'sort_order' => 14,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
+        [
+            'nav_group' => 'workspace',
+            'nav_key' => 'settings_controls',
+            'label' => 'Config Shortcuts',
+            'nav_target' => 'settings:controls',
+            'dom_id' => 'sidebar-settings-sub-controls',
+            'node_id' => '',
+            'icon' => 'assets/nav-settings.svg',
+            'active_icon' => '',
+            'icon_id' => '',
+            'badge_type' => 'none',
+            'badge_id' => '',
+            'badge_text' => '',
+            'allowed_roles' => 'admin,administrator',
+            'sort_order' => 15,
+            'is_enabled' => 1,
+            'is_system' => 1,
+        ],
     ];
 }
 
@@ -1082,6 +1226,40 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
             }
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_dispatch_create_event_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
+
+        // One-time migration: add Checkpoint Controls Settings submenu items for per-section access control
+        $migSettingsSub = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_settings_subitems_v1' LIMIT 1");
+        $migSettingsSub->execute();
+        if (!$migSettingsSub->fetchColumn()) {
+            $insSubNav = $pdo->prepare("
+                INSERT IGNORE INTO `navigation_items`
+                (`nav_group`, `nav_key`, `label`, `nav_target`, `dom_id`, `node_id`, `icon`, `active_icon`, `icon_id`, `badge_type`, `badge_id`, `badge_text`, `allowed_roles`, `sort_order`, `is_enabled`, `is_system`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            foreach (getDefaultNavigationItems() as $defNav) {
+                if (strpos((string) ($defNav['nav_target'] ?? ''), 'settings:') === 0) {
+                    $insSubNav->execute([
+                        $defNav['nav_group'] ?? 'workspace',
+                        $defNav['nav_key'],
+                        $defNav['label'],
+                        $defNav['nav_target'],
+                        $defNav['dom_id'] ?? '',
+                        $defNav['node_id'] ?? '',
+                        $defNav['icon'] ?? '',
+                        $defNav['active_icon'] ?? '',
+                        $defNav['icon_id'] ?? '',
+                        $defNav['badge_type'] ?? 'none',
+                        $defNav['badge_id'] ?? '',
+                        $defNav['badge_text'] ?? '',
+                        $defNav['allowed_roles'] ?? 'all',
+                        (int) ($defNav['sort_order'] ?? 10),
+                        (int) ($defNav['is_enabled'] ?? 1),
+                        (int) ($defNav['is_system'] ?? 1),
+                    ]);
+                }
+            }
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_settings_subitems_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
     } catch (Throwable $e) {}
 }
 
@@ -1254,6 +1432,574 @@ function getNavigationConfig(PDO $pdo): array
     return [
         'main_nav_enabled' => $mainNavEnabled,
         'workspace_nav_enabled' => $workspaceNavEnabled,
+        'items' => $items,
+    ];
+}
+
+function getDefaultOverviewWidgetItems(): array
+{
+    return [
+        [
+            'parent_key' => '',
+            'widget_key' => 'overview_page_intro',
+            'label' => 'Page Header & Title Block',
+            'selector' => '#screen-overview > .overview-top-block > .page-intro',
+            'dom_id' => '',
+            'node_id' => '2:3349',
+            'category' => 'header',
+            'allowed_roles' => 'all',
+            'sort_order' => 1,
+            'is_enabled' => 1,
+            'description' => 'Gate Operations & Access Matrix title bar and action buttons',
+        ],
+        [
+            'parent_key' => 'overview_page_intro',
+            'widget_key' => 'overview_tour_btn',
+            'label' => 'Header · Interactive Guided Tour',
+            'selector' => '#screen-overview #topbar-menu-tour',
+            'dom_id' => 'topbar-menu-tour',
+            'node_id' => '',
+            'category' => 'header',
+            'allowed_roles' => 'all',
+            'sort_order' => 2,
+            'is_enabled' => 1,
+            'description' => 'Guided workflow spotlight tour button',
+        ],
+        [
+            'parent_key' => 'overview_page_intro',
+            'widget_key' => 'overview_schedule_roster_btn',
+            'label' => 'Header · Schedule Event Roster Button',
+            'selector' => '#screen-overview #overview-schedule-roster-btn',
+            'dom_id' => 'overview-schedule-roster-btn',
+            'node_id' => '',
+            'category' => 'header',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead',
+            'sort_order' => 3,
+            'is_enabled' => 1,
+            'description' => 'Quick button to open Schedule Event Roster modal',
+        ],
+        [
+            'parent_key' => '',
+            'widget_key' => 'overview_checkpoint_bar',
+            'label' => 'Checkpoint Selector Bar (Master)',
+            'selector' => '#screen-overview .checkpoint-controls-bar',
+            'dom_id' => '',
+            'node_id' => '2:3356',
+            'category' => 'checkpoint',
+            'allowed_roles' => 'all',
+            'sort_order' => 4,
+            'is_enabled' => 1,
+            'description' => 'Dual Facility Gate / Event Venue selector and station status bar',
+        ],
+        [
+            'parent_key' => 'overview_checkpoint_bar',
+            'widget_key' => 'overview_cp_type_toggle',
+            'label' => 'Checkpoint · Facility Gate / Event Venue Tabs',
+            'selector' => '#screen-overview .checkpoint-controls-bar .cp-type-toggle',
+            'dom_id' => '',
+            'node_id' => '',
+            'category' => 'checkpoint',
+            'allowed_roles' => 'all',
+            'sort_order' => 5,
+            'is_enabled' => 1,
+            'description' => 'Facility Gate (L2-L4) vs Event Venue (L1-L4) toggle pills',
+        ],
+        [
+            'parent_key' => 'overview_checkpoint_bar',
+            'widget_key' => 'overview_cp_select',
+            'label' => 'Checkpoint · Active Checkpoint Dropdown',
+            'selector' => '#screen-overview .checkpoint-controls-bar .js-checkpoint-select',
+            'dom_id' => '',
+            'node_id' => '',
+            'category' => 'checkpoint',
+            'allowed_roles' => 'all',
+            'sort_order' => 6,
+            'is_enabled' => 1,
+            'description' => 'Active gate or event venue dropdown selector',
+        ],
+        [
+            'parent_key' => 'overview_checkpoint_bar',
+            'widget_key' => 'overview_station_lock_pill',
+            'label' => 'Checkpoint · Multi-Checkpoint / Lock Station Pill',
+            'selector' => '#screen-overview .checkpoint-controls-bar .js-station-lock-btn',
+            'dom_id' => '',
+            'node_id' => '2:3362',
+            'category' => 'checkpoint',
+            'allowed_roles' => 'all',
+            'sort_order' => 7,
+            'is_enabled' => 1,
+            'description' => 'Station PIN lock mode indicator and quick lock trigger',
+        ],
+        [
+            'parent_key' => 'overview_checkpoint_bar',
+            'widget_key' => 'overview_cp_meta',
+            'label' => 'Checkpoint · Call-Time & Clearance Meta',
+            'selector' => '#screen-overview .checkpoint-controls-bar .checkpoint-right-group',
+            'dom_id' => '',
+            'node_id' => '2:3366',
+            'category' => 'checkpoint',
+            'allowed_roles' => 'all',
+            'sort_order' => 8,
+            'is_enabled' => 1,
+            'description' => 'Active checkpoint call time and authorized tiers summary',
+        ],
+        [
+            'parent_key' => '',
+            'widget_key' => 'overview_metrics_grid',
+            'label' => 'Gate Telemetry KPI Cards Grid (Master)',
+            'selector' => '#screen-overview > .overview-top-block > .metrics-grid',
+            'dom_id' => '',
+            'node_id' => '2:3372',
+            'category' => 'kpi',
+            'allowed_roles' => 'all',
+            'sort_order' => 9,
+            'is_enabled' => 1,
+            'description' => '4-card KPI telemetry strip with sparklines',
+        ],
+        [
+            'parent_key' => 'overview_metrics_grid',
+            'widget_key' => 'overview_kpi_badges',
+            'label' => 'KPI Card 1 · Active ID Badges',
+            'selector' => '#screen-overview .metrics-grid .metric-card[data-node-id="2:3373"]',
+            'dom_id' => 'overview-tier-breakdown',
+            'node_id' => '2:3373',
+            'category' => 'kpi',
+            'allowed_roles' => 'all',
+            'sort_order' => 10,
+            'is_enabled' => 1,
+            'description' => 'Total active badges & L1-L8 tier breakdown card',
+        ],
+        [
+            'parent_key' => 'overview_metrics_grid',
+            'widget_key' => 'overview_kpi_onsite',
+            'label' => 'KPI Card 2 · Currently On-Site (Roll-Call)',
+            'selector' => '#screen-overview .metrics-grid .metric-card[data-node-id="2:3393"]',
+            'dom_id' => '',
+            'node_id' => '2:3393',
+            'category' => 'kpi',
+            'allowed_roles' => 'all',
+            'sort_order' => 11,
+            'is_enabled' => 1,
+            'description' => 'Live checked-in roll-call count card',
+        ],
+        [
+            'parent_key' => 'overview_metrics_grid',
+            'widget_key' => 'overview_kpi_checkins',
+            'label' => 'KPI Card 3 · Venue vs. Facility Check-Ins',
+            'selector' => '#screen-overview .metrics-grid .metric-card[data-node-id="2:3413"]',
+            'dom_id' => '',
+            'node_id' => '2:3413',
+            'category' => 'kpi',
+            'allowed_roles' => 'all',
+            'sort_order' => 12,
+            'is_enabled' => 1,
+            'description' => 'Today granted check-ins split by Venue vs Stock Gate',
+        ],
+        [
+            'parent_key' => 'overview_metrics_grid',
+            'widget_key' => 'overview_kpi_exceptions',
+            'label' => 'KPI Card 4 · Late & Denied Scans',
+            'selector' => '#screen-overview .metrics-grid .metric-card[data-node-id="2:3433"]',
+            'dom_id' => '',
+            'node_id' => '2:3433',
+            'category' => 'kpi',
+            'allowed_roles' => 'all',
+            'sort_order' => 13,
+            'is_enabled' => 1,
+            'description' => 'Today late arrivals and access denied exceptions card',
+        ],
+        [
+            'parent_key' => '',
+            'widget_key' => 'overview_timeline_card',
+            'label' => 'User Activity Timeline Widget (Master)',
+            'selector' => '#screen-overview .timeline-card-overview',
+            'dom_id' => 'timeline-feed-list',
+            'node_id' => '2:3516',
+            'category' => 'timeline',
+            'allowed_roles' => 'all',
+            'sort_order' => 14,
+            'is_enabled' => 1,
+            'description' => 'Live activity stream card with filters, reports, and feed',
+        ],
+        [
+            'parent_key' => 'overview_timeline_card',
+            'widget_key' => 'overview_timeline_clear_btn',
+            'label' => 'Timeline · Reset Logs Button',
+            'selector' => '#screen-overview #timeline-clear-btn',
+            'dom_id' => 'timeline-clear-btn',
+            'node_id' => '',
+            'category' => 'timeline',
+            'allowed_roles' => 'admin,administrator',
+            'sort_order' => 15,
+            'is_enabled' => 1,
+            'description' => 'Reset today gate activity logs button',
+        ],
+        [
+            'parent_key' => 'overview_timeline_card',
+            'widget_key' => 'overview_timeline_add_btn',
+            'label' => 'Timeline · + Add Log Button',
+            'selector' => '#screen-overview .timeline-card-overview .js-open-create-timeline-btn',
+            'dom_id' => '',
+            'node_id' => '',
+            'category' => 'timeline',
+            'allowed_roles' => 'admin,administrator,stock_manager',
+            'sort_order' => 16,
+            'is_enabled' => 1,
+            'description' => 'Manual gate log entry creation button',
+        ],
+        [
+            'parent_key' => 'overview_timeline_card',
+            'widget_key' => 'overview_timeline_filters',
+            'label' => 'Timeline · Search & Scope Filter Bar',
+            'selector' => '#screen-overview .timeline-card-overview .timeline-filter-bar',
+            'dom_id' => 'timeline-search-input',
+            'node_id' => '',
+            'category' => 'timeline',
+            'allowed_roles' => 'all',
+            'sort_order' => 17,
+            'is_enabled' => 1,
+            'description' => 'Timeline text search and venue/status scope dropdown',
+        ],
+        [
+            'parent_key' => 'overview_timeline_card',
+            'widget_key' => 'overview_shift_report_toolbar',
+            'label' => 'Timeline · Shift Report Toolbar',
+            'selector' => '#screen-overview #shift-report-toolbar',
+            'dom_id' => 'shift-report-toolbar',
+            'node_id' => '',
+            'category' => 'timeline',
+            'allowed_roles' => 'all',
+            'sort_order' => 18,
+            'is_enabled' => 1,
+            'description' => 'Date range selector and report export toolbar',
+        ],
+        [
+            'parent_key' => 'overview_shift_report_toolbar',
+            'widget_key' => 'overview_timeline_export_csv',
+            'label' => 'Shift Report · Export CSV Button',
+            'selector' => '#screen-overview #timeline-export-csv-btn',
+            'dom_id' => 'timeline-export-csv-btn',
+            'node_id' => '',
+            'category' => 'timeline',
+            'allowed_roles' => 'all',
+            'sort_order' => 19,
+            'is_enabled' => 1,
+            'description' => 'Download shift attendance CSV button',
+        ],
+        [
+            'parent_key' => 'overview_shift_report_toolbar',
+            'widget_key' => 'overview_timeline_print_pdf',
+            'label' => 'Shift Report · Client PDF / Sign-Off',
+            'selector' => '#screen-overview #timeline-print-btn',
+            'dom_id' => 'timeline-print-btn',
+            'node_id' => '',
+            'category' => 'timeline',
+            'allowed_roles' => 'all',
+            'sort_order' => 20,
+            'is_enabled' => 1,
+            'description' => 'Generate printable branded client shift sign-off report',
+        ],
+        [
+            'parent_key' => 'overview_timeline_card',
+            'widget_key' => 'overview_timeline_pagination',
+            'label' => 'Timeline · Pagination Footer',
+            'selector' => '#screen-overview .timeline-card-overview .timeline-pagination-bar',
+            'dom_id' => 'timeline-prev-btn',
+            'node_id' => '',
+            'category' => 'timeline',
+            'allowed_roles' => 'all',
+            'sort_order' => 21,
+            'is_enabled' => 1,
+            'description' => 'Prev/Next pagination strip below the timeline feed',
+        ],
+        [
+            'parent_key' => '',
+            'widget_key' => 'overview_techlead_card',
+            'label' => 'Tech Lead Assigned Crew Card (Master)',
+            'selector' => '#screen-overview #tech-lead-roster-overview-card',
+            'dom_id' => 'tech-lead-roster-overview-card',
+            'node_id' => '',
+            'category' => 'techlead',
+            'allowed_roles' => 'tech_lead,technical_lead',
+            'sort_order' => 22,
+            'is_enabled' => 1,
+            'description' => 'Assigned Crew & Locations telemetry card',
+        ],
+        [
+            'parent_key' => 'overview_techlead_card',
+            'widget_key' => 'overview_techlead_reset_all',
+            'label' => 'Tech Lead Card · Reset All Button',
+            'selector' => '#screen-overview #techlead-card-reset-all-btn',
+            'dom_id' => 'techlead-card-reset-all-btn',
+            'node_id' => '',
+            'category' => 'techlead',
+            'allowed_roles' => 'tech_lead,technical_lead',
+            'sort_order' => 23,
+            'is_enabled' => 1,
+            'description' => 'Reset assigned crew back to standby action link',
+        ],
+        [
+            'parent_key' => 'overview_techlead_card',
+            'widget_key' => 'overview_techlead_open_roster',
+            'label' => 'Tech Lead Card · Schedule Roster ↗',
+            'selector' => '#screen-overview #techlead-card-open-roster-btn',
+            'dom_id' => 'techlead-card-open-roster-btn',
+            'node_id' => '',
+            'category' => 'techlead',
+            'allowed_roles' => 'tech_lead,technical_lead',
+            'sort_order' => 24,
+            'is_enabled' => 1,
+            'description' => 'Quick Schedule Roster shortcut link inside Tech Lead card',
+        ],
+        [
+            'parent_key' => 'overview_techlead_card',
+            'widget_key' => 'overview_techlead_coordinates',
+            'label' => 'Tech Lead Card · Last Located Telemetry',
+            'selector' => '#screen-overview #tech-lead-roster-overview-card .metric-coordinates',
+            'dom_id' => 'techlead-roster-last-location',
+            'node_id' => '',
+            'category' => 'techlead',
+            'allowed_roles' => 'tech_lead,technical_lead',
+            'sort_order' => 25,
+            'is_enabled' => 1,
+            'description' => 'Latest checkpoint & scan timestamp strip',
+        ],
+        [
+            'parent_key' => 'overview_techlead_card',
+            'widget_key' => 'overview_techlead_breakdown',
+            'label' => 'Tech Lead Card · Location Crew Breakdown',
+            'selector' => '#screen-overview #techlead-roster-breakdown',
+            'dom_id' => 'techlead-roster-breakdown',
+            'node_id' => '',
+            'category' => 'techlead',
+            'allowed_roles' => 'tech_lead,technical_lead',
+            'sort_order' => 26,
+            'is_enabled' => 1,
+            'description' => 'Interactive location rows showing crew counts and reset buttons',
+        ],
+        [
+            'parent_key' => '',
+            'widget_key' => 'overview_allocation_card',
+            'label' => 'Hourly Traffic & Currently On-Site Card (Master)',
+            'selector' => '#screen-overview #overview-allocation-card',
+            'dom_id' => 'overview-allocation-card',
+            'node_id' => '2:3454',
+            'category' => 'allocation',
+            'allowed_roles' => 'all',
+            'sort_order' => 27,
+            'is_enabled' => 1,
+            'description' => 'Right-hand analytics card holding Traffic Chart and Currently On-Site (COS) roster',
+        ],
+        [
+            'parent_key' => 'overview_allocation_card',
+            'widget_key' => 'overview_allocation_switcher',
+            'label' => 'Traffic & COS · View Switcher Tabs',
+            'selector' => '#screen-overview #overview-map-switcher',
+            'dom_id' => 'overview-map-switcher',
+            'node_id' => '',
+            'category' => 'allocation',
+            'allowed_roles' => 'all',
+            'sort_order' => 28,
+            'is_enabled' => 1,
+            'description' => 'View toggle buttons between Traffic Chart and Currently On-Site',
+        ],
+        [
+            'parent_key' => 'overview_allocation_card',
+            'widget_key' => 'overview_traffic_chart_view',
+            'label' => 'Traffic & COS · Hourly Traffic Chart View',
+            'selector' => '#screen-overview #overview-traffic-chart-view',
+            'dom_id' => 'overview-traffic-chart-view',
+            'node_id' => '',
+            'category' => 'allocation',
+            'allowed_roles' => 'all',
+            'sort_order' => 29,
+            'is_enabled' => 1,
+            'description' => 'Dual-bar hourly check-in chart for Venues vs Facility Gates',
+        ],
+        [
+            'parent_key' => 'overview_allocation_card',
+            'widget_key' => 'overview_cos_view',
+            'label' => 'Traffic & COS · Currently On-Site (COS) View',
+            'selector' => '#screen-overview #overview-cos-view',
+            'dom_id' => 'overview-cos-view',
+            'node_id' => '',
+            'category' => 'allocation',
+            'allowed_roles' => 'all',
+            'sort_order' => 30,
+            'is_enabled' => 1,
+            'description' => 'Filterable grid of personnel currently checked in on-site',
+        ],
+        [
+            'parent_key' => '',
+            'widget_key' => 'overview_crew_roster',
+            'label' => 'Production Crew & Staff Roster (Master)',
+            'selector' => '#screen-overview > section.directory-card[data-node-id="2:3533"]',
+            'dom_id' => 'overview-attendee-rows',
+            'node_id' => '2:3533',
+            'category' => 'roster',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,stock_manager,stock_controller',
+            'sort_order' => 31,
+            'is_enabled' => 1,
+            'description' => 'Full bottom crew directory & paired check-in/out table',
+        ],
+        [
+            'parent_key' => 'overview_crew_roster',
+            'widget_key' => 'overview_roster_actions',
+            'label' => 'Crew Roster · Export & Open Kiosk Buttons',
+            'selector' => '#screen-overview section.directory-card[data-node-id="2:3533"] .directory-actions',
+            'dom_id' => '',
+            'node_id' => '2:3541',
+            'category' => 'roster',
+            'allowed_roles' => 'all',
+            'sort_order' => 32,
+            'is_enabled' => 1,
+            'description' => 'Export CSV, Export Audit Logs, and Open Kiosk Deck buttons',
+        ],
+        [
+            'parent_key' => 'overview_crew_roster',
+            'widget_key' => 'overview_roster_tabs',
+            'label' => 'Crew Roster · Status Filter Tabs',
+            'selector' => '#screen-overview #overview-attendee-tabs',
+            'dom_id' => 'overview-attendee-tabs',
+            'node_id' => '2:3548',
+            'category' => 'roster',
+            'allowed_roles' => 'all',
+            'sort_order' => 33,
+            'is_enabled' => 1,
+            'description' => 'All Crew / Checked In / Checked Out / L2-L4 / L1 tabs',
+        ],
+        [
+            'parent_key' => 'overview_crew_roster',
+            'widget_key' => 'overview_roster_tools',
+            'label' => 'Crew Roster · Search & Clearance Filters',
+            'selector' => '#screen-overview section.directory-card[data-node-id="2:3533"] .table-tools',
+            'dom_id' => 'overview-attendee-search',
+            'node_id' => '2:3564',
+            'category' => 'roster',
+            'allowed_roles' => 'all',
+            'sort_order' => 34,
+            'is_enabled' => 1,
+            'description' => 'Search box, clearance tier pill filter, and gate state filter',
+        ],
+        [
+            'parent_key' => 'overview_crew_roster',
+            'widget_key' => 'overview_roster_footer',
+            'label' => 'Crew Roster · Pagination & Footer Link',
+            'selector' => '#screen-overview section.directory-card[data-node-id="2:3533"] .table-footer',
+            'dom_id' => 'overview-page-controls',
+            'node_id' => '2:3783',
+            'category' => 'roster',
+            'allowed_roles' => 'all',
+            'sort_order' => 35,
+            'is_enabled' => 1,
+            'description' => 'Roster pagination controls and Full Gate Terminal shortcut',
+        ],
+    ];
+}
+
+function ensureOverviewWidgetsTables(PDO $pdo, bool $forceReset = false): void
+{
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `overview_widget_controls` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `parent_key` VARCHAR(64) NOT NULL DEFAULT '',
+                `widget_key` VARCHAR(64) NOT NULL UNIQUE,
+                `label` VARCHAR(120) NOT NULL,
+                `selector` VARCHAR(190) NOT NULL,
+                `dom_id` VARCHAR(100) NOT NULL DEFAULT '',
+                `node_id` VARCHAR(32) NOT NULL DEFAULT '',
+                `category` VARCHAR(48) NOT NULL DEFAULT 'general',
+                `allowed_roles` TEXT DEFAULT NULL,
+                `sort_order` INT NOT NULL DEFAULT 10,
+                `is_enabled` TINYINT(1) NOT NULL DEFAULT 1,
+                `description` VARCHAR(255) NOT NULL DEFAULT '',
+                `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        if ($forceReset) {
+            $pdo->exec("DELETE FROM `overview_widget_controls`");
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('overview_widgets_enabled', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('overview_widgets_seeded_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        } else {
+            $pdo->exec("INSERT IGNORE INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('overview_widgets_enabled', '1')");
+        }
+
+        $mig = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'overview_widgets_seeded_v1' LIMIT 1");
+        $mig->execute();
+        $seededFlag = (string) ($mig->fetchColumn() ?: '');
+        $cnt = (int) $pdo->query("SELECT COUNT(*) FROM `overview_widget_controls`")->fetchColumn();
+
+        if ($forceReset || $cnt === 0 || $seededFlag !== '1') {
+            $ins = $pdo->prepare("
+                INSERT IGNORE INTO `overview_widget_controls`
+                (`parent_key`, `widget_key`, `label`, `selector`, `dom_id`, `node_id`, `category`, `allowed_roles`, `sort_order`, `is_enabled`, `description`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            foreach (getDefaultOverviewWidgetItems() as $it) {
+                $ins->execute([
+                    $it['parent_key'],
+                    $it['widget_key'],
+                    $it['label'],
+                    $it['selector'],
+                    $it['dom_id'],
+                    $it['node_id'],
+                    $it['category'],
+                    $it['allowed_roles'],
+                    (int) $it['sort_order'],
+                    (int) $it['is_enabled'],
+                    $it['description'],
+                ]);
+            }
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('overview_widgets_seeded_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+    } catch (Throwable $e) {}
+}
+
+function getOverviewWidgetsConfig(PDO $pdo): array
+{
+    ensureOverviewWidgetsTables($pdo);
+    $enabled = true;
+    $items = [];
+    try {
+        $st = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'overview_widgets_enabled' LIMIT 1");
+        $st->execute();
+        $val = $st->fetchColumn();
+        if ($val !== false) {
+            $enabled = ((string) $val !== '0');
+        }
+
+        $rows = $pdo->query("SELECT * FROM `overview_widget_controls` ORDER BY `sort_order` ASC, `id` ASC")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as $r) {
+            $items[] = [
+                'id' => (int) ($r['id'] ?? 0),
+                'parent_key' => trim((string) ($r['parent_key'] ?? '')),
+                'widget_key' => trim((string) ($r['widget_key'] ?? '')),
+                'label' => trim((string) ($r['label'] ?? '')),
+                'selector' => trim((string) ($r['selector'] ?? '')),
+                'dom_id' => trim((string) ($r['dom_id'] ?? '')),
+                'node_id' => trim((string) ($r['node_id'] ?? '')),
+                'category' => trim((string) ($r['category'] ?? 'general')),
+                'allowed_roles' => trim((string) ($r['allowed_roles'] ?? 'all')),
+                'sort_order' => (int) ($r['sort_order'] ?? 10),
+                'is_enabled' => (int) ($r['is_enabled'] ?? 1),
+                'description' => trim((string) ($r['description'] ?? '')),
+            ];
+        }
+    } catch (Throwable $e) {}
+
+    if (empty($items)) {
+        $defaults = getDefaultOverviewWidgetItems();
+        foreach ($defaults as $idx => $d) {
+            $d['id'] = $idx + 1;
+            $items[] = $d;
+        }
+    }
+
+    return [
+        'enabled' => $enabled,
         'items' => $items,
     ];
 }
@@ -3060,6 +3806,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'roles' => getRolesList($pdo, $crew),
         'departments' => getDepartmentsList($pdo, $crew),
         'navigationConfig' => getNavigationConfig($pdo),
+        'overviewWidgetsConfig' => getOverviewWidgetsConfig($pdo),
         'standalonePortals' => getStandalonePortalsList($pdo, $canSeeTerminalPins),
     ];
 }
@@ -7209,6 +7956,122 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             'ok' => true,
             'message' => 'Main navigation restored to default items and enabled.',
             'navigationConfig' => getNavigationConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'get_overview_widgets') {
+        echo json_encode([
+            'ok' => true,
+            'overviewWidgetsConfig' => getOverviewWidgetsConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'toggle_overview_widgets_master') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureOverviewWidgetsTables($pdo);
+        $enabledRaw = $_POST['enabled'] ?? $jsonBody['enabled'] ?? 1;
+        $enabledStr = ((int) $enabledRaw === 1 || $enabledRaw === true || $enabledRaw === 'true') ? '1' : '0';
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('overview_widgets_enabled', ?) ON DUPLICATE KEY UPDATE `setting_value` = ?")
+            ->execute([$enabledStr, $enabledStr]);
+        echo json_encode([
+            'ok' => true,
+            'message' => $enabledStr === '1' ? 'Gate Dashboard custom layout controls active.' : 'Gate Dashboard sections temporarily disabled.',
+            'overviewWidgetsConfig' => getOverviewWidgetsConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'toggle_overview_widget') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureOverviewWidgetsTables($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $widgetKey = trim((string) ($_POST['widget_key'] ?? $jsonBody['widget_key'] ?? ''));
+        $isEnabled = isset($_POST['is_enabled']) ? ((int) $_POST['is_enabled'] ? 1 : 0) : ((int) ($jsonBody['is_enabled'] ?? 1) ? 1 : 0);
+
+        if ($id > 0) {
+            $stmt = $pdo->prepare("SELECT `id`, `label`, `widget_key` FROM `overview_widget_controls` WHERE `id` = ?");
+            $stmt->execute([$id]);
+        } else {
+            $stmt = $pdo->prepare("SELECT `id`, `label`, `widget_key` FROM `overview_widget_controls` WHERE `widget_key` = ?");
+            $stmt->execute([$widgetKey]);
+        }
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            echo json_encode(['ok' => false, 'error' => 'Dashboard widget item not found.']);
+            exit;
+        }
+        $pdo->prepare("UPDATE `overview_widget_controls` SET `is_enabled` = ? WHERE `id` = ?")->execute([$isEnabled, (int) $row['id']]);
+        echo json_encode([
+            'ok' => true,
+            'message' => ($isEnabled ? 'Enabled' : 'Disabled') . " '{$row['label']}'.",
+            'overviewWidgetsConfig' => getOverviewWidgetsConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'save_overview_widget') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureOverviewWidgetsTables($pdo);
+        $id = (int) ($_POST['id'] ?? $jsonBody['id'] ?? 0);
+        $label = trim((string) ($_POST['label'] ?? $jsonBody['label'] ?? ''));
+        $allowedRoles = trim((string) ($_POST['allowed_roles'] ?? $jsonBody['allowed_roles'] ?? 'all'));
+        $isEnabled = isset($_POST['is_enabled']) ? ((int) $_POST['is_enabled'] ? 1 : 0) : ((int) ($jsonBody['is_enabled'] ?? 1) ? 1 : 0);
+        if ($allowedRoles === '') {
+            $allowedRoles = 'all';
+        }
+        if ($id <= 0 || $label === '') {
+            echo json_encode(['ok' => false, 'error' => 'Valid widget ID and label are required.']);
+            exit;
+        }
+        $chk = $pdo->prepare("SELECT `id` FROM `overview_widget_controls` WHERE `id` = ?");
+        $chk->execute([$id]);
+        if (!$chk->fetch()) {
+            echo json_encode(['ok' => false, 'error' => 'Dashboard widget item not found.']);
+            exit;
+        }
+        $pdo->prepare("UPDATE `overview_widget_controls` SET `label` = ?, `allowed_roles` = ?, `is_enabled` = ? WHERE `id` = ?")
+            ->execute([$label, $allowedRoles, $isEnabled, $id]);
+        echo json_encode([
+            'ok' => true,
+            'message' => "Saved settings for '{$label}'.",
+            'overviewWidgetsConfig' => getOverviewWidgetsConfig($pdo),
+        ]);
+        exit;
+    }
+
+    if ($action === 'reset_overview_widgets_defaults') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('manage_navigation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        ensureOverviewWidgetsTables($pdo, true);
+        echo json_encode([
+            'ok' => true,
+            'message' => 'Gate Dashboard widget defaults restored.',
+            'overviewWidgetsConfig' => getOverviewWidgetsConfig($pdo),
         ]);
         exit;
     }

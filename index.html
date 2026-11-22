@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="aBility Manager" />
+  <meta name="apple-mobile-web-app-title" content="RE_LOCATE" />
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-180.png" />
   <link rel="icon" type="image/png" href="assets/icons/favicon-64.png" />
-  <title>aBility Manager — Gate Check-in / Check-out Terminal &amp; 4-Tier Access Matrix</title>
+  <title>RE_LOCATE — Gate Check-in / Check-out Terminal &amp; 4-Tier Access Matrix</title>
   <script>
     (function () {
       try {
@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261122_v24" />
+  <link rel="stylesheet" href="styles.css?v=20261122_v27" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -33,9 +33,9 @@
       <div class="sidebar-brand-row">
         <div class="brand-header" id="brand-home-btn" data-node-id="2:3271">
           <div class="brand-mark-wrap" data-node-id="2:3272">
-            <img src="assets/rwanda-events-logo.png" alt="aBility" class="brand-logo-img js-brand-logo-img" data-brand-logo="1" />
+            <img src="assets/rwanda-events-logo.png" alt="RE_LOCATE" class="brand-logo-img js-brand-logo-img" data-brand-logo="1" />
           </div>
-          <span class="brand-name" data-node-id="2:3276">REAV</span>
+          <span class="brand-name" data-node-id="2:3276">RE_LOCATE</span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse-toggle-btn" title="Collapse Sidebar (Alt+S)" aria-label="Collapse Sidebar">
           <svg class="svg-icon collapse-arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -47,7 +47,7 @@
       <!-- <button type="button" class="workspace-switcher" id="workspace-switcher-btn" data-node-id="2:3277">
         <div class="workspace-monogram" data-node-id="2:3278">A</div>
         <div class="workspace-info" data-node-id="2:3280">
-          <span class="workspace-name" data-node-id="2:3281">aBility Manager</span>
+          <span class="workspace-name" data-node-id="2:3281">RE_LOCATE</span>
           <span class="workspace-plan" data-node-id="2:3282">Gate &amp; Access Matrix</span>
         </div>
         <img src="assets/chevrons-up-down.svg" alt="" class="svg-icon" />
@@ -203,7 +203,7 @@
             </svg>
           </button>
           <div class="breadcrumb" data-node-id="2:3331">
-            <span class="breadcrumb-root" id="breadcrumb-workspace" data-node-id="2:3332" title="Return to Overview Dashboard">aBility Manager</span>
+            <span class="breadcrumb-root" id="breadcrumb-workspace" data-node-id="2:3332" title="Return to Overview Dashboard">RE_LOCATE</span>
             <img src="assets/chevron-right.svg" alt="" class="svg-icon" />
             <span class="breadcrumb-current" id="breadcrumb-page" data-node-id="2:3334">Gate Operations Dashboard</span>
           </div>
@@ -423,6 +423,10 @@
             <div class="page-actions">
               <button type="button" class="btn btn-secondary-38" id="overview-schedule-roster-btn" style="display: none;">
                 <span>Schedule Event Roster</span>
+              </button>
+              <button type="button" class="btn btn-secondary-38" id="overview-customize-widgets-btn" style="display: none;" title="Enable, disable, or role-scope sections &amp; IDs on Gate Dashboard">
+                <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
+                <span>Customize Widgets</span>
               </button>
               <!-- <button type="button" class="btn btn-secondary-38 js-open-rollcall-modal">
                 <img src="assets/metric-users.svg" alt="" class="svg-icon" />
@@ -1947,6 +1951,10 @@
               <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
               <span>Navigation Menu CRUD (<span id="pill-nav-count">11</span>)</span>
             </button>
+            <button type="button" class="btn btn-secondary-32 js-users-view-tab" id="view-tab-overview-widgets" data-view="overview-widgets">
+              <img src="assets/nav-overview-inactive.svg" alt="" class="svg-icon" />
+              <span>Dashboard Widgets (<span id="pill-overview-widgets-count">35</span>)</span>
+            </button>
           </div>
         </div><!-- End overview-top-block -->
 
@@ -2436,8 +2444,131 @@
                 <div id="navigation-table-rows"></div>
               </div>
             </div>
+
+            <!-- Navigation Table Pagination Footer (5 items per page) -->
+            <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 14px 4px 6px; border-top: 1px solid var(--border-color); margin-top: 10px;">
+              <span class="results-count" id="nav-results-footer">Showing 1–5 of 22 navigation items</span>
+              <div class="page-controls" id="nav-page-controls" style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;"></div>
+            </div>
           </section>
         </div><!-- End #navigation-view-container -->
+
+        <!-- TAB 6: GATE DASHBOARD WIDGETS & ID VISIBILITY VIEW CONTAINER -->
+        <div id="overview-widgets-view-container" style="display: none; margin-top: 14px;">
+          <!-- Master Enable / Disable Controls for Gate Dashboard -->
+          <div class="nav-master-control-card">
+            <div style="display: flex; align-items: center; gap: 14px; flex: 1 1 420px;">
+              <label class="nav-toggle-switch" title="Master switch for custom Gate Dashboard layout enforcement">
+                <input type="checkbox" id="overview-widgets-master-toggle" checked />
+                <span class="nav-toggle-slider"></span>
+              </label>
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <strong style="font-size: 14.5px; color: var(--text-primary);">Gate Dashboard Controls (&lt;main id="screen-overview"&gt;)</strong>
+                  <span class="status-badge status-badge-green-sm" id="overview-widgets-master-status-badge">Enabled</span>
+                </div>
+                <p style="margin: 2px 0 0; font-size: 11.5px; color: var(--text-secondary);">
+                  Enable, disable, or role-scope every section, KPI card, timeline toolbar, allocation card, and element ID inside Gate Operations &amp; Access Matrix.
+                </p>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary-38" id="overview-widgets-expand-all-btn" title="Expand or collapse child element lists">
+                <span>Expand All Sub-Controls</span>
+              </button>
+              <button type="button" class="btn btn-secondary-38" id="overview-widgets-reset-defaults-btn" title="Restore all default Gate Dashboard sections and roles">
+                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                <span>Restore Defaults</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Top Metrics Cards -->
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Total Controls</span>
+                <img src="assets/sliders-horizontal-13.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="ow-kpi-total">35</span>
+              <span class="metric-context">Sections &amp; Child IDs</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Parent Sections</span>
+                <img src="assets/nav-overview-inactive.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="ow-kpi-parents">7</span>
+              <span class="metric-context">Expandable Dashboard Blocks</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Enabled Controls</span>
+                <img src="assets/metric-circle-check.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="ow-kpi-enabled">35</span>
+              <span class="metric-context">Active on Gate Dashboard</span>
+            </div>
+            <div class="metric-card">
+              <div class="metric-heading">
+                <span class="metric-label-reg">Disabled Controls</span>
+                <img src="assets/lock.svg" alt="" class="svg-icon" />
+              </div>
+              <span class="metric-value-30" id="ow-kpi-disabled">0</span>
+              <span class="metric-context">Hidden Across Sessions</span>
+            </div>
+          </div>
+
+          <!-- Dashboard Widgets Directory Card -->
+          <section class="directory-card" style="margin-top: 20px;">
+            <div class="directory-header">
+              <div class="directory-heading">
+                <div class="directory-title-row">
+                  <h2 class="directory-title-18">Gate Dashboard Elements &amp; IDs (#screen-overview)</h2>
+                  <span class="status-badge status-badge-blue-sm" id="ow-badge-count">7 Sections · 35 IDs</span>
+                </div>
+                <p class="directory-desc">
+                  Toggle entire sections (KPI Cards Grid, Activity Timeline, Allocation Card, Crew Roster) or expand a section to enable, disable, or role-scope individual element IDs.
+                </p>
+              </div>
+            </div>
+
+            <!-- Tools -->
+            <div class="table-tools" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+              <label class="table-search-box" for="ow-search-input" style="flex: 1 1 240px; min-width: 220px;">
+                <img src="assets/search-table.svg" alt="" class="svg-icon" />
+                <input type="text" id="ow-search-input" class="table-search-input" placeholder="Search by widget name, element ID (#overview-allocation-card), data-node-id (2:3372), or role..." />
+              </label>
+
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <select id="ow-filter-category" class="scan-mode-select" style="min-width: 190px;" aria-label="Filter Dashboard Section">
+                  <option value="all">All Dashboard Sections</option>
+                  <option value="header">Page Header &amp; Intro</option>
+                  <option value="checkpoint">Checkpoint Selector Bar</option>
+                  <option value="kpi">Gate Telemetry KPI Cards</option>
+                  <option value="timeline">User Activity Timeline</option>
+                  <option value="techlead">Tech Lead Crew Card</option>
+                  <option value="allocation">Traffic &amp; On-Site Card</option>
+                  <option value="roster">Production Crew Roster</option>
+                </select>
+                <select id="ow-filter-status" class="scan-mode-select" style="min-width: 145px;" aria-label="Filter Control Status">
+                  <option value="all">All Statuses</option>
+                  <option value="enabled">Enabled Only</option>
+                  <option value="disabled">Disabled Only</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Hierarchical Section & Sub-Element List (5 parent sections per page) -->
+            <div id="overview-widgets-list" style="margin-top: 14px; display: flex; flex-direction: column; gap: 12px;"></div>
+
+            <!-- Pagination Footer (5 sections per page) -->
+            <div class="table-footer" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 14px 4px 6px; border-top: 1px solid var(--border-color); margin-top: 14px;">
+              <span class="results-count" id="ow-results-footer">Showing 1–5 of 7 sections</span>
+              <div class="page-controls" id="ow-page-controls" style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;"></div>
+            </div>
+          </section>
+        </div><!-- End #overview-widgets-view-container -->
       </main>
 
       <!-- ================================================================== -->
@@ -3359,7 +3490,7 @@
             <div class="flow-explorer-header">
               <div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                  <span class="status-badge status-badge-purple-sm">aBility Manager</span>
+                  <span class="status-badge status-badge-purple-sm">RELOCATE</span>
                   <h2 class="directory-title-18" style="margin: 0;">Interactive System Flow Explorer</h2>
                 </div>
                 <p class="directory-desc" id="settings-flow-subtitle" style="margin-top: 4px;">
@@ -4624,6 +4755,7 @@
     </div>
   </div>
 
+
   <!-- ====================================================================== -->
   <!-- SCHEDULE EVENT ROSTER & ALLOCATION MODAL (TECH LEAD GATE DASHBOARD)    -->
   <!-- ====================================================================== -->
@@ -4792,6 +4924,7 @@
     </div>
   </div>
 
+
   <!-- ====================================================================== -->
   <!-- MODAL 2B: UNIFIED SITE TERMINAL PIN MANAGER MODAL                      -->
   <!-- ====================================================================== -->
@@ -4828,6 +4961,7 @@
       </form>
     </div>
   </div>
+
 
   <!-- ====================================================================== -->
   <!-- MODAL 4: SET CALL TIME MODAL (VENUES, STOCKS & WAREHOUSES)             -->
@@ -4909,6 +5043,7 @@
       </form>
     </div>
   </div>
+
 
   <!-- ====================================================================== -->
   <!-- MODAL 5: WAREHOUSE CRUD MODAL (WITH IMAGE UPLOAD)                      -->
@@ -5020,6 +5155,7 @@
       </form>
     </div>
   </div>
+
 
   <!-- ====================================================================== -->
   <!-- MODAL 8: USER & ROLE MANAGEMENT MODAL (WITH PROFILE PHOTO UPLOAD)      -->
@@ -5202,6 +5338,7 @@
     </div>
   </div>
 
+
   <!-- ====================================================================== -->
 
   <!-- ====================================================================== -->
@@ -5274,6 +5411,7 @@
       </form>
     </div>
   </div>
+
 
   <!-- ====================================================================== -->
   <!-- MODAL: CREATE / EDIT CLEARANCE TIER (4-TIER ACCESS MATRIX CRUD)        -->
@@ -5384,6 +5522,7 @@
     </div>
   </div>
 
+
   <!-- MODAL: CREATE / EDIT DEPARTMENT (DEPARTMENTS CRUD)                     -->
   <!-- ====================================================================== -->
   <div class="modal-backdrop" id="dept-crud-modal" aria-hidden="true" style="display: none;">
@@ -5421,6 +5560,7 @@
       </form>
     </div>
   </div>
+
 
   <!-- MODAL: CREATE / EDIT NAVIGATION ITEM (MAIN NAVIGATION CRUD)           -->
   <!-- ====================================================================== -->
@@ -5462,6 +5602,8 @@
               <optgroup label="Main Navigation Screens">
                 <option value="overview">Gate Dashboard (overview)</option>
                 <option value="events">Checkpoints &amp; Venues (events)</option>
+                <option value="create-event">Create Event (create-event)</option>
+                <option value="dispatch-flow">Dispatch Flow (dispatch-flow)</option>
                 <option value="users">Users &amp; Roles (users)</option>
                 <option value="attendees">Staff ID Badges (attendees)</option>
                 <option value="terminals">Terminals (terminals)</option>
@@ -5479,6 +5621,16 @@
                 <option value="reset-scans">Reset Today's Scans Page (reset-scans)</option>
                 <option value="standalone-portals">Gates &amp; On-Site Portals Page (standalone-portals)</option>
                 <option value="settings">Settings &amp; System Flow Explorer (settings)</option>
+              </optgroup>
+              <optgroup label="Settings Sub-Sections (Checkpoint Controls)">
+                <option value="settings:flow">Settings → Flow (settings:flow)</option>
+                <option value="settings:relief">Settings → Relief &amp; Geo-QR (settings:relief)</option>
+                <option value="settings:dispatch">Settings → Dispatch Hierarchy (settings:dispatch)</option>
+                <option value="settings:links">Settings → Shared Links (settings:links)</option>
+                <option value="settings:branding">Settings → Branding &amp; Mode (settings:branding)</option>
+                <option value="settings:accounts">Settings → Accounts &amp; Offline (settings:accounts)</option>
+                <option value="settings:pwa">Settings → PWA (Android &amp; iOS) (settings:pwa)</option>
+                <option value="settings:controls">Settings → Config Shortcuts (settings:controls)</option>
               </optgroup>
               <optgroup label="Quick Modal Triggers (Optional)">
                 <option value="action:shift-relief">Shift Relief &amp; Swaps Modal</option>
@@ -5515,6 +5667,11 @@
               <option value="assets/nav-analytics.svg">Analytics Chart</option>
               <option value="assets/nav-integrations.svg">Integrations / Lock</option>
               <option value="assets/key-round-13.svg">Key / Shared Access Link</option>
+              <option value="assets/sliders-horizontal-13.svg">Settings / Flow Sliders</option>
+              <option value="assets/map-grid.svg">Dispatch Hierarchy Grid</option>
+              <option value="assets/sparkles.svg">Branding / Sparkles</option>
+              <option value="assets/shield-lock.svg">Security / Shield Lock</option>
+              <option value="assets/globe-12.svg">PWA / Web Globe</option>
               <option value="assets/nav-settings.svg">Settings / Reset Gear</option>
             </select>
           </div>
@@ -5550,10 +5707,11 @@
           <div class="nav-crud-roles-grid" id="nav-crud-roles-list">
             <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="admin,administrator" /> Administrator</label>
             <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="manager,project_manager" /> Manager / PM</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="event_coordinator" /> Event Coordinator</label>
             <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="tech_lead,technical_lead" /> Technical Lead</label>
             <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="stock_manager" /> Site Manager</label>
             <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="stock_controller" /> Gate Controller</label>
-            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="technician,sound_engineer,lighting_tech,video_director,stage_manager,rigging_lead,user,security,driver" /> Crew &amp; Technicians</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-nav-role-cb" value="technician,sound_engineer,lighting_tech,video_director,stage_manager,rigging_lead,electrical_tech,interpretation_tech,support_staff,user,security,driver" /> Crew, Tech &amp; Support</label>
           </div>
         </div>
 
@@ -5572,6 +5730,67 @@
     </div>
   </div>
 
+  <!-- ====================================================================== -->
+  <!-- MODAL 6B: OVERVIEW WIDGET ROLES & LABEL MODAL                          -->
+  <!-- ====================================================================== -->
+  <div class="modal-backdrop" id="overview-widget-crud-modal" aria-hidden="true" style="display: none;">
+    <div class="modal-card" style="width: 500px; max-width: 96vw;" role="dialog" aria-labelledby="ow-crud-modal-title">
+      <div class="modal-header-row" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
+        <div>
+          <h3 class="modal-title" id="ow-crud-modal-title">Configure Dashboard Element</h3>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 2px 0 0;">Control label, enable/disable state, and allowed roles on #screen-overview.</p>
+        </div>
+        <button type="button" class="icon-btn js-close-ow-crud-modal" aria-label="Close" style="font-size: 18px;">&times;</button>
+      </div>
+
+      <form id="overview-widget-crud-form">
+        <input type="hidden" id="ow-crud-id" value="0" />
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="ow-crud-label">Control Display Label *</label>
+          <input type="text" id="ow-crud-label" class="form-input" required maxlength="120" />
+        </div>
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label">Target DOM Selector / Node ID</label>
+          <div id="ow-crud-selector-preview" style="font-family: monospace; font-size: 11.5px; padding: 8px 10px; border-radius: 8px; background: var(--bg-subtle); border: 1px solid var(--border-color); color: var(--text-primary); word-break: break-all;"></div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Allowed Roles</span>
+            <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; cursor: pointer;">
+              <input type="checkbox" id="ow-crud-roles-all" />
+              <span>All Roles</span>
+            </label>
+          </label>
+          <div class="nav-crud-roles-grid" id="ow-crud-roles-list">
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-ow-role-cb" value="admin,administrator" /> Administrator</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-ow-role-cb" value="manager,project_manager" /> Manager / PM</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-ow-role-cb" value="event_coordinator" /> Event Coordinator</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-ow-role-cb" value="tech_lead,technical_lead" /> Technical Lead</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-ow-role-cb" value="stock_manager" /> Site Manager</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-ow-role-cb" value="stock_controller" /> Gate Controller</label>
+            <label class="nav-crud-role-opt"><input type="checkbox" class="js-ow-role-cb" value="technician,sound_engineer,lighting_tech,video_director,stage_manager,rigging_lead,electrical_tech,interpretation_tech,support_staff,user,security,driver" /> Crew, Tech &amp; Support</label>
+          </div>
+        </div>
+
+        <div class="form-field" style="margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+            <input type="checkbox" id="ow-crud-enabled" checked />
+            <span>Enabled (visible on Gate Dashboard)</span>
+          </label>
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary-38 js-close-ow-crud-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-38" id="ow-crud-submit-btn" style="background: #4f46e5; border-color: #4f46e5; color: #fff;">Save Control</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ====================================================================== -->
   <!-- MODAL 7: CONFIRM DELETE MODAL                                          -->
   <!-- ====================================================================== -->
   <div class="modal-backdrop" id="confirm-delete-modal" aria-hidden="true">
@@ -5735,6 +5954,7 @@
       </form>
     </div>
   </div>
+
 
   <!-- ====================================================================== -->
   <!-- MODAL 9: SWITCH ACTIVE OPERATOR MODAL                                  -->
@@ -5929,6 +6149,7 @@
       </form>
     </div>
   </div>
+
 
   <!-- ====================================================================== -->
   <!-- MODAL 12: EVENT VENUE SECURITY STATION CRUD MODAL                      -->
@@ -6132,6 +6353,7 @@
     </div>
   </div>
 
+
   <!-- Modal: Create / Customize Standalone Gate or On-Site Portal -->
   <div class="modal-backdrop" id="portal-crud-modal" aria-hidden="true">
     <div class="modal-card" style="width: 560px; max-width: 95vw; max-height: 92vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="portal-crud-modal-title">
@@ -6267,6 +6489,7 @@
     </div>
   </div>
 
+
   <!-- Modal: Standalone Gates & Live On-Site Portal Links -->
   <div class="modal-backdrop" id="onsite-share-modal" aria-hidden="true">
     <div class="modal-card" style="width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="onsite-share-modal-title">
@@ -6391,6 +6614,6 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261122_v24"></script>
+  <script src="app.js?v=20261122_v27"></script>
 </body>
 </html>
