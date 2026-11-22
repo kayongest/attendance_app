@@ -344,6 +344,16 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("UPDATE `events` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
     } catch (Throwable $e) {}
     try {
+        $pdo->exec("
+            UPDATE `events`
+            SET `dispatch_status` = 'request_sent_to_tech_lead'
+            WHERE (`dispatch_status` IS NULL OR `dispatch_status` = '' OR `dispatch_status` = 'draft')
+              AND `tech_lead` IS NOT NULL
+              AND TRIM(`tech_lead`) != ''
+              AND LOWER(TRIM(`tech_lead`)) != 'tech lead'
+        ");
+    } catch (Throwable $e) {}
+    try {
         $pdo->exec("ALTER TABLE `stock_locations` ADD COLUMN `geofence_radius_m` INT NOT NULL DEFAULT 200");
     } catch (Throwable $e) {}
     try {
@@ -557,6 +567,19 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             `payload_json` TEXT DEFAULT NULL,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX `idx_edl_event` (`event_id`, `id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `event_dept_confirmations` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `event_id` VARCHAR(64) NOT NULL,
+            `user_id` INT NOT NULL,
+            `department` VARCHAR(64) NOT NULL DEFAULT 'General',
+            `confirmation_status` VARCHAR(32) NOT NULL DEFAULT 'confirmed',
+            `comment` TEXT NOT NULL,
+            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_edc_event` (`event_id`, `id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
@@ -1860,7 +1883,7 @@ function logEventDispatchAction(
 function recalculateEventDispatchStatus(PDO $pdo, string $eventId): string
 {
     try {
-        $evSt = $pdo->prepare("SELECT `id`, `requirements_json`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evSt = $pdo->prepare("SELECT `id`, `tech_lead`, `requirements_json`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
         $evSt->execute([$eventId, $eventId]);
         $ev = $evSt->fetch(PDO::FETCH_ASSOC);
         if (!$ev) {
@@ -1869,13 +1892,21 @@ function recalculateEventDispatchStatus(PDO $pdo, string $eventId): string
         $realId = (string) $ev['id'];
         $reqs = json_decode((string) ($ev['requirements_json'] ?? ''), true);
         $hasReq = is_array($reqs) && !empty(array_filter((array) ($reqs['branches'] ?? []), static fn($v) => (int) $v > 0));
+        $tlClean = trim((string) ($ev['tech_lead'] ?? ''));
+        $hasTechLead = ($tlClean !== '' && strtolower($tlClean) !== 'tech lead');
 
         $asgSt = $pdo->prepare("SELECT `branch_dept`, `confirmation_status` FROM `event_crew_assignments` WHERE `event_id` = ?");
         $asgSt->execute([$realId]);
         $rows = $asgSt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($rows)) {
-            $next = $hasReq ? 'requirements_sent' : 'draft';
+            if ($hasTechLead) {
+                $next = 'request_sent_to_tech_lead';
+            } elseif ($hasReq) {
+                $next = 'requirements_sent';
+            } else {
+                $next = 'draft';
+            }
             $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
             return $next;
         }

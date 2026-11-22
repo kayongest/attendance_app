@@ -1541,6 +1541,12 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             }
             break;
 
+        case 'save_event_dept_confirmation':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Posting department confirmations requires Technical Lead or Administrator privileges.'];
+            }
+            break;
+
         case 'request_support_staff':
             if (!in_array($role, ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'technical_lead'], true)) {
                 return ['ok' => false, 'error' => 'Permission denied: Requesting Support Staff requires Project Manager, Event Coordinator, Technical Lead, or Administrator privileges.'];
@@ -2995,6 +3001,31 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         }
     } catch (Throwable $e) {}
 
+    $eventDeptConfirmations = [];
+    try {
+        $edcRows = $pdo->query("SELECT * FROM `event_dept_confirmations` ORDER BY `id` DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($edcRows as $edc) {
+            $eId = (string) ($edc['event_id'] ?? '');
+            $uId = (int) ($edc['user_id'] ?? 0);
+            $uObj = $crewById[$uId] ?? null;
+            if (!isset($eventDeptConfirmations[$eId])) {
+                $eventDeptConfirmations[$eId] = [];
+            }
+            $eventDeptConfirmations[$eId][] = [
+                'id' => (int) $edc['id'],
+                'event_id' => $eId,
+                'user_id' => $uId,
+                'full_name' => $uObj ? $uObj['full_name'] : 'Tech Lead',
+                'role_display' => $uObj ? $uObj['role_display'] : 'Technical Lead',
+                'user_department' => $uObj ? $uObj['department'] : '',
+                'department' => (string) ($edc['department'] ?? 'General'),
+                'confirmation_status' => strtolower((string) ($edc['confirmation_status'] ?? 'confirmed')),
+                'comment' => (string) ($edc['comment'] ?? ''),
+                'created_at' => (string) ($edc['created_at'] ?? ''),
+            ];
+        }
+    } catch (Throwable $e) {}
+
     return [
         'ok' => true,
         'dbSource' => $activeDb,
@@ -3009,6 +3040,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'eventSupportRequests' => $eventSupportRequests,
         'myPendingAssignments' => $myPendingAssignments,
         'eventDispatchLogs' => $eventDispatchLogs,
+        'eventDeptConfirmations' => $eventDeptConfirmations,
         'brandingConfig' => getBrandingConfig($pdo),
         'brandingFonts' => getBrandingFontsList($pdo),
         'read_notif_ids' => $readNotifIds,
@@ -5124,6 +5156,15 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
         $projectManager = trim((string) ($_POST['project_manager'] ?? $jsonBody['project_manager'] ?? ''));
         $eventCoordinator = trim((string) ($_POST['event_coordinator'] ?? $jsonBody['event_coordinator'] ?? ''));
+        $callerRoleLower = strtolower(trim((string) ($caller['role'] ?? '')));
+        $callerDisplayName = trim((string) ($caller['full_name'] ?? $caller['username'] ?? ''));
+        $isCallerAdmin = in_array($callerRoleLower, ['admin', 'administrator', 'manager'], true);
+        if ($eventId === '' && $projectManager === '' && $callerRoleLower === 'project_manager' && $callerDisplayName !== '') {
+            $projectManager = $callerDisplayName;
+        }
+        if ($eventId === '' && $eventCoordinator === '' && $callerRoleLower === 'event_coordinator' && $callerDisplayName !== '') {
+            $eventCoordinator = $callerDisplayName;
+        }
         $eventPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
         $assignedTechs = $_POST['assigned_technicians'] ?? $jsonBody['assigned_technicians'] ?? [];
         $hasRosterIn = array_key_exists('assigned_roster', $_POST) || array_key_exists('assigned_roster', $jsonBody);
@@ -5139,12 +5180,12 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $latIn = $_POST['lat'] ?? $jsonBody['lat'] ?? null;
         $lngIn = $_POST['lng'] ?? $jsonBody['lng'] ?? null;
         $hasCoords = ($latIn !== null && $latIn !== '' && $lngIn !== null && $lngIn !== '' && is_numeric($latIn) && is_numeric($lngIn));
-        $hasPolicyIn = isset($_POST['checkin_policy']) || isset($jsonBody['checkin_policy']);
+        $hasPolicyIn = $isCallerAdmin && (isset($_POST['checkin_policy']) || isset($jsonBody['checkin_policy']));
         $checkinPolicyIn = strtolower(trim((string) ($_POST['checkin_policy'] ?? $jsonBody['checkin_policy'] ?? 'hybrid')));
         if (!in_array($checkinPolicyIn, ['hybrid', 'qr_strict', 'manual_allowed'], true)) {
             $checkinPolicyIn = 'hybrid';
         }
-        $hasVisualIn = isset($_POST['require_visual_match']) || isset($jsonBody['require_visual_match']);
+        $hasVisualIn = $isCallerAdmin && (isset($_POST['require_visual_match']) || isset($jsonBody['require_visual_match']));
         $reqVisualIn = ((int) ($_POST['require_visual_match'] ?? $jsonBody['require_visual_match'] ?? 1) === 1) ? 1 : 0;
         $hasReqsIn = array_key_exists('requirements', $_POST) || array_key_exists('requirements', $jsonBody);
         $reqsRawIn = $_POST['requirements'] ?? $jsonBody['requirements'] ?? null;
@@ -5156,7 +5197,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             }
             if (is_array($reqsRawIn)) {
                 $cleanBranches = [];
-                foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'] as $bk) {
+                foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation', 'Support Staff'] as $bk) {
                     $cleanBranches[$bk] = max(0, min(99, (int) ($reqsRawIn['branches'][$bk] ?? 0)));
                 }
                 $reqsJsonIn = json_encode([
@@ -5267,13 +5308,24 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                         $dSt->execute([$uid]);
                         $uRow = $dSt->fetch(PDO::FETCH_ASSOC);
                         $uDept = trim((string) ($uRow['department'] ?? ''));
+                        $uDeptLow = strtolower($uDept);
                         $uRole = strtolower(trim((string) ($uRow['role'] ?? '')));
-                        if (in_array($uRole, ['driver', 'operations_crew', 'operations', 'runner', 'venue_crew', 'security', 'cleaning', 'catering', 'logistics', 'support_staff', 'support'], true)) {
+                        if (in_array($uRole, ['driver', 'operations_crew', 'operations', 'runner', 'venue_crew', 'security', 'cleaning', 'catering', 'logistics', 'support_staff', 'support', 'decorator'], true) || str_contains($uDeptLow, 'support') || $uDeptLow === 'scurt') {
                             $userBranches[$uid][] = 'Support Staff';
-                        } elseif (in_array($uDept, ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'], true)) {
-                            $userBranches[$uid][] = $uDept;
+                        } elseif (str_contains($uDeptLow, 'video') || $uDeptLow === 'vid') {
+                            $userBranches[$uid][] = 'Video';
+                        } elseif (str_contains($uDeptLow, 'sound') || str_contains($uDeptLow, 'audio') || $uDeptLow === 'snd') {
+                            $userBranches[$uid][] = 'Sound';
+                        } elseif (str_contains($uDeptLow, 'light') || $uDeptLow === 'lgt') {
+                            $userBranches[$uid][] = 'Lighting';
+                        } elseif (str_contains($uDeptLow, 'elect') || $uDeptLow === 'elc') {
+                            $userBranches[$uid][] = 'Electrical';
+                        } elseif (str_contains($uDeptLow, 'rig')) {
+                            $userBranches[$uid][] = 'Rigging';
+                        } elseif (str_contains($uDeptLow, 'interp') || $uDeptLow === 'int') {
+                            $userBranches[$uid][] = 'Interpretation';
                         } else {
-                            $userBranches[$uid][] = $uDept ?: 'Sound';
+                            $userBranches[$uid][] = $uDept !== '' ? $uDept : 'Sound';
                         }
                     }
                 }
@@ -5347,7 +5399,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
 
         $msg = 'Event updated successfully';
         if ($eventId !== '') {
-            $chk = $pdo->prepare("SELECT `id`, `title`, `date`, `start_date`, `end_date`, `image` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $chk = $pdo->prepare("SELECT `id`, `title`, `date`, `start_date`, `end_date`, `image`, `tech_lead`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
             $chk->execute([$eventId, $eventId]);
             $existingEvRow = $chk->fetch(PDO::FETCH_ASSOC);
             if (!$existingEvRow) {
@@ -5423,9 +5475,17 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $updParams[] = $reqVisualIn;
             }
             if ($hasReqsIn && $reqsJsonIn !== null) {
-                $setClauses[] = "`requirements_json` = ?, `dispatch_status` = 'requirements_sent', `requirements_sent_by` = ?, `requirements_sent_at` = NOW()";
+                $setClauses[] = "`requirements_json` = ?, `requirements_sent_by` = ?, `requirements_sent_at` = NOW()";
                 $updParams[] = $reqsJsonIn;
                 $updParams[] = (int) ($caller['id'] ?? 1);
+            }
+            $effTechLead = $techLead !== '' ? $techLead : trim((string) ($existingEvRow['tech_lead'] ?? ''));
+            $curDispatchStatus = strtolower(trim((string) ($existingEvRow['dispatch_status'] ?? 'draft')));
+            $hasEffTechLead = ($effTechLead !== '' && strtolower($effTechLead) !== 'tech lead');
+            if (($curDispatchStatus === '' || $curDispatchStatus === 'draft') && $hasEffTechLead) {
+                $setClauses[] = "`dispatch_status` = 'request_sent_to_tech_lead'";
+            } elseif ($hasReqsIn && $reqsJsonIn !== null && !$hasEffTechLead && ($curDispatchStatus === '' || $curDispatchStatus === 'draft')) {
+                $setClauses[] = "`dispatch_status` = 'requirements_sent'";
             }
             if ($uploadedEventImagePath !== null) {
                 $oldImg = trim((string) ($existingEvRow['image'] ?? ''));
@@ -5457,6 +5517,9 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     $evTitleFinal
                 );
             } else {
+                if ($hasReqsIn) {
+                    recalculateEventDispatchStatus($pdo, $realEventId);
+                }
                 try {
                     logEventDispatchAction(
                         $pdo,
@@ -5487,7 +5550,14 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $newEventId = (string) ($maxId + 1);
             $newLoc = $locationIn !== '' ? $locationIn : 'Kigali Event Venue';
             $newPin = $eventPinRaw !== '' ? $eventPinRaw : '1234';
-            $initDispatchStatus = ($hasReqsIn && $reqsJsonIn !== null) ? 'requirements_sent' : 'draft';
+            $hasAssignedTechLead = ($techLead !== '' && strtolower($techLead) !== 'tech lead');
+            if ($hasAssignedTechLead) {
+                $initDispatchStatus = 'request_sent_to_tech_lead';
+            } elseif ($hasReqsIn && $reqsJsonIn !== null) {
+                $initDispatchStatus = 'requirements_sent';
+            } else {
+                $initDispatchStatus = 'draft';
+            }
             $stmtIns = $pdo->prepare("
                 INSERT INTO `events` (`id`, `title`, `location`, `date`, `start_date`, `end_date`, `duration_days`, `duration_label`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`, `checkin_policy`, `require_visual_match`, `requirements_json`, `dispatch_status`, `requirements_sent_by`, `requirements_sent_at`)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -5502,7 +5572,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $durationDaysVal,
                 $durationLabelVal,
                 $formattedTime,
-                $projectManager !== '' ? $projectManager : 'Operations PM',
+                $projectManager !== '' ? $projectManager : ($eventCoordinator !== '' ? '' : 'Operations PM'),
                 $eventCoordinator,
                 $techLead !== '' ? $techLead : 'Tech Lead',
                 json_encode($assignedTechsInt),
@@ -5521,14 +5591,18 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             ]);
             $eventId = $newEventId;
             $syncAssignedUsers($newEventId, $assignedTechsInt);
+            $createdSummary = "Created event venue \"{$titleIn}\" ({$newLoc}) at {$formattedTime}";
+            if ($initDispatchStatus === 'request_sent_to_tech_lead') {
+                $createdSummary .= " — Request sent to Tech Lead ({$techLead})";
+            }
             logEventDispatchAction(
                 $pdo,
                 $newEventId,
                 (int) ($caller['id'] ?? 1),
                 (string) ($caller['role'] ?? 'project_manager'),
                 'event_created',
-                "Created event venue \"{$titleIn}\" ({$newLoc}) at {$formattedTime}",
-                ['checkin_policy' => $checkinPolicyIn, 'has_requirements' => ($reqsJsonIn !== null)]
+                $createdSummary,
+                ['checkin_policy' => $checkinPolicyIn, 'has_requirements' => ($reqsJsonIn !== null), 'dispatch_status' => $initDispatchStatus]
             );
             if (!empty($assignedTechsInt) || is_array($assignedRosterIn)) {
                 $syncDispatchAssignments(
@@ -9926,7 +10000,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
 
         $cleanBranches = [];
         $summaryParts = [];
-        foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'] as $bk) {
+        foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation', 'Support Staff'] as $bk) {
             $cnt = max(0, min(99, (int) ($branchesIn[$bk] ?? 0)));
             $cleanBranches[$bk] = $cnt;
             if ($cnt > 0) {
@@ -10159,6 +10233,71 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         echo json_encode(array_merge(
             buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
             ['ok' => true, 'decision' => $decision, 'dispatch_status' => $newStatus, 'message' => $decision === 'confirmed' ? "Assignment confirmed for {$evTitle}." : "Declined assignment for {$evTitle} — Tech Lead notified."]
+        ));
+        exit;
+    }
+
+    if ($action === 'save_event_dept_confirmation') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('save_event_dept_confirmation', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $evIdIn = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $deptIn = trim((string) ($_POST['department'] ?? $jsonBody['department'] ?? ''));
+        $statusIn = strtolower(trim((string) ($_POST['confirmation_status'] ?? $jsonBody['confirmation_status'] ?? 'confirmed')));
+        $commentIn = trim((string) ($_POST['comment'] ?? $jsonBody['comment'] ?? ''));
+        if ($evIdIn === '') {
+            echo json_encode(['ok' => false, 'error' => 'event_id is required.']);
+            exit;
+        }
+        if (!in_array($statusIn, ['confirmed', 'needs_adjustment', 'commented'], true)) {
+            $statusIn = 'commented';
+        }
+        if ($commentIn === '') {
+            if ($statusIn === 'confirmed') {
+                $commentIn = 'Confirmed department staffing readiness.';
+            } else {
+                echo json_encode(['ok' => false, 'error' => 'Please enter a comment or confirmation note.']);
+                exit;
+            }
+        }
+        if ($deptIn === '') {
+            $deptIn = trim((string) ($caller['department'] ?? 'General')) ?: 'General';
+        }
+        $evChk = $pdo->prepare("SELECT `id`, `title` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evChk->execute([$evIdIn, $evIdIn]);
+        $evRow = $evChk->fetch(PDO::FETCH_ASSOC);
+        if (!$evRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Event not found.']);
+            exit;
+        }
+        $realEventId = (string) $evRow['id'];
+        $evTitle = (string) ($evRow['title'] ?? ('Event #' . $realEventId));
+
+        $insEdc = $pdo->prepare("
+            INSERT INTO `event_dept_confirmations` (`event_id`, `user_id`, `department`, `confirmation_status`, `comment`)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        $insEdc->execute([$realEventId, (int) $caller['id'], substr($deptIn, 0, 64), $statusIn, $commentIn]);
+
+        $statusLabel = $statusIn === 'confirmed' ? 'Confirmed' : ($statusIn === 'needs_adjustment' ? 'Needs Adjustment' : 'Commented');
+        logEventDispatchAction(
+            $pdo,
+            $realEventId,
+            (int) $caller['id'],
+            (string) ($caller['role'] ?? 'tech_lead'),
+            'dept_techlead_confirmation',
+            "{$caller['full_name']} ({$deptIn} Tech Lead) [{$statusLabel}] on {$evTitle}: " . substr($commentIn, 0, 120),
+            ['department' => $deptIn, 'confirmation_status' => $statusIn]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            ['ok' => true, 'message' => "{$deptIn} confirmation & comment saved."]
         ));
         exit;
     }

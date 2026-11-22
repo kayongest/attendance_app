@@ -87,6 +87,7 @@
     srFilterStatus: 'all',
     createEventSearch: '',
     selectedDispatchEventId: '',
+    eventDeptConfirmations: {},
     rollCallSearch: '',
     rollCallCpFilter: 'all',
     rollCallRoleFilter: 'all',
@@ -622,6 +623,9 @@
     }
     if (Array.isArray(data.eventDispatchLogs)) {
       state.eventDispatchLogs = data.eventDispatchLogs;
+    }
+    if (data.eventDeptConfirmations && typeof data.eventDeptConfirmations === 'object') {
+      state.eventDeptConfirmations = data.eventDeptConfirmations;
     }
     if (data.brandingConfig && typeof data.brandingConfig === 'object') {
       applyBrandingConfigClient(data.brandingConfig, data.brandingFonts || null);
@@ -8794,6 +8798,293 @@
     if (modal) modal.style.display = 'none';
   }
 
+  const CORE_DISPATCH_DEPTS = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation', 'Support Staff'];
+  const venueCrudSelectedCrewIds = new Set();
+
+  function resolveCrewCanonicalDepartment(u) {
+    if (!u) return 'General';
+    const rawDept = String(u.department || '').trim();
+    const dep = rawDept.toLowerCase();
+    const role = String(u.role || '').trim().toLowerCase();
+    if (dep.includes('video') || dep === 'vid' || role.includes('video')) return 'Video';
+    if (dep.includes('sound') || dep.includes('audio') || dep === 'snd' || role.includes('sound')) return 'Sound';
+    if (dep.includes('light') || dep === 'lgt' || role.includes('light')) return 'Lighting';
+    if (dep.includes('elect') || dep === 'elc' || role.includes('elect')) return 'Electrical';
+    if (dep.includes('rig') || role.includes('rig')) return 'Rigging';
+    if (dep.includes('interp') || dep === 'int' || role.includes('interp')) return 'Interpretation';
+    if (
+      dep.includes('support') ||
+      dep === 'sup' ||
+      dep === 'scurt' ||
+      ['support_staff', 'driver', 'decorator', 'runner', 'operations_crew', 'venue_crew', 'cleaning', 'catering', 'logistics'].includes(role)
+    ) {
+      return 'Support Staff';
+    }
+    if (dep.includes('warehouse') || dep === 'whs') return 'Warehouse';
+    if (dep.includes('operat') || dep === 'ops' || dep === 'production') return 'Operations';
+    if (dep.includes('secur') || dep === 'sec' || role === 'security') return 'Security';
+    if (dep.includes('logist') || dep === 'log') return 'Logistics';
+    if (dep.includes('exec') || dep === 'exc') return 'Executive';
+    const deptMatch = (state.departments || []).find((d) => String(d?.name || '').trim().toLowerCase() === dep);
+    if (deptMatch && deptMatch.name) return String(deptMatch.name).trim();
+    if (rawDept) return rawDept.charAt(0).toUpperCase() + rawDept.slice(1);
+    if (role === 'technician') return 'Sound';
+    return 'General';
+  }
+
+  function buildStructuredEventRoster(pm, eventCoord, techLead, crewIds) {
+    const idSet = new Set((crewIds || []).map(Number));
+    const depts = { Video: [], Sound: [], Lighting: [], Electrical: [], Rigging: [], Interpretation: [] };
+    const supportStaff = [];
+    (state.crew || []).forEach((u) => {
+      const uid = Number(u.id);
+      if (!idSet.has(uid)) return;
+      const canon = resolveCrewCanonicalDepartment(u);
+      if (Object.prototype.hasOwnProperty.call(depts, canon)) {
+        depts[canon].push(uid);
+      } else {
+        supportStaff.push(uid);
+      }
+    });
+    return {
+      project_manager: pm,
+      event_coordinator: eventCoord,
+      tech_lead: techLead,
+      departments: depts,
+      support_staff: supportStaff,
+    };
+  }
+
+  function getVenueCrudDepartmentBuckets() {
+    const bucketMap = new Map();
+    CORE_DISPATCH_DEPTS.forEach((d) => bucketMap.set(d, []));
+    (state.crew || []).forEach((c) => {
+      if (!c) return;
+      const uid = Number(c.id);
+      const isActive = Number(c.is_active ?? 1) !== 0;
+      if (!isActive && !venueCrudSelectedCrewIds.has(uid)) return;
+      const dept = resolveCrewCanonicalDepartment(c);
+      if (!bucketMap.has(dept)) bucketMap.set(dept, []);
+      bucketMap.get(dept).push(c);
+    });
+    const result = [];
+    CORE_DISPATCH_DEPTS.forEach((d) => {
+      result.push({ dept: d, members: bucketMap.get(d) || [] });
+    });
+    bucketMap.forEach((members, dept) => {
+      if (!CORE_DISPATCH_DEPTS.includes(dept) && members.length > 0) {
+        result.push({ dept, members });
+      }
+    });
+    return result;
+  }
+
+  let venueCrudCurrentTargets = {};
+
+  function getVenueCrudDeptCountsPayload() {
+    const branches = {};
+    document.querySelectorAll('#venue-crud-dept-counts-section .js-venue-dept-count-input').forEach((inp) => {
+      const dept = inp.getAttribute('data-dept');
+      if (dept) {
+        branches[dept] = Math.max(0, Math.min(99, Number(inp.value || 0)));
+      }
+    });
+    const notes = (document.getElementById('venue-dept-count-notes')?.value || '').trim();
+    return { branches, notes };
+  }
+
+  function updateVenueCrudDeptCountsTotal() {
+    const { branches } = getVenueCrudDeptCountsPayload();
+    venueCrudCurrentTargets = branches;
+    const total = Object.values(branches).reduce((acc, v) => acc + Number(v || 0), 0);
+    const pill = document.getElementById('venue-crud-dept-counts-total');
+    if (pill) {
+      pill.textContent = `${total} Technician${total === 1 ? '' : 's'}`;
+    }
+  }
+
+  function renderVenueCrudTargetsBanner() {
+    const banner = document.getElementById('venue-crud-targets-banner');
+    if (!banner) return;
+    const buckets = getVenueCrudDepartmentBuckets();
+    const entries = Object.entries(venueCrudCurrentTargets || {}).filter(([, need]) => Number(need) > 0);
+    if (entries.length === 0) {
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+      return;
+    }
+    const itemsHtml = entries.map(([dept, need]) => {
+      const b = buckets.find((x) => x.dept === dept);
+      const assigned = b ? b.members.filter((m) => venueCrudSelectedCrewIds.has(Number(m.id))).length : 0;
+      const met = assigned >= Number(need);
+      const dispDept = dept === 'Sound' ? 'Audio / Sound' : dept;
+      return `<span class="status-badge ${met ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${escapeHtml(dispDept)}: ${assigned}/${Number(need)}${met ? ' ✓' : ''}</span>`;
+    }).join('');
+    banner.style.display = 'flex';
+    banner.innerHTML = `<span style="font-weight:700;color:var(--text-primary);margin-right:4px;">PM Targets:</span>${itemsHtml}`;
+  }
+
+  function renderVenueCrudDeptComments(eventIdStr = '') {
+    const listEl = document.getElementById('venue-comment-list');
+    const countBadge = document.getElementById('venue-comment-count-badge');
+    const saveHint = document.getElementById('venue-comment-save-hint');
+    const submitBtn = document.getElementById('venue-comment-submit-btn');
+    const evKey = String(eventIdStr || '').trim();
+    const entries = evKey && state.eventDeptConfirmations && Array.isArray(state.eventDeptConfirmations[evKey])
+      ? state.eventDeptConfirmations[evKey]
+      : [];
+    if (countBadge) {
+      countBadge.textContent = `${entries.length} Note${entries.length === 1 ? '' : 's'}`;
+    }
+    if (saveHint) {
+      saveHint.style.display = evKey ? 'none' : 'block';
+    }
+    if (submitBtn) {
+      submitBtn.disabled = !evKey;
+    }
+    if (!listEl) return;
+    if (!evKey) {
+      listEl.innerHTML = '';
+      return;
+    }
+    if (entries.length === 0) {
+      listEl.innerHTML = '<div style="font-size:11.5px;color:var(--text-muted);padding:6px 2px;">No department Tech-Lead confirmations or comments recorded for this event yet.</div>';
+      return;
+    }
+    listEl.innerHTML = entries.map((item) => {
+      const st = String(item.confirmation_status || 'commented').toLowerCase();
+      const badgeCls = st === 'confirmed'
+        ? 'status-badge-green-sm'
+        : (st === 'needs_adjustment' ? 'status-badge-amber-sm' : 'status-badge-blue-sm');
+      const badgeTxt = st === 'confirmed' ? '✓ Confirmed' : (st === 'needs_adjustment' ? '⚠ Needs Adjustment' : 'Comment');
+      const deptLabel = item.department === 'Sound' ? 'Audio / Sound' : (item.department || 'General');
+      return `
+        <div style="padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+            <span style="font-weight:700;color:var(--text-primary);">${escapeHtml(item.full_name || 'Tech Lead')} <span style="font-weight:500;color:var(--text-muted);">(${escapeHtml(deptLabel)})</span></span>
+            <span class="status-badge ${badgeCls}" style="font-size:10px;">${badgeTxt}</span>
+          </div>
+          <div style="color:var(--text-secondary);line-height:1.45;">${escapeHtml(item.comment || '')}</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${escapeHtml(String(item.created_at || '').slice(0, 16))}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function postVenueDeptConfirmation(eventId, dept, status, comment, silentToast = false) {
+    const res = await fetch('api.php?action=save_event_dept_confirmation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'save_event_dept_confirmation',
+        event_id: eventId,
+        department: dept,
+        confirmation_status: status,
+        comment,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || 'Failed to save department confirmation.');
+    }
+    applyBootstrapPayload(data, true);
+    renderVenueCrudDeptComments(eventId);
+    renderDispatchViews();
+    if (!silentToast) {
+      showToast(data.message || 'Department confirmation saved.', 'success');
+    }
+    return data;
+  }
+
+  function renderVenueCrudDepartmentSelect(preferredDept = '') {
+    const deptSel = document.getElementById('venue-crud-dept-select');
+    if (!deptSel) return '';
+    const buckets = getVenueCrudDepartmentBuckets();
+    const curVal = preferredDept || deptSel.value || '';
+    let chosenDept = '';
+    if (curVal && buckets.some((b) => b.dept === curVal)) {
+      chosenDept = curVal;
+    } else {
+      const withSelected = buckets.find((b) => b.members.some((m) => venueCrudSelectedCrewIds.has(Number(m.id))));
+      const withTarget = buckets.find((b) => Number(venueCrudCurrentTargets[b.dept] || 0) > 0);
+      const withMembers = buckets.find((b) => b.members.length > 0);
+      chosenDept = (withSelected || withTarget || withMembers || buckets[0])?.dept || 'Video';
+    }
+    deptSel.innerHTML = buckets.map((b) => {
+      const selCount = b.members.filter((m) => venueCrudSelectedCrewIds.has(Number(m.id))).length;
+      const targetNeed = Number(venueCrudCurrentTargets[b.dept] || 0);
+      const dispDept = b.dept === 'Sound' ? 'Audio / Sound' : b.dept;
+      let countText = `${b.members.length} crew`;
+      if (targetNeed > 0) {
+        countText += ` · ${selCount}/${targetNeed} needed`;
+      } else if (selCount > 0) {
+        countText += ` · ${selCount} selected`;
+      }
+      return `<option value="${escapeHtml(b.dept)}" ${b.dept === chosenDept ? 'selected' : ''}>${escapeHtml(dispDept)} (${escapeHtml(countText)})</option>`;
+    }).join('');
+    deptSel.value = chosenDept;
+    return chosenDept;
+  }
+
+  function renderVenueCrudCrewSummary() {
+    const countBadge = document.getElementById('venue-crud-crew-count-badge');
+    const clearAllBtn = document.getElementById('venue-crud-clear-all-btn');
+    const summaryEl = document.getElementById('venue-crud-selected-summary');
+    const total = venueCrudSelectedCrewIds.size;
+    if (countBadge) countBadge.textContent = `${total} Selected`;
+    if (clearAllBtn) clearAllBtn.style.display = total > 0 ? 'inline-flex' : 'none';
+    renderVenueCrudTargetsBanner();
+    if (!summaryEl) return;
+    if (total === 0) {
+      summaryEl.style.display = 'none';
+      summaryEl.innerHTML = '';
+      return;
+    }
+    const buckets = getVenueCrudDepartmentBuckets();
+    const chips = buckets
+      .map((b) => {
+        const selMembers = b.members.filter((m) => venueCrudSelectedCrewIds.has(Number(m.id)));
+        if (selMembers.length === 0) return '';
+        const targetNeed = Number(venueCrudCurrentTargets[b.dept] || 0);
+        const dispDept = b.dept === 'Sound' ? 'Audio / Sound' : b.dept;
+        const suffix = targetNeed > 0 ? `${selMembers.length}/${targetNeed}` : `${selMembers.length}`;
+        return `<button type="button" class="status-badge status-badge-purple-sm js-venue-dept-chip" data-dept="${escapeHtml(b.dept)}" style="border:none;cursor:pointer;" title="Switch to ${escapeHtml(dispDept)}">${escapeHtml(dispDept)}: ${suffix} ✓</button>`;
+      })
+      .filter(Boolean);
+    summaryEl.style.display = chips.length > 0 ? 'flex' : 'none';
+    summaryEl.innerHTML = chips.join('');
+  }
+
+  function renderVenueCrudCrewChecklist() {
+    const crewBox = document.getElementById('venue-crud-crew-list');
+    const deptSel = document.getElementById('venue-crud-dept-select');
+    if (!crewBox) return;
+    const activeDept = deptSel ? deptSel.value : '';
+    const buckets = getVenueCrudDepartmentBuckets();
+    const activeBucket = buckets.find((b) => b.dept === activeDept) || buckets[0];
+    const members = activeBucket ? activeBucket.members : [];
+    if (members.length === 0) {
+      crewBox.innerHTML = `<div style="grid-column:1/-1;padding:12px;text-align:center;font-size:12px;color:var(--text-muted);">No staff members assigned to ${escapeHtml(activeDept || 'this')} department yet.</div>`;
+    } else {
+      crewBox.innerHTML = members.map((c) => `
+        <label class="nav-crud-role-opt">
+          <input type="checkbox" class="js-venue-crud-crew-cb" value="${Number(c.id)}" ${venueCrudSelectedCrewIds.has(Number(c.id)) ? 'checked' : ''} />
+          <span>${escapeHtml(c.full_name)} (${escapeHtml(c.role_display || c.role)})</span>
+        </label>
+      `).join('');
+      crewBox.querySelectorAll('.js-venue-crud-crew-cb').forEach((cb) => {
+        cb.addEventListener('change', () => {
+          const uid = Number(cb.value);
+          if (cb.checked) venueCrudSelectedCrewIds.add(uid);
+          else venueCrudSelectedCrewIds.delete(uid);
+          renderVenueCrudDepartmentSelect(activeDept);
+          renderVenueCrudCrewSummary();
+        });
+      });
+    }
+    renderVenueCrudCrewSummary();
+  }
+
   function openVenueCrudModal(venue = null) {
     const modal = document.getElementById('venue-crud-modal');
     if (!modal) return;
@@ -8805,24 +9096,64 @@
     const endDateEl = document.getElementById('venue-crud-end-date');
     const durEl = document.getElementById('venue-crud-duration');
     const ctEl = document.getElementById('venue-crud-calltime');
-    const pinEl = document.getElementById('venue-crud-pin');
     const tlEl = document.getElementById('venue-crud-techlead');
     const pmEl = document.getElementById('venue-crud-pm');
     const coordEl = document.getElementById('venue-crud-coordinator');
-    const radEl = document.getElementById('venue-crud-radius');
-    const latEl = document.getElementById('venue-crud-lat');
-    const lngEl = document.getElementById('venue-crud-lng');
-    const crewBox = document.getElementById('venue-crud-crew-list');
+    const pmAutoTag = document.getElementById('venue-crud-pm-auto-tag');
+    const coordAutoTag = document.getElementById('venue-crud-coord-auto-tag');
+    const deptCountsSection = document.getElementById('venue-crud-dept-counts-section');
+    const techLeadCrewSection = document.getElementById('venue-crud-techlead-crew-section');
 
-    const assignedSet = new Set((venue && Array.isArray(venue.assigned_technicians) ? venue.assigned_technicians : []).map(Number));
-    if (crewBox) {
-      crewBox.innerHTML = (state.crew || []).map((c) => `
-        <label class="nav-crud-role-opt">
-          <input type="checkbox" class="js-venue-crud-crew-cb" value="${Number(c.id)}" ${assignedSet.has(Number(c.id)) ? 'checked' : ''} />
-          <span>${escapeHtml(c.full_name)} (${escapeHtml(c.role_display || c.role)})</span>
-        </label>
-      `).join('');
+    const curUser = state.currentUser || {};
+    const curRole = String(curUser.role || '').toLowerCase();
+    const curName = String(curUser.full_name || curUser.username || '').trim();
+    const isAdmin = isCurrentUserAdmin();
+    const isPm = curRole === 'project_manager' && !isAdmin;
+    const isCoord = curRole === 'event_coordinator' && !isAdmin;
+    const isPmOrCoord = isPm || isCoord;
+    const showDeptCounts = isAdmin || isPmOrCoord;
+    const canAssignCrew = isAdmin || (!isPmOrCoord && isCurrentUserTechLead());
+
+    if (deptCountsSection) deptCountsSection.style.display = showDeptCounts ? 'block' : 'none';
+    if (techLeadCrewSection) techLeadCrewSection.style.display = canAssignCrew ? 'block' : 'none';
+
+    const reqBranches = (venue && venue.requirements && venue.requirements.branches) || {};
+    venueCrudCurrentTargets = { ...reqBranches };
+    document.querySelectorAll('#venue-crud-dept-counts-section .js-venue-dept-count-input').forEach((inp) => {
+      const deptKey = inp.getAttribute('data-dept');
+      inp.value = String(Math.max(0, Number(reqBranches[deptKey] || 0)));
+    });
+    const deptNotesEl = document.getElementById('venue-dept-count-notes');
+    if (deptNotesEl) {
+      deptNotesEl.value = (venue && venue.requirements && venue.requirements.notes) || '';
     }
+    updateVenueCrudDeptCountsTotal();
+
+    venueCrudSelectedCrewIds.clear();
+    if (venue && Array.isArray(venue.assigned_technicians)) {
+      venue.assigned_technicians.forEach((uid) => {
+        const n = Number(uid);
+        if (n > 0) venueCrudSelectedCrewIds.add(n);
+      });
+    }
+    renderVenueCrudDepartmentSelect('');
+    renderVenueCrudCrewChecklist();
+
+    const commentDeptSel = document.getElementById('venue-comment-dept');
+    const commentStatusSel = document.getElementById('venue-comment-status');
+    const commentTxt = document.getElementById('venue-comment-text');
+    if (commentDeptSel) {
+      const userCanonDept = resolveCrewCanonicalDepartment(curUser);
+      if (Array.from(commentDeptSel.options).some((o) => o.value === userCanonDept)) {
+        commentDeptSel.value = userCanonDept;
+      } else {
+        const curDeptVal = document.getElementById('venue-crud-dept-select')?.value || 'Video';
+        commentDeptSel.value = Array.from(commentDeptSel.options).some((o) => o.value === curDeptVal) ? curDeptVal : 'Video';
+      }
+    }
+    if (commentStatusSel) commentStatusSel.value = 'confirmed';
+    if (commentTxt) commentTxt.value = '';
+    renderVenueCrudDeptComments(venue ? String(venue.raw_id || venue.id || '') : '');
 
     resetDropzone('venue');
     const rmImgEl = document.getElementById('venue-crud-remove-image');
@@ -8830,6 +9161,17 @@
     const subModalBtn = document.getElementById('venue-crud-submit-btn');
     if (rmImgEl) rmImgEl.value = '0';
     const todayIso = new Date().toISOString().slice(0, 10);
+    const leadGrid = document.getElementById('venue-crud-leadership-grid');
+    const pmWrap = document.getElementById('venue-crud-pm-wrap');
+    const coordWrap = document.getElementById('venue-crud-coord-wrap');
+
+    let showPm = true;
+    let showCoord = true;
+    let disablePm = false;
+    let disableCoord = false;
+    let pmValInit = '';
+    let coordValInit = '';
+
     if (venue) {
       const startIso = venue.start_date || venue.date || todayIso;
       const endIso = venue.end_date || startIso;
@@ -8844,30 +9186,47 @@
       }
       if (durEl) durEl.value = venue.duration_label || computeEventDuration(startIso, endIso).label;
       if (ctEl) ctEl.value = venue.call_time || '08:00';
-      if (pinEl) {
-        pinEl.value = venue.terminal_pin || '';
-        pinEl.placeholder = 'Leave blank to keep existing PIN';
-      }
       if (subModalBtn) subModalBtn.textContent = 'Save Event Changes';
       if (delModalBtn) delModalBtn.style.display = canCurrentUserAssignEvents() ? 'inline-flex' : 'none';
-      if (radEl) radEl.value = String(venue.geofence_radius_m || 200);
-      if (latEl) latEl.value = venue.lat !== null && venue.lat !== undefined ? String(venue.lat) : '';
-      if (lngEl) lngEl.value = venue.lng !== null && venue.lng !== undefined ? String(venue.lng) : '';
-      const polEl = document.getElementById('venue-crud-checkin-policy');
-      const visEl = document.getElementById('venue-crud-visual-match');
-      if (polEl) polEl.value = venue.checkin_policy || 'hybrid';
-      if (visEl) visEl.checked = Number(venue.require_visual_match ?? 1) === 1;
-      const reqB = (venue.requirements && venue.requirements.branches) || {};
-      ['video', 'sound', 'lighting', 'electrical', 'rigging', 'interpretation'].forEach((k) => {
-        const inp = document.getElementById(`venue-req-${k}`);
-        const cap = k.charAt(0).toUpperCase() + k.slice(1);
-        if (inp) inp.value = String(reqB[cap] || 0);
-      });
-      const rNotes = document.getElementById('venue-req-notes');
-      if (rNotes) rNotes.value = (venue.requirements && venue.requirements.notes) || '';
       populateLeadershipSelect(tlEl, venue.tech_lead || venue.lead_name || '', 'techlead');
-      populateLeadershipSelect(pmEl, venue.project_manager || '', 'pm');
-      populateLeadershipSelect(coordEl, venue.event_coordinator || '', 'coordinator');
+
+      const rawPm = String(venue.project_manager || '').trim();
+      const rawCoord = String(venue.event_coordinator || '').trim();
+      const hasRealPm = rawPm !== '' && rawPm.toLowerCase() !== 'operations pm';
+      const hasCoord = rawCoord !== '';
+      const hasLegacyPm = rawPm !== '' && !hasCoord;
+
+      if (hasCoord && !hasRealPm) {
+        showPm = false;
+        showCoord = true;
+        disableCoord = true;
+        coordValInit = rawCoord;
+      } else if (hasRealPm && hasCoord) {
+        showPm = true;
+        showCoord = true;
+        disablePm = true;
+        disableCoord = true;
+        pmValInit = rawPm;
+        coordValInit = rawCoord;
+      } else if (hasRealPm || hasLegacyPm) {
+        showPm = true;
+        showCoord = false;
+        disablePm = true;
+        pmValInit = rawPm;
+      } else if (isPm && curName) {
+        showPm = true;
+        showCoord = false;
+        disablePm = true;
+        pmValInit = curName;
+      } else if (isCoord && curName) {
+        showPm = false;
+        showCoord = true;
+        disableCoord = true;
+        coordValInit = curName;
+      }
+
+      populateLeadershipSelect(pmEl, pmValInit, 'pm');
+      populateLeadershipSelect(coordEl, coordValInit, 'coordinator');
       if (venue.image) {
         setDropzonePreview('venue', venue.image, venue.image.split('/').pop());
       }
@@ -8883,29 +9242,48 @@
       }
       if (durEl) durEl.value = '1 day';
       if (ctEl) ctEl.value = '08:00';
-      if (pinEl) {
-        pinEl.value = '1234';
-        pinEl.placeholder = 'e.g. 1234';
-      }
       if (subModalBtn) subModalBtn.textContent = 'Save Event Venue';
       if (delModalBtn) delModalBtn.style.display = 'none';
-      if (radEl) radEl.value = '200';
-      if (latEl) latEl.value = '';
-      if (lngEl) lngEl.value = '';
-      const polEl = document.getElementById('venue-crud-checkin-policy');
-      const visEl = document.getElementById('venue-crud-visual-match');
-      if (polEl) polEl.value = 'hybrid';
-      if (visEl) visEl.checked = true;
-      ['video', 'sound', 'lighting', 'electrical', 'rigging', 'interpretation'].forEach((k) => {
-        const inp = document.getElementById(`venue-req-${k}`);
-        if (inp) inp.value = '0';
-      });
-      const rNotes = document.getElementById('venue-req-notes');
-      if (rNotes) rNotes.value = '';
       populateLeadershipSelect(tlEl, '', 'techlead');
-      populateLeadershipSelect(pmEl, '', 'pm');
-      populateLeadershipSelect(coordEl, '', 'coordinator');
+
+      if (isPm && curName) {
+        showPm = true;
+        showCoord = false;
+        disablePm = true;
+        pmValInit = curName;
+      } else if (isCoord && curName) {
+        showPm = false;
+        showCoord = true;
+        disableCoord = true;
+        coordValInit = curName;
+      }
+      populateLeadershipSelect(pmEl, pmValInit, 'pm');
+      populateLeadershipSelect(coordEl, coordValInit, 'coordinator');
     }
+
+    if (pmWrap) pmWrap.style.display = showPm ? 'block' : 'none';
+    if (coordWrap) coordWrap.style.display = showCoord ? 'block' : 'none';
+    if (leadGrid) {
+      const visibleCols = 1 + (showPm ? 1 : 0) + (showCoord ? 1 : 0);
+      leadGrid.style.gridTemplateColumns = `repeat(${visibleCols}, minmax(0, 1fr))`;
+    }
+
+    if (pmEl) {
+      pmEl.disabled = Boolean(disablePm);
+      pmEl.style.background = disablePm ? 'var(--bg-subtle)' : '';
+      pmEl.style.cursor = disablePm ? 'not-allowed' : '';
+      pmEl.style.opacity = disablePm ? '0.85' : '';
+    }
+    if (pmAutoTag) pmAutoTag.style.display = disablePm ? 'inline' : 'none';
+
+    if (coordEl) {
+      coordEl.disabled = Boolean(disableCoord);
+      coordEl.style.background = disableCoord ? 'var(--bg-subtle)' : '';
+      coordEl.style.cursor = disableCoord ? 'not-allowed' : '';
+      coordEl.style.opacity = disableCoord ? '0.85' : '';
+    }
+    if (coordAutoTag) coordAutoTag.style.display = disableCoord ? 'inline' : 'none';
+
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
     modal.style.display = 'flex';
@@ -10085,22 +10463,12 @@
     const tlName = activeEv?.tech_lead || activeEv?.lead_name || ((state.crew || []).find((c) => isUserAssignedTechLeadRole(c))?.full_name || 'Technical Lead');
 
     const deptNames = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
-    const deptMatches = (c, d) => {
-      const dep = String(c.department || '').toLowerCase();
-      const role = String(c.role || '').toLowerCase();
-      if (d === 'Sound') return dep.includes('sound') || dep.includes('audio') || role.includes('sound') || role === 'technician';
-      if (d === 'Video') return dep.includes('video') || role.includes('video');
-      if (d === 'Lighting') return dep.includes('light') || role.includes('light');
-      if (d === 'Electrical') return dep.includes('elect') || role.includes('elect');
-      if (d === 'Rigging') return dep.includes('rig') || role.includes('rig');
-      if (d === 'Interpretation') return dep.includes('interp') || role.includes('interp');
-      return dep === d.toLowerCase();
-    };
+    const deptMatches = (c, d) => resolveCrewCanonicalDepartment(c) === d;
     const techDeptMemberCount = deptNames.reduce((acc, dn) => acc + pool.filter((c) => deptMatches(c, dn)).length, 0);
     const supportList = pool.filter((c) => {
-      const dep = String(c.department || '').toLowerCase();
+      const canon = resolveCrewCanonicalDepartment(c);
       const role = String(c.role || '').toLowerCase();
-      return role === 'support_staff' || dep.includes('support') || role === 'user' || role === 'driver' || role === 'security';
+      return canon === 'Support Staff' || (!deptNames.includes(canon) && (role === 'security' || role === 'user'));
     });
 
     const asgMap = (activeEv && state.eventCrewAssignments && state.eventCrewAssignments[String(activeEv.raw_id || activeEv.id)]) || {};
@@ -10118,19 +10486,21 @@
     const pendingSupportCount = supportReqs.filter((r) => r.status === 'pending').length;
     const confirmedCount = Object.values(asgMap).filter((rec) => String(rec?.confirmation_status || '') === 'confirmed').length;
     const durLabel = activeEv?.duration_label || computeEventDuration(activeEv?.start_date || activeEv?.date, activeEv?.end_date).label;
+    const dispatchStatusRaw = activeEv ? String(activeEv.dispatch_status || 'draft').toLowerCase() : '';
+    const dispatchStatusLabel = dispatchStatusRaw.replace(/_/g, ' ').toUpperCase();
 
     const nodes = [
       {
         tierKey: 'tier1_command',
         step: 'TIER 1 · COMMAND',
-        tone: 'chip',
+        tone: activeEv ? (dispatchStatusRaw === 'draft' ? 'warn' : 'ok') : 'chip',
         short: activeEv ? (activeEv.title || activeEv.name) : 'Create Event & Command',
         summary: `PM: ${pmName} · ${durLabel}`,
         title: `Tier 1 · Command Initiation (${pmName} / ${coordName})`,
         source: activeEv ? `${activeEv.location || 'Venue'} · ${activeEv.start_date || activeEv.date || ''} → ${activeEv.end_date || activeEv.start_date || activeEv.date || ''} (${durLabel})` : 'Create Event & Dispatch Initiation',
         route: 'Create Event (Dates & Auto Duration, Cover, Tech Lead) → Send Branch Targets',
         detail: 'Project Managers and Event Coordinators create events, set call times & duration, assign the system-filtered Tech Lead, and issue department headcount requirements.',
-        outcome: activeEv ? `Status: ${String(activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase()}` : 'Ready for Event Creation',
+        outcome: activeEv ? `Status: ${dispatchStatusLabel}` : 'Ready for Event Creation',
         jumpScreen: 'create-event',
         jumpLabel: 'Open Create Event Tab',
       },
@@ -10361,7 +10731,7 @@
       <div class="dispatch-tier">
         <div class="dispatch-node-card is-clickable ${selTier === 'tier4_support' ? 'is-selected' : ''}" data-tier-key="tier4_support" style="width:100%;max-width:640px;">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 4 · Operations Ground Support</div>
-          <div style="font-size:14px;font-weight:800;margin-top:2px;">Support Staff (${ctx.supportList.length})</div>
+          <div style="font-size:14px;font-weight:800;margin-top:2px;">Support Staff (${ctx.supportList.length}${Number(ctx.activeEv?.requirements?.branches?.['Support Staff'] || 0) > 0 ? ` / ${Number(ctx.activeEv.requirements.branches['Support Staff'])} req` : ''})</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">
             ${ctx.supportList.length ? ctx.supportList.slice(0, 6).map((s) => ctx.formatMemberBadge(s)).join(' · ') : 'Assign runners, logistics drivers, or venue crew via Event Roster or Support Requests below.'}
           </div>
@@ -15029,12 +15399,34 @@
         if (e.target === venueCrudBackdrop) closeVenueCrudModal();
       });
     }
+    const venueDeptSelect = document.getElementById('venue-crud-dept-select');
+    if (venueDeptSelect) {
+      venueDeptSelect.addEventListener('change', () => {
+        renderVenueCrudCrewChecklist();
+      });
+    }
+    const venueSelectedSummary = document.getElementById('venue-crud-selected-summary');
+    if (venueSelectedSummary) {
+      venueSelectedSummary.addEventListener('click', (e) => {
+        const chip = e.target.closest('.js-venue-dept-chip');
+        if (!chip) return;
+        const targetDept = chip.getAttribute('data-dept') || '';
+        if (venueDeptSelect && targetDept) {
+          venueDeptSelect.value = targetDept;
+          renderVenueCrudCrewChecklist();
+        }
+      });
+    }
     const venueSelectAllBtn = document.getElementById('venue-crud-select-all-btn');
     if (venueSelectAllBtn) {
       venueSelectAllBtn.addEventListener('click', () => {
         document.querySelectorAll('#venue-crud-crew-list .js-venue-crud-crew-cb').forEach((cb) => {
           cb.checked = true;
+          const uid = Number(cb.value);
+          if (uid > 0) venueCrudSelectedCrewIds.add(uid);
         });
+        renderVenueCrudDepartmentSelect(venueDeptSelect?.value || '');
+        renderVenueCrudCrewSummary();
       });
     }
     const venueClearBtn = document.getElementById('venue-crud-clear-btn');
@@ -15042,7 +15434,54 @@
       venueClearBtn.addEventListener('click', () => {
         document.querySelectorAll('#venue-crud-crew-list .js-venue-crud-crew-cb').forEach((cb) => {
           cb.checked = false;
+          venueCrudSelectedCrewIds.delete(Number(cb.value));
         });
+        renderVenueCrudDepartmentSelect(venueDeptSelect?.value || '');
+        renderVenueCrudCrewSummary();
+      });
+    }
+    const venueClearAllBtn = document.getElementById('venue-crud-clear-all-btn');
+    if (venueClearAllBtn) {
+      venueClearAllBtn.addEventListener('click', () => {
+        venueCrudSelectedCrewIds.clear();
+        renderVenueCrudDepartmentSelect(venueDeptSelect?.value || '');
+        renderVenueCrudCrewChecklist();
+      });
+    }
+    document.querySelectorAll('#venue-crud-dept-counts-section .js-venue-dept-count-input').forEach((inp) => {
+      inp.addEventListener('input', updateVenueCrudDeptCountsTotal);
+      inp.addEventListener('change', updateVenueCrudDeptCountsTotal);
+    });
+    const venueCommentSubmitBtn = document.getElementById('venue-comment-submit-btn');
+    if (venueCommentSubmitBtn) {
+      venueCommentSubmitBtn.addEventListener('click', async () => {
+        const evId = document.getElementById('venue-crud-id')?.value.trim() || '';
+        const dept = document.getElementById('venue-comment-dept')?.value || 'Video';
+        const status = document.getElementById('venue-comment-status')?.value || 'confirmed';
+        const commentEl = document.getElementById('venue-comment-text');
+        const comment = (commentEl?.value || '').trim();
+        if (!evId) {
+          showToast('Save the event first before posting a department confirmation.', 'warning');
+          return;
+        }
+        if (!comment && status !== 'confirmed') {
+          showToast('Please enter a comment explaining the adjustment or note.', 'warning');
+          return;
+        }
+        venueCommentSubmitBtn.disabled = true;
+        try {
+          await postVenueDeptConfirmation(
+            evId,
+            dept,
+            status,
+            comment || 'Confirmed department staffing readiness.'
+          );
+          if (commentEl) commentEl.value = '';
+        } catch (err) {
+          showToast(err.message || 'Failed to post department confirmation.', 'error');
+        } finally {
+          venueCommentSubmitBtn.disabled = false;
+        }
       });
     }
     const whCapBtn = document.getElementById('wh-capture-gps-btn');
@@ -15055,23 +15494,6 @@
             if (l1) l1.value = pos.coords.latitude.toFixed(6);
             if (l2) l2.value = pos.coords.longitude.toFixed(6);
             showToast('Warehouse GPS coordinates captured.');
-          },
-          (err) => showToast('GPS error: ' + err.message),
-          { enableHighAccuracy: true, timeout: 10000 }
-        );
-      });
-    }
-
-    const venueCapBtn = document.getElementById('venue-capture-gps-btn');
-    if (venueCapBtn && navigator.geolocation) {
-      venueCapBtn.addEventListener('click', () => {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const l1 = document.getElementById('venue-crud-lat');
-            const l2 = document.getElementById('venue-crud-lng');
-            if (l1) l1.value = pos.coords.latitude.toFixed(6);
-            if (l2) l2.value = pos.coords.longitude.toFixed(6);
-            showToast('Venue GPS coordinates captured.');
           },
           (err) => showToast('GPS error: ' + err.message),
           { enableHighAccuracy: true, timeout: 10000 }
@@ -15112,8 +15534,16 @@
           btn.disabled = true;
           btn.textContent = 'Saving...';
         }
-        const assignedTechs = Array.from(document.querySelectorAll('#venue-crud-crew-list .js-venue-crud-crew-cb:checked'))
-          .map((cb) => Number(cb.value));
+        const isAdminUser = isCurrentUserAdmin();
+        const isPmOrCoordUser = !isAdminUser && isCurrentUserEventCommand();
+        const showDeptCounts = isAdminUser || isPmOrCoordUser;
+        const canAssignCrew = isAdminUser || (!isPmOrCoordUser && isCurrentUserTechLead());
+        const assignedTechs = Array.from(venueCrudSelectedCrewIds);
+        const tlVal = document.getElementById('venue-crud-techlead')?.value.trim() || '';
+        const pmWrapVisible = document.getElementById('venue-crud-pm-wrap')?.style.display !== 'none';
+        const coordWrapVisible = document.getElementById('venue-crud-coord-wrap')?.style.display !== 'none';
+        const pmVal = pmWrapVisible ? (document.getElementById('venue-crud-pm')?.value.trim() || '') : '';
+        const coordVal = coordWrapVisible ? (document.getElementById('venue-crud-coordinator')?.value.trim() || '') : '';
         const fd = new FormData();
         fd.append('event_id', editingEventId);
         fd.append('title', document.getElementById('venue-crud-title')?.value.trim() || '');
@@ -15122,28 +15552,20 @@
         fd.append('start_date', modalStartDate);
         fd.append('end_date', modalEndDate);
         fd.append('call_time', document.getElementById('venue-crud-calltime')?.value || '08:00');
-        fd.append('terminal_pin', document.getElementById('venue-crud-pin')?.value.trim() || '');
-        fd.append('tech_lead', document.getElementById('venue-crud-techlead')?.value.trim() || '');
-        fd.append('project_manager', document.getElementById('venue-crud-pm')?.value.trim() || '');
-        fd.append('event_coordinator', document.getElementById('venue-crud-coordinator')?.value.trim() || '');
-        fd.append('geofence_radius_m', document.getElementById('venue-crud-radius')?.value || '200');
-        fd.append('lat', document.getElementById('venue-crud-lat')?.value || '');
-        fd.append('lng', document.getElementById('venue-crud-lng')?.value || '');
-        fd.append('checkin_policy', document.getElementById('venue-crud-checkin-policy')?.value || 'hybrid');
-        fd.append('require_visual_match', document.getElementById('venue-crud-visual-match')?.checked ? '1' : '0');
+        fd.append('tech_lead', tlVal);
+        fd.append('project_manager', pmVal);
+        fd.append('event_coordinator', coordVal);
         fd.append('remove_image', document.getElementById('venue-crud-remove-image')?.value || '0');
-        const branchReqs = {};
-        let hasAnyReq = false;
-        ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'].forEach((cap) => {
-          const val = Math.max(0, Number(document.getElementById(`venue-req-${cap.toLowerCase()}`)?.value || 0));
-          branchReqs[cap] = val;
-          if (val > 0) hasAnyReq = true;
-        });
-        const rNotes = (document.getElementById('venue-req-notes')?.value || '').trim();
-        if (hasAnyReq || rNotes) {
-          fd.append('requirements', JSON.stringify({ branches: branchReqs, notes: rNotes }));
+        if (showDeptCounts) {
+          fd.append('requirements', JSON.stringify(getVenueCrudDeptCountsPayload()));
         }
-        fd.append('assigned_technicians', JSON.stringify(assignedTechs));
+        if (canAssignCrew) {
+          fd.append('assigned_technicians', JSON.stringify(assignedTechs));
+          fd.append('assigned_roster', JSON.stringify(buildStructuredEventRoster(pmVal, coordVal, tlVal, assignedTechs)));
+        }
+        const pendingCommentText = canAssignCrew ? (document.getElementById('venue-comment-text')?.value || '').trim() : '';
+        const pendingCommentDept = document.getElementById('venue-comment-dept')?.value || 'Video';
+        const pendingCommentStatus = document.getElementById('venue-comment-status')?.value || 'confirmed';
         const fileInput = document.getElementById('venue-modal-image');
         if (fileInput && fileInput.files && fileInput.files[0]) {
           fd.append('image', fileInput.files[0]);
@@ -15155,9 +15577,16 @@
           });
           const data = await res.json();
           if (res.ok && data && data.ok) {
-            if (data.event_id) state.selectedDispatchEventId = String(data.event_id);
+            const savedEventId = String(data.event_id || editingEventId || '');
+            if (savedEventId) state.selectedDispatchEventId = savedEventId;
+            if (pendingCommentText && savedEventId) {
+              try {
+                await postVenueDeptConfirmation(savedEventId, pendingCommentDept, pendingCommentStatus, pendingCommentText, true);
+              } catch (_) {}
+            } else {
+              applyBootstrapPayload(data, true);
+            }
             closeVenueCrudModal();
-            applyBootstrapPayload(data, true);
             renderAll();
             showToast(data.message || 'Event changes saved successfully.', 'success');
           } else {
@@ -16336,18 +16765,12 @@
       }
       if (!listEl) return;
       const query = String(rosterSearchInput ? rosterSearchInput.value : '').trim().toLowerCase();
-      const deptFilter = String(state.rosterDeptFilter || 'all').toLowerCase();
+      const deptFilter = String(state.rosterDeptFilter || 'all');
       const filtered = (state.crew || []).filter((u) => {
         if (!u) return false;
         if (deptFilter !== 'all') {
-          const uDept = String(u.department || '').toLowerCase();
-          const uRole = String(u.role || '').toLowerCase();
-          const matchesDept =
-            (deptFilter === 'sound' && (uDept.includes('sound') || uDept.includes('audio') || uRole === 'technician' || uRole.includes('sound'))) ||
-            (deptFilter === 'support staff' && (uDept.includes('support') || uRole === 'support_staff' || uRole === 'driver' || uRole === 'security' || uRole === 'user')) ||
-            uDept.includes(deptFilter) ||
-            uRole.includes(deptFilter);
-          if (!matchesDept) return false;
+          const canon = resolveCrewCanonicalDepartment(u).toLowerCase();
+          if (canon !== deptFilter.toLowerCase()) return false;
         }
         if (!query) return true;
         const hay = `${u.full_name || ''} ${u.role || ''} ${u.department || ''} ${u.clearance_level || ''}`.toLowerCase();
@@ -16430,7 +16853,7 @@
           const brParts = Object.keys(br).filter((k) => Number(br[k]) > 0).map((k) => `${k}: ${br[k]}`);
           reqSum.textContent = brParts.length
             ? `Requirements Brief: ${brParts.join(' · ')}${facility.requirements?.notes ? ` — ${facility.requirements.notes}` : ''}`
-            : 'No technical branch requirements sent yet (configure in Edit Event Venue or Settings → Dispatch Flow).';
+            : 'No technical branch requirements sent yet (configure in Dispatch Flow).';
         }
       } else {
         const hsBox = document.getElementById('roster-dispatch-handshake-box');
@@ -16620,32 +17043,6 @@
 
     if (rosterSearchInput) {
       rosterSearchInput.addEventListener('input', renderRosterChecklist);
-    }
-
-    function buildStructuredEventRoster(pm, eventCoord, techLead, crewIds) {
-      const idSet = new Set((crewIds || []).map(Number));
-      const depts = { Video: [], Sound: [], Lighting: [], Electrical: [], Rigging: [], Interpretation: [] };
-      const supportStaff = [];
-      (state.crew || []).forEach((u) => {
-        const uid = Number(u.id);
-        if (!idSet.has(uid)) return;
-        const d = String(u.department || '').toLowerCase();
-        const r = String(u.role || '').toLowerCase();
-        if (d.includes('video') || r.includes('video')) depts.Video.push(uid);
-        else if (d.includes('sound') || d.includes('audio') || r.includes('sound') || r === 'technician') depts.Sound.push(uid);
-        else if (d.includes('light') || r.includes('light')) depts.Lighting.push(uid);
-        else if (d.includes('elect') || r.includes('elect')) depts.Electrical.push(uid);
-        else if (d.includes('rig') || r.includes('rig')) depts.Rigging.push(uid);
-        else if (d.includes('interp') || r.includes('interp')) depts.Interpretation.push(uid);
-        else supportStaff.push(uid);
-      });
-      return {
-        project_manager: pm,
-        event_coordinator: eventCoord,
-        tech_lead: techLead,
-        departments: depts,
-        support_staff: supportStaff,
-      };
     }
 
     const rosterSaveEventBtn = document.getElementById('roster-save-event-btn');

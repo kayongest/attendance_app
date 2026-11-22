@@ -35,7 +35,7 @@
           <div class="brand-mark-wrap" data-node-id="2:3272">
             <img src="assets/rwanda-events-logo.png" alt="aBility" class="brand-logo-img js-brand-logo-img" data-brand-logo="1" />
           </div>
-          <span class="brand-name" data-node-id="2:3276">aBility</span>
+          <span class="brand-name" data-node-id="2:3276">REAV</span>
         </div>
         <button type="button" class="sidebar-collapse-btn" id="sidebar-collapse-toggle-btn" title="Collapse Sidebar (Alt+S)" aria-label="Collapse Sidebar">
           <svg class="svg-icon collapse-arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -5969,89 +5969,124 @@
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-          <div class="form-field">
-            <label class="form-label" for="venue-crud-calltime">Call Time (24h CAT)</label>
-            <input type="time" id="venue-crud-calltime" class="form-input" value="08:00" required />
-          </div>
-          <div class="form-field">
-            <label class="form-label" for="venue-crud-pin">Terminal PIN (4–12 chars)</label>
-            <input type="text" id="venue-crud-pin" class="form-input" placeholder="e.g. 1234" minlength="4" maxlength="12" autocomplete="off" />
-          </div>
+        <div class="form-field" style="margin-bottom: 12px;">
+          <label class="form-label" for="venue-crud-calltime">Call Time (24h CAT)</label>
+          <input type="time" id="venue-crud-calltime" class="form-input" value="08:00" required />
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div class="form-field">
+        <div id="venue-crud-leadership-grid" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-field" id="venue-crud-techlead-wrap">
             <label class="form-label" for="venue-crud-techlead">Technical Lead</label>
             <select id="venue-crud-techlead" class="form-input"></select>
           </div>
-          <div class="form-field">
-            <label class="form-label" for="venue-crud-pm">Project Manager</label>
+          <div class="form-field" id="venue-crud-pm-wrap">
+            <label class="form-label" for="venue-crud-pm">Project Manager <span id="venue-crud-pm-auto-tag" style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span></label>
             <select id="venue-crud-pm" class="form-input"></select>
           </div>
-          <div class="form-field">
-            <label class="form-label" for="venue-crud-coordinator">Event Coordinator</label>
+          <div class="form-field" id="venue-crud-coord-wrap">
+            <label class="form-label" for="venue-crud-coordinator">Event Coordinator <span id="venue-crud-coord-auto-tag" style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span></label>
             <select id="venue-crud-coordinator" class="form-input"></select>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 110px 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px;">
-          <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="venue-crud-radius">Fence (m)</label>
-            <input type="number" id="venue-crud-radius" class="form-input" min="50" max="5000" value="200" />
+        <!-- PM / Event Coordinator: Department Technician Headcount Targets -->
+        <div id="venue-crud-dept-counts-section" class="form-field" style="display: none; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-subtle);">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+            <div>
+              <label class="form-label" style="margin: 0;">Required Technicians per Department</label>
+              <div style="font-size: 11px; color: var(--text-muted);">Specify headcount needed per department for Tech Lead staffing.</div>
+            </div>
+            <span class="status-badge status-badge-purple-sm" id="venue-crud-dept-counts-total">0 Technicians</span>
           </div>
-          <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="venue-crud-lat">GPS Lat</label>
-            <input type="number" id="venue-crud-lat" class="form-input" step="0.000001" placeholder="-1.9536" />
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px;">
+            <div>
+              <label class="form-label" for="venue-dept-count-video" style="font-size: 11px;">Video</label>
+              <input type="number" id="venue-dept-count-video" class="form-input js-venue-dept-count-input" data-dept="Video" min="0" max="99" value="0" style="height: 34px; padding: 0 8px;" />
+            </div>
+            <div>
+              <label class="form-label" for="venue-dept-count-sound" style="font-size: 11px;">Audio / Sound</label>
+              <input type="number" id="venue-dept-count-sound" class="form-input js-venue-dept-count-input" data-dept="Sound" min="0" max="99" value="0" style="height: 34px; padding: 0 8px;" />
+            </div>
+            <div>
+              <label class="form-label" for="venue-dept-count-lighting" style="font-size: 11px;">Lighting</label>
+              <input type="number" id="venue-dept-count-lighting" class="form-input js-venue-dept-count-input" data-dept="Lighting" min="0" max="99" value="0" style="height: 34px; padding: 0 8px;" />
+            </div>
+            <div>
+              <label class="form-label" for="venue-dept-count-electrical" style="font-size: 11px;">Electrical</label>
+              <input type="number" id="venue-dept-count-electrical" class="form-input js-venue-dept-count-input" data-dept="Electrical" min="0" max="99" value="0" style="height: 34px; padding: 0 8px;" />
+            </div>
+            <div>
+              <label class="form-label" for="venue-dept-count-rigging" style="font-size: 11px;">Rigging</label>
+              <input type="number" id="venue-dept-count-rigging" class="form-input js-venue-dept-count-input" data-dept="Rigging" min="0" max="99" value="0" style="height: 34px; padding: 0 8px;" />
+            </div>
+            <div>
+              <label class="form-label" for="venue-dept-count-interpretation" style="font-size: 11px;">Interpretation</label>
+              <input type="number" id="venue-dept-count-interpretation" class="form-input js-venue-dept-count-input" data-dept="Interpretation" min="0" max="99" value="0" style="height: 34px; padding: 0 8px;" />
+            </div>
+            <div style="grid-column: span 2;">
+              <label class="form-label" for="venue-dept-count-support" style="font-size: 11px;">Support Staff</label>
+              <input type="number" id="venue-dept-count-support" class="form-input js-venue-dept-count-input" data-dept="Support Staff" min="0" max="99" value="0" style="height: 34px; padding: 0 8px;" />
+            </div>
           </div>
-          <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="venue-crud-lng">GPS Lng</label>
-            <input type="number" id="venue-crud-lng" class="form-input" step="0.000001" placeholder="30.0928" />
-          </div>
-          <button type="button" class="btn btn-secondary-32" id="venue-capture-gps-btn">GPS</button>
+          <input type="text" id="venue-dept-count-notes" class="form-input" placeholder="Production brief / department notes for Tech Lead..." style="height: 34px; font-size: 12px;" />
         </div>
 
-        <!-- Anti-Shadowing Policy & Tier 1 -> Tier 2 Technical Branch Requirements -->
-        <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; margin-bottom: 12px; padding: 10px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-subtle);">
-          <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="venue-crud-checkin-policy">Gate Check-In Policy</label>
-            <select id="venue-crud-checkin-policy" class="form-input">
-              <option value="hybrid">Hybrid: Rotating Anti-Shadowing QR + Enter Name Checkin</option>
-              <option value="qr_strict">Strict QR Only (Supervisor Override PIN for Name Check-In)</option>
-              <option value="manual_allowed">Flexible Manual Name + Badge + QR</option>
-            </select>
-          </div>
-          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text-primary);padding-bottom:8px;cursor:pointer;">
-            <input type="checkbox" id="venue-crud-visual-match" checked />
-            <span>Require Face-Match Hold</span>
-          </label>
-        </div>
+        <!-- Tech Lead: Per-Department Technician Assignment + Cross-Department Tech-Lead Confirmations -->
+        <div id="venue-crud-techlead-crew-section" style="display: none; margin-bottom: 16px;">
+          <div id="venue-crud-targets-banner" style="display: none; flex-wrap: wrap; gap: 6px; padding: 8px 10px; margin-bottom: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 11.5px;"></div>
 
-        <div style="margin-bottom: 14px; padding: 10px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-subtle);">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <label class="form-label" style="margin:0;">Technical Branch Requirements (For Tech Lead)</label>
-            <span style="font-size:10.5px;color:var(--text-muted);">Headcount needed per specialty</span>
+          <div class="form-field" style="margin-bottom: 12px;">
+            <label class="form-label" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+              <span style="display: inline-flex; align-items: center; gap: 6px;">
+                <span>Assigned Crew / Technicians</span>
+                <span class="status-badge status-badge-purple-sm" id="venue-crud-crew-count-badge">0 Selected</span>
+              </span>
+              <span style="display: inline-flex; gap: 8px; font-size: 11px;">
+                <button type="button" class="btn-link-inline" id="venue-crud-select-all-btn">Select Dept</button>
+                <button type="button" class="btn-link-inline btn-link-danger" id="venue-crud-clear-btn">Clear Dept</button>
+                <button type="button" class="btn-link-inline btn-link-danger" id="venue-crud-clear-all-btn" style="display: none;">Clear All</button>
+              </span>
+            </label>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
+              <select id="venue-crud-dept-select" class="form-input" style="flex: 1; min-width: 200px; height: 34px; font-size: 12.5px; font-weight: 600;"></select>
+            </div>
+            <div id="venue-crud-selected-summary" style="display: none; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;"></div>
+            <div id="venue-crud-crew-list" class="nav-crud-roles-grid" style="max-height: 180px; overflow-y: auto;"></div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:8px;">
-            <div><label class="form-label" for="venue-req-video" style="font-size:10px;">Video</label><input type="number" id="venue-req-video" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
-            <div><label class="form-label" for="venue-req-sound" style="font-size:10px;">Sound</label><input type="number" id="venue-req-sound" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
-            <div><label class="form-label" for="venue-req-lighting" style="font-size:10px;">Lighting</label><input type="number" id="venue-req-lighting" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
-            <div><label class="form-label" for="venue-req-electrical" style="font-size:10px;">Electrical</label><input type="number" id="venue-req-electrical" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
-            <div><label class="form-label" for="venue-req-rigging" style="font-size:10px;">Rigging</label><input type="number" id="venue-req-rigging" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
-            <div><label class="form-label" for="venue-req-interpretation" style="font-size:10px;">Interp.</label><input type="number" id="venue-req-interpretation" class="form-input" min="0" max="99" value="0" style="height:32px;padding:0 6px;" /></div>
-          </div>
-          <input type="text" id="venue-req-notes" class="form-input" placeholder="Technical brief / gear notes for Tech Lead..." style="height:32px;font-size:12px;" />
-        </div>
 
-        <div class="form-field" style="margin-bottom: 16px;">
-          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>Assigned Crew / Technicians</span>
-            <span style="display: inline-flex; gap: 8px; font-size: 11px;">
-              <button type="button" class="btn-link-inline" id="venue-crud-select-all-btn">Select All</button>
-              <button type="button" class="btn-link-inline btn-link-danger" id="venue-crud-clear-btn">Clear</button>
-            </span>
-          </label>
-          <div id="venue-crud-crew-list" class="nav-crud-roles-grid" style="max-height: 180px; overflow-y: auto;"></div>
+          <!-- Other Departments' Tech-Lead Confirmations & Comments -->
+          <div id="venue-crud-dept-comments-wrap" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-subtle);">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+              <div>
+                <span class="form-label" style="margin: 0; display: block;">Department Tech-Lead Confirmations &amp; Comments</span>
+                <span style="font-size: 11px; color: var(--text-muted);">Confirm crew readiness or leave coordination comments per department.</span>
+              </div>
+              <span class="status-badge status-badge-blue-sm" id="venue-comment-count-badge">0 Notes</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+              <select id="venue-comment-dept" class="form-input" style="height: 32px; font-size: 12px;">
+                <option value="Video">Video</option>
+                <option value="Sound">Audio / Sound</option>
+                <option value="Lighting">Lighting</option>
+                <option value="Electrical">Electrical</option>
+                <option value="Rigging">Rigging</option>
+                <option value="Interpretation">Interpretation</option>
+                <option value="Support Staff">Support Staff</option>
+                <option value="All Departments">All Departments</option>
+              </select>
+              <select id="venue-comment-status" class="form-input" style="height: 32px; font-size: 12px;">
+                <option value="confirmed">Confirmed (Dept Ready)</option>
+                <option value="needs_adjustment">Needs Adjustment</option>
+                <option value="commented">Comment / Note</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 8px;">
+              <textarea id="venue-comment-text" class="form-input" rows="2" placeholder="Add confirmation note or comment from your department's Tech Lead..." style="flex: 1; min-height: 54px; padding: 6px 8px; font-size: 12px; resize: vertical;"></textarea>
+              <button type="button" class="btn btn-primary-32" id="venue-comment-submit-btn" style="white-space: nowrap; height: 34px;">Post Confirmation</button>
+            </div>
+            <div id="venue-comment-save-hint" style="display: none; font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Save this event first to post department Tech-Lead confirmations.</div>
+            <div id="venue-comment-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto;"></div>
+          </div>
         </div>
 
         <!-- Event Venue Photo Upload Dropzone -->
@@ -6348,6 +6383,6 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261120_v18"></script>
+  <script src="app.js?v=20261122_v21"></script>
 </body>
 </html>
