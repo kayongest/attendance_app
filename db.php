@@ -22,6 +22,40 @@ if (!function_exists('getSessionCsrfToken')) {
     }
 }
 
+if (!function_exists('resolveProfileImageUrl')) {
+    function resolveProfileImageUrl(?string $profileImage): ?string
+    {
+        $rel = trim((string) $profileImage);
+        if ($rel === '') {
+            return null;
+        }
+        if (strpos($rel, 'http://') === 0 || strpos($rel, 'https://') === 0 || strpos($rel, 'assets/') === 0) {
+            return $rel;
+        }
+        $cleanRel = ltrim(str_replace('\\', '/', $rel), '/');
+        $abilityPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'ability_app_main' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $cleanRel);
+        if (file_exists($abilityPath)) {
+            return '/ability_app_main/' . $cleanRel;
+        }
+        $localPath = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $cleanRel);
+        if (file_exists($localPath)) {
+            return $cleanRel;
+        }
+        return null;
+    }
+}
+
+if (!function_exists('computeInitials')) {
+    function computeInitials(string $fullName): string
+    {
+        $parts = preg_split('/\s+/', trim($fullName)) ?: [];
+        if (count($parts) >= 2) {
+            return strtoupper(substr($parts[0], 0, 1) . substr($parts[count($parts) - 1], 0, 1));
+        }
+        return strtoupper(substr(trim($fullName), 0, 2) ?: 'CR');
+    }
+}
+
 function getDbConnection(string &$activeDatabaseName = ''): PDO
 {
     $host = '127.0.0.1';
@@ -341,16 +375,35 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `requirements_sent_at` DATETIME DEFAULT NULL");
     } catch (Throwable $e) {}
     try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `tech_lead_approved` TINYINT(1) NOT NULL DEFAULT 0");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `tech_lead_approved_by` INT DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `tech_lead_approved_at` DATETIME DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `tech_lead_approval_note` VARCHAR(255) DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `created_by_id` INT DEFAULT NULL");
+    } catch (Throwable $e) {}
+    try {
+        $pdo->exec("ALTER TABLE `events` ADD COLUMN `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+    } catch (Throwable $e) {}
+    try {
         $pdo->exec("UPDATE `events` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
     } catch (Throwable $e) {}
     try {
         $pdo->exec("
             UPDATE `events`
-            SET `dispatch_status` = 'request_sent_to_tech_lead'
-            WHERE (`dispatch_status` IS NULL OR `dispatch_status` = '' OR `dispatch_status` = 'draft')
+            SET `dispatch_status` = 'awaiting_approval_from_tech_lead'
+            WHERE COALESCE(`tech_lead_approved`, 0) = 0
               AND `tech_lead` IS NOT NULL
               AND TRIM(`tech_lead`) != ''
               AND LOWER(TRIM(`tech_lead`)) != 'tech lead'
+              AND (`dispatch_status` IS NULL OR `dispatch_status` IN ('', 'draft', 'request_sent_to_tech_lead', 'requirements_sent', 'staffing_in_progress', 'ready'))
         ");
     } catch (Throwable $e) {}
     try {
@@ -759,9 +812,33 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
         $pdo->exec("UPDATE `stock_locations` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
     } catch (Throwable $e) {}
 
-    // Seed events if empty
+    // Ensure app_settings exists so one-time event seed flags persist across full deletions
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `app_settings` (
+                `setting_key` VARCHAR(64) PRIMARY KEY,
+                `setting_value` TEXT DEFAULT NULL,
+                `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    } catch (Throwable $e) {}
+
+    $eventsSeededFlag = false;
+    try {
+        $sfStmt = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'events_seeded_v1' LIMIT 1");
+        $sfStmt->execute();
+        $eventsSeededFlag = ((string) $sfStmt->fetchColumn() === '1');
+    } catch (Throwable $e) {}
+
+    // Seed sample events ONLY once (or on explicit factory reset), never respawning after user deletes all events
     $eventCount = (int) $pdo->query("SELECT COUNT(*) FROM `events`")->fetchColumn();
-    if ($eventCount === 0 || $forceReset) {
+    if ($eventCount > 0 && !$eventsSeededFlag && !$forceReset) {
+        try {
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('events_seeded_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+            $eventsSeededFlag = true;
+        } catch (Throwable $e) {}
+    }
+    if (($eventCount === 0 && !$eventsSeededFlag) || $forceReset) {
         $today = date('Y-m-d');
         $stmtEv = $pdo->prepare("
             INSERT IGNORE INTO `events` (`id`, `title`, `location`, `date`, `call_time`, `project_manager`, `tech_lead`, `assigned_technician`) VALUES
@@ -771,6 +848,9 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
             ('1004', 'Gala Dinner — Marriott Hotel', 'Kigali Marriott Hotel', ?, '10:00', 'Diane Iradukunda', 'Hirwa Jean de Dieu', '[8, 19]')
         ");
         $stmtEv->execute([$today, $today, $today, $today]);
+        try {
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('events_seeded_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        } catch (Throwable $e) {}
     }
 
     // Seed `users` ONLY when completely empty (never inject/overwrite existing `ability_db.users`)
@@ -1883,7 +1963,7 @@ function logEventDispatchAction(
 function recalculateEventDispatchStatus(PDO $pdo, string $eventId): string
 {
     try {
-        $evSt = $pdo->prepare("SELECT `id`, `tech_lead`, `requirements_json`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evSt = $pdo->prepare("SELECT `id`, `tech_lead`, `tech_lead_approved`, `requirements_json`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
         $evSt->execute([$eventId, $eventId]);
         $ev = $evSt->fetch(PDO::FETCH_ASSOC);
         if (!$ev) {
@@ -1894,14 +1974,23 @@ function recalculateEventDispatchStatus(PDO $pdo, string $eventId): string
         $hasReq = is_array($reqs) && !empty(array_filter((array) ($reqs['branches'] ?? []), static fn($v) => (int) $v > 0));
         $tlClean = trim((string) ($ev['tech_lead'] ?? ''));
         $hasTechLead = ($tlClean !== '' && strtolower($tlClean) !== 'tech lead');
+        $isTlApproved = ((int) ($ev['tech_lead_approved'] ?? 0) === 1);
+
+        if ($hasTechLead && !$isTlApproved) {
+            $next = 'awaiting_approval_from_tech_lead';
+            $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
+            return $next;
+        }
 
         $asgSt = $pdo->prepare("SELECT `branch_dept`, `confirmation_status` FROM `event_crew_assignments` WHERE `event_id` = ?");
         $asgSt->execute([$realId]);
         $rows = $asgSt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($rows)) {
-            if ($hasTechLead) {
-                $next = 'request_sent_to_tech_lead';
+            if ($hasTechLead && $isTlApproved) {
+                $next = 'approved_by_tech_lead';
+            } elseif ($hasTechLead) {
+                $next = 'awaiting_approval_from_tech_lead';
             } elseif ($hasReq) {
                 $next = 'requirements_sent';
             } else {

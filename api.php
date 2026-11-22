@@ -198,35 +198,7 @@ function formatStaffCode(int $userId): string
     return 'ABL-' . str_pad((string) $userId, 3, '0', STR_PAD_LEFT);
 }
 
-function resolveProfileImageUrl(?string $profileImage): ?string
-{
-    $rel = trim((string) $profileImage);
-    if ($rel === '') {
-        return null;
-    }
-    if (strpos($rel, 'http://') === 0 || strpos($rel, 'https://') === 0 || strpos($rel, 'assets/') === 0) {
-        return $rel;
-    }
-    $cleanRel = ltrim(str_replace('\\', '/', $rel), '/');
-    $abilityPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'ability_app_main' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $cleanRel);
-    if (file_exists($abilityPath)) {
-        return '/ability_app_main/' . $cleanRel;
-    }
-    $localPath = __DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $cleanRel);
-    if (file_exists($localPath)) {
-        return $cleanRel;
-    }
-    return null;
-}
-
-function computeInitials(string $fullName): string
-{
-    $parts = preg_split('/\s+/', trim($fullName)) ?: [];
-    if (count($parts) >= 2) {
-        return strtoupper(substr($parts[0], 0, 1) . substr($parts[count($parts) - 1], 0, 1));
-    }
-    return strtoupper(substr(trim($fullName), 0, 2) ?: 'CR');
-}
+// resolveProfileImageUrl() and computeInitials() are provided by db.php
 
 function evaluateCheckpointAccess(array $userBadgeRow, string $checkpointType, int $checkpointId): array
 {
@@ -1542,8 +1514,9 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             break;
 
         case 'save_event_dept_confirmation':
+        case 'approve_event_tech_lead':
             if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead'], true)) {
-                return ['ok' => false, 'error' => 'Permission denied: Posting department confirmations requires Technical Lead or Administrator privileges.'];
+                return ['ok' => false, 'error' => 'Permission denied: Technical Lead approval and department confirmations require Technical Lead or Administrator privileges.'];
             }
             break;
 
@@ -1974,6 +1947,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     // 0. Preload Users Lookup for Name/ID resolution across warehouses and events
     $usersLookup = [];
     $userNameToId = [];
+    $userIdToName = [];
+    $userIdToRole = [];
     try {
         $uLkStmt = $pdo->query("SELECT `id`, `username`, `full_name`, `role`, `assigned_checkpoint_type`, `assigned_checkpoint_id` FROM `users`");
         while ($uLk = $uLkStmt->fetch(PDO::FETCH_ASSOC)) {
@@ -1982,6 +1957,8 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             $unLk = strtolower(trim((string) $uLk['username']));
             if ($fnLk !== '') $userNameToId[$fnLk] = $uIdLk;
             if ($unLk !== '') $userNameToId[$unLk] = $uIdLk;
+            $userIdToName[$uIdLk] = trim((string) ($uLk['full_name'] ?: $uLk['username'] ?: ''));
+            $userIdToRole[$uIdLk] = strtolower(trim((string) ($uLk['role'] ?? '')));
             $usersLookup[] = $uLk;
         }
     } catch (Throwable $e) {}
@@ -2132,7 +2109,18 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'require_visual_match' => (int) ($er['require_visual_match'] ?? 1),
             'requirements' => json_decode((string) ($er['requirements_json'] ?? ''), true) ?: null,
             'dispatch_status' => (string) ($er['dispatch_status'] ?? 'draft'),
+            'created_at' => $er['created_at'] ?? ($er['requirements_sent_at'] ?? null),
             'requirements_sent_at' => $er['requirements_sent_at'] ?? null,
+            'requirements_sent_by' => !empty($er['requirements_sent_by']) ? (int) $er['requirements_sent_by'] : null,
+            'requirements_sent_by_name' => !empty($er['requirements_sent_by']) ? ($userIdToName[(int) $er['requirements_sent_by']] ?? '') : '',
+            'created_by_id' => !empty($er['created_by_id']) ? (int) $er['created_by_id'] : null,
+            'created_by_name' => !empty($er['created_by_id']) ? ($userIdToName[(int) $er['created_by_id']] ?? '') : '',
+            'created_by_role' => !empty($er['created_by_id']) ? ($userIdToRole[(int) $er['created_by_id']] ?? '') : '',
+            'tech_lead_approved' => ((int) ($er['tech_lead_approved'] ?? 0) === 1),
+            'tech_lead_approved_by' => !empty($er['tech_lead_approved_by']) ? (int) $er['tech_lead_approved_by'] : null,
+            'tech_lead_approved_by_name' => !empty($er['tech_lead_approved_by']) ? ($userIdToName[(int) $er['tech_lead_approved_by']] ?? '') : '',
+            'tech_lead_approved_at' => $er['tech_lead_approved_at'] ?? null,
+            'tech_lead_approval_note' => trim((string) ($er['tech_lead_approval_note'] ?? '')),
             'image' => resolveProfileImageUrl(($er['image'] ?? '') !== '' ? $er['image'] : ($er['event_image'] ?? null)),
             'lat' => isset($er['lat']) && $er['lat'] !== null ? (float) $er['lat'] : null,
             'lng' => isset($er['lng']) && $er['lng'] !== null ? (float) $er['lng'] : null,
@@ -5399,7 +5387,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
 
         $msg = 'Event updated successfully';
         if ($eventId !== '') {
-            $chk = $pdo->prepare("SELECT `id`, `title`, `date`, `start_date`, `end_date`, `image`, `tech_lead`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+            $chk = $pdo->prepare("SELECT `id`, `title`, `date`, `start_date`, `end_date`, `image`, `tech_lead`, `tech_lead_approved`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
             $chk->execute([$eventId, $eventId]);
             $existingEvRow = $chk->fetch(PDO::FETCH_ASSOC);
             if (!$existingEvRow) {
@@ -5479,11 +5467,27 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $updParams[] = $reqsJsonIn;
                 $updParams[] = (int) ($caller['id'] ?? 1);
             }
-            $effTechLead = $techLead !== '' ? $techLead : trim((string) ($existingEvRow['tech_lead'] ?? ''));
+            $oldTechLead = trim((string) ($existingEvRow['tech_lead'] ?? ''));
+            $effTechLead = $techLead !== '' ? $techLead : $oldTechLead;
             $curDispatchStatus = strtolower(trim((string) ($existingEvRow['dispatch_status'] ?? 'draft')));
             $hasEffTechLead = ($effTechLead !== '' && strtolower($effTechLead) !== 'tech lead');
-            if (($curDispatchStatus === '' || $curDispatchStatus === 'draft') && $hasEffTechLead) {
-                $setClauses[] = "`dispatch_status` = 'request_sent_to_tech_lead'";
+            $techLeadChanged = ($techLead !== '' && strcasecmp($techLead, $oldTechLead) !== 0);
+            $isTlOrAdminCaller = in_array($callerRoleLower, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead'], true);
+            $callerMatchesTl = $isCallerAdmin
+                || !$hasEffTechLead
+                || ($callerDisplayName !== '' && strcasecmp($callerDisplayName, $effTechLead) === 0);
+            $crewAssignedNow = ($hasRosterIn || ($hasAssignedTechsIn && !empty($assignedTechsInt)) || $action === 'assign_event_crew')
+                && !empty($assignedTechsInt);
+
+            if ($techLeadChanged && !($isTlOrAdminCaller && $crewAssignedNow && $callerMatchesTl)) {
+                $setClauses[] = "`tech_lead_approved` = 0, `tech_lead_approved_by` = NULL, `tech_lead_approved_at` = NULL, `tech_lead_approval_note` = NULL";
+            } elseif ($isTlOrAdminCaller && $crewAssignedNow && $callerMatchesTl && ((int) ($existingEvRow['tech_lead_approved'] ?? 0) !== 1)) {
+                $setClauses[] = "`tech_lead_approved` = 1, `tech_lead_approved_by` = ?, `tech_lead_approved_at` = NOW()";
+                $updParams[] = (int) ($caller['id'] ?? 1);
+            }
+
+            if ($hasEffTechLead && ((int) ($existingEvRow['tech_lead_approved'] ?? 0) !== 1) && !($isTlOrAdminCaller && $crewAssignedNow && $callerMatchesTl)) {
+                $setClauses[] = "`dispatch_status` = 'awaiting_approval_from_tech_lead'";
             } elseif ($hasReqsIn && $reqsJsonIn !== null && !$hasEffTechLead && ($curDispatchStatus === '' || $curDispatchStatus === 'draft')) {
                 $setClauses[] = "`dispatch_status` = 'requirements_sent'";
             }
@@ -5517,9 +5521,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     $evTitleFinal
                 );
             } else {
-                if ($hasReqsIn) {
-                    recalculateEventDispatchStatus($pdo, $realEventId);
-                }
+                recalculateEventDispatchStatus($pdo, $realEventId);
                 try {
                     logEventDispatchAction(
                         $pdo,
@@ -5541,26 +5543,36 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             }
             $maxId = 1004;
             try {
-                foreach ($pdo->query("SELECT `id` FROM `events`")->fetchAll(PDO::FETCH_COLUMN) as $existingEvId) {
-                    if (is_numeric($existingEvId)) {
-                        $maxId = max($maxId, (int) $existingEvId);
+                foreach (['events' => 'id', 'event_dept_confirmations' => 'event_id', 'event_crew_assignments' => 'event_id', 'event_support_requests' => 'event_id', 'event_dispatch_logs' => 'event_id'] as $tbl => $col) {
+                    foreach ($pdo->query("SELECT DISTINCT `{$col}` FROM `{$tbl}`")->fetchAll(PDO::FETCH_COLUMN) as $existingEvId) {
+                        if (is_numeric($existingEvId)) {
+                            $maxId = max($maxId, (int) $existingEvId);
+                        }
                     }
                 }
             } catch (Throwable $e) {}
             $newEventId = (string) ($maxId + 1);
+            try {
+                $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('events_seeded_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+            } catch (Throwable $e) {}
             $newLoc = $locationIn !== '' ? $locationIn : 'Kigali Event Venue';
             $newPin = $eventPinRaw !== '' ? $eventPinRaw : '1234';
             $hasAssignedTechLead = ($techLead !== '' && strtolower($techLead) !== 'tech lead');
+            $isTlOrAdminCreator = in_array($callerRoleLower, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead'], true);
+            $creatorMatchesTl = $isCallerAdmin
+                || !$hasAssignedTechLead
+                || ($callerDisplayName !== '' && strcasecmp($callerDisplayName, $techLead) === 0);
+            $initTechLeadApproved = ($hasAssignedTechLead && $isTlOrAdminCreator && !empty($assignedTechsInt) && $creatorMatchesTl) ? 1 : 0;
             if ($hasAssignedTechLead) {
-                $initDispatchStatus = 'request_sent_to_tech_lead';
+                $initDispatchStatus = $initTechLeadApproved === 1 ? 'staffing_in_progress' : 'awaiting_approval_from_tech_lead';
             } elseif ($hasReqsIn && $reqsJsonIn !== null) {
                 $initDispatchStatus = 'requirements_sent';
             } else {
                 $initDispatchStatus = 'draft';
             }
             $stmtIns = $pdo->prepare("
-                INSERT INTO `events` (`id`, `title`, `location`, `date`, `start_date`, `end_date`, `duration_days`, `duration_label`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`, `checkin_policy`, `require_visual_match`, `requirements_json`, `dispatch_status`, `requirements_sent_by`, `requirements_sent_at`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO `events` (`id`, `title`, `location`, `date`, `start_date`, `end_date`, `duration_days`, `duration_label`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`, `checkin_policy`, `require_visual_match`, `requirements_json`, `dispatch_status`, `requirements_sent_by`, `requirements_sent_at`, `tech_lead_approved`, `tech_lead_approved_by`, `tech_lead_approved_at`, `created_by_id`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmtIns->execute([
                 $newEventId,
@@ -5572,7 +5584,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $durationDaysVal,
                 $durationLabelVal,
                 $formattedTime,
-                $projectManager !== '' ? $projectManager : ($eventCoordinator !== '' ? '' : 'Operations PM'),
+                $projectManager !== '' ? $projectManager : (($eventCoordinator !== '' || $isCallerAdmin) ? '' : 'Operations PM'),
                 $eventCoordinator,
                 $techLead !== '' ? $techLead : 'Tech Lead',
                 json_encode($assignedTechsInt),
@@ -5588,12 +5600,18 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $initDispatchStatus,
                 ($hasReqsIn && $reqsJsonIn !== null) ? (int) ($caller['id'] ?? 1) : null,
                 ($hasReqsIn && $reqsJsonIn !== null) ? date('Y-m-d H:i:s') : null,
+                $initTechLeadApproved,
+                $initTechLeadApproved === 1 ? (int) ($caller['id'] ?? 1) : null,
+                $initTechLeadApproved === 1 ? date('Y-m-d H:i:s') : null,
+                (int) ($caller['id'] ?? 1),
             ]);
             $eventId = $newEventId;
             $syncAssignedUsers($newEventId, $assignedTechsInt);
             $createdSummary = "Created event venue \"{$titleIn}\" ({$newLoc}) at {$formattedTime}";
-            if ($initDispatchStatus === 'request_sent_to_tech_lead') {
-                $createdSummary .= " — Request sent to Tech Lead ({$techLead})";
+            if ($initDispatchStatus === 'awaiting_approval_from_tech_lead') {
+                $createdSummary .= " — Awaiting approval from Tech Lead ({$techLead})";
+            } elseif ($initTechLeadApproved === 1 && $hasAssignedTechLead) {
+                $createdSummary .= " — Approved & staffed by Tech Lead ({$techLead})";
             }
             logEventDispatchAction(
                 $pdo,
@@ -5660,9 +5678,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $crcVal = (string) (is_numeric($realId) ? (int) $realId : crc32($realId));
         try {
             $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)")->execute([$realId, $crcVal]);
+            $pdo->prepare("DELETE FROM `event_dept_confirmations` WHERE `event_id` = ?")->execute([$realId]);
             $pdo->prepare("DELETE FROM `event_crew_assignments` WHERE `event_id` = ?")->execute([$realId]);
             $pdo->prepare("DELETE FROM `event_support_requests` WHERE `event_id` = ?")->execute([$realId]);
             $pdo->prepare("DELETE FROM `event_dispatch_logs` WHERE `event_id` = ?")->execute([$realId]);
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('events_seeded_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         } catch (Throwable $e) {}
         $pdo->prepare("DELETE FROM `events` WHERE `id` = ?")->execute([$realId]);
 
@@ -10233,6 +10253,78 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         echo json_encode(array_merge(
             buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
             ['ok' => true, 'decision' => $decision, 'dispatch_status' => $newStatus, 'message' => $decision === 'confirmed' ? "Assignment confirmed for {$evTitle}." : "Declined assignment for {$evTitle} — Tech Lead notified."]
+        ));
+        exit;
+    }
+
+    if ($action === 'approve_event_tech_lead') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('approve_event_tech_lead', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $evIdIn = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $noteIn = trim((string) ($_POST['note'] ?? $jsonBody['note'] ?? ''));
+        if ($evIdIn === '') {
+            echo json_encode(['ok' => false, 'error' => 'event_id is required.']);
+            exit;
+        }
+        $evChk = $pdo->prepare("SELECT `id`, `title`, `tech_lead`, `tech_lead_approved` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evChk->execute([$evIdIn, $evIdIn]);
+        $evRow = $evChk->fetch(PDO::FETCH_ASSOC);
+        if (!$evRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Event not found.']);
+            exit;
+        }
+        $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+        $isAdminApprover = in_array($callerRole, ['admin', 'administrator', 'manager'], true);
+        $assignedTl = trim((string) ($evRow['tech_lead'] ?? ''));
+        $hasSpecificTl = ($assignedTl !== '' && strtolower($assignedTl) !== 'tech lead');
+        $callerFull = trim((string) ($caller['full_name'] ?? ''));
+        $callerUser = trim((string) ($caller['username'] ?? ''));
+        if (!$isAdminApprover && $hasSpecificTl && strcasecmp($callerFull, $assignedTl) !== 0 && strcasecmp($callerUser, $assignedTl) !== 0) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => "Only the assigned Technical Lead ({$assignedTl}) or an Administrator can approve this request."]);
+            exit;
+        }
+        $realEventId = (string) $evRow['id'];
+        $evTitle = (string) ($evRow['title'] ?? ('Event #' . $realEventId));
+        $approverName = $callerFull !== '' ? $callerFull : ($callerUser !== '' ? $callerUser : 'Technical Lead');
+        $updTl = $hasSpecificTl ? $assignedTl : $approverName;
+
+        $pdo->prepare("
+            UPDATE `events`
+            SET `tech_lead` = ?, `tech_lead_approved` = 1, `tech_lead_approved_by` = ?, `tech_lead_approved_at` = NOW(), `tech_lead_approval_note` = ?
+            WHERE `id` = ?
+        ")->execute([
+            $updTl,
+            (int) ($caller['id'] ?? 1),
+            $noteIn !== '' ? substr($noteIn, 0, 255) : null,
+            $realEventId,
+        ]);
+
+        $newStatus = recalculateEventDispatchStatus($pdo, $realEventId);
+        logEventDispatchAction(
+            $pdo,
+            $realEventId,
+            (int) ($caller['id'] ?? 1),
+            (string) ($caller['role'] ?? 'tech_lead'),
+            'tech_lead_approved',
+            "Approved Tier 1 dispatch request for {$evTitle} ({$approverName}) — Tier 2 Tech Lead unlocked" . ($noteIn !== '' ? ": {$noteIn}" : ''),
+            ['dispatch_status' => $newStatus, 'tech_lead_approved' => true]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'dispatch_status' => $newStatus,
+                'tech_lead_approved' => true,
+                'message' => "Request approved by {$approverName} — Tier 2 · Tech Lead is now unlocked.",
+            ]
         ));
         exit;
     }

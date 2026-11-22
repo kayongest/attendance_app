@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261120_v18" />
+  <link rel="stylesheet" href="styles.css?v=20261122_v24" />
 </head>
 <body>
   <div class="app-shell" data-node-id="2:3269">
@@ -337,14 +337,14 @@
             <button type="button" class="icon-btn" id="topbar-logout-quick-btn" title="Sign Out of Station" style="display: none; color: #dc2626;">
               <img src="assets/log-out.svg" alt="Sign Out" class="svg-icon" style="width: 16px; height: 16px;" />
             </button>
-            <div class="avatar-circle avatar-jl" id="topbar-avatar" data-node-id="2:3345" title="User Account &amp; Access" style="cursor: pointer;">MU</div>
+            <div class="avatar-circle avatar-jl" id="topbar-avatar" data-node-id="2:3345" title="User Account &amp; Access" style="cursor: pointer;">--</div>
             <div class="topbar-dropdown user-dropdown" id="topbar-user-dropdown" style="display: none;">
               <div class="user-dropdown-header">
-                <div class="avatar-circle avatar-jl" id="user-menu-avatar" style="width: 42px; height: 42px; font-size: 15px;">MU</div>
+                <div class="avatar-circle avatar-jl" id="user-menu-avatar" style="width: 42px; height: 42px; font-size: 15px;">--</div>
                 <div class="user-menu-info">
-                  <div class="user-menu-name" id="user-menu-name">Mirene Uwase</div>
-                  <div class="user-menu-role" id="user-menu-role">Stock Controller · L3</div>
-                  <div class="user-menu-badge" id="user-menu-badge">REW-BADGE-0002</div>
+                  <div class="user-menu-name" id="user-menu-name">Loading...</div>
+                  <div class="user-menu-role" id="user-menu-role">Active Session</div>
+                  <div class="user-menu-badge" id="user-menu-badge">--</div>
                 </div>
               </div>
               <div class="topbar-dropdown-divider"></div>
@@ -3590,7 +3590,7 @@
               </div>
             </div>
             <div class="flow-explorer-pipeline" id="settings-dispatch-flow-diagram" style="margin-bottom:14px;"></div>
-            <div class="flow-explorer-inspector" id="settings-dispatch-flow-inspector" style="margin-bottom:16px;"></div>
+            <div class="flow-explorer-inspector is-dispatch-inspector" id="settings-dispatch-flow-inspector" style="margin-bottom:16px;"></div>
             <div id="dispatch-hierarchy-canvas" class="dispatch-tree-wrap"></div>
             <div id="dispatch-role-flow-drawer" class="dispatch-inspector-card" style="margin-top: 16px;"></div>
             <div id="dispatch-workflow-deck" class="dispatch-workflow-grid" style="margin-top: 16px;"></div>
@@ -4095,7 +4095,7 @@
             </div>
 
             <div class="flow-explorer-pipeline" id="dispatch-flow-diagram"></div>
-            <div class="flow-explorer-inspector" id="dispatch-flow-inspector"></div>
+            <div class="flow-explorer-inspector is-dispatch-inspector" id="dispatch-flow-inspector"></div>
           </section>
 
           <!-- Live 6-Department Hierarchy & Role Action Workbench -->
@@ -5989,6 +5989,14 @@
           </div>
         </div>
 
+        <div id="venue-crud-approval-banner" style="display: none; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 12px; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="status-badge status-badge-amber-sm" id="venue-crud-approval-pill">Awaiting Approval from Tech Lead</span>
+            <span id="venue-crud-approval-meta" style="color: var(--text-secondary); font-size: 11.5px;"></span>
+          </div>
+          <button type="button" class="btn btn-primary-32" id="venue-crud-approve-btn" style="display: none;">✓ Approve Request (Tech Lead)</button>
+        </div>
+
         <!-- PM / Event Coordinator: Department Technician Headcount Targets -->
         <div id="venue-crud-dept-counts-section" class="form-field" style="display: none; margin-bottom: 16px; padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--bg-subtle);">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
@@ -6383,6 +6391,6 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261122_v21"></script>
+  <script src="app.js?v=20261122_v24"></script>
 </body>
 </html>
