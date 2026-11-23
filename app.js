@@ -225,7 +225,7 @@
 
   function getOrCreateClientDeviceToken() {
     let devTok = '';
-    try { devTok = localStorage.getItem('ability_device_tok') || ''; } catch (e) {}
+    try { devTok = localStorage.getItem('ability_device_tok') || ''; } catch (e) { }
     if (!devTok || devTok.length < 16) {
       const m = document.cookie.match(/(?:^|;\s*)ability_device_tok=([^;]+)/);
       if (m) devTok = decodeURIComponent(m[1]);
@@ -239,7 +239,7 @@
       }
       devTok = 'ABDEV-' + Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
     }
-    try { localStorage.setItem('ability_device_tok', devTok); } catch (e) {}
+    try { localStorage.setItem('ability_device_tok', devTok); } catch (e) { }
     document.cookie = `ability_device_tok=${encodeURIComponent(devTok)}; path=/; max-age=31536000; SameSite=Lax`;
     return devTok;
   }
@@ -395,7 +395,7 @@
       const baseScale = Number(state.brandingConfig?.font_scale || 1);
       const effectiveScale = lg ? Math.min(1.30, +(baseScale * 1.12).toFixed(2)) : baseScale;
       root.style.setProperty('--brand-font-scale', effectiveScale.toFixed(2));
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // Offline-First IndexedDB Cache (`ability_offline_v1`) for Verification Roster Metadata
@@ -445,7 +445,7 @@
           })),
           updated_at: new Date().toISOString(),
         });
-      } catch (_) {}
+      } catch (_) { }
     }
     async function getStatus() {
       try {
@@ -464,7 +464,7 @@
       try {
         const db = await openDb();
         db.transaction('rosters', 'readwrite').objectStore('rosters').clear();
-      } catch (_) {}
+      } catch (_) { }
     }
     return { saveRoster, getStatus, clearAll };
   })();
@@ -656,7 +656,7 @@
       };
       try {
         localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig));
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (data.overviewWidgetsConfig && Array.isArray(data.overviewWidgetsConfig.items)) {
@@ -666,7 +666,7 @@
       };
       try {
         localStorage.setItem('ability_overview_widgets_config', JSON.stringify(state.overviewWidgetsConfig));
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (data.currentUser) {
@@ -709,11 +709,11 @@
     let isAllowed = member.badge_status === 'active' && (!isStock || member.clearance_code !== 'L1');
     let reason = isAllowed
       ? (isCheckedIn
-          ? `Currently Checked In at ${member.last_checkpoint_name || cp.name}`
-          : `Authorized for ${isStock ? 'Stock Warehouse' : 'Event Venue'} access (${member.clearance_code} — ${member.clearance_short})`)
+        ? `Currently Checked In at ${member.last_checkpoint_name || cp.name}`
+        : `Authorized for ${isStock ? 'Stock Warehouse' : 'Event Venue'} access (${member.clearance_code} — ${member.clearance_short})`)
       : (member.badge_status !== 'active'
-          ? `ID Badge is currently ${String(member.badge_status).toUpperCase()}`
-          : 'Level 1 (Venue Crew) is not authorized for Stock Warehouses');
+        ? `ID Badge is currently ${String(member.badge_status).toUpperCase()}`
+        : 'Level 1 (Venue Crew) is not authorized for Stock Warehouses');
 
     let punctuality = member.punctuality_code || 'on_time';
     let punctualityLabel = isAllowed ? (member.punctuality || 'ON TIME') : 'ACCESS RESTRICTED';
@@ -893,8 +893,8 @@
   let kioskCountdownPaused = false;
 
   // Camera is disabled per configuration — scanner operates via optical barcode reader & input search
-  function startKioskCamera() {}
-  function stopKioskCamera() {}
+  function startKioskCamera() { }
+  function stopKioskCamera() { }
 
   // Web Audio Synthesizer for high-fidelity sensory feedback (Zero audio file dependencies)
   const audioCtx =
@@ -940,7 +940,7 @@
         osc.start(now);
         osc.stop(now + 0.32);
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   async function confirmGateAction(decision, extra = {}) {
@@ -1137,7 +1137,7 @@
   function saveOfflineQueue(list) {
     try {
       localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(list));
-    } catch (_) {}
+    } catch (_) { }
     renderOfflineQueueBar();
   }
 
@@ -1288,7 +1288,7 @@
     if (cameraStream) {
       try {
         cameraStream.getTracks().forEach((t) => t.stop());
-      } catch (_) {}
+      } catch (_) { }
       cameraStream = null;
     }
     const videoEl = document.getElementById('kiosk-camera-video');
@@ -1337,7 +1337,7 @@
             triggerGateScan(decodedValue);
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     if (cameraStream) {
@@ -1390,7 +1390,7 @@
 
       if (videoEl) {
         videoEl.srcObject = cameraStream;
-        await videoEl.play().catch(() => {});
+        await videoEl.play().catch(() => { });
       }
 
       if (!cameraBarcodeDetector && typeof window.jsQR !== 'function') {
@@ -1593,7 +1593,7 @@
     } else if (screenKey === 'stock-manager') {
       state.eventsHubTab = 'warehouses';
       screenKey = 'events';
-      } else if (screenKey === 'venue-security') {
+    } else if (screenKey === 'venue-security') {
       if (!canCurrentUserAssignEvents() && !isCurrentUserAdmin()) {
         showToast('Access Restricted: Event Venues CRUD is reserved for Operations Managers, Coordinators, Tech Leads, and Administrators.');
         screenKey = isCurrentUserStockController() || isCurrentUserTechnician() ? 'terminals' : 'overview';
@@ -1701,7 +1701,8 @@
       overview: 'Gate Operations Dashboard',
       events: 'Checkpoints & Venues',
       'create-event': 'Create Event',
-      'dispatch-flow': 'Operational Command & Department Dispatch Flow',
+      'dispatch-flow': 'Department Dispatch Flow',
+      // Operational Command & 
       users: 'Staff, Technicians & Role Management',
       attendees: 'Staff ID Badges',
       terminals: 'Terminals (#pane-kiosk)',
@@ -2129,6 +2130,58 @@
     if (!state.currentUser) return false;
     const role = (state.currentUser.role || '').toLowerCase();
     return role === 'tech_lead' || role === 'technical_lead' || isCurrentUserAdmin();
+  }
+
+  function isCurrentUserTechLeadOnly() {
+    if (!state.currentUser || isCurrentUserAdmin()) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return role === 'tech_lead' || role === 'technical_lead';
+  }
+
+  function isCurrentUserEventScopedRole() {
+    if (!state.currentUser || isCurrentUserAdmin()) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return role === 'tech_lead' || role === 'technical_lead' || role === 'project_manager' || role === 'event_coordinator';
+  }
+
+  function isEventVisibleToCurrentUser(ev) {
+    if (!ev || !isCurrentUserEventScopedRole()) return true;
+    const curUser = state.currentUser || {};
+    const curId = Number(curUser.id || 0);
+    const curRole = String(curUser.role || '').toLowerCase();
+    const curFull = String(curUser.full_name || '').trim().toLowerCase();
+    const curUsername = String(curUser.username || '').trim().toLowerCase();
+
+    if (curId > 0) {
+      if (Number(ev.created_by_id || 0) === curId) return true;
+      if (Number(ev.requirements_sent_by || 0) === curId) return true;
+      if (Array.isArray(ev.assigned_technicians) && ev.assigned_technicians.some((id) => Number(id) === curId)) {
+        return true;
+      }
+    }
+
+    const ignoredPlaceholders = new Set(['tech lead', 'technical lead', 'operations pm', 'project manager', 'event coordinator', 'unassigned']);
+    const matchesIdentity = (rawVal) => {
+      const v = String(rawVal || '').trim().toLowerCase();
+      if (!v || ignoredPlaceholders.has(v)) return false;
+      return (curFull !== '' && v === curFull) || (curUsername !== '' && v === curUsername);
+    };
+
+    if (curRole === 'tech_lead' || curRole === 'technical_lead') {
+      return matchesIdentity(ev.tech_lead) || (curId > 0 && Number(ev.tech_lead_approved_by || 0) === curId);
+    }
+    if (curRole === 'project_manager') {
+      return matchesIdentity(ev.project_manager);
+    }
+    if (curRole === 'event_coordinator') {
+      return matchesIdentity(ev.event_coordinator);
+    }
+    return false;
+  }
+
+  function getVisibleEventsList() {
+    const events = state.checkpoints?.event_venues || [];
+    return isCurrentUserEventScopedRole() ? events.filter(isEventVisibleToCurrentUser) : events;
   }
 
   function isCurrentUserStockManager() {
@@ -2808,8 +2861,8 @@
     const lockReason = isCtrlLocked
       ? `Gate Controller locked: Your account is assigned to ${assignedCpName}. Use Relief / Swap to request reassignment.`
       : (isStationLocked
-          ? `Station PIN locked to ${activeCpName}. Click the Station Lock pill to unlock with your Site PIN.`
-          : '');
+        ? `Station PIN locked to ${activeCpName}. Click the Station Lock pill to unlock with your Site PIN.`
+        : '');
 
     document.querySelectorAll('.cp-type-toggle').forEach((wrap) => {
       wrap.classList.toggle('is-locked', isLocked);
@@ -2839,7 +2892,7 @@
 
     const optionsList = isStock
       ? state.checkpoints.stock_warehouses || []
-      : state.checkpoints.event_venues || [];
+      : getVisibleEventsList();
 
     document.querySelectorAll('.js-checkpoint-select').forEach((sel) => {
       sel.innerHTML = optionsList
@@ -2866,8 +2919,8 @@
         isCtrlLocked
           ? lockReason
           : (isStationLocked
-              ? `Station PIN locked to ${activeCpName} — click to unlock with Site PIN`
-              : `Lock terminal switcher to ${activeCpName} with Site PIN`)
+            ? `Station PIN locked to ${activeCpName} — click to unlock with Site PIN`
+            : `Lock terminal switcher to ${activeCpName} with Site PIN`)
       );
     });
 
@@ -2882,9 +2935,8 @@
     });
 
     document.querySelectorAll('.js-active-cp-meta').forEach((el) => {
-      el.textContent = `${state.activeCheckpoint.name} · Call Time ${state.activeCheckpoint.call_time || '08:00'} · ${
-        state.activeCheckpoint.min_clearance || ''
-      }`;
+      el.textContent = `${state.activeCheckpoint.name} · Call Time ${state.activeCheckpoint.call_time || '08:00'} · ${state.activeCheckpoint.min_clearance || ''
+        }`;
     });
 
     const sbCallPill = document.getElementById('sidebar-active-calltime-pill');
@@ -3190,7 +3242,7 @@
         state.passQrUserId = Number(data.user_id || state.currentUser.id);
         renderCrewDigitalPassQrOnly();
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function renderCrewDigitalPassQrOnly() {
@@ -3358,7 +3410,7 @@
         box.textContent = data.token.slice(0, 12);
       }
       if (countdownEl) countdownEl.textContent = 'Rotating: 20s';
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function renderKioskVenueQrDeck() {
@@ -3684,9 +3736,8 @@
         footerStatusEl.textContent = `${v.checkpoint_name || state.activeCheckpoint.name} - Checked Out`;
         footerStatusEl.className = 'kiosk-footer-clearance-status verified';
       } else {
-        footerStatusEl.textContent = `${v.checkpoint_name || state.activeCheckpoint.name} Clearance - ${
-          granted ? 'Verified' : 'Denied'
-        }`;
+        footerStatusEl.textContent = `${v.checkpoint_name || state.activeCheckpoint.name} Clearance - ${granted ? 'Verified' : 'Denied'
+          }`;
         footerStatusEl.className = `kiosk-footer-clearance-status ${granted ? 'verified' : 'denied'}`;
       }
     }
@@ -3722,15 +3773,15 @@
     const buckets = state.hourlyTraffic && state.hourlyTraffic.length > 0
       ? state.hourlyTraffic
       : [
-          { hour: '07:00', venueCount: 1, stockCount: 1 },
-          { hour: '08:00', venueCount: 2, stockCount: 1 },
-          { hour: '09:00', venueCount: 1, stockCount: 0 },
-          { hour: '10:00', venueCount: 0, stockCount: 0 },
-          { hour: '11:00', venueCount: 0, stockCount: 0 },
-          { hour: '12:00', venueCount: 0, stockCount: 0 },
-          { hour: '14:00', venueCount: 0, stockCount: 0 },
-          { hour: '16:00', venueCount: 0, stockCount: 0 },
-        ];
+        { hour: '07:00', venueCount: 1, stockCount: 1 },
+        { hour: '08:00', venueCount: 2, stockCount: 1 },
+        { hour: '09:00', venueCount: 1, stockCount: 0 },
+        { hour: '10:00', venueCount: 0, stockCount: 0 },
+        { hour: '11:00', venueCount: 0, stockCount: 0 },
+        { hour: '12:00', venueCount: 0, stockCount: 0 },
+        { hour: '14:00', venueCount: 0, stockCount: 0 },
+        { hour: '16:00', venueCount: 0, stockCount: 0 },
+      ];
 
     const maxVal = Math.max(
       4,
@@ -3808,17 +3859,17 @@
     const isStock = facility.type === 'stock_warehouse';
     const defaults = isStock
       ? [
-          { left: '84%', top: '20%', shortName: 'Ndera Hub' },
-          { left: '39%', top: '80%', shortName: 'Gikondo Hub' },
-          { left: '82%', top: '80%', shortName: 'Masaka Depot' },
-          { left: '59%', top: '60%', shortName: 'Remera Hub' },
-        ]
+        { left: '84%', top: '20%', shortName: 'Ndera Hub' },
+        { left: '39%', top: '80%', shortName: 'Gikondo Hub' },
+        { left: '82%', top: '80%', shortName: 'Masaka Depot' },
+        { left: '59%', top: '60%', shortName: 'Remera Hub' },
+      ]
       : [
-          { left: '48%', top: '40%', shortName: 'KCC' },
-          { left: '70%', top: '44%', shortName: 'BK Arena' },
-          { left: '29%', top: '76%', shortName: 'Camp Kigali' },
-          { left: '87%', top: '48%', shortName: 'Intare Arena' },
-        ];
+        { left: '48%', top: '40%', shortName: 'KCC' },
+        { left: '70%', top: '44%', shortName: 'BK Arena' },
+        { left: '29%', top: '76%', shortName: 'Camp Kigali' },
+        { left: '87%', top: '48%', shortName: 'Intare Arena' },
+      ];
     const item = defaults[index % defaults.length];
     return {
       left: item.left,
@@ -3894,11 +3945,12 @@
   }
 
   function getAllFacilitiesList() {
+    const filterVisible = (list) => (list || []).filter((cp) => cp && (cp.type !== 'event_venue' || isEventVisibleToCurrentUser(cp)));
     if (state.checkpoints && Array.isArray(state.checkpoints.directory) && state.checkpoints.directory.length > 0) {
-      return state.checkpoints.directory;
+      return filterVisible(state.checkpoints.directory);
     }
     const merged = [
-      ...(state.checkpoints?.event_venues || []),
+      ...getVisibleEventsList(),
       ...(state.checkpoints?.stock_warehouses || []),
     ];
     if (merged.length > 0) return merged;
@@ -4455,11 +4507,10 @@
     }
 
     if (filtered.length === 0) {
-      grid.innerHTML = `<div class="cos-empty-state">${
-        list.length === 0
+      grid.innerHTML = `<div class="cos-empty-state">${list.length === 0
           ? 'No personnel are currently checked in on-site right now.'
           : 'No on-site personnel match your selected checkpoint, role, or search filter.'
-      }</div>`;
+        }</div>`;
       return;
     }
 
@@ -4564,11 +4615,11 @@
 
   const OPTION_B_VENUES = {
     'Ndera Warehouse': { x: 0.30, y: 0.40, label: '🏭 Ndera Hub' },
-    'KCC Stock':       { x: 0.48, y: 0.38, label: '🏭 KCC Stock' },
-    'BK Arena Stock':  { x: 0.55, y: 0.72, label: '🏭 BK Arena Stock' },
+    'KCC Stock': { x: 0.48, y: 0.38, label: '🏭 KCC Stock' },
+    'BK Arena Stock': { x: 0.55, y: 0.72, label: '🏭 BK Arena Stock' },
     'Kigali Convention Centre': { x: 0.48, y: 0.38, label: '🎪 KCC Dome' },
-    'BK Arena':        { x: 0.55, y: 0.72, label: '🏟️ BK Arena' },
-    'Camp Kigali':     { x: 0.20, y: 0.56, label: '🏛️ Camp Kigali' },
+    'BK Arena': { x: 0.55, y: 0.72, label: '🏟️ BK Arena' },
+    'Camp Kigali': { x: 0.20, y: 0.56, label: '🏛️ Camp Kigali' },
     'Intare Conference Arena': { x: 0.85, y: 0.48, label: '🎪 Intare Arena' },
     'Gikondo Logistics Hub': { x: 0.38, y: 0.72, label: '🏭 Gikondo Hub' },
     'Masaka Central Depot': { x: 0.78, y: 0.78, label: '🏭 Masaka Depot' },
@@ -4688,7 +4739,7 @@
       pin.textContent = u.initials;
       pin.title = `${u.name} · ${u.role} · ${u.venue} (${u.status})`;
       pin.style.left = `calc(${coord.x * 100}% + ${offsetX}px)`;
-      pin.style.top  = `calc(${coord.y * 100}% + ${offsetY}px)`;
+      pin.style.top = `calc(${coord.y * 100}% + ${offsetY}px)`;
       pin.addEventListener('click', () => focusOptionBUser(u.uid));
       map.appendChild(pin);
     });
@@ -5180,23 +5231,20 @@
                 </div>
               </div>
               <div class="timeline-event-right">
-                ${
-                  !isDenied && item.in_pill
-                    ? `<span class="ts-mini-pill in">${escapeHtml(item.in_pill)}</span>`
-                    : ''
-                }
-                ${
-                  !isDenied && item.out_pill
-                    ? `<span class="ts-mini-pill out">${escapeHtml(item.out_pill)}</span>`
-                    : ''
-                }
+                ${!isDenied && item.in_pill
+              ? `<span class="ts-mini-pill in">${escapeHtml(item.in_pill)}</span>`
+              : ''
+            }
+                ${!isDenied && item.out_pill
+              ? `<span class="ts-mini-pill out">${escapeHtml(item.out_pill)}</span>`
+              : ''
+            }
                 ${durationChip}
                 ${nightChip}
-                ${
-                  isTransit
-                    ? `<span class="status-badge status-badge-purple-sm" title="Cross-Facility Transit">Transit Flow</span>`
-                    : ''
-                }
+                ${isTransit
+              ? `<span class="status-badge status-badge-purple-sm" title="Cross-Facility Transit">Transit Flow</span>`
+              : ''
+            }
                 <span class="status-badge ${isDenied ? 'status-badge-red-sm' : 'status-badge-green-sm'}">
                   ${isDenied ? 'Denied' : 'Granted'}
                 </span>
@@ -5290,11 +5338,10 @@
             </div>
             <div class="col-reg-status">
               <div class="paired-timestamps-cell">
-                ${
-                  c.checkpoint_authorized
-                    ? `<span class="status-badge status-badge-green-sm">Authorized (${escapeHtml(c.punctuality)})</span>`
-                    : `<span class="status-badge status-badge-red-sm">Stock Restricted (L1)</span>`
-                }
+                ${c.checkpoint_authorized
+            ? `<span class="status-badge status-badge-green-sm">Authorized (${escapeHtml(c.punctuality)})</span>`
+            : `<span class="status-badge status-badge-red-sm">Stock Restricted (L1)</span>`
+          }
                 ${c.check_in_time ? `<span class="ts-mini-pill in">In: ${escapeHtml(c.check_in_time)}</span>` : ''}
                 ${c.check_out_time ? `<span class="ts-mini-pill out">Out: ${escapeHtml(c.check_out_time)}</span>` : ''}
               </div>
@@ -5497,9 +5544,9 @@
     const rowsEl = document.getElementById('events-table-rows');
     if (!rowsEl) return;
 
-    const allCps = state.checkpoints.directory || [];
+    const allCps = (state.checkpoints.directory || []).filter((cp) => cp && (cp.type !== 'event_venue' || isEventVisibleToCurrentUser(cp)));
     const stocksCount = (state.checkpoints.stock_warehouses || []).length;
-    const venuesCount = (state.checkpoints.event_venues || []).length;
+    const venuesCount = getVisibleEventsList().length;
 
     const hubAllEl = document.getElementById('cp-hub-count-all');
     const hubWhEl = document.getElementById('cp-hub-count-wh');
@@ -5651,9 +5698,8 @@
                     <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 10px; height: 10px;" />
                     <span>Set</span>
                   </button>
-                  ${
-                    !isStock
-                      ? `<button
+                  ${!isStock
+            ? `<button
                           type="button"
                           class="calltime-edit-trigger js-open-event-assign-modal"
                           data-event-id="${cp.raw_id || cp.id}"
@@ -5663,8 +5709,8 @@
                           <img src="assets/team-members.svg" alt="" class="svg-icon" style="width: 10px; height: 10px;" />
                           <span>Crew (${cp.assigned_count || 0})</span>
                         </button>`
-                      : ''
-                  }
+            : ''
+          }
                 </div>
                 <span class="company-role">${escapeHtml(cp.lead_label || '')}</span>
               </div>
@@ -5696,9 +5742,8 @@
               >
                 ${isActive ? 'Active Terminal (#pane-kiosk)' : 'Open Gate Terminal'}
               </button>
-              ${
-                !isStock
-                  ? `<button
+              ${!isStock
+            ? `<button
                       type="button"
                       class="btn btn-secondary-32 js-open-event-assign-modal"
                       data-event-id="${cp.raw_id || cp.id}"
@@ -5708,8 +5753,8 @@
                       <img src="assets/team-members.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
                       <span>Roster</span>
                     </button>`
-                  : ''
-              }
+            : ''
+          }
             </div>
             <div class="col-actions"></div>
           </div>
@@ -5740,25 +5785,23 @@
                 <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" />
                 <span>Edit</span>
               </button>
-              ${
-                isCore
-                  ? `<span style="font-size: 10px; font-weight: 600; color: #1e40af; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><img src="assets/lock.svg" alt="" class="svg-icon" style="width: 10px; height: 10px; opacity: 0.7;" /> Core Tier</span>`
-                  : `<span style="font-size: 10px; font-weight: 600; color: #475569; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;">Standard</span>
+              ${isCore
+            ? `<span style="font-size: 10px; font-weight: 600; color: #1e40af; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><img src="assets/lock.svg" alt="" class="svg-icon" style="width: 10px; height: 10px; opacity: 0.7;" /> Core Tier</span>`
+            : `<span style="font-size: 10px; font-weight: 600; color: #475569; background: rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.08); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;">Standard</span>
               <button type="button" class="btn-tier-action js-delete-tier" data-tier-id="${m.id || ''}" data-tier-code="${escapeHtml(m.code)}" data-tier-title="${escapeHtml(m.title)}" data-member-count="${m.member_count || 0}" title="Delete Custom Tier" style="background: #fef2f2; border: 1px solid #fee2e2; border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer; color: #dc2626; display: inline-flex; align-items: center; gap: 3px;">
                 <img src="assets/trash.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" />
                 <span>Del</span>
               </button>`
-              }
+          }
             </div>
           </div>
           <span style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 6px; display: block; line-height: 1.25;">${escapeHtml(m.title)}</span>
           <span class="metric-context" style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; display: block;">
             Venue Access: <strong>${escapeHtml(venueRule)}</strong> · Stock Access: <strong>${escapeHtml(stockRule)}</strong>
           </span>
-          ${
-            m.description
-              ? `<p style="margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(m.description)}">${escapeHtml(m.description)}</p>`
-              : ''
+          ${m.description
+            ? `<p style="margin: 6px 0 0; font-size: 11px; color: var(--text-secondary); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(m.description)}">${escapeHtml(m.description)}</p>`
+            : ''
           }
         </div>
       `;
@@ -5888,11 +5931,10 @@
               </span>
             </div>
             <div style="width: 180px; font-size: 11px;">
-              ${
-                c.clearance_code === 'L1'
-                  ? 'Venue: YES · <strong style="color:#dc2626;">Stock: NO</strong>'
-                  : 'Venue: YES · <strong style="color:#16a34a;">Stock: YES</strong>'
-              }
+              ${c.clearance_code === 'L1'
+              ? 'Venue: YES · <strong style="color:#dc2626;">Stock: NO</strong>'
+              : 'Venue: YES · <strong style="color:#16a34a;">Stock: YES</strong>'
+            }
             </div>
             <div style="flex: 1; display: flex; align-items: center; gap: 8px;">
               <select class="form-select js-clearance-select" data-user-id="${c.id}" style="height: 30px; font-size: 11px;">
@@ -6848,7 +6890,12 @@
       ? '-- Select Event Coordinator --'
       : (isPm ? '-- Select Project Manager --' : '-- Select Event Tech Lead --');
 
-    const crewList = (state.crew || []).filter((u) => u && (u.full_name || u.username));
+    const crewList = (state.crew || []).filter((u) => {
+      if (!u) return false;
+      const name = String(u.full_name || u.username || '').trim();
+      if (!name) return false;
+      return Number(u.is_active ?? 1) !== 0 || (String(currentVal || '').trim().toLowerCase() === name.toLowerCase());
+    });
     const targetLower = String(currentVal || '').trim().toLowerCase();
     let matched = false;
     const buildOpt = (u) => {
@@ -6887,6 +6934,12 @@
       } else {
         others.push(u);
       }
+    });
+    const primaryRole = isCoord ? 'event_coordinator' : 'project_manager';
+    preferred.sort((a, b) => {
+      const aExact = String(a.role || '').toLowerCase() === primaryRole ? 0 : 1;
+      const bExact = String(b.role || '').toLowerCase() === primaryRole ? 0 : 1;
+      return aExact - bExact;
     });
 
     let html = `<option value="">${placeholder}</option>`;
@@ -6981,7 +7034,7 @@
 
   function renderStockManager() {
     const whCountNum = state.stockManager.warehouses.length;
-    const evCountNum = (state.checkpoints?.event_venues || []).length;
+    const evCountNum = getVisibleEventsList().length;
     const hubWhCount = document.getElementById('cp-hub-count-wh');
     const hubVenCount = document.getElementById('cp-hub-count-venues');
     if (hubWhCount) hubWhCount.textContent = String(whCountNum).padStart(2, '0');
@@ -7117,7 +7170,7 @@
     const grid = document.getElementById('sm-events-grid');
     if (!grid) return;
 
-    const allEvents = state.checkpoints?.event_venues || [];
+    const allEvents = getVisibleEventsList();
     const q = (state.stockManager.evSearch || '').toLowerCase().trim();
     const list = allEvents.filter((ev) => {
       if (!q) return true;
@@ -7301,7 +7354,7 @@
     const sel = document.getElementById('user-modal-assigned-cp');
     if (!sel) return;
     const whs = state.checkpoints.stock_warehouses || [];
-    const evs = state.checkpoints.event_venues || [];
+    const evs = getVisibleEventsList();
     const opts = ['<option value="">-- Unassigned (Requires Approval Request) --</option>'];
     if (whs.length > 0) {
       opts.push('<optgroup label="Facility Gates">');
@@ -7546,7 +7599,7 @@
     showToast('Exported Crew Roster to CSV');
   }
 
-  
+
   // =========================================================================
   // ROLES MANAGEMENT CRUD LOGIC
   // =========================================================================
@@ -7756,8 +7809,8 @@
       .map((r) => {
         const tierBadgeClass =
           r.clearance_code === 'L4' ? 'status-badge-green-sm' :
-          r.clearance_code === 'L3' ? 'status-badge-purple-sm' :
-          r.clearance_code === 'L2' ? 'status-badge-blue-sm' : 'status-badge-gray-sm';
+            r.clearance_code === 'L3' ? 'status-badge-purple-sm' :
+              r.clearance_code === 'L2' ? 'status-badge-blue-sm' : 'status-badge-gray-sm';
 
         const isSys = Number(r.is_system) === 1;
         const typeTag = isSys
@@ -7802,11 +7855,10 @@
                 <img src="assets/edit.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" />
                 <span>Edit</span>
               </button>
-              ${
-                isSys
-                  ? `<button type="button" class="btn btn-secondary-32" disabled title="Protected Core System Role" style="opacity: 0.45; cursor: not-allowed; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 3px;"><img src="assets/lock.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" /> <span style="font-size: 10px;">Core</span></button>`
-                  : `<button type="button" class="btn btn-secondary-32 js-delete-role" data-role-id="${r.id}" data-role-title="${escapeHtml(r.title)}" data-assigned="${r.staff_count}" title="Delete Custom Role" style="color: #dc2626; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><img src="assets/trash.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" /> <span>Del</span></button>`
-              }
+              ${isSys
+            ? `<button type="button" class="btn btn-secondary-32" disabled title="Protected Core System Role" style="opacity: 0.45; cursor: not-allowed; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 3px;"><img src="assets/lock.svg" alt="" class="svg-icon" style="width: 11px; height: 11px;" /> <span style="font-size: 10px;">Core</span></button>`
+            : `<button type="button" class="btn btn-secondary-32 js-delete-role" data-role-id="${r.id}" data-role-title="${escapeHtml(r.title)}" data-assigned="${r.staff_count}" title="Delete Custom Role" style="color: #dc2626; padding: 0 8px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"><img src="assets/trash.svg" alt="" class="svg-icon" style="width: 12px; height: 12px;" /> <span>Del</span></button>`
+          }
             </div>
           </div>
         `;
@@ -8098,14 +8150,14 @@
   function getNavBadgeValueAndId(item) {
     const type = String(item.badge_type || 'none');
     if (type === 'event_venues' || item.nav_key === 'create_event') {
-      const evOnlyCount = state.checkpoints?.event_venues?.length || 0;
+      const evOnlyCount = getVisibleEventsList().length;
       return {
         id: item.badge_id || 'sidebar-create-event-count',
         text: String(evOnlyCount).padStart(2, '0'),
       };
     }
     if (type === 'events') {
-      const evCount = (state.checkpoints?.event_venues?.length || 0) + (state.checkpoints?.stock_warehouses?.length || 0);
+      const evCount = getVisibleEventsList().length + (state.checkpoints?.stock_warehouses?.length || 0);
       return {
         id: item.badge_id || 'sidebar-events-count',
         text: String(evCount).padStart(2, '0'),
@@ -8271,14 +8323,14 @@
       const subItems = configuredSubs.length > 0
         ? configuredSubs
         : DEFAULT_SETTINGS_SUBSECTIONS.map((s, idx) => ({
-            id: 0,
-            nav_key: `settings_${s.key}`,
-            label: s.label,
-            nav_target: `settings:${s.key}`,
-            allowed_roles: 'all',
-            is_enabled: 1,
-            sort_order: idx + 8,
-          }));
+          id: 0,
+          nav_key: `settings_${s.key}`,
+          label: s.label,
+          nav_target: `settings:${s.key}`,
+          allowed_roles: 'all',
+          is_enabled: 1,
+          sort_order: idx + 8,
+        }));
       const parentLabel = item.label === 'Settings & Flow' ? 'Settings' : (item.label || 'Settings');
       return `
         <div class="sidebar-settings-group${settingsOpen ? ' is-open' : ''}" id="sidebar-settings-group" style="display: ${visible ? 'flex' : 'none'};">
@@ -8289,15 +8341,15 @@
           </button>
           <div class="sidebar-settings-submenu" id="sidebar-settings-submenu" style="display: ${settingsOpen ? 'flex' : 'none'};">
             ${subItems.map((sub) => {
-              const subKey = String(sub.nav_target || '').slice('settings:'.length) || 'flow';
-              const subPermitted = Number(sub.id || 0) > 0 ? isNavItemPermittedForCurrentUser(sub) : true;
-              const subActive = sec === subKey;
-              return `
+        const subKey = String(sub.nav_target || '').slice('settings:'.length) || 'flow';
+        const subPermitted = Number(sub.id || 0) > 0 ? isNavItemPermittedForCurrentUser(sub) : true;
+        const subActive = sec === subKey;
+        return `
                 <button type="button" class="nav-subitem${subActive ? ' active' : ''}" data-settings-section="${escapeHtml(subKey)}" data-nav-key="${escapeHtml(sub.nav_key || '')}" data-nav-id="${Number(sub.id || 0)}" style="display: ${subPermitted ? 'flex' : 'none'};" ${subPermitted ? '' : 'data-restricted="true" tabindex="-1"'}>
                   <span>${escapeHtml(sub.label || subKey)}</span>
                 </button>
               `;
-            }).join('')}
+      }).join('')}
           </div>
         </div>
       `;
@@ -8692,7 +8744,7 @@
       };
       try {
         localStorage.setItem('ability_overview_widgets_config', JSON.stringify(state.overviewWidgetsConfig));
-      } catch (e) {}
+      } catch (e) { }
     }
     applyOverviewWidgetVisibility();
     if (state.activeScreen === 'users' && state.usersViewMode === 'overview-widgets') {
@@ -9000,8 +9052,8 @@
         ? `
           <div class="ow-children-list">
             ${children.map((ch) => {
-              const chEn = Number(ch.is_enabled) === 1;
-              return `
+          const chEn = Number(ch.is_enabled) === 1;
+          return `
                 <div class="ow-child-row ${chEn ? '' : 'is-disabled'}">
                   <div style="display: flex; flex-direction: column; gap: 3px; flex: 1 1 260px; min-width: 0;">
                     <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
@@ -9020,7 +9072,7 @@
                   </div>
                 </div>
               `;
-            }).join('')}
+        }).join('')}
           </div>
         `
         : '';
@@ -9123,7 +9175,7 @@
 
   function buildCheckpointSelectOptionsHtml(selectedVal = '') {
     const whs = state.checkpoints.stock_warehouses || [];
-    const evs = state.checkpoints.event_venues || [];
+    const evs = getVisibleEventsList();
     const curVal = selectedVal || `${state.checkpointType}:${state.checkpointId}`;
     const opts = [];
     if (whs.length > 0) {
@@ -9161,8 +9213,8 @@
             <button type="button" class="btn btn-secondary-32-sm js-review-shift-btn" data-req-id="${r.id}" data-decision="rejected" style="color: #dc2626; border-color: #fecaca;">Reject</button>
           </div>`
         : (st === 'pending'
-            ? '<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Requires Administrator or Site Manager approval</div>'
-            : `<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Reviewed by ${escapeHtml(r.reviewed_by_name || 'Supervisor')} ${r.reviewed_by_role ? '(' + escapeHtml(r.reviewed_by_role) + ')' : ''}</div>`);
+          ? '<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Requires Administrator or Site Manager approval</div>'
+          : `<div style="font-size: 10.5px; color: var(--text-muted); margin-top: 6px;">Reviewed by ${escapeHtml(r.reviewed_by_name || 'Supervisor')} ${r.reviewed_by_role ? '(' + escapeHtml(r.reviewed_by_role) + ')' : ''}</div>`);
 
       return `
         <div style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-white);">
@@ -9241,7 +9293,7 @@
   }
 
   function renderVenueSecurityPage() {
-    const allVenues = state.checkpoints?.event_venues || [];
+    const allVenues = getVisibleEventsList();
     const q = (state.vsSearch || '').trim().toLowerCase();
     const venues = q
       ? allVenues.filter((v) => `${v.name} ${v.title || ''} ${v.location || ''} ${v.tech_lead || ''} ${v.project_manager || ''} ${v.date || ''}`.toLowerCase().includes(q))
@@ -9640,6 +9692,18 @@
     return (m[4] && m[5]) ? `${dStr} · ${m[4]}:${m[5]} CAT` : dStr;
   }
 
+  function applySelectLockState(el, isLocked, tagEl = null) {
+    if (el) {
+      el.disabled = Boolean(isLocked);
+      el.style.background = isLocked ? 'var(--bg-subtle)' : '';
+      el.style.cursor = isLocked ? 'not-allowed' : '';
+      el.style.opacity = isLocked ? '0.85' : '';
+    }
+    if (tagEl) {
+      tagEl.style.display = isLocked ? 'inline' : 'none';
+    }
+  }
+
   function getEventLeadershipViewState(ev = null) {
     const curUser = state.currentUser || {};
     const curRole = String(curUser.role || '').toLowerCase();
@@ -9647,6 +9711,7 @@
     const isAdmin = isCurrentUserAdmin();
     const isPm = curRole === 'project_manager' && !isAdmin;
     const isCoord = curRole === 'event_coordinator' && !isAdmin;
+    const isTechLead = !isAdmin && (curRole === 'tech_lead' || curRole === 'technical_lead');
 
     let showPm = true;
     let showCoord = true;
@@ -9654,8 +9719,14 @@
     let disableCoord = false;
     let pmValInit = '';
     let coordValInit = '';
+    const disableTechLead = isTechLead && curName !== '';
+    let techLeadValInit = isTechLead ? curName : '';
 
     if (ev) {
+      const rawTl = String(ev.tech_lead || ev.lead_name || '').trim();
+      if (rawTl && rawTl.toLowerCase() !== 'tech lead' && rawTl.toLowerCase() !== 'technical lead') {
+        techLeadValInit = rawTl;
+      }
       const rawPm = String(ev.project_manager || '').trim();
       const rawCoord = String(ev.event_coordinator || '').trim();
       const hasRealPm = rawPm !== '' && rawPm.toLowerCase() !== 'operations pm';
@@ -9710,12 +9781,16 @@
       isAdmin,
       isPm,
       isCoord,
+      isTechLead,
       showPm,
       showCoord,
       disablePm,
       disableCoord,
+      disableTechLead,
       pmValInit,
       coordValInit,
+      techLeadValInit,
+      requirePmOrCoord: isTechLead,
       targetsPrefix,
     };
   }
@@ -9977,6 +10052,7 @@
     const tlEl = document.getElementById('venue-crud-techlead');
     const pmEl = document.getElementById('venue-crud-pm');
     const coordEl = document.getElementById('venue-crud-coordinator');
+    const tlAutoTag = document.getElementById('venue-crud-techlead-auto-tag');
     const pmAutoTag = document.getElementById('venue-crud-pm-auto-tag');
     const coordAutoTag = document.getElementById('venue-crud-coord-auto-tag');
     const deptCountsSection = document.getElementById('venue-crud-dept-counts-section');
@@ -10043,7 +10119,7 @@
     const pmWrap = document.getElementById('venue-crud-pm-wrap');
     const coordWrap = document.getElementById('venue-crud-coord-wrap');
     const leadView = getEventLeadershipViewState(venue);
-    const { showPm, showCoord, disablePm, disableCoord, pmValInit, coordValInit } = leadView;
+    const { showPm, showCoord, disablePm, disableCoord, disableTechLead, pmValInit, coordValInit, techLeadValInit } = leadView;
 
     if (venue) {
       const startIso = venue.start_date || venue.date || todayIso;
@@ -10061,7 +10137,7 @@
       if (ctEl) ctEl.value = venue.call_time || '08:00';
       if (subModalBtn) subModalBtn.textContent = 'Save Event Changes';
       if (delModalBtn) delModalBtn.style.display = canCurrentUserAssignEvents() ? 'inline-flex' : 'none';
-      populateLeadershipSelect(tlEl, venue.tech_lead || venue.lead_name || '', 'techlead');
+      populateLeadershipSelect(tlEl, techLeadValInit || venue.tech_lead || venue.lead_name || '', 'techlead');
       populateLeadershipSelect(pmEl, pmValInit, 'pm');
       populateLeadershipSelect(coordEl, coordValInit, 'coordinator');
       if (venue.image) {
@@ -10081,7 +10157,7 @@
       if (ctEl) ctEl.value = '08:00';
       if (subModalBtn) subModalBtn.textContent = 'Save Event Venue';
       if (delModalBtn) delModalBtn.style.display = 'none';
-      populateLeadershipSelect(tlEl, '', 'techlead');
+      populateLeadershipSelect(tlEl, techLeadValInit, 'techlead');
       populateLeadershipSelect(pmEl, pmValInit, 'pm');
       populateLeadershipSelect(coordEl, coordValInit, 'coordinator');
     }
@@ -10144,21 +10220,9 @@
       leadGrid.style.gridTemplateColumns = `repeat(${visibleCols}, minmax(0, 1fr))`;
     }
 
-    if (pmEl) {
-      pmEl.disabled = Boolean(disablePm);
-      pmEl.style.background = disablePm ? 'var(--bg-subtle)' : '';
-      pmEl.style.cursor = disablePm ? 'not-allowed' : '';
-      pmEl.style.opacity = disablePm ? '0.85' : '';
-    }
-    if (pmAutoTag) pmAutoTag.style.display = disablePm ? 'inline' : 'none';
-
-    if (coordEl) {
-      coordEl.disabled = Boolean(disableCoord);
-      coordEl.style.background = disableCoord ? 'var(--bg-subtle)' : '';
-      coordEl.style.cursor = disableCoord ? 'not-allowed' : '';
-      coordEl.style.opacity = disableCoord ? '0.85' : '';
-    }
-    if (coordAutoTag) coordAutoTag.style.display = disableCoord ? 'inline' : 'none';
+    applySelectLockState(tlEl, disableTechLead, tlAutoTag);
+    applySelectLockState(pmEl, disablePm, pmAutoTag);
+    applySelectLockState(coordEl, disableCoord, coordAutoTag);
 
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
@@ -10180,7 +10244,7 @@
     const approvedReqs = reqs.filter((r) => String(r.status || '').toLowerCase() === 'approved');
     const controllers = (state.crew || []).filter((c) => String(c.role || '').toLowerCase() === 'stock_controller' && Number(c.is_active ?? 1) !== 0);
     const whs = state.checkpoints.stock_warehouses || [];
-    const evs = state.checkpoints.event_venues || [];
+    const evs = getVisibleEventsList();
     const allCps = [...whs.map((w) => ({ ...w, type: 'stock_warehouse', typeLabel: 'Facility Gate' })), ...evs.map((e) => ({ ...e, type: 'event_venue', typeLabel: 'Event Venue' }))];
 
     const elPend = document.getElementById('page-sr-kpi-pending');
@@ -10233,7 +10297,7 @@
   }
 
   function renderCallTimePage() {
-    const allCps = state.checkpoints.directory || [];
+    const allCps = getAllFacilitiesList();
     const activeCp = state.activeCheckpoint || allCps[0] || { type: 'stock_warehouse', id: 1, name: 'Checkpoint', call_time: '08:00' };
     const times = allCps.map((c) => String(c.call_time || '08:00')).sort();
 
@@ -10278,8 +10342,8 @@
       rowsEl.innerHTML = allCps.length === 0
         ? '<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px;">No checkpoints found.</div>'
         : allCps.map((cp) => {
-            const isStock = cp.type === 'stock_warehouse';
-            return `
+          const isStock = cp.type === 'stock_warehouse';
+          return `
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface-white); flex-wrap: wrap;">
                 <div>
                   <div style="display: flex; align-items: center; gap: 6px;">
@@ -10294,7 +10358,7 @@
                 </div>
               </div>
             `;
-          }).join('');
+        }).join('');
     }
   }
 
@@ -11265,7 +11329,7 @@
 
     const cpSel = document.getElementById('relief-qr-checkpoint');
     const whs = (state.checkpoints?.stock_warehouses || []).map((w) => Object.assign({}, w, { type: 'stock_warehouse', typeLabel: 'Facility Gate' }));
-    const evs = (state.checkpoints?.event_venues || []).map((e) => Object.assign({}, e, { type: 'event_venue', typeLabel: 'Event Venue' }));
+    const evs = getVisibleEventsList().map((e) => Object.assign({}, e, { type: 'event_venue', typeLabel: 'Event Venue' }));
     const allCps = [...whs, ...evs];
     if (cpSel) {
       const prevCp = cpSel.value;
@@ -11337,7 +11401,7 @@
   }
 
   function getDispatchContextData(pickedId = '') {
-    const events = state.checkpoints?.event_venues || [];
+    const events = getVisibleEventsList();
     const resolvedId = pickedId && events.some((ev) => String(ev.raw_id || ev.id) === String(pickedId))
       ? String(pickedId)
       : (state.selectedDispatchEventId && events.some((ev) => String(ev.raw_id || ev.id) === String(state.selectedDispatchEventId))
@@ -11916,9 +11980,9 @@
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-dept-grid">
         ${ctx.deptNames.map((dn) => {
-          const members = ctx.pool.filter((c) => ctx.deptMatches(c, dn));
-          const reqNeed = Number(ctx.activeEv?.requirements?.branches?.[dn] || 0);
-          return `
+      const members = ctx.pool.filter((c) => ctx.deptMatches(c, dn));
+      const reqNeed = Number(ctx.activeEv?.requirements?.branches?.[dn] || 0);
+      return `
             <div class="dispatch-dept-card is-clickable${lockedCardClass}" data-tier-key="tier3_technicians">
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <strong style="font-size:13px;">${escapeHtml(dn)}</strong>
@@ -11929,7 +11993,7 @@
               </div>
             </div>
           `;
-        }).join('')}
+    }).join('')}
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-tier">
@@ -12099,9 +12163,9 @@
         ` : ''}
         <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
           ${supportReqs.length ? supportReqs.map((sr) => {
-            const isPend = sr.status === 'pending';
-            const rolesStr = Object.entries(sr.requested_roles || {}).map(([k, v]) => `${v}x ${k}`).join(', ');
-            return `
+      const isPend = sr.status === 'pending';
+      const rolesStr = Object.entries(sr.requested_roles || {}).map(([k, v]) => `${v}x ${k}`).join(', ');
+      return `
               <div style="padding:8px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:11.5px;">
                 <div style="display:flex;justify-content:space-between;gap:6px;">
                   <strong>#${Number(sr.id)} · ${escapeHtml(rolesStr || 'Support Crew')}</strong>
@@ -12119,7 +12183,7 @@
                 ` : ''}
               </div>
             `;
-          }).join('') : '<div style="font-size:11.5px;color:var(--text-muted);">No Support Staff requests for this event yet.</div>'}
+    }).join('') : '<div style="font-size:11.5px;color:var(--text-muted);">No Support Staff requests for this event yet.</div>'}
         </div>
       </div>
 
@@ -12267,6 +12331,10 @@
     const titleVal = document.getElementById('ce-title')?.value.trim() || 'Event Cover Preview';
     const locVal = document.getElementById('ce-location')?.value.trim() || 'Location pending';
     const tlVal = document.getElementById('ce-techlead')?.value.trim() || 'Unassigned';
+    const pmWrapVis = document.getElementById('ce-pm-wrap')?.style.display !== 'none';
+    const coordWrapVis = document.getElementById('ce-coord-wrap')?.style.display !== 'none';
+    const pmVal = pmWrapVis ? (document.getElementById('ce-pm')?.value.trim() || '') : '';
+    const coordVal = coordWrapVis ? (document.getElementById('ce-coordinator')?.value.trim() || '') : '';
     const sDate = document.getElementById('ce-start-date')?.value || new Date().toISOString().slice(0, 10);
     const eDate = document.getElementById('ce-end-date')?.value || sDate;
     const dur = computeEventDuration(sDate, eDate);
@@ -12281,7 +12349,12 @@
     const pMeta = document.getElementById('ce-cover-preview-meta');
     if (pTitle) pTitle.textContent = titleVal;
     if (pDates) pDates.textContent = sDate === eDate ? `${sDate} · ${dur.label}` : `${sDate} → ${eDate} · ${dur.label}`;
-    if (pMeta) pMeta.textContent = `${locVal} · Tech Lead: ${tlVal}`;
+    if (pMeta) {
+      const metaParts = [`${locVal}`, `Tech Lead: ${tlVal}`];
+      if (pmVal) metaParts.push(`PM: ${pmVal}`);
+      if (coordVal) metaParts.push(`Coord: ${coordVal}`);
+      pMeta.textContent = metaParts.join(' · ');
+    }
 
     const dropPreviewVisible = document.getElementById('ce-dropzone-preview')?.style.display !== 'none';
     const dropImgSrc = document.getElementById('ce-preview-img')?.getAttribute('src') || '';
@@ -12297,6 +12370,78 @@
     }
   }
 
+  function syncCreateEventLeadershipFields(ev = null, preserveSelections = false) {
+    const tlEl = document.getElementById('ce-techlead');
+    const tlRoleHint = document.getElementById('ce-techlead-role-hint');
+    const tlAutoTag = document.getElementById('ce-techlead-auto-tag');
+    const pmWrap = document.getElementById('ce-pm-wrap');
+    const coordWrap = document.getElementById('ce-coord-wrap');
+    const leadGrid = document.getElementById('ce-leadership-grid');
+    const pmEl = document.getElementById('ce-pm');
+    const coordEl = document.getElementById('ce-coordinator');
+    const pmAutoTag = document.getElementById('ce-pm-auto-tag');
+    const coordAutoTag = document.getElementById('ce-coord-auto-tag');
+    const pmStar = document.getElementById('ce-pm-req-star');
+    const coordStar = document.getElementById('ce-coord-req-star');
+    const leadHint = document.getElementById('ce-leadership-hint');
+
+    const leadView = getEventLeadershipViewState(ev);
+    const { isAdmin, isTechLead, disableTechLead, techLeadValInit, requirePmOrCoord } = leadView;
+
+    let showPm = leadView.showPm;
+    let showCoord = leadView.showCoord;
+    let disablePm = leadView.disablePm;
+    let disableCoord = leadView.disableCoord;
+    let pmValInit = leadView.pmValInit;
+    let coordValInit = leadView.coordValInit;
+
+    if (ev && (isTechLead || isAdmin)) {
+      showPm = true;
+      showCoord = true;
+      disablePm = false;
+      disableCoord = false;
+      const rawPm = String(ev.project_manager || '').trim();
+      pmValInit = rawPm.toLowerCase() === 'operations pm' ? '' : rawPm;
+      coordValInit = String(ev.event_coordinator || '').trim();
+    }
+
+    const desiredTl = disableTechLead
+      ? techLeadValInit
+      : (ev ? (techLeadValInit || ev.tech_lead || '') : (preserveSelections ? (tlEl?.value || '') : ''));
+    if (tlEl && (!preserveSelections || disableTechLead || !tlEl.matches(':focus'))) {
+      populateLeadershipSelect(tlEl, desiredTl, 'techlead');
+    }
+    applySelectLockState(tlEl, disableTechLead, tlAutoTag);
+    if (tlRoleHint) tlRoleHint.style.display = disableTechLead ? 'none' : 'inline';
+
+    if (pmWrap) pmWrap.style.display = showPm ? 'block' : 'none';
+    if (coordWrap) coordWrap.style.display = showCoord ? 'block' : 'none';
+    if (leadGrid) {
+      const visibleCols = Math.max(1, (showPm ? 1 : 0) + (showCoord ? 1 : 0));
+      leadGrid.style.gridTemplateColumns = `repeat(${visibleCols}, minmax(0, 1fr))`;
+    }
+
+    const desiredPm = disablePm
+      ? pmValInit
+      : (ev ? pmValInit : (preserveSelections ? (pmEl?.value || '') : ''));
+    const desiredCoord = disableCoord
+      ? coordValInit
+      : (ev ? coordValInit : (preserveSelections ? (coordEl?.value || '') : ''));
+
+    if (pmEl && (!preserveSelections || disablePm || !pmEl.matches(':focus'))) {
+      populateLeadershipSelect(pmEl, desiredPm, 'pm');
+    }
+    if (coordEl && (!preserveSelections || disableCoord || !coordEl.matches(':focus'))) {
+      populateLeadershipSelect(coordEl, desiredCoord, 'coordinator');
+    }
+    applySelectLockState(pmEl, disablePm, pmAutoTag);
+    applySelectLockState(coordEl, disableCoord, coordAutoTag);
+
+    if (pmStar) pmStar.style.display = requirePmOrCoord ? 'inline' : 'none';
+    if (coordStar) coordStar.style.display = requirePmOrCoord ? 'inline' : 'none';
+    if (leadHint) leadHint.style.display = requirePmOrCoord ? 'block' : 'none';
+  }
+
   function resetCreateEventForm() {
     const todayIso = new Date().toISOString().slice(0, 10);
     const idEl = document.getElementById('ce-event-id');
@@ -12306,7 +12451,6 @@
     const endEl = document.getElementById('ce-end-date');
     const ctEl = document.getElementById('ce-calltime');
     const pinEl = document.getElementById('ce-pin');
-    const tlEl = document.getElementById('ce-techlead');
     const modeBadge = document.getElementById('ce-screen-mode-badge');
     const heading = document.getElementById('ce-form-heading');
     const cancelBtn = document.getElementById('ce-cancel-edit-btn');
@@ -12324,7 +12468,7 @@
     if (cancelBtn) cancelBtn.style.display = 'none';
     if (submitLabel) submitLabel.textContent = 'Save & Create Event';
     resetDropzone('ce');
-    populateLeadershipSelect(tlEl, '', 'techlead');
+    syncCreateEventLeadershipFields(null, false);
     updateCreateEventLivePreview();
   }
 
@@ -12340,7 +12484,6 @@
     const endEl = document.getElementById('ce-end-date');
     const ctEl = document.getElementById('ce-calltime');
     const pinEl = document.getElementById('ce-pin');
-    const tlEl = document.getElementById('ce-techlead');
     const modeBadge = document.getElementById('ce-screen-mode-badge');
     const heading = document.getElementById('ce-form-heading');
     const cancelBtn = document.getElementById('ce-cancel-edit-btn');
@@ -12361,7 +12504,7 @@
     if (ev.image) {
       setDropzonePreview('ce', ev.image, ev.image.split('/').pop());
     }
-    populateLeadershipSelect(tlEl, ev.tech_lead || '', 'techlead');
+    syncCreateEventLeadershipFields(ev, false);
     updateCreateEventLivePreview();
     document.getElementById('create-event-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
@@ -12369,7 +12512,6 @@
   function renderCreateEventPage() {
     const startEl = document.getElementById('ce-start-date');
     const endEl = document.getElementById('ce-end-date');
-    const tlEl = document.getElementById('ce-techlead');
     const gridEl = document.getElementById('create-event-cards-grid');
     const countBadge = document.getElementById('ce-cards-count-badge');
 
@@ -12377,18 +12519,19 @@
     if (startEl && !startEl.value) startEl.value = todayIso;
     if (endEl && !endEl.value) endEl.value = startEl?.value || todayIso;
 
-    if (tlEl) {
-      const preservedVal = tlEl.value || '';
-      populateLeadershipSelect(tlEl, preservedVal, 'techlead');
-    }
+    const editingCeId = document.getElementById('ce-event-id')?.value.trim() || '';
+    const editingEv = editingCeId
+      ? getVisibleEventsList().find((v) => String(v.raw_id || v.id) === String(editingCeId)) || null
+      : null;
+    syncCreateEventLeadershipFields(editingEv, true);
     updateCreateEventLivePreview();
 
     if (!gridEl) return;
-    const allEvents = state.checkpoints?.event_venues || [];
+    const allEvents = getVisibleEventsList();
     const q = String(state.createEventSearch || '').trim().toLowerCase();
     const filtered = allEvents.filter((ev) => {
       if (!q) return true;
-      const hay = `${ev.title || ''} ${ev.location || ''} ${ev.tech_lead || ''} ${ev.start_date || ev.date || ''}`.toLowerCase();
+      const hay = `${ev.title || ''} ${ev.location || ''} ${ev.tech_lead || ''} ${ev.project_manager || ''} ${ev.event_coordinator || ''} ${ev.start_date || ev.date || ''}`.toLowerCase();
       return hay.includes(q);
     });
 
@@ -12397,7 +12540,10 @@
     }
 
     if (!filtered.length) {
-      gridEl.innerHTML = '<div style="grid-column:1/-1;padding:28px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:12px;">No events match the filter yet. Use the form on the left to create an event.</div>';
+      const emptyMsg = !q && isCurrentUserEventScopedRole()
+        ? 'No events are currently assigned to you. Use the form on the left to create an event.'
+        : 'No events match the filter yet. Use the form on the left to create an event.';
+      gridEl.innerHTML = `<div style="grid-column:1/-1;padding:28px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:12px;">${emptyMsg}</div>`;
       return;
     }
 
@@ -12409,6 +12555,10 @@
       const durLabel = ev.duration_label || computeEventDuration(startDate, endDate).label;
       const heroStyle = ev.image ? ` style="background-image: url('${escapeHtml(ev.image)}');"` : '';
       const statusText = String(ev.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase();
+      const pmTxt = String(ev.project_manager || '').trim();
+      const hasRealPm = pmTxt !== '' && pmTxt.toLowerCase() !== 'operations pm';
+      const coordTxt = String(ev.event_coordinator || '').trim();
+      const commandLeadText = [hasRealPm ? `PM: ${pmTxt}` : '', coordTxt ? `Coord: ${coordTxt}` : ''].filter(Boolean).join(' · ') || '—';
       return `
         <article class="event-showcase-card" data-ce-card-id="${escapeHtml(evIdStr)}">
           <div class="event-showcase-hero"${heroStyle}>
@@ -12436,6 +12586,10 @@
                 <span class="event-showcase-meta-val">${escapeHtml(ev.tech_lead || '—')}</span>
               </div>
               <div class="event-showcase-meta-item">
+                <span class="event-showcase-meta-label">PM / Coordinator</span>
+                <span class="event-showcase-meta-val">${escapeHtml(commandLeadText)}</span>
+              </div>
+              <div class="event-showcase-meta-item" style="grid-column: 1 / -1;">
                 <span class="event-showcase-meta-label">Call Time · Crew</span>
                 <span class="event-showcase-meta-val">${escapeHtml(ev.call_time || '08:00')} · ${Number(ev.assigned_count || 0)} crew</span>
               </div>
@@ -12453,7 +12607,7 @@
     gridEl.querySelectorAll('.js-ce-edit-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const eid = btn.getAttribute('data-event-id');
-        const found = (state.checkpoints?.event_venues || []).find((v) => String(v.raw_id || v.id) === String(eid));
+        const found = getVisibleEventsList().find((v) => String(v.raw_id || v.id) === String(eid));
         if (found) openVenueCrudModal(found);
       });
     });
@@ -12549,14 +12703,14 @@
     const fonts = state.brandingFonts && state.brandingFonts.length
       ? state.brandingFonts
       : Object.keys(BRANDING_FONT_STACKS).map((name, i) => ({
-          id: i + 1,
-          font_name: name,
-          css_stack: BRANDING_FONT_STACKS[name],
-          font_url: '',
-          file_path: '',
-          is_system: 1,
-          is_active: 1,
-        }));
+        id: i + 1,
+        font_name: name,
+        css_stack: BRANDING_FONT_STACKS[name],
+        font_url: '',
+        file_path: '',
+        is_system: 1,
+        is_active: 1,
+      }));
     if (ffEl) {
       const activeFonts = fonts.filter((f) => Number(f.is_active ?? 1) === 1);
       ffEl.innerHTML = activeFonts.map((f) => `<option value="${escapeHtml(f.font_name)}">${escapeHtml(f.font_name)}${f.file_path ? ' (Uploaded)' : (f.font_url ? ' (Webfont)' : '')}</option>`).join('');
@@ -12624,7 +12778,7 @@
       if (hc) hc.checked = localStorage.getItem('ability_a11y_high_contrast') === '1';
       if (lg) lg.checked = localStorage.getItem('ability_a11y_large_text') === '1';
       if (rm) rm.checked = localStorage.getItem('ability_a11y_reduced_motion') === '1';
-    } catch (_) {}
+    } catch (_) { }
     const pill = document.getElementById('offline-cache-status-pill');
     if (pill) {
       const st = await AbilityMainOffline.getStatus();
@@ -13100,7 +13254,7 @@
         if (pwdHint) pwdHint.textContent = 'Custom hashed passcode is active. Enter a new passcode or click Generate to rotate.';
         if (invitePrev) invitePrev.textContent = `Link: ${shareUrl}\n(Custom technician password set by Administrator)`;
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function closePortalCrudModal() {
@@ -13529,10 +13683,10 @@
         type === 'warehouse'
           ? 'facility gate'
           : type === 'user'
-          ? 'personnel record & badge credentials for'
-          : type === 'clearance_tier'
-          ? 'security clearance level'
-          : 'record';
+            ? 'personnel record & badge credentials for'
+            : type === 'clearance_tier'
+              ? 'security clearance level'
+              : 'record';
       descEl.textContent = `Are you sure you want to delete ${typeLabel} "${name}"? This action will permanently remove it from MySQL.`;
     }
 
@@ -14606,7 +14760,7 @@
     bindDateRangeDuration('ce-start-date', 'ce-end-date', 'ce-duration', 'ce-duration-pill', updateCreateEventLivePreview);
     bindDateRangeDuration('venue-crud-date', 'venue-crud-end-date', 'venue-crud-duration', null, null);
 
-    ['ce-title', 'ce-location', 'ce-techlead'].forEach((id) => {
+    ['ce-title', 'ce-location', 'ce-techlead', 'ce-pm', 'ce-coordinator'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) {
         el.addEventListener('input', updateCreateEventLivePreview);
@@ -14635,8 +14789,17 @@
         const endVal = document.getElementById('ce-end-date')?.value || startVal;
         const locVal = document.getElementById('ce-location')?.value.trim() || '';
         const tlVal = document.getElementById('ce-techlead')?.value.trim() || '';
+        const pmWrapVis = document.getElementById('ce-pm-wrap')?.style.display !== 'none';
+        const coordWrapVis = document.getElementById('ce-coord-wrap')?.style.display !== 'none';
+        const pmVal = pmWrapVis ? (document.getElementById('ce-pm')?.value.trim() || '') : '';
+        const coordVal = coordWrapVis ? (document.getElementById('ce-coordinator')?.value.trim() || '') : '';
         if (!titleVal || !startVal || !endVal || !locVal || !tlVal) {
           showToast('Please complete Event Name, Start & End Dates, Location, and Event Tech Lead.');
+          return;
+        }
+        if (isCurrentUserTechLeadOnly() && !pmVal && !coordVal) {
+          showToast('Please select a Project Manager and/or Event Coordinator for this event.', 'warning');
+          document.getElementById('ce-pm')?.focus();
           return;
         }
         const durCheck = computeEventDuration(startVal, endVal);
@@ -14659,6 +14822,8 @@
         fd.append('end_date', endVal);
         fd.append('location', locVal);
         fd.append('tech_lead', tlVal);
+        fd.append('project_manager', pmVal);
+        fd.append('event_coordinator', coordVal);
         fd.append('call_time', document.getElementById('ce-calltime')?.value || '08:00');
         fd.append('terminal_pin', document.getElementById('ce-pin')?.value.trim() || '1234');
         const ceImgInput = document.getElementById('ce-modal-image');
@@ -14945,7 +15110,7 @@
               });
               const d = await r.json();
               if (r.ok && d && d.ok && d.brandingConfig) applyBrandingConfigClient(d.brandingConfig, d.brandingFonts || null);
-            } catch (_) {}
+            } catch (_) { }
           }
           renderSettingsBrandingSection();
           showToast(`Active font set to ${fname}.`);
@@ -15047,7 +15212,7 @@
       const cb = document.getElementById(elId);
       if (cb) {
         cb.addEventListener('change', () => {
-          try { localStorage.setItem(storeKey, cb.checked ? '1' : '0'); } catch (_) {}
+          try { localStorage.setItem(storeKey, cb.checked ? '1' : '0'); } catch (_) { }
           applyAccessibilityPreferences();
           showToast('Accessibility preference updated.');
         });
@@ -15076,7 +15241,7 @@
       pwaInstallBtn.addEventListener('click', async () => {
         if (!state.deferredPwaPrompt) return;
         state.deferredPwaPrompt.prompt();
-        await state.deferredPwaPrompt.userChoice.catch(() => {});
+        await state.deferredPwaPrompt.userChoice.catch(() => { });
         state.deferredPwaPrompt = null;
         renderSettingsPwaSection();
       });
@@ -15233,7 +15398,7 @@
         closeAllTopbarDropdowns();
         try {
           await fetch('api.php?action=logout');
-        } catch (e) {}
+        } catch (e) { }
         state.currentUser = null;
         renderTopbarAndKpis();
         showToast('You have been signed out successfully.');
@@ -15432,8 +15597,8 @@
           const res = await fetch('api.php?action=switch_user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ 
-              user_id: uid, 
+            body: new URLSearchParams({
+              user_id: uid,
               badge_code: badge,
               email: email,
               username: username,
@@ -16579,7 +16744,7 @@
           showToast('Station is locked. Unlock with the checkpoint Terminal PIN first.');
           return;
         }
-        const firstVenue = (state.checkpoints.event_venues || [])[0];
+        const firstVenue = getVisibleEventsList()[0];
         if (!firstVenue) {
           showToast('No Event Venues available.');
           return;
@@ -16796,8 +16961,18 @@
           showToast('Event end date cannot be earlier than start date.', 'error');
           return;
         }
-        const btn = document.getElementById('venue-crud-submit-btn');
         const editingEventId = document.getElementById('venue-crud-id')?.value.trim() || '';
+        const tlVal = document.getElementById('venue-crud-techlead')?.value.trim() || '';
+        const pmWrapVisible = document.getElementById('venue-crud-pm-wrap')?.style.display !== 'none';
+        const coordWrapVisible = document.getElementById('venue-crud-coord-wrap')?.style.display !== 'none';
+        const pmVal = pmWrapVisible ? (document.getElementById('venue-crud-pm')?.value.trim() || '') : '';
+        const coordVal = coordWrapVisible ? (document.getElementById('venue-crud-coordinator')?.value.trim() || '') : '';
+        if (!editingEventId && isCurrentUserTechLeadOnly() && !pmVal && !coordVal) {
+          showToast('Please select a Project Manager and/or Event Coordinator for this event.', 'warning');
+          document.getElementById('venue-crud-pm')?.focus();
+          return;
+        }
+        const btn = document.getElementById('venue-crud-submit-btn');
         const defaultBtnText = editingEventId ? 'Save Event Changes' : 'Save Event Venue';
         if (btn) {
           btn.disabled = true;
@@ -16808,11 +16983,6 @@
         const showDeptCounts = isAdminUser || isPmOrCoordUser;
         const canAssignCrew = isAdminUser || (!isPmOrCoordUser && isCurrentUserTechLead());
         const assignedTechs = Array.from(venueCrudSelectedCrewIds);
-        const tlVal = document.getElementById('venue-crud-techlead')?.value.trim() || '';
-        const pmWrapVisible = document.getElementById('venue-crud-pm-wrap')?.style.display !== 'none';
-        const coordWrapVisible = document.getElementById('venue-crud-coord-wrap')?.style.display !== 'none';
-        const pmVal = pmWrapVisible ? (document.getElementById('venue-crud-pm')?.value.trim() || '') : '';
-        const coordVal = coordWrapVisible ? (document.getElementById('venue-crud-coordinator')?.value.trim() || '') : '';
         const fd = new FormData();
         fd.append('event_id', editingEventId);
         fd.append('title', document.getElementById('venue-crud-title')?.value.trim() || '');
@@ -16851,7 +17021,7 @@
             if (pendingCommentText && savedEventId) {
               try {
                 await postVenueDeptConfirmation(savedEventId, pendingCommentDept, pendingCommentStatus, pendingCommentText, true);
-              } catch (_) {}
+              } catch (_) { }
             } else {
               applyBootstrapPayload(data, true);
             }
@@ -18109,9 +18279,13 @@
         const dateLabel = document.getElementById('roster-event-date-label');
         if (callInput) callInput.value = (facility.call_time || '08:00').slice(0, 5);
         if (dateLabel) dateLabel.textContent = facility.date ? `Date: ${facility.date}` : '';
-        populateLeadershipSelect(pmInput, facility.project_manager || '', 'pm');
-        populateLeadershipSelect(coordInput, facility.event_coordinator || '', 'coordinator');
-        populateLeadershipSelect(tlSelect, facility.tech_lead || facility.lead_name || '', 'techlead');
+        const rosterLeadView = getEventLeadershipViewState(facility);
+        populateLeadershipSelect(pmInput, rosterLeadView.pmValInit || facility.project_manager || '', 'pm');
+        populateLeadershipSelect(coordInput, rosterLeadView.coordValInit || facility.event_coordinator || '', 'coordinator');
+        populateLeadershipSelect(tlSelect, rosterLeadView.techLeadValInit || facility.tech_lead || facility.lead_name || '', 'techlead');
+        applySelectLockState(tlSelect, rosterLeadView.disableTechLead, document.getElementById('roster-event-techlead-auto-tag'));
+        applySelectLockState(pmInput, rosterLeadView.disablePm, document.getElementById('roster-event-pm-auto-tag'));
+        applySelectLockState(coordInput, rosterLeadView.disableCoord, document.getElementById('roster-event-coord-auto-tag'));
         const hsBox = document.getElementById('roster-dispatch-handshake-box');
         const stPill = document.getElementById('roster-dispatch-status-pill');
         const reqSum = document.getElementById('roster-requirements-summary');
@@ -18787,7 +18961,7 @@
       });
     });
 
-    
+
     // View Switcher between Personnel Directory, Roles Management, 4-Tier Access Matrix, and Departments
     const tabPersonnel = document.getElementById('view-tab-personnel');
     const tabRoles = document.getElementById('view-tab-roles');
@@ -18890,9 +19064,9 @@
         } catch (err) {
           // Offline fallback
           const tier = clearance_level === 'L4_ALL_ACCESS' ? { code: 'L4', title: 'Level 4 - All Access', color: '#10b981' } :
-                       clearance_level === 'L3_STOCK_WAREHOUSE' ? { code: 'L3', title: 'Level 3 - Stock Warehouse', color: '#8b5cf6' } :
-                       clearance_level === 'L2_TECH_STAGE' ? { code: 'L2', title: 'Level 2 - Technical & Stage', color: '#3b82f6' } :
-                       { code: 'L1', title: 'Level 1 - Venue Basic', color: '#64748b' };
+            clearance_level === 'L3_STOCK_WAREHOUSE' ? { code: 'L3', title: 'Level 3 - Stock Warehouse', color: '#8b5cf6' } :
+              clearance_level === 'L2_TECH_STAGE' ? { code: 'L2', title: 'Level 2 - Technical & Stage', color: '#3b82f6' } :
+                { code: 'L1', title: 'Level 1 - Venue Basic', color: '#64748b' };
           if (id > 0) {
             const existing = state.roles.find((r) => Number(r.id) === id);
             if (existing) {
@@ -19178,7 +19352,7 @@
           const data = await res.json();
           if (res.ok && data && data.ok && data.navigationConfig) {
             state.navigationConfig = data.navigationConfig;
-            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) { }
             renderMainNavigation();
             renderNavigationManagerScreen();
             showToast(data.message || (enabled ? 'Main navigation enabled.' : 'Main navigation disabled.'));
@@ -19207,7 +19381,7 @@
           const data = await res.json();
           if (res.ok && data && data.ok && data.navigationConfig) {
             state.navigationConfig = data.navigationConfig;
-            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) { }
             renderMainNavigation();
             renderNavigationManagerScreen();
             showToast(data.message || (enabled ? 'Checkpoint Controls enabled.' : 'Checkpoint Controls disabled.'));
@@ -19242,7 +19416,7 @@
           const data = await res.json();
           if (res.ok && data && data.ok && data.navigationConfig) {
             state.navigationConfig = data.navigationConfig;
-            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) { }
             renderMainNavigation();
             renderNavigationManagerScreen();
             showToast(data.message || 'Default navigation restored.');
@@ -19412,7 +19586,7 @@
           if (res.ok && data && data.ok && data.navigationConfig) {
             closeNavItemModal();
             state.navigationConfig = data.navigationConfig;
-            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) { }
             renderMainNavigation();
             renderNavigationManagerScreen();
             showToast(data.message || `Saved navigation item "${label}".`);
@@ -19446,7 +19620,7 @@
           const data = await res.json();
           if (res.ok && data && data.ok && data.navigationConfig) {
             state.navigationConfig = data.navigationConfig;
-            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+            try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) { }
             renderMainNavigation();
             renderNavigationManagerScreen();
             showToast(data.message || (is_enabled ? 'Navigation item enabled.' : 'Navigation item disabled.'));
@@ -19490,7 +19664,7 @@
             const data = await res.json();
             if (res.ok && data && data.ok && data.navigationConfig) {
               state.navigationConfig = data.navigationConfig;
-              try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) {}
+              try { localStorage.setItem('ability_nav_config', JSON.stringify(state.navigationConfig)); } catch (err) { }
               renderMainNavigation();
               renderNavigationManagerScreen();
               showToast(data.message || `Deleted "${label}".`);
@@ -20510,7 +20684,7 @@
     try {
       const saved = localStorage.getItem('ability_theme');
       if (saved === 'dark' || saved === 'light') return saved;
-    } catch (e) {}
+    } catch (e) { }
     return getSystemTheme();
   }
 
@@ -20530,7 +20704,7 @@
     try {
       localStorage.setItem('ability_theme', theme);
       document.cookie = `ability_theme=${theme};path=/;max-age=31536000;SameSite=Lax`;
-    } catch (e) {}
+    } catch (e) { }
 
     updateThemeUI(theme);
     if (state.activeScreen === 'settings') {
@@ -20654,7 +20828,7 @@
 
   function findCheckpointLeadMatch(cpType, cpId) {
     const whs = state.checkpoints.stock_warehouses || [];
-    const evs = state.checkpoints.event_venues || [];
+    const evs = getVisibleEventsList();
     const list = cpType === 'stock_warehouse' ? whs : evs;
     const cp = list.find((item) => String(item.id) === String(cpId));
     return cp ? String(cp.controller_name || cp.lead_name || '').trim().toLowerCase() : '';
@@ -21164,7 +21338,7 @@
       win.document.close();
       win.focus();
       setTimeout(() => {
-        try { win.print(); } catch (_) {}
+        try { win.print(); } catch (_) { }
       }, 250);
     } else {
       window.print();
@@ -21592,7 +21766,7 @@
       onDestroyed: () => {
         try {
           localStorage.setItem(`ability_tour_seen_v1_${targetScope}`, '1');
-        } catch (_) {}
+        } catch (_) { }
       },
     });
     driverObj.drive();
@@ -21608,13 +21782,13 @@
       if (localStorage.getItem('ability_sidebar_collapsed') === 'true') {
         shell.classList.add('sidebar-collapsed');
       }
-    } catch (_) {}
+    } catch (_) { }
 
     const toggle = () => {
       const isCollapsed = shell.classList.toggle('sidebar-collapsed');
       try {
         localStorage.setItem('ability_sidebar_collapsed', isCollapsed ? 'true' : 'false');
-      } catch (_) {}
+      } catch (_) { }
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 260);
@@ -21654,7 +21828,7 @@
         splitRow.classList.add('is-fullwidth');
         if (label) label.textContent = 'Split View';
       }
-    } catch (_) {}
+    } catch (_) { }
 
     btn.addEventListener('click', () => {
       const isFull = splitRow.classList.toggle('is-fullwidth');
@@ -21663,7 +21837,7 @@
       }
       try {
         localStorage.setItem('ability_roster_fullwidth', isFull ? 'true' : 'false');
-      } catch (_) {}
+      } catch (_) { }
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
       }, 260);
@@ -21698,7 +21872,7 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').then(() => {
         if (state.activeScreen === 'settings' && state.settingsTab === 'pwa') renderSettingsPwaSection();
-      }).catch(() => {});
+      }).catch(() => { });
     }
     initSidebarCollapse();
     initRosterLayoutToggle();
@@ -21761,6 +21935,6 @@
           showToast('Tip: Open Help (?) → Interactive Guided Tour for a quick walkthrough.');
         }, 1200);
       }
-    } catch (_) {}
+    } catch (_) { }
   });
 })();

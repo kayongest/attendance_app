@@ -642,7 +642,9 @@ function getDefaultNavigationItems(): array
         [
             'nav_group' => 'main',
             'nav_key' => 'dispatch_flow',
-            'label' => 'Operational Command & Department Dispatch Flow',
+            // Operational Command & 
+            'label' => 'Department Dispatch Flow',
+            // Operational Command & 
             'nav_target' => 'dispatch-flow',
             'dom_id' => 'nav-dispatch-flow-btn',
             'node_id' => '',
@@ -2204,6 +2206,102 @@ function assertControllerCheckpointLock(PDO $pdo, string $targetType, string $ta
     return ['ok' => true, 'caller' => $caller, 'assigned' => $assignedCp];
 }
 
+/**
+ * Returns true if the caller belongs to an event leadership role whose visibility
+ * is scoped strictly to events assigned to (or created by) that user.
+ */
+function isCallerEventScopedRole(?array $caller): bool
+{
+    if (!$caller) {
+        return false;
+    }
+    $role = strtolower(trim((string) ($caller['role'] ?? '')));
+    return in_array($role, ['tech_lead', 'technical_lead', 'project_manager', 'event_coordinator'], true);
+}
+
+/**
+ * Checks whether an event row/payload is accessible to the given caller.
+ * Admins, Managers, Site Managers, and Gate Controllers remain unscoped here.
+ */
+function canCallerAccessEventRecord(array $ev, ?array $caller, array $resolvedAssignedIds = []): bool
+{
+    if (!$caller || !isCallerEventScopedRole($caller)) {
+        return true;
+    }
+    $callerId = (int) ($caller['id'] ?? 0);
+    $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+    $callerFull = strtolower(trim((string) ($caller['full_name'] ?? '')));
+    $callerUser = strtolower(trim((string) ($caller['username'] ?? '')));
+
+    if ($callerId > 0) {
+        if ((int) ($ev['created_by_id'] ?? 0) === $callerId) {
+            return true;
+        }
+        if ((int) ($ev['requirements_sent_by'] ?? 0) === $callerId) {
+            return true;
+        }
+        $assignedIds = !empty($resolvedAssignedIds)
+            ? array_map('intval', $resolvedAssignedIds)
+            : array_map('intval', (array) ($ev['assigned_technicians'] ?? []));
+        if (empty($assignedIds) && isset($ev['assigned_technician']) && is_string($ev['assigned_technician'])) {
+            $dec = json_decode($ev['assigned_technician'], true);
+            if (is_array($dec)) {
+                $assignedIds = array_map('intval', $dec);
+            }
+        }
+        if (in_array($callerId, $assignedIds, true)) {
+            return true;
+        }
+    }
+
+    $matchesCallerIdentity = static function (?string $rawVal) use ($callerFull, $callerUser): bool {
+        $v = strtolower(trim((string) $rawVal));
+        if ($v === '' || in_array($v, ['tech lead', 'technical lead', 'operations pm', 'project manager', 'event coordinator', 'unassigned'], true)) {
+            return false;
+        }
+        return ($callerFull !== '' && $v === $callerFull) || ($callerUser !== '' && $v === $callerUser);
+    };
+
+    if (in_array($callerRole, ['tech_lead', 'technical_lead'], true)) {
+        return $matchesCallerIdentity($ev['tech_lead'] ?? '')
+            || ($callerId > 0 && (int) ($ev['tech_lead_approved_by'] ?? 0) === $callerId);
+    }
+    if ($callerRole === 'project_manager') {
+        return $matchesCallerIdentity($ev['project_manager'] ?? '');
+    }
+    if ($callerRole === 'event_coordinator') {
+        return $matchesCallerIdentity($ev['event_coordinator'] ?? '');
+    }
+
+    return false;
+}
+
+/**
+ * Loads an event row by ID or CRC32 and enforces event-level access for scoped roles.
+ */
+function fetchAuthorizedEventOrFail(
+    PDO $pdo,
+    string $eventIdOrCrc,
+    ?array $caller,
+    string $notFoundMsg = 'Event Venue not found.',
+    string $deniedMsg = 'Permission denied: You can only view or manage events assigned to you.'
+): array {
+    $chk = $pdo->prepare("SELECT * FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+    $chk->execute([$eventIdOrCrc, $eventIdOrCrc]);
+    $evRow = $chk->fetch(PDO::FETCH_ASSOC);
+    if (!$evRow) {
+        http_response_code(404);
+        echo json_encode(['ok' => false, 'error' => $notFoundMsg]);
+        exit;
+    }
+    if (!canCallerAccessEventRecord($evRow, $caller)) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => $deniedMsg]);
+        exit;
+    }
+    return $evRow;
+}
+
 function canCallerPerformAction(string $action, ?array $caller, array $context = []): array
 {
     if ($caller === null) {
@@ -2916,14 +3014,33 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $fallbackIdx++;
     }
 
-    // Resolve Active Checkpoint (enforcing strict single-checkpoint lock for Gate Controllers)
+    // Resolve Active Checkpoint (enforcing strict single-checkpoint lock for Gate Controllers
+    // and scoping visible event venues for Tech Leads, Project Managers, and Event Coordinators)
+    $allEventVenues = $eventVenues;
     $callerLockRow = getCallerUser($pdo);
     $callerLockRole = strtolower(trim((string) ($callerLockRow['role'] ?? '')));
+    $isScopedEventViewer = isCallerEventScopedRole($callerLockRow);
+    $visibleEventVenues = $isScopedEventViewer
+        ? array_values(array_filter(
+            $allEventVenues,
+            static fn(array $ev): bool => canCallerAccessEventRecord($ev, $callerLockRow, (array) ($ev['assigned_technicians'] ?? []))
+        ))
+        : $allEventVenues;
+    $visibleEventKeySet = [];
+    foreach ($visibleEventVenues as $vev) {
+        if (isset($vev['raw_id']) && (string) $vev['raw_id'] !== '') {
+            $visibleEventKeySet[(string) $vev['raw_id']] = true;
+        }
+        if (isset($vev['id']) && (string) $vev['id'] !== '') {
+            $visibleEventKeySet[(string) $vev['id']] = true;
+        }
+    }
+
     $lockedAssignedCp = null;
     if ($callerLockRole === 'stock_controller') {
         $lockedAssignedCp = findCheckpointRecord(
             $stockWarehouses,
-            $eventVenues,
+            $allEventVenues,
             (string) ($callerLockRow['assigned_checkpoint_type'] ?? ''),
             (string) ($callerLockRow['assigned_checkpoint_id'] ?? '')
         );
@@ -2947,14 +3064,16 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             $activeCheckpoint = $stockWarehouses[0];
         }
     } else {
-        foreach ($eventVenues as $ev) {
+        foreach ($visibleEventVenues as $ev) {
             if ($ev['id'] === $reqCheckpointId) {
                 $activeCheckpoint = $ev;
                 break;
             }
         }
-        if (!$activeCheckpoint && !empty($eventVenues)) {
-            $activeCheckpoint = $eventVenues[0];
+        if (!$activeCheckpoint && !empty($visibleEventVenues)) {
+            $activeCheckpoint = $visibleEventVenues[0];
+        } elseif (!$activeCheckpoint && !empty($stockWarehouses)) {
+            $activeCheckpoint = $stockWarehouses[0];
         }
     }
 
@@ -3262,7 +3381,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
 
         $assignedCpObj = findCheckpointRecord(
             $stockWarehouses,
-            $eventVenues,
+            $allEventVenues,
             (string) ($ur['assigned_checkpoint_type'] ?? ''),
             (string) ($ur['assigned_checkpoint_id'] ?? '')
         );
@@ -3360,7 +3479,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     }
     unset($sw);
 
-    foreach ($eventVenues as &$ev) {
+    foreach ($visibleEventVenues as &$ev) {
         $cpKey = 'event_venue:' . $ev['id'];
         $st = $checkpointStats[$cpKey] ?? ['checked_in_today' => 0, 'checked_out_today' => 0, 'denied_today' => 0, 'active_users' => []];
         $ev['checked_in_today'] = (int) $st['checked_in_today'];
@@ -3370,6 +3489,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $allCheckpointsDirectory[] = $ev;
     }
     unset($ev);
+    $eventVenues = $visibleEventVenues;
 
     // 6. Build User Activity Timeline (from `attendance_logs` newest first)
     $timelineRows = $pdo->query("SELECT * FROM `attendance_logs` ORDER BY `scanned_at` DESC, `id` DESC LIMIT 60")->fetchAll();
@@ -3560,7 +3680,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             foreach ($pdo->query($rtSql)->fetchAll(PDO::FETCH_ASSOC) as $rt) {
                 $tUid = (int) ($rt['assigned_user_id'] ?? 0);
                 $rUid = (int) ($rt['created_by_id'] ?? 0);
-                $cpRec = findCheckpointRecord($stockWarehouses, $eventVenues, (string) $rt['checkpoint_type'], (string) $rt['checkpoint_id']);
+                $cpRec = findCheckpointRecord($stockWarehouses, $allEventVenues, (string) $rt['checkpoint_type'], (string) $rt['checkpoint_id']);
                 $reliefTokens[] = [
                     'id' => (int) $rt['id'],
                     'shift_request_id' => (int) ($rt['shift_request_id'] ?? 0),
@@ -3668,7 +3788,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
     $eventCrewAssignments = [];
     $myPendingAssignments = [];
     $evByAnyId = [];
-    foreach ($eventVenues as $evObj) {
+    foreach ($allEventVenues as $evObj) {
         $evByAnyId[(string) $evObj['raw_id']] = $evObj;
         $evByAnyId[(string) $evObj['id']] = $evObj;
     }
@@ -3695,10 +3815,12 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
                 'assigned_at' => (string) ($eca['assigned_at'] ?? ''),
                 'responded_at' => $eca['responded_at'] ?: null,
             ];
-            if (!isset($eventCrewAssignments[$eId])) {
-                $eventCrewAssignments[$eId] = [];
+            if (!$isScopedEventViewer || isset($visibleEventKeySet[$eId])) {
+                if (!isset($eventCrewAssignments[$eId])) {
+                    $eventCrewAssignments[$eId] = [];
+                }
+                $eventCrewAssignments[$eId][(string) $uId] = $rec;
             }
-            $eventCrewAssignments[$eId][(string) $uId] = $rec;
 
             if ($authUserId > 0 && $uId === $authUserId) {
                 $evMeta = $evByAnyId[$eId] ?? null;
@@ -3719,6 +3841,9 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $esrRows = $pdo->query("SELECT * FROM `event_support_requests` ORDER BY CASE WHEN `status` = 'pending' THEN 0 ELSE 1 END, `id` DESC LIMIT 40")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($esrRows as $esr) {
             $eId = (string) ($esr['event_id'] ?? '');
+            if ($isScopedEventViewer && !isset($visibleEventKeySet[$eId])) {
+                continue;
+            }
             $reqUid = (int) ($esr['requested_by_id'] ?? 0);
             $fulUid = (int) ($esr['fulfilled_by_id'] ?? 0);
             $evMeta = $evByAnyId[$eId] ?? null;
@@ -3754,6 +3879,9 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         foreach ($edlRows as $edl) {
             $aUid = (int) ($edl['actor_id'] ?? 0);
             $eId = (string) ($edl['event_id'] ?? '');
+            if ($isScopedEventViewer && !isset($visibleEventKeySet[$eId])) {
+                continue;
+            }
             $evMeta = $evByAnyId[$eId] ?? null;
             $eventDispatchLogs[] = [
                 'id' => (int) $edl['id'],
@@ -3776,6 +3904,9 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $edcRows = $pdo->query("SELECT * FROM `event_dept_confirmations` ORDER BY `id` DESC LIMIT 200")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($edcRows as $edc) {
             $eId = (string) ($edc['event_id'] ?? '');
+            if ($isScopedEventViewer && !isset($visibleEventKeySet[$eId])) {
+                continue;
+            }
             $uId = (int) ($edc['user_id'] ?? 0);
             $uObj = $crewById[$uId] ?? null;
             if (!isset($eventDeptConfirmations[$eId])) {
@@ -5843,9 +5974,17 @@ try {
                 }
             }
         } elseif ($cpType === 'event_venue') {
+            $evRow = fetchAuthorizedEventOrFail(
+                $pdo,
+                $rawCpId,
+                $caller,
+                'Event Venue not found.',
+                'Permission denied: You can only update call times for events assigned to you.'
+            );
+            $realCpId = (string) $evRow['id'];
             try {
                 $upd = $pdo->prepare("UPDATE `events` SET `call_time` = ? WHERE `id` = ?");
-                $upd->execute([$formattedTime, $rawCpId]);
+                $upd->execute([$formattedTime, $realCpId]);
             } catch (Throwable $e) {
                 // Ignore error if schema differs
             }
@@ -5946,17 +6085,14 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $facilityName = trim((string) ($_POST['facility_name'] ?? $jsonBody['facility_name'] ?? $_POST['checkpoint_name'] ?? $jsonBody['checkpoint_name'] ?? ''));
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
+        $hasPmIn = array_key_exists('project_manager', $_POST) || array_key_exists('project_manager', $jsonBody);
+        $hasCoordIn = array_key_exists('event_coordinator', $_POST) || array_key_exists('event_coordinator', $jsonBody);
         $projectManager = trim((string) ($_POST['project_manager'] ?? $jsonBody['project_manager'] ?? ''));
         $eventCoordinator = trim((string) ($_POST['event_coordinator'] ?? $jsonBody['event_coordinator'] ?? ''));
         $callerRoleLower = strtolower(trim((string) ($caller['role'] ?? '')));
         $callerDisplayName = trim((string) ($caller['full_name'] ?? $caller['username'] ?? ''));
         $isCallerAdmin = in_array($callerRoleLower, ['admin', 'administrator', 'manager'], true);
-        if ($eventId === '' && $projectManager === '' && $callerRoleLower === 'project_manager' && $callerDisplayName !== '') {
-            $projectManager = $callerDisplayName;
-        }
-        if ($eventId === '' && $eventCoordinator === '' && $callerRoleLower === 'event_coordinator' && $callerDisplayName !== '') {
-            $eventCoordinator = $callerDisplayName;
-        }
+        $isCallerTlOnly = !$isCallerAdmin && in_array($callerRoleLower, ['tech_lead', 'technical_lead'], true);
         $eventPinRaw = trim((string) ($_POST['terminal_pin'] ?? $jsonBody['terminal_pin'] ?? ''));
         $assignedTechs = $_POST['assigned_technicians'] ?? $jsonBody['assigned_technicians'] ?? [];
         $hasRosterIn = array_key_exists('assigned_roster', $_POST) || array_key_exists('assigned_roster', $jsonBody);
@@ -6190,16 +6326,46 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
 
         $msg = 'Event updated successfully';
-        if ($eventId !== '') {
-            $chk = $pdo->prepare("SELECT `id`, `title`, `date`, `start_date`, `end_date`, `image`, `tech_lead`, `tech_lead_approved`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
-            $chk->execute([$eventId, $eventId]);
-            $existingEvRow = $chk->fetch(PDO::FETCH_ASSOC);
-            if (!$existingEvRow) {
-                http_response_code(404);
-                echo json_encode(['ok' => false, 'error' => 'Event not found or already deleted.']);
+        if ($eventId === '') {
+            if ($callerRoleLower === 'project_manager' && $callerDisplayName !== '') {
+                $projectManager = $callerDisplayName;
+            }
+            if ($callerRoleLower === 'event_coordinator' && $callerDisplayName !== '') {
+                $eventCoordinator = $callerDisplayName;
+            }
+            if ($isCallerTlOnly && $callerDisplayName !== '') {
+                $techLead = $callerDisplayName;
+            }
+            $hasPmOrCoord = ($projectManager !== '' && strtolower($projectManager) !== 'operations pm')
+                || $eventCoordinator !== '';
+            if ($isCallerTlOnly && !$hasPmOrCoord) {
+                echo json_encode(['ok' => false, 'error' => 'Please select a Project Manager and/or Event Coordinator for this event.']);
                 exit;
             }
+        }
+        if ($eventId !== '') {
+            $existingEvRow = fetchAuthorizedEventOrFail(
+                $pdo,
+                $eventId,
+                $caller,
+                'Event not found or already deleted.',
+                'Permission denied: You can only edit events assigned to you.'
+            );
             $realEventId = (string) $existingEvRow['id'];
+            if ($isCallerTlOnly && $callerDisplayName !== '') {
+                $existingTlRaw = trim((string) ($existingEvRow['tech_lead'] ?? ''));
+                $techLead = ($existingTlRaw !== '' && strtolower($existingTlRaw) !== 'tech lead')
+                    ? $existingTlRaw
+                    : $callerDisplayName;
+            }
+            if ($isCallerTlOnly && $hasPmIn && $hasCoordIn) {
+                $hasPmOrCoordUpd = ($projectManager !== '' && strtolower($projectManager) !== 'operations pm')
+                    || $eventCoordinator !== '';
+                if (!$hasPmOrCoordUpd) {
+                    echo json_encode(['ok' => false, 'error' => 'Please select a Project Manager and/or Event Coordinator for this event.']);
+                    exit;
+                }
+            }
             $evTitleFinal = $titleIn !== '' ? $titleIn : (string) ($existingEvRow['title'] ?? ('Event #' . $realEventId));
             $existingStart = trim((string) ($existingEvRow['start_date'] ?? $existingEvRow['date'] ?? ''));
             $existingEnd = trim((string) ($existingEvRow['end_date'] ?? ''));
@@ -6223,8 +6389,8 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 "`duration_label` = ?",
                 "`call_time` = ?",
                 "`tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END",
-                "`project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END",
-                "`event_coordinator` = CASE WHEN ? != '' THEN ? ELSE `event_coordinator` END",
+                $hasPmIn ? "`project_manager` = ?" : "`project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END",
+                $hasCoordIn ? "`event_coordinator` = ?" : "`event_coordinator` = CASE WHEN ? != '' THEN ? ELSE `event_coordinator` END",
                 "`terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END",
             ];
             $updParams = [
@@ -6237,10 +6403,21 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $effDurLabel,
                 $formattedTime,
                 $techLead, $techLead,
-                $projectManager, $projectManager,
-                $eventCoordinator, $eventCoordinator,
-                $eventPinRaw, $eventPinRaw,
             ];
+            if ($hasPmIn) {
+                $updParams[] = $projectManager;
+            } else {
+                $updParams[] = $projectManager;
+                $updParams[] = $projectManager;
+            }
+            if ($hasCoordIn) {
+                $updParams[] = $eventCoordinator;
+            } else {
+                $updParams[] = $eventCoordinator;
+                $updParams[] = $eventCoordinator;
+            }
+            $updParams[] = $eventPinRaw;
+            $updParams[] = $eventPinRaw;
             if ($hasAssignedTechsIn) {
                 $setClauses[] = "`assigned_technician` = ?";
                 $updParams[] = json_encode($assignedTechsInt);
@@ -6466,14 +6643,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             echo json_encode(['ok' => false, 'error' => 'Event Venue ID is required.']);
             exit;
         }
-        $chk = $pdo->prepare("SELECT `id`, `title`, `image` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
-        $chk->execute([$eventId, $eventId]);
-        $row = $chk->fetch(PDO::FETCH_ASSOC);
-        if (!$row) {
-            http_response_code(404);
-            echo json_encode(['ok' => false, 'error' => 'Event Venue not found.']);
-            exit;
-        }
+        $row = fetchAuthorizedEventOrFail(
+            $pdo,
+            $eventId,
+            $caller,
+            'Event Venue not found.',
+            'Permission denied: You can only delete events assigned to you.'
+        );
         $realId = (string) $row['id'];
         $oldImg = trim((string) ($row['image'] ?? ''));
         if ($oldImg !== '' && str_starts_with($oldImg, 'uploads/events/') && is_file(__DIR__ . '/' . $oldImg)) {
@@ -6533,20 +6709,21 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $notes = trim((string) ($_POST['notes'] ?? $jsonBody['notes'] ?? 'Real-time allocation via Map Radar'));
 
         if ($cpType === 'event_venue' && !empty($userIds)) {
+            $ev = fetchAuthorizedEventOrFail(
+                $pdo,
+                $cpId,
+                $caller,
+                'Event Venue not found.',
+                'Permission denied: You can only allocate personnel to events assigned to you.'
+            );
             try {
-                $realEventId = $cpId;
-                $chkEv = $pdo->prepare("SELECT `id`, `assigned_technician` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
-                $chkEv->execute([$cpId, $cpId]);
-                $ev = $chkEv->fetch(PDO::FETCH_ASSOC);
+                $realEventId = (string) $ev['id'];
                 $existing = [];
-                if ($ev) {
-                    $realEventId = (string) $ev['id'];
-                    $rawAssigned = trim((string)($ev['assigned_technician'] ?? ''));
-                    if ($rawAssigned !== '') {
-                        $dec = json_decode($rawAssigned, true);
-                        if (is_array($dec)) {
-                            $existing = $dec;
-                        }
+                $rawAssigned = trim((string)($ev['assigned_technician'] ?? ''));
+                if ($rawAssigned !== '') {
+                    $dec = json_decode($rawAssigned, true);
+                    if (is_array($dec)) {
+                        $existing = $dec;
                     }
                 }
                 $merged = array_values(array_unique(array_merge($existing, $userIds)));
@@ -6606,15 +6783,15 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
 
         if ($cpType === 'event_venue') {
+            $ev = fetchAuthorizedEventOrFail(
+                $pdo,
+                $cpId,
+                $caller,
+                'Event Venue not found.',
+                'Permission denied: You can only reset rosters for events assigned to you.'
+            );
             try {
-                // Resolve real event ID (handles numeric IDs, UUIDs, or CRC32 hashes)
-                $realEventId = $cpId;
-                $chkEv = $pdo->prepare("SELECT `id` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
-                $chkEv->execute([$cpId, $cpId]);
-                $fId = $chkEv->fetchColumn();
-                if ($fId) {
-                    $realEventId = (string) $fId;
-                }
+                $realEventId = (string) $ev['id'];
 
                 $upd = $pdo->prepare("UPDATE `events` SET `assigned_technician` = '[]' WHERE `id` = ? OR CRC32(`id`) = ?");
                 $upd->execute([$realEventId, $cpId]);
@@ -6680,13 +6857,16 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $targetUsern = strtolower(trim((string)($targetUser['username'] ?? '')));
 
             if ($cpType === 'event_venue') {
+                $ev = fetchAuthorizedEventOrFail(
+                    $pdo,
+                    $cpId,
+                    $caller,
+                    'Event Venue not found.',
+                    'Permission denied: You can only unassign crew on events assigned to you.'
+                );
                 try {
-                    $realEventId = $cpId;
-                    $chkEv = $pdo->prepare("SELECT `id`, `assigned_technician` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
-                    $chkEv->execute([$cpId, $cpId]);
-                    $ev = $chkEv->fetch(PDO::FETCH_ASSOC);
+                    $realEventId = (string) $ev['id'];
                     if ($ev) {
-                        $realEventId = (string) $ev['id'];
                         $rawAssigned = trim((string)($ev['assigned_technician'] ?? ''));
                         if ($rawAssigned !== '') {
                             $dec = json_decode($rawAssigned, true);
@@ -10928,14 +11108,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             exit;
         }
 
-        $chk = $pdo->prepare("SELECT `id`, `title`, `tech_lead` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
-        $chk->execute([$evIdIn, $evIdIn]);
-        $evRow = $chk->fetch(PDO::FETCH_ASSOC);
-        if (!$evRow) {
-            http_response_code(404);
-            echo json_encode(['ok' => false, 'error' => 'Event Venue not found.']);
-            exit;
-        }
+        $evRow = fetchAuthorizedEventOrFail(
+            $pdo,
+            $evIdIn,
+            $caller,
+            'Event Venue not found.',
+            'Permission denied: You can only send requirements for events assigned to you.'
+        );
         $realId = (string) $evRow['id'];
 
         $cleanBranches = [];
@@ -10994,14 +11173,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             echo json_encode(['ok' => false, 'error' => 'event_id is required.']);
             exit;
         }
-        $chk = $pdo->prepare("SELECT `id`, `title` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
-        $chk->execute([$evIdIn, $evIdIn]);
-        $evRow = $chk->fetch(PDO::FETCH_ASSOC);
-        if (!$evRow) {
-            http_response_code(404);
-            echo json_encode(['ok' => false, 'error' => 'Event Venue not found.']);
-            exit;
-        }
+        $evRow = fetchAuthorizedEventOrFail(
+            $pdo,
+            $evIdIn,
+            $caller,
+            'Event Venue not found.',
+            'Permission denied: You can only request support staff for events assigned to you.'
+        );
         $realId = (string) $evRow['id'];
 
         $cleanRoles = [];
@@ -11279,14 +11457,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         if ($deptIn === '') {
             $deptIn = trim((string) ($caller['department'] ?? 'General')) ?: 'General';
         }
-        $evChk = $pdo->prepare("SELECT `id`, `title` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
-        $evChk->execute([$evIdIn, $evIdIn]);
-        $evRow = $evChk->fetch(PDO::FETCH_ASSOC);
-        if (!$evRow) {
-            http_response_code(404);
-            echo json_encode(['ok' => false, 'error' => 'Event not found.']);
-            exit;
-        }
+        $evRow = fetchAuthorizedEventOrFail(
+            $pdo,
+            $evIdIn,
+            $caller,
+            'Event not found.',
+            'Permission denied: You can only confirm departments for events assigned to you.'
+        );
         $realEventId = (string) $evRow['id'];
         $evTitle = (string) ($evRow['title'] ?? ('Event #' . $realEventId));
 
