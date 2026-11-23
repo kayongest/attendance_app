@@ -26,7 +26,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261123_v29" />
+  <link rel="stylesheet" href="styles.css?v=20261123_v30" />
 </head>
 
 <body>
@@ -4532,26 +4532,36 @@
                 <div id="ce-leadership-section" style="margin-bottom: 12px;">
                   <div id="ce-leadership-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-field" id="ce-pm-wrap" style="margin: 0;">
-                      <label class="form-label" for="ce-pm">
-                        Project Manager <span id="ce-pm-req-star" style="display: none;">*</span>
-                        <span id="ce-pm-auto-tag"
-                          style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                          Owner)</span>
+                      <label class="form-label" for="ce-pm"
+                        style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <span>
+                          Project Manager <span id="ce-pm-req-star" style="display: none;">*</span>
+                          <span id="ce-pm-auto-tag"
+                            style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
+                            Owner)</span>
+                        </span>
+                        <button type="button" id="ce-pm-clear-btn" class="ce-role-clear-btn"
+                          style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
                       </label>
                       <select id="ce-pm" class="form-input"></select>
                     </div>
                     <div class="form-field" id="ce-coord-wrap" style="margin: 0;">
-                      <label class="form-label" for="ce-coordinator">
-                        Event Coordinator <span id="ce-coord-req-star" style="display: none;">*</span>
-                        <span id="ce-coord-auto-tag"
-                          style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                          Owner)</span>
+                      <label class="form-label" for="ce-coordinator"
+                        style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <span>
+                          Event Coordinator <span id="ce-coord-req-star" style="display: none;">*</span>
+                          <span id="ce-coord-auto-tag"
+                            style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
+                            Owner)</span>
+                        </span>
+                        <button type="button" id="ce-coord-clear-btn" class="ce-role-clear-btn"
+                          style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
                       </label>
                       <select id="ce-coordinator" class="form-input"></select>
                     </div>
                   </div>
                   <div id="ce-leadership-hint" class="muted-text" style="display: none; font-size: 11px; margin-top: 4px;">
-                    Required: Select a Project Manager and/or Event Coordinator for this event.
+                    Select either a Project Manager or an Event Coordinator (not both).
                   </div>
                 </div>
 
@@ -4603,7 +4613,15 @@
                   </div>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 10px; margin-top: 14px;">
+                <div id="ce-disabled-banner"
+                  style="display: none; padding: 10px 12px; border-radius: 8px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); color: #b45309; font-size: 12px; line-height: 1.45; margin-top: 10px;">
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap;">
+                  <button type="button" class="btn btn-secondary-38" id="ce-disable-btn"
+                    style="display: none; color: #b45309; border-color: #fde68a;">Disable Event</button>
+                  <button type="button" class="btn btn-secondary-38" id="ce-enable-btn"
+                    style="display: none; color: #15803d; border-color: #86efac;">Re-enable Event</button>
                   <button type="button" class="btn btn-secondary-38" id="ce-cancel-edit-btn"
                     style="display: none;">Cancel Edit</button>
                   <button type="submit" class="btn btn-primary-38" id="ce-submit-btn" style="flex: 1;">
@@ -5302,16 +5320,25 @@
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
           <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="roster-event-pm">Project Manager <span id="roster-event-pm-auto-tag"
-                style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                Owner)</span></label>
+            <label class="form-label" for="roster-event-pm"
+              style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+              <span>Project Manager <span id="roster-event-pm-auto-tag"
+                  style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
+                  Owner)</span></span>
+              <button type="button" id="roster-event-pm-clear-btn" class="ce-role-clear-btn"
+                style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
+            </label>
             <select id="roster-event-pm" class="form-input" style="height: 36px;"></select>
           </div>
           <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="roster-event-coordinator">Event Coordinator <span
-                id="roster-event-coord-auto-tag"
-                style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                Owner)</span></label>
+            <label class="form-label" for="roster-event-coordinator"
+              style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+              <span>Event Coordinator <span id="roster-event-coord-auto-tag"
+                  style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
+                  Owner)</span></span>
+              <button type="button" id="roster-event-coord-clear-btn" class="ce-role-clear-btn"
+                style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
+            </label>
             <select id="roster-event-coordinator" class="form-input" style="height: 36px;"></select>
           </div>
         </div>
@@ -6812,6 +6839,9 @@
       <form id="venue-crud-form">
         <input type="hidden" id="venue-crud-id" value="" />
         <input type="hidden" id="venue-crud-remove-image" value="0" />
+        <div id="venue-crud-disabled-banner"
+          style="display: none; padding: 10px 12px; border-radius: 8px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); color: #b45309; font-size: 12px; line-height: 1.45; margin-bottom: 12px;">
+        </div>
 
         <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-field">
@@ -6856,16 +6886,25 @@
             <select id="venue-crud-techlead" class="form-input"></select>
           </div>
           <div class="form-field" id="venue-crud-pm-wrap">
-            <label class="form-label" for="venue-crud-pm">Project Manager <span id="venue-crud-pm-auto-tag"
-                style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                Owner)</span></label>
+            <label class="form-label" for="venue-crud-pm"
+              style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+              <span>Project Manager <span id="venue-crud-pm-auto-tag"
+                  style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
+                  Owner)</span></span>
+              <button type="button" id="venue-crud-pm-clear-btn" class="ce-role-clear-btn"
+                style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
+            </label>
             <select id="venue-crud-pm" class="form-input"></select>
           </div>
           <div class="form-field" id="venue-crud-coord-wrap">
-            <label class="form-label" for="venue-crud-coordinator">Event Coordinator <span
-                id="venue-crud-coord-auto-tag"
-                style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                Owner)</span></label>
+            <label class="form-label" for="venue-crud-coordinator"
+              style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+              <span>Event Coordinator <span id="venue-crud-coord-auto-tag"
+                  style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
+                  Owner)</span></span>
+              <button type="button" id="venue-crud-coord-clear-btn" class="ce-role-clear-btn"
+                style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
+            </label>
             <select id="venue-crud-coordinator" class="form-input"></select>
           </div>
         </div>
@@ -7039,8 +7078,14 @@
         </div>
 
         <div class="modal-actions" style="justify-content: space-between; width: 100%; flex-wrap: wrap;">
-          <button type="button" class="btn btn-secondary-38" id="venue-crud-delete-btn"
-            style="color: #dc2626; border-color: #fecaca; display: none;">Delete Event</button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary-38" id="venue-crud-disable-btn"
+              style="color: #b45309; border-color: #fde68a; display: none;">Disable Event</button>
+            <button type="button" class="btn btn-secondary-38" id="venue-crud-enable-btn"
+              style="color: #15803d; border-color: #86efac; display: none;">Re-enable Event</button>
+            <button type="button" class="btn btn-secondary-38" id="venue-crud-delete-btn"
+              style="color: #dc2626; border-color: #fecaca; display: none;">Delete Event</button>
+          </div>
           <div style="display: flex; gap: 8px; margin-left: auto;">
             <button type="button" class="btn btn-secondary-38 js-close-venue-crud-modal">Cancel</button>
             <button type="submit" class="btn btn-primary-38" id="venue-crud-submit-btn">Save Event Venue</button>
@@ -7344,6 +7389,12 @@
         </div>
       </div>
 
+      <div id="app-confirm-reason-wrap" class="form-field" style="display: none; margin: 12px 0 4px;">
+        <label class="form-label" for="app-confirm-reason-input" id="app-confirm-reason-label">Reason *</label>
+        <textarea id="app-confirm-reason-input" class="form-input" rows="3" maxlength="500"
+          placeholder="Explain why this action is being taken..." style="height: auto; padding: 8px 10px;"></textarea>
+      </div>
+
       <div id="app-confirm-password-wrap" class="form-field" style="display: none; margin: 12px 0 4px;">
         <label class="form-label" for="app-confirm-password-input" id="app-confirm-password-label">Administrator
           Password</label>
@@ -7365,7 +7416,7 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261123_v29"></script>
+  <script src="app.js?v=20261123_v30"></script>
 </body>
 
 </html>

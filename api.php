@@ -2219,6 +2219,12 @@ function isCallerEventScopedRole(?array $caller): bool
     return in_array($role, ['tech_lead', 'technical_lead', 'project_manager', 'event_coordinator'], true);
 }
 
+function isPlaceholderLeadershipValue(?string $rawVal): bool
+{
+    $v = strtolower(trim((string) $rawVal));
+    return $v === '' || in_array($v, ['tech lead', 'technical lead', 'operations pm', 'project manager', 'event coordinator', 'unassigned'], true);
+}
+
 /**
  * Checks whether an event row/payload is accessible to the given caller.
  * Admins, Managers, Site Managers, and Gate Controllers remain unscoped here.
@@ -2234,12 +2240,6 @@ function canCallerAccessEventRecord(array $ev, ?array $caller, array $resolvedAs
     $callerUser = strtolower(trim((string) ($caller['username'] ?? '')));
 
     if ($callerId > 0) {
-        if ((int) ($ev['created_by_id'] ?? 0) === $callerId) {
-            return true;
-        }
-        if ((int) ($ev['requirements_sent_by'] ?? 0) === $callerId) {
-            return true;
-        }
         $assignedIds = !empty($resolvedAssignedIds)
             ? array_map('intval', $resolvedAssignedIds)
             : array_map('intval', (array) ($ev['assigned_technicians'] ?? []));
@@ -2255,22 +2255,47 @@ function canCallerAccessEventRecord(array $ev, ?array $caller, array $resolvedAs
     }
 
     $matchesCallerIdentity = static function (?string $rawVal) use ($callerFull, $callerUser): bool {
-        $v = strtolower(trim((string) $rawVal));
-        if ($v === '' || in_array($v, ['tech lead', 'technical lead', 'operations pm', 'project manager', 'event coordinator', 'unassigned'], true)) {
+        if (isPlaceholderLeadershipValue($rawVal)) {
             return false;
         }
+        $v = strtolower(trim((string) $rawVal));
         return ($callerFull !== '' && $v === $callerFull) || ($callerUser !== '' && $v === $callerUser);
     };
 
+    $tlVal = (string) ($ev['tech_lead'] ?? '');
+    $pmVal = (string) ($ev['project_manager'] ?? '');
+    $ecVal = (string) ($ev['event_coordinator'] ?? '');
+
     if (in_array($callerRole, ['tech_lead', 'technical_lead'], true)) {
-        return $matchesCallerIdentity($ev['tech_lead'] ?? '')
-            || ($callerId > 0 && (int) ($ev['tech_lead_approved_by'] ?? 0) === $callerId);
+        if ($matchesCallerIdentity($tlVal)) {
+            return true;
+        }
+        // Only fall back to creator/approver if no specific Tech Lead is assigned on the event
+        if (isPlaceholderLeadershipValue($tlVal) && $callerId > 0) {
+            return (int) ($ev['created_by_id'] ?? 0) === $callerId
+                || (int) ($ev['tech_lead_approved_by'] ?? 0) === $callerId;
+        }
+        return false;
     }
     if ($callerRole === 'project_manager') {
-        return $matchesCallerIdentity($ev['project_manager'] ?? '');
+        if ($matchesCallerIdentity($pmVal)) {
+            return true;
+        }
+        if (isPlaceholderLeadershipValue($pmVal) && isPlaceholderLeadershipValue($ecVal) && $callerId > 0) {
+            return (int) ($ev['created_by_id'] ?? 0) === $callerId
+                || (int) ($ev['requirements_sent_by'] ?? 0) === $callerId;
+        }
+        return false;
     }
     if ($callerRole === 'event_coordinator') {
-        return $matchesCallerIdentity($ev['event_coordinator'] ?? '');
+        if ($matchesCallerIdentity($ecVal)) {
+            return true;
+        }
+        if (isPlaceholderLeadershipValue($pmVal) && isPlaceholderLeadershipValue($ecVal) && $callerId > 0) {
+            return (int) ($ev['created_by_id'] ?? 0) === $callerId
+                || (int) ($ev['requirements_sent_by'] ?? 0) === $callerId;
+        }
+        return false;
     }
 
     return false;
@@ -2284,7 +2309,8 @@ function fetchAuthorizedEventOrFail(
     string $eventIdOrCrc,
     ?array $caller,
     string $notFoundMsg = 'Event Venue not found.',
-    string $deniedMsg = 'Permission denied: You can only view or manage events assigned to you.'
+    string $deniedMsg = 'Permission denied: You can only view or manage events assigned to you.',
+    bool $allowDisabled = false
 ): array {
     $chk = $pdo->prepare("SELECT * FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
     $chk->execute([$eventIdOrCrc, $eventIdOrCrc]);
@@ -2297,6 +2323,13 @@ function fetchAuthorizedEventOrFail(
     if (!canCallerAccessEventRecord($evRow, $caller)) {
         http_response_code(403);
         echo json_encode(['ok' => false, 'error' => $deniedMsg]);
+        exit;
+    }
+    $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+    $isAdminCaller = in_array($callerRole, ['admin', 'manager', 'administrator'], true);
+    if (!$allowDisabled && !$isAdminCaller && ((int) ($evRow['is_active'] ?? 1) === 0)) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'This event is currently disabled. Only an Administrator can re-enable or delete it.']);
         exit;
     }
     return $evRow;
@@ -2374,9 +2407,24 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             }
             break;
 
+        case 'delete_event':
+        case 'enable_event':
+            if (!$isAdmin) {
+                $msg = $action === 'delete_event'
+                    ? 'Permission denied: Only Administrators can permanently delete events. Project Managers, Event Coordinators, and Technical Leads can disable an event with a reason instead.'
+                    : 'Permission denied: Only Administrators can re-enable a disabled event.';
+                return ['ok' => false, 'error' => $msg];
+            }
+            break;
+
+        case 'disable_event':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead', 'project_manager', 'event_coordinator'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Disabling events requires Tech Lead, Project Manager, Event Coordinator, or Administrator privileges.'];
+            }
+            break;
+
         case 'update_call_time':
         case 'save_event':
-        case 'delete_event':
         case 'assign_event_crew':
             // Tech Lead, Project Manager, Event Coordinator, Admin, and Stock Manager (for warehouses)
             if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead', 'project_manager', 'event_coordinator'], true)) {
@@ -3001,6 +3049,13 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'tech_lead_approved_by_name' => !empty($er['tech_lead_approved_by']) ? ($userIdToName[(int) $er['tech_lead_approved_by']] ?? '') : '',
             'tech_lead_approved_at' => $er['tech_lead_approved_at'] ?? null,
             'tech_lead_approval_note' => trim((string) ($er['tech_lead_approval_note'] ?? '')),
+            'is_active' => isset($er['is_active']) ? (int) $er['is_active'] : 1,
+            'disabled_reason' => trim((string) ($er['disabled_reason'] ?? '')),
+            'disabled_by_id' => !empty($er['disabled_by_id']) ? (int) $er['disabled_by_id'] : null,
+            'disabled_by_name' => trim((string) ($er['disabled_by_name'] ?? '')) ?: (!empty($er['disabled_by_id']) ? ($userIdToName[(int) $er['disabled_by_id']] ?? '') : ''),
+            'disabled_by_role' => trim((string) ($er['disabled_by_role'] ?? '')),
+            'disabled_by_role_display' => !empty($er['disabled_by_role']) ? formatRoleDisplay((string) $er['disabled_by_role']) : '',
+            'disabled_at' => $er['disabled_at'] ?? null,
             'image' => resolveProfileImageUrl(($er['image'] ?? '') !== '' ? $er['image'] : ($er['event_image'] ?? null)),
             'lat' => isset($er['lat']) && $er['lat'] !== null ? (float) $er['lat'] : null,
             'lng' => isset($er['lng']) && $er['lng'] !== null ? (float) $er['lng'] : null,
@@ -3065,9 +3120,17 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         }
     } else {
         foreach ($visibleEventVenues as $ev) {
-            if ($ev['id'] === $reqCheckpointId) {
+            if ($ev['id'] === $reqCheckpointId && (int) ($ev['is_active'] ?? 1) === 1) {
                 $activeCheckpoint = $ev;
                 break;
+            }
+        }
+        if (!$activeCheckpoint) {
+            foreach ($visibleEventVenues as $ev) {
+                if ((int) ($ev['is_active'] ?? 1) === 1) {
+                    $activeCheckpoint = $ev;
+                    break;
+                }
             }
         }
         if (!$activeCheckpoint && !empty($visibleEventVenues)) {
@@ -6326,20 +6389,36 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
 
         $msg = 'Event updated successfully';
+        $isRealPmIn = !isPlaceholderLeadershipValue($projectManager);
+        $isRealCoordIn = !isPlaceholderLeadershipValue($eventCoordinator);
+        if (!$isRealPmIn) {
+            $projectManager = '';
+        }
+        if (!$isRealCoordIn) {
+            $eventCoordinator = '';
+        }
+        if ($isRealPmIn && $isRealCoordIn) {
+            echo json_encode(['ok' => false, 'error' => 'Please select either a Project Manager or an Event Coordinator, not both.']);
+            exit;
+        }
         if ($eventId === '') {
             if ($callerRoleLower === 'project_manager' && $callerDisplayName !== '') {
                 $projectManager = $callerDisplayName;
+                $eventCoordinator = '';
+                $isRealPmIn = true;
+                $isRealCoordIn = false;
             }
             if ($callerRoleLower === 'event_coordinator' && $callerDisplayName !== '') {
                 $eventCoordinator = $callerDisplayName;
+                $projectManager = '';
+                $isRealCoordIn = true;
+                $isRealPmIn = false;
             }
             if ($isCallerTlOnly && $callerDisplayName !== '') {
                 $techLead = $callerDisplayName;
             }
-            $hasPmOrCoord = ($projectManager !== '' && strtolower($projectManager) !== 'operations pm')
-                || $eventCoordinator !== '';
-            if ($isCallerTlOnly && !$hasPmOrCoord) {
-                echo json_encode(['ok' => false, 'error' => 'Please select a Project Manager and/or Event Coordinator for this event.']);
+            if ($isCallerTlOnly && !$isRealPmIn && !$isRealCoordIn) {
+                echo json_encode(['ok' => false, 'error' => 'Please select either a Project Manager or an Event Coordinator for this event.']);
                 exit;
             }
         }
@@ -6352,19 +6431,24 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'Permission denied: You can only edit events assigned to you.'
             );
             $realEventId = (string) $existingEvRow['id'];
-            if ($isCallerTlOnly && $callerDisplayName !== '') {
-                $existingTlRaw = trim((string) ($existingEvRow['tech_lead'] ?? ''));
-                $techLead = ($existingTlRaw !== '' && strtolower($existingTlRaw) !== 'tech lead')
-                    ? $existingTlRaw
-                    : $callerDisplayName;
+            if (((int) ($existingEvRow['is_active'] ?? 1) === 0) && !$isCallerAdmin) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => 'This event is currently disabled. Only an Administrator can re-enable or delete it.']);
+                exit;
             }
-            if ($isCallerTlOnly && $hasPmIn && $hasCoordIn) {
-                $hasPmOrCoordUpd = ($projectManager !== '' && strtolower($projectManager) !== 'operations pm')
-                    || $eventCoordinator !== '';
-                if (!$hasPmOrCoordUpd) {
-                    echo json_encode(['ok' => false, 'error' => 'Please select a Project Manager and/or Event Coordinator for this event.']);
-                    exit;
-                }
+            $oldPmRaw = trim((string) ($existingEvRow['project_manager'] ?? ''));
+            $oldCoordRaw = trim((string) ($existingEvRow['event_coordinator'] ?? ''));
+            $effPmVal = $hasPmIn ? $projectManager : ($hasCoordIn && $isRealCoordIn ? '' : $oldPmRaw);
+            $effCoordVal = $hasCoordIn ? $eventCoordinator : ($hasPmIn && $isRealPmIn ? '' : $oldCoordRaw);
+            $effPmIsReal = !isPlaceholderLeadershipValue($effPmVal);
+            $effCoordIsReal = !isPlaceholderLeadershipValue($effCoordVal);
+            if ($effPmIsReal && $effCoordIsReal) {
+                echo json_encode(['ok' => false, 'error' => 'Please select either a Project Manager or an Event Coordinator, not both.']);
+                exit;
+            }
+            if (!$isCallerAdmin && ($hasPmIn || $hasCoordIn) && !$effPmIsReal && !$effCoordIsReal) {
+                echo json_encode(['ok' => false, 'error' => 'Please select either a Project Manager or an Event Coordinator for this event.']);
+                exit;
             }
             $evTitleFinal = $titleIn !== '' ? $titleIn : (string) ($existingEvRow['title'] ?? ('Event #' . $realEventId));
             $existingStart = trim((string) ($existingEvRow['start_date'] ?? $existingEvRow['date'] ?? ''));
@@ -6389,8 +6473,8 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 "`duration_label` = ?",
                 "`call_time` = ?",
                 "`tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END",
-                $hasPmIn ? "`project_manager` = ?" : "`project_manager` = CASE WHEN ? != '' THEN ? ELSE `project_manager` END",
-                $hasCoordIn ? "`event_coordinator` = ?" : "`event_coordinator` = CASE WHEN ? != '' THEN ? ELSE `event_coordinator` END",
+                "`project_manager` = ?",
+                "`event_coordinator` = ?",
                 "`terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END",
             ];
             $updParams = [
@@ -6403,21 +6487,10 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $effDurLabel,
                 $formattedTime,
                 $techLead, $techLead,
+                $effPmVal,
+                $effCoordVal,
+                $eventPinRaw, $eventPinRaw,
             ];
-            if ($hasPmIn) {
-                $updParams[] = $projectManager;
-            } else {
-                $updParams[] = $projectManager;
-                $updParams[] = $projectManager;
-            }
-            if ($hasCoordIn) {
-                $updParams[] = $eventCoordinator;
-            } else {
-                $updParams[] = $eventCoordinator;
-                $updParams[] = $eventCoordinator;
-            }
-            $updParams[] = $eventPinRaw;
-            $updParams[] = $eventPinRaw;
             if ($hasAssignedTechsIn) {
                 $setClauses[] = "`assigned_technician` = ?";
                 $updParams[] = json_encode($assignedTechsInt);
@@ -6504,14 +6577,26 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             } else {
                 recalculateEventDispatchStatus($pdo, $realEventId);
                 try {
+                    $leadNotes = [];
+                    if ($techLeadChanged) {
+                        $leadNotes[] = "Tech Lead: " . ($oldTechLead !== '' ? $oldTechLead : 'Unassigned') . " → {$effTechLead}";
+                    }
+                    if (strcasecmp($oldPmRaw, $effPmVal) !== 0) {
+                        $leadNotes[] = "PM: " . ($oldPmRaw !== '' ? $oldPmRaw : 'None') . " → " . ($effPmVal !== '' ? $effPmVal : 'None');
+                    }
+                    if (strcasecmp($oldCoordRaw, $effCoordVal) !== 0) {
+                        $leadNotes[] = "Coordinator: " . ($oldCoordRaw !== '' ? $oldCoordRaw : 'None') . " → " . ($effCoordVal !== '' ? $effCoordVal : 'None');
+                    }
+                    $updSummary = "Updated event \"{$evTitleFinal}\" ({$effStart} → {$effEnd}, {$effDurLabel})"
+                        . (!empty($leadNotes) ? ' · Reassigned [' . implode('; ', $leadNotes) . ']' : '');
                     logEventDispatchAction(
                         $pdo,
                         $realEventId,
                         (int) ($caller['id'] ?? 1),
                         (string) ($caller['role'] ?? 'admin'),
-                        'event_updated',
-                        "Updated event \"{$evTitleFinal}\" ({$effStart} → {$effEnd}, {$effDurLabel})",
-                        ['start_date' => $effStart, 'end_date' => $effEnd, 'duration_days' => $effDurDays]
+                        !empty($leadNotes) ? 'leadership_reassigned' : 'event_updated',
+                        $updSummary,
+                        ['start_date' => $effStart, 'end_date' => $effEnd, 'duration_days' => $effDurDays, 'lead_changes' => $leadNotes]
                     );
                 } catch (Throwable $e) {}
             }
@@ -6672,6 +6757,132 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'ok' => true,
                 'deleted_event_id' => $realId,
                 'message' => 'Deleted Event "' . (string) ($row['title'] ?? $realId) . '".',
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'disable_event') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('disable_event', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $eventId = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? $_POST['id'] ?? $jsonBody['id'] ?? ''));
+        $reason = trim((string) ($_POST['reason'] ?? $jsonBody['reason'] ?? ''));
+        if ($eventId === '') {
+            echo json_encode(['ok' => false, 'error' => 'Event Venue ID is required.']);
+            exit;
+        }
+        if (strlen($reason) < 3) {
+            echo json_encode(['ok' => false, 'error' => 'Please enter a clear reason (at least 3 characters) for disabling this event.']);
+            exit;
+        }
+        $row = fetchAuthorizedEventOrFail(
+            $pdo,
+            $eventId,
+            $caller,
+            'Event Venue not found.',
+            'Permission denied: You can only disable events assigned to you.'
+        );
+        if ((int) ($row['is_active'] ?? 1) === 0) {
+            echo json_encode(['ok' => false, 'error' => 'This event is already disabled.']);
+            exit;
+        }
+        $realId = (string) $row['id'];
+        $evTitle = (string) ($row['title'] ?? ('Event #' . $realId));
+        $actorId = (int) ($caller['id'] ?? 1);
+        $actorName = trim((string) ($caller['full_name'] ?? $caller['username'] ?? 'Staff'));
+        $actorRole = strtolower(trim((string) ($caller['role'] ?? 'tech_lead')));
+        $actorRoleDisplay = formatRoleDisplay($actorRole);
+
+        $pdo->prepare("
+            UPDATE `events`
+            SET `is_active` = 0,
+                `disabled_reason` = ?,
+                `disabled_by_id` = ?,
+                `disabled_by_name` = ?,
+                `disabled_by_role` = ?,
+                `disabled_at` = NOW()
+            WHERE `id` = ?
+        ")->execute([$reason, $actorId, $actorName, $actorRole, $realId]);
+
+        logEventDispatchAction(
+            $pdo,
+            $realId,
+            $actorId,
+            $actorRole,
+            'event_disabled',
+            "Disabled event \"{$evTitle}\" by {$actorName} ({$actorRoleDisplay}) — Reason: {$reason}",
+            ['reason' => $reason, 'disabled_by_name' => $actorName, 'disabled_by_role' => $actorRoleDisplay]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'disabled_event_id' => $realId,
+                'message' => "Disabled Event \"{$evTitle}\". Administrators have been notified with your reason.",
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'enable_event') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('enable_event', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $eventId = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? $_POST['id'] ?? $jsonBody['id'] ?? ''));
+        if ($eventId === '') {
+            echo json_encode(['ok' => false, 'error' => 'Event Venue ID is required.']);
+            exit;
+        }
+        $row = fetchAuthorizedEventOrFail(
+            $pdo,
+            $eventId,
+            $caller,
+            'Event Venue not found.',
+            'Permission denied.'
+        );
+        $realId = (string) $row['id'];
+        $evTitle = (string) ($row['title'] ?? ('Event #' . $realId));
+        $actorId = (int) ($caller['id'] ?? 1);
+        $actorName = trim((string) ($caller['full_name'] ?? $caller['username'] ?? 'Administrator'));
+        $actorRole = strtolower(trim((string) ($caller['role'] ?? 'admin')));
+
+        $pdo->prepare("
+            UPDATE `events`
+            SET `is_active` = 1,
+                `disabled_reason` = NULL,
+                `disabled_by_id` = NULL,
+                `disabled_by_name` = NULL,
+                `disabled_by_role` = NULL,
+                `disabled_at` = NULL
+            WHERE `id` = ?
+        ")->execute([$realId]);
+
+        logEventDispatchAction(
+            $pdo,
+            $realId,
+            $actorId,
+            $actorRole,
+            'event_enabled',
+            "Re-enabled event \"{$evTitle}\" by {$actorName} (Administrator)",
+            ['is_active' => 1]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'enabled_event_id' => $realId,
+                'message' => "Re-enabled Event \"{$evTitle}\".",
             ]
         ));
         exit;
@@ -11369,7 +11580,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             echo json_encode(['ok' => false, 'error' => 'event_id is required.']);
             exit;
         }
-        $evChk = $pdo->prepare("SELECT `id`, `title`, `tech_lead`, `tech_lead_approved` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evChk = $pdo->prepare("SELECT `id`, `title`, `tech_lead`, `tech_lead_approved`, `is_active` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
         $evChk->execute([$evIdIn, $evIdIn]);
         $evRow = $evChk->fetch(PDO::FETCH_ASSOC);
         if (!$evRow) {
@@ -11379,6 +11590,11 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
         $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
         $isAdminApprover = in_array($callerRole, ['admin', 'administrator', 'manager'], true);
+        if (((int) ($evRow['is_active'] ?? 1) === 0) && !$isAdminApprover) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'This event is currently disabled. Only an Administrator can re-enable or delete it.']);
+            exit;
+        }
         $assignedTl = trim((string) ($evRow['tech_lead'] ?? ''));
         $hasSpecificTl = ($assignedTl !== '' && strtolower($assignedTl) !== 'tech lead');
         $callerFull = trim((string) ($caller['full_name'] ?? ''));

@@ -409,6 +409,18 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     try {
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
     } catch (Throwable $e) {}
+    foreach ([
+        "ALTER TABLE `events` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1",
+        "ALTER TABLE `events` ADD COLUMN `disabled_reason` TEXT DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `disabled_by_id` INT DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `disabled_by_name` VARCHAR(120) DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `disabled_by_role` VARCHAR(64) DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `disabled_at` DATETIME DEFAULT NULL",
+    ] as $evDisableAlter) {
+        try {
+            $pdo->exec($evDisableAlter);
+        } catch (Throwable $e) {}
+    }
     try {
         $pdo->exec("UPDATE `events` SET `terminal_pin` = '1234' WHERE `terminal_pin` IS NULL OR `terminal_pin` = ''");
     } catch (Throwable $e) {}

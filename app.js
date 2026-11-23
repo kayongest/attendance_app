@@ -2088,6 +2088,27 @@
       });
     }
 
+    // 9. Disabled Events Audit Alert for Administrators (and visible owners)
+    const disabledEvents = (state.checkpoints?.event_venues || []).filter((ev) => Number(ev?.is_active ?? 1) === 0);
+    if (disabledEvents.length > 0 && isCurrentUserAdmin()) {
+      disabledEvents.slice(0, 3).forEach((ev) => {
+        const disKey = `ev-disabled-${ev.raw_id || ev.id}-${ev.disabled_at || ''}`;
+        const byWho = ev.disabled_by_name
+          ? `${ev.disabled_by_name}${ev.disabled_by_role_display ? ` (${ev.disabled_by_role_display})` : ''}`
+          : 'Staff Member';
+        const reasonTxt = ev.disabled_reason || 'No reason provided.';
+        items.unshift({
+          id: disKey,
+          type: 'dispatch',
+          iconSvg: 'assets/status-dot-red-5.svg',
+          title: `Event Disabled: ${ev.title || ev.name}`,
+          desc: `Disabled by ${byWho} · Reason: ${reasonTxt}`,
+          time: ev.disabled_at ? String(ev.disabled_at).slice(0, 16) : 'Disabled',
+          unread: !state.readNotifIds.has(disKey),
+        });
+      });
+    }
+
     state.notifications = items;
     state.unreadNotifCount = items.filter((n) => n.unread).length;
   }
@@ -2144,6 +2165,20 @@
     return role === 'tech_lead' || role === 'technical_lead' || role === 'project_manager' || role === 'event_coordinator';
   }
 
+  const IGNORED_LEADERSHIP_PLACEHOLDERS = new Set([
+    'tech lead',
+    'technical lead',
+    'operations pm',
+    'project manager',
+    'event coordinator',
+    'unassigned',
+  ]);
+
+  function isPlaceholderLeadershipValue(rawVal) {
+    const v = String(rawVal || '').trim().toLowerCase();
+    return v === '' || IGNORED_LEADERSHIP_PLACEHOLDERS.has(v);
+  }
+
   function isEventVisibleToCurrentUser(ev) {
     if (!ev || !isCurrentUserEventScopedRole()) return true;
     const curUser = state.currentUser || {};
@@ -2152,29 +2187,41 @@
     const curFull = String(curUser.full_name || '').trim().toLowerCase();
     const curUsername = String(curUser.username || '').trim().toLowerCase();
 
-    if (curId > 0) {
-      if (Number(ev.created_by_id || 0) === curId) return true;
-      if (Number(ev.requirements_sent_by || 0) === curId) return true;
-      if (Array.isArray(ev.assigned_technicians) && ev.assigned_technicians.some((id) => Number(id) === curId)) {
-        return true;
-      }
+    if (curId > 0 && Array.isArray(ev.assigned_technicians) && ev.assigned_technicians.some((id) => Number(id) === curId)) {
+      return true;
     }
 
-    const ignoredPlaceholders = new Set(['tech lead', 'technical lead', 'operations pm', 'project manager', 'event coordinator', 'unassigned']);
     const matchesIdentity = (rawVal) => {
+      if (isPlaceholderLeadershipValue(rawVal)) return false;
       const v = String(rawVal || '').trim().toLowerCase();
-      if (!v || ignoredPlaceholders.has(v)) return false;
       return (curFull !== '' && v === curFull) || (curUsername !== '' && v === curUsername);
     };
 
+    const tlVal = String(ev.tech_lead || '');
+    const pmVal = String(ev.project_manager || '');
+    const ecVal = String(ev.event_coordinator || '');
+
     if (curRole === 'tech_lead' || curRole === 'technical_lead') {
-      return matchesIdentity(ev.tech_lead) || (curId > 0 && Number(ev.tech_lead_approved_by || 0) === curId);
+      if (matchesIdentity(tlVal)) return true;
+      // Only fall back to creator/approver while no specific Tech Lead is assigned on the event
+      if (isPlaceholderLeadershipValue(tlVal) && curId > 0) {
+        return Number(ev.created_by_id || 0) === curId || Number(ev.tech_lead_approved_by || 0) === curId;
+      }
+      return false;
     }
     if (curRole === 'project_manager') {
-      return matchesIdentity(ev.project_manager);
+      if (matchesIdentity(pmVal)) return true;
+      if (isPlaceholderLeadershipValue(pmVal) && isPlaceholderLeadershipValue(ecVal) && curId > 0) {
+        return Number(ev.created_by_id || 0) === curId || Number(ev.requirements_sent_by || 0) === curId;
+      }
+      return false;
     }
     if (curRole === 'event_coordinator') {
-      return matchesIdentity(ev.event_coordinator);
+      if (matchesIdentity(ecVal)) return true;
+      if (isPlaceholderLeadershipValue(pmVal) && isPlaceholderLeadershipValue(ecVal) && curId > 0) {
+        return Number(ev.created_by_id || 0) === curId || Number(ev.requirements_sent_by || 0) === curId;
+      }
+      return false;
     }
     return false;
   }
@@ -2256,6 +2303,14 @@
     const rawRole = (state.currentUser.role || '').toLowerCase();
     const isManager = rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator';
     return isCurrentUserAdmin() || isManager || isCurrentUserTechLead();
+  }
+
+  function canCurrentUserDeleteEvents() {
+    return isCurrentUserAdmin();
+  }
+
+  function canCurrentUserDisableEvents() {
+    return canCurrentUserAssignEvents();
   }
 
   function canCurrentUserSetCallTime() {
@@ -2892,7 +2947,7 @@
 
     const optionsList = isStock
       ? state.checkpoints.stock_warehouses || []
-      : getVisibleEventsList();
+      : getVisibleEventsList().filter((ev) => Number(ev.is_active ?? 1) !== 0);
 
     document.querySelectorAll('.js-checkpoint-select').forEach((sel) => {
       sel.innerHTML = optionsList
@@ -5665,20 +5720,21 @@
     rowsEl.innerHTML = paged
       .map((cp) => {
         const isStock = cp.type === 'stock_warehouse';
+        const isDisabledEvent = !isStock && Number(cp.is_active ?? 1) === 0;
         const isActive = cp.type === state.checkpointType && Number(cp.id) === Number(state.checkpointId);
         return `
-          <div class="data-table-row data-table-row-event event-table-row" style="${isActive ? 'background-color: #f5f3ff;' : ''}">
+          <div class="data-table-row data-table-row-event event-table-row" style="${isActive ? 'background-color: #f5f3ff;' : (isDisabledEvent ? 'background-color: rgba(245, 158, 11, 0.05);' : '')}">
             <div class="col-checkbox-event">
               <div class="custom-checkbox" role="checkbox" aria-checked="${isActive ? 'true' : 'false'}"></div>
             </div>
             <div class="col-event-name">
-              <div class="date-tile" style="background-color: ${isStock ? '#dcfce7' : '#e0f2fe'};">
-                <span class="date-tile-month" style="color: ${isStock ? '#15803d' : '#0369a1'};">${isStock ? 'STOCK' : 'VENUE'}</span>
-                <span class="date-tile-day" style="font-size: 13px; font-weight: 700; color: ${isStock ? '#15803d' : '#0369a1'};">#${cp.id}</span>
+              <div class="date-tile" style="background-color: ${isStock ? '#dcfce7' : (isDisabledEvent ? '#fef3c7' : '#e0f2fe')};">
+                <span class="date-tile-month" style="color: ${isStock ? '#15803d' : (isDisabledEvent ? '#b45309' : '#0369a1')};">${isStock ? 'STOCK' : (isDisabledEvent ? 'OFF' : 'VENUE')}</span>
+                <span class="date-tile-day" style="font-size: 13px; font-weight: 700; color: ${isStock ? '#15803d' : (isDisabledEvent ? '#b45309' : '#0369a1')};">#${cp.id}</span>
               </div>
               <div class="attendee-identity">
                 <span class="event-row-title">${escapeHtml(cp.name)}</span>
-                <span class="event-row-type">${escapeHtml(cp.location)}</span>
+                <span class="event-row-type">${escapeHtml(cp.location)}${isDisabledEvent && cp.disabled_reason ? ` · Disabled: ${escapeHtml(cp.disabled_reason)}` : ''}</span>
               </div>
             </div>
             <div class="col-event-schedule">
@@ -5729,8 +5785,8 @@
               </div>
             </div>
             <div class="col-event-status">
-              <span class="status-badge ${isStock ? 'status-badge-green-sm' : 'status-badge-purple-sm'}">
-                ${isStock ? 'Stock Warehouse' : 'Event Venue'}
+              <span class="status-badge ${isStock ? 'status-badge-green-sm' : (isDisabledEvent ? 'status-badge-amber-sm' : 'status-badge-purple-sm')}">
+                ${isStock ? 'Stock Warehouse' : (isDisabledEvent ? 'Disabled Event' : 'Event Venue')}
               </span>
             </div>
             <div class="col-event-action" style="display: flex; gap: 6px; align-items: center;">
@@ -5739,8 +5795,9 @@
                 class="btn btn-primary-32 js-activate-checkpoint-btn"
                 data-cp-type="${cp.type}"
                 data-cp-id="${cp.id}"
+                ${isDisabledEvent ? 'disabled title="Disabled event cannot host active gate terminal"' : ''}
               >
-                ${isActive ? 'Active Terminal (#pane-kiosk)' : 'Open Gate Terminal'}
+                ${isDisabledEvent ? 'Event Disabled' : (isActive ? 'Active Terminal (#pane-kiosk)' : 'Open Gate Terminal')}
               </button>
               ${!isStock
             ? `<button
@@ -6991,14 +7048,148 @@
     return safePage;
   }
 
+  function syncActiveCheckpointFromDisableResponse(data, disabledEventId) {
+    if (!data) return;
+    if (String(state.checkpointType) === 'event_venue' && String(state.checkpointId) === String(disabledEventId) && data.active_checkpoint) {
+      state.checkpointType = data.active_checkpoint.type || 'stock_warehouse';
+      state.checkpointId = Number(data.active_checkpoint.id || 0);
+      state.activeCheckpoint = data.active_checkpoint;
+    }
+  }
+
+  function formatEventDisabledInfoText(ev) {
+    if (!ev || Number(ev.is_active ?? 1) !== 0) return '';
+    const byWho = ev.disabled_by_name
+      ? `${ev.disabled_by_name}${ev.disabled_by_role_display ? ` (${ev.disabled_by_role_display})` : ''}`
+      : 'Staff Member';
+    const when = ev.disabled_at ? ` · ${String(ev.disabled_at).slice(0, 16)}` : '';
+    const reason = ev.disabled_reason || 'No reason provided.';
+    return `Disabled by ${byWho}${when} — Reason: ${reason}`;
+  }
+
+  function buildEventDisabledBannerHtml(ev, marginBottom = '8px') {
+    const info = formatEventDisabledInfoText(ev);
+    if (!info) return '';
+    return `<div style="padding: 8px 10px; border-radius: 8px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); color: #b45309; font-size: 11px; line-height: 1.4; margin-bottom: ${marginBottom};"><strong>DISABLED</strong> · ${escapeHtml(info)}</div>`;
+  }
+
+  function buildEventCardCrudButtonsHtml(ev, opts = {}) {
+    const {
+      editClass = 'js-vs-edit-venue',
+      disableClass = 'js-vs-disable-venue',
+      enableClass = 'js-vs-enable-venue',
+      deleteClass = 'js-vs-delete-venue',
+      compact = false,
+      editDataAttr = 'data-venue-id',
+      titleAttr = 'data-venue-title',
+    } = opts;
+    if (!ev) return '';
+    const evIdAttr = escapeHtml(String(ev.raw_id || ev.id));
+    const evTitleAttr = escapeHtml(ev.title || ev.name || 'Event');
+    const isActive = Number(ev.is_active ?? 1) !== 0;
+    const isAdmin = canCurrentUserDeleteEvents();
+    const canDisable = canCurrentUserDisableEvents();
+    const canManage = canCurrentUserAssignEvents();
+    const parts = [];
+    if (canManage && (isActive || isAdmin)) {
+      parts.push(`<button type="button" class="btn btn-secondary-32-sm ${editClass}" ${editDataAttr}="${evIdAttr}">Edit</button>`);
+    }
+    if (isActive && canDisable) {
+      parts.push(`<button type="button" class="btn btn-secondary-32-sm ${disableClass}" ${editDataAttr}="${evIdAttr}" ${titleAttr}="${evTitleAttr}" style="color: #b45309; border-color: #fde68a;">Disable</button>`);
+    }
+    if (!isActive && isAdmin) {
+      parts.push(`<button type="button" class="btn btn-secondary-32-sm ${enableClass}" ${editDataAttr}="${evIdAttr}" ${titleAttr}="${evTitleAttr}" style="color: #15803d; border-color: #86efac;">Re-enable</button>`);
+    }
+    if (isAdmin) {
+      parts.push(`<button type="button" class="btn btn-secondary-32-sm ${deleteClass}" ${editDataAttr}="${evIdAttr}" ${titleAttr}="${evTitleAttr}" style="color: #dc2626; border-color: #fecaca;">${compact ? 'Del' : 'Delete'}</button>`);
+    }
+    return parts.join('\n');
+  }
+
+  async function confirmAndDisableEventVenue(vid, vTitle) {
+    if (!canCurrentUserDisableEvents()) {
+      showToast('Permission Denied: Disabling Events requires Tech Lead, PM, Event Coordinator, or Administrator privileges.', 'error');
+      return false;
+    }
+    const { confirmed, reason } = await showConfirmModal({
+      title: 'Disable Event',
+      message: `Disable Event "${vTitle}" instead of deleting it? Administrators will be notified with your reason and can review or re-enable it anytime.`,
+      confirmText: 'Disable Event',
+      tone: 'warning',
+      requireReason: true,
+      reasonLabel: 'Reason for Disabling Event *',
+      reasonPlaceholder: 'e.g. Client postponed dates / venue changed / duplicate request...',
+    });
+    if (!confirmed) return false;
+    try {
+      const res = await fetch('api.php?action=disable_event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: vid, reason }),
+      });
+      const data = await res.json();
+      if (res.ok && data && data.ok) {
+        const editingCeId = document.getElementById('ce-event-id')?.value.trim() || '';
+        if (editingCeId && String(editingCeId) === String(vid)) {
+          resetCreateEventForm();
+        }
+        applyBootstrapPayload(data, true);
+        syncActiveCheckpointFromDisableResponse(data, vid);
+        renderAll();
+        showToast(data.message || `Disabled Event "${vTitle}".`, 'success');
+        return true;
+      } else {
+        showToast((data && data.error) || 'Failed to disable Event.', 'error');
+        return false;
+      }
+    } catch (err) {
+      showToast('Network error disabling Event.', 'error');
+      return false;
+    }
+  }
+
+  async function enableEventVenue(vid, vTitle) {
+    if (!canCurrentUserDeleteEvents()) {
+      showToast('Permission Denied: Only Administrators can re-enable disabled events.', 'error');
+      return false;
+    }
+    const { confirmed } = await showConfirmModal({
+      title: 'Re-enable Event',
+      message: `Re-enable Event "${vTitle}" so active gates, rosters, and crew workflows resume?`,
+      confirmText: 'Re-enable Event',
+      tone: 'primary',
+    });
+    if (!confirmed) return false;
+    try {
+      const res = await fetch('api.php?action=enable_event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: vid }),
+      });
+      const data = await res.json();
+      if (res.ok && data && data.ok) {
+        applyBootstrapPayload(data, true);
+        renderAll();
+        showToast(data.message || `Re-enabled Event "${vTitle}".`, 'success');
+        return true;
+      } else {
+        showToast((data && data.error) || 'Failed to re-enable Event.', 'error');
+        return false;
+      }
+    } catch (err) {
+      showToast('Network error re-enabling Event.', 'error');
+      return false;
+    }
+  }
+
   async function confirmAndDeleteEventVenue(vid, vTitle) {
-    if (!canCurrentUserAssignEvents()) {
-      showToast('Permission Denied: Deleting Event Venues requires Tech Lead, PM, or Administrator privileges.', 'error');
+    if (!canCurrentUserDeleteEvents()) {
+      showToast('Permission Denied: Only Administrators can permanently delete events. Use Disable Event instead.', 'error');
       return false;
     }
     const { confirmed } = await showConfirmModal({
       title: 'Delete Event',
-      message: `Delete Event "${vTitle}"? Any crew assignments pointing to this event will be cleared.`,
+      message: `Permanently delete Event "${vTitle}"? Any crew assignments pointing to this event will be cleared.`,
       confirmText: 'Delete Event',
       tone: 'danger',
     });
@@ -7019,6 +7210,7 @@
           resetCreateEventForm();
         }
         applyBootstrapPayload(data, true);
+        syncActiveCheckpointFromDisableResponse(data, vid);
         renderAll();
         showToast(data.message || `Deleted Event "${vTitle}".`, 'success');
         return true;
@@ -7210,18 +7402,20 @@
 
     const startIdx = ((state.stockManager.evPage || 1) - 1) * perPage;
     const pagedList = list.slice(startIdx, startIdx + perPage);
-    const canManage = canCurrentUserAssignEvents();
 
     grid.innerHTML = pagedList.map((ev) => {
-      const venueIdAttr = escapeHtml(String(ev.raw_id || ev.id));
+      const isDisabled = Number(ev.is_active ?? 1) === 0;
       const onsiteCount = Number(ev.on_site_now || 0);
-      const statusBadge = onsiteCount > 0
-        ? `<span class="status-badge status-badge-green-sm">${onsiteCount} On-Site</span>`
-        : `<span class="status-badge status-badge-purple-sm">Event Gate</span>`;
-      const crudBtns = canManage
-        ? `<button type="button" class="btn btn-secondary-32-sm js-vs-edit-venue" data-venue-id="${venueIdAttr}">Edit</button>
-           <button type="button" class="btn btn-secondary-32-sm js-vs-delete-venue" data-venue-id="${venueIdAttr}" data-venue-title="${escapeHtml(ev.title || ev.name)}" style="color: #dc2626; border-color: #fecaca;">Delete</button>`
-        : '';
+      const statusBadge = isDisabled
+        ? `<span class="status-badge status-badge-amber-sm">Disabled</span>`
+        : (onsiteCount > 0
+          ? `<span class="status-badge status-badge-green-sm">${onsiteCount} On-Site</span>`
+          : `<span class="status-badge status-badge-purple-sm">Event Gate</span>`);
+      const crudBtns = buildEventCardCrudButtonsHtml(ev);
+      const disabledBanner = buildEventDisabledBannerHtml(ev, '8px');
+      const pmTxt = !isPlaceholderLeadershipValue(ev.project_manager) ? ev.project_manager : '';
+      const coordTxt = !isPlaceholderLeadershipValue(ev.event_coordinator) ? ev.event_coordinator : '';
+      const cmdLabel = pmTxt ? `PM: ${pmTxt}` : (coordTxt ? `Coord: ${coordTxt}` : 'Command: Unassigned');
 
       const evFallbackSvg = `<img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" style="width: 36px; height: 36px; filter: brightness(0) invert(1); opacity: 0.9;" />`;
       const bannerHtml = ev.image
@@ -7229,8 +7423,8 @@
         : `<div class="wh-card-fallback-icon">${evFallbackSvg}</div>`;
 
       return `
-        <div class="wh-card">
-          <div class="wh-card-banner" style="background: linear-gradient(135deg, #312e81, #4f46e5);">
+        <div class="wh-card" style="${isDisabled ? 'opacity: 0.9; border-color: rgba(245, 158, 11, 0.45);' : ''}">
+          <div class="wh-card-banner" style="background: linear-gradient(135deg, ${isDisabled ? '#78350f, #b45309' : '#312e81, #4f46e5'});">
             ${bannerHtml}
             <div class="wh-card-badge-top">${statusBadge}</div>
           </div>
@@ -7252,12 +7446,13 @@
                 <span>TL: ${escapeHtml(ev.tech_lead || ev.lead_name || 'Unassigned')}</span>
               </div>
               <div style="color: var(--text-secondary); font-size: 11px;">
-                PM: ${escapeHtml(ev.project_manager || 'Unassigned')}
+                ${escapeHtml(cmdLabel)}
               </div>
             </div>
+            ${disabledBanner}
             <div class="wh-card-footer">
               <span class="wh-stored-pill">${Number(ev.assigned_count || 0)} crew</span>
-              <div style="display: flex; gap: 6px;">
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                 ${crudBtns}
               </div>
             </div>
@@ -9175,7 +9370,7 @@
 
   function buildCheckpointSelectOptionsHtml(selectedVal = '') {
     const whs = state.checkpoints.stock_warehouses || [];
-    const evs = getVisibleEventsList();
+    const evs = getVisibleEventsList().filter((ev) => Number(ev.is_active ?? 1) !== 0);
     const curVal = selectedVal || `${state.checkpointType}:${state.checkpointId}`;
     const opts = [];
     if (whs.length > 0) {
@@ -9353,16 +9548,14 @@
     const pagedVenues = venues.slice(startIdx, startIdx + perPage);
 
     gridEl.innerHTML = pagedVenues.map((v) => {
+      const isDisabled = Number(v.is_active ?? 1) === 0;
       const onsiteCount = rcList.filter((r) => String(r.checkpoint_type) === 'event_venue' && String(r.checkpoint_id) === String(v.id)).length;
       const assignedCtrls = crewList.filter((c) => String(c.assigned_checkpoint_type || '') === 'event_venue' && String(c.assigned_checkpoint_id || '') === String(v.id));
       const ctrlLabel = assignedCtrls.length > 0
         ? assignedCtrls.map((u) => escapeHtml(u.full_name)).join(', ')
         : (v.lead_name ? escapeHtml(v.lead_name) : 'Unassigned');
-      const venueIdAttr = escapeHtml(String(v.raw_id || v.id));
-      const crudRow = canManageVenues
-        ? `<button type="button" class="btn btn-secondary-32-sm js-vs-edit-venue" data-venue-id="${venueIdAttr}" title="Edit Event Venue">Edit</button>
-           <button type="button" class="btn btn-secondary-32-sm js-vs-delete-venue" data-venue-id="${venueIdAttr}" data-venue-title="${escapeHtml(v.title || v.name)}" title="Delete Event Venue" style="color: #dc2626; border-color: #fecaca;">Del</button>`
-        : '';
+      const crudRow = canManageVenues ? buildEventCardCrudButtonsHtml(v, { compact: true }) : '';
+      const disabledBanner = buildEventDisabledBannerHtml(v, '2px');
       const thumbStrip = v.image
         ? `<div style="height: 88px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: #312e81;"><img src="${escapeHtml(v.image)}" alt="${escapeHtml(v.title || v.name)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.display='none';" /></div>`
         : '';
@@ -9371,24 +9564,25 @@
       const durLbl = v.duration_label || computeEventDuration(sDate, eDate).label;
       const dateSpanText = sDate ? (sDate === eDate ? `${sDate} · ${durLbl}` : `${sDate} → ${eDate} · ${durLbl}`) : '';
       return `
-        <div style="border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; background: var(--surface-white); display: flex; flex-direction: column; gap: 10px;">
+        <div style="border: 1px solid ${isDisabled ? 'rgba(245, 158, 11, 0.45)' : 'var(--border-color)'}; border-radius: 10px; padding: 14px; background: var(--surface-white); display: flex; flex-direction: column; gap: 10px; ${isDisabled ? 'opacity: 0.92;' : ''}">
           ${thumbStrip}
           <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
             <div>
               <strong style="font-size: 14px; color: var(--text-primary);">${escapeHtml(v.title || v.name)}</strong>
               <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">${escapeHtml(v.location || v.venue_location || 'Kigali Event Venue')}${dateSpanText ? ' · ' + escapeHtml(dateSpanText) : ''}</div>
             </div>
-            <span class="status-badge ${onsiteCount > 0 ? 'status-badge-green-sm' : 'status-badge-purple-sm'}">${onsiteCount} On-Site</span>
+            <span class="status-badge ${isDisabled ? 'status-badge-amber-sm' : (onsiteCount > 0 ? 'status-badge-green-sm' : 'status-badge-purple-sm')}">${isDisabled ? 'Disabled' : `${onsiteCount} On-Site`}</span>
           </div>
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px;">
             <span>Call Time: <strong>${escapeHtml(v.call_time || '08:00')} CAT</strong> · Assigned: <strong>${Number(v.assigned_count || 0)}</strong></span>
             <span>Gate Controller / Lead: <strong>${ctrlLabel}</strong></span>
           </div>
+          ${disabledBanner}
           <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 6px;">
-            <button type="button" class="btn btn-primary-32 js-vs-launch-kiosk" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" style="flex: 1 1 120px;">
-              Launch Kiosk
+            <button type="button" class="btn btn-primary-32 js-vs-launch-kiosk" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" style="flex: 1 1 120px;" ${isDisabled ? 'disabled title="Disabled event cannot launch kiosk"' : ''}>
+              ${isDisabled ? 'Event Disabled' : 'Launch Kiosk'}
             </button>
-            <button type="button" class="btn btn-secondary-32-sm js-vs-edit-calltime" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" data-call-time="${escapeHtml(v.call_time || '08:00')}">
+            <button type="button" class="btn btn-secondary-32-sm js-vs-edit-calltime" data-cp-id="${escapeHtml(String(v.id))}" data-cp-name="${escapeHtml(v.name)}" data-call-time="${escapeHtml(v.call_time || '08:00')}" ${isDisabled ? 'disabled' : ''}>
               Call Time
             </button>
             ${crudRow}
@@ -9717,50 +9911,29 @@
     let showCoord = true;
     let disablePm = false;
     let disableCoord = false;
+    let disableTechLead = false;
+    let showAutoTags = !ev;
     let pmValInit = '';
     let coordValInit = '';
-    const disableTechLead = isTechLead && curName !== '';
-    let techLeadValInit = isTechLead ? curName : '';
+    let techLeadValInit = '';
 
     if (ev) {
+      // Editing / reassigning an existing event: unlock all 3 roles so Tech Lead, PM, and Coordinator can hand off dynamically
+      // (unless event is disabled and caller is not an Admin, in which case keep it read-only)
       const rawTl = String(ev.tech_lead || ev.lead_name || '').trim();
-      if (rawTl && rawTl.toLowerCase() !== 'tech lead' && rawTl.toLowerCase() !== 'technical lead') {
-        techLeadValInit = rawTl;
-      }
+      techLeadValInit = !isPlaceholderLeadershipValue(rawTl) ? rawTl : '';
       const rawPm = String(ev.project_manager || '').trim();
       const rawCoord = String(ev.event_coordinator || '').trim();
-      const hasRealPm = rawPm !== '' && rawPm.toLowerCase() !== 'operations pm';
-      const hasCoord = rawCoord !== '';
-      const hasLegacyPm = rawPm !== '' && !hasCoord;
-
-      if (hasCoord && !hasRealPm) {
-        showPm = false;
-        showCoord = true;
-        disableCoord = true;
-        coordValInit = rawCoord;
-      } else if (hasRealPm && hasCoord) {
-        showPm = true;
-        showCoord = true;
+      pmValInit = !isPlaceholderLeadershipValue(rawPm) ? rawPm : '';
+      coordValInit = !isPlaceholderLeadershipValue(rawCoord) ? rawCoord : '';
+      if (Number(ev.is_active ?? 1) === 0 && !isAdmin) {
+        disableTechLead = true;
         disablePm = true;
         disableCoord = true;
-        pmValInit = rawPm;
-        coordValInit = rawCoord;
-      } else if (hasRealPm || hasLegacyPm) {
-        showPm = true;
-        showCoord = false;
-        disablePm = true;
-        pmValInit = rawPm;
-      } else if (isPm && curName) {
-        showPm = true;
-        showCoord = false;
-        disablePm = true;
-        pmValInit = curName;
-      } else if (isCoord && curName) {
-        showPm = false;
-        showCoord = true;
-        disableCoord = true;
-        coordValInit = curName;
       }
+    } else if (isTechLead && curName) {
+      disableTechLead = true;
+      techLeadValInit = curName;
     } else if (isPm && curName) {
       showPm = true;
       showCoord = false;
@@ -9773,9 +9946,11 @@
       coordValInit = curName;
     }
 
-    const targetsPrefix = (showCoord && !showPm)
+    const hasCoordInit = !isPlaceholderLeadershipValue(coordValInit);
+    const hasPmInit = !isPlaceholderLeadershipValue(pmValInit);
+    const targetsPrefix = hasCoordInit && !hasPmInit
       ? 'Coordinator Targets:'
-      : ((showPm && showCoord) ? 'Command Targets:' : 'PM Targets:');
+      : ((!showPm && showCoord) ? 'Coordinator Targets:' : 'PM Targets:');
 
     return {
       isAdmin,
@@ -9787,12 +9962,118 @@
       disablePm,
       disableCoord,
       disableTechLead,
+      showAutoTags,
       pmValInit,
       coordValInit,
       techLeadValInit,
       requirePmOrCoord: isTechLead,
       targetsPrefix,
     };
+  }
+
+  function syncExclusivePmCoordFields(pmEl, coordEl, opts = {}) {
+    const {
+      disablePm = false,
+      disableCoord = false,
+      pmAutoTag = null,
+      coordAutoTag = null,
+      pmClearBtn = null,
+      coordClearBtn = null,
+    } = opts;
+    if (!pmEl || !coordEl) {
+      if (pmEl) applySelectLockState(pmEl, disablePm, pmAutoTag);
+      if (coordEl) applySelectLockState(coordEl, disableCoord, coordAutoTag);
+      if (pmClearBtn) pmClearBtn.style.display = 'none';
+      if (coordClearBtn) coordClearBtn.style.display = 'none';
+      return;
+    }
+
+    const pmVal = isPlaceholderLeadershipValue(pmEl.value) ? '' : String(pmEl.value).trim();
+    const coordVal = isPlaceholderLeadershipValue(coordEl.value) ? '' : String(coordEl.value).trim();
+
+    if (disablePm || disableCoord) {
+      applySelectLockState(pmEl, disablePm, pmAutoTag);
+      applySelectLockState(coordEl, disableCoord, coordAutoTag);
+      if (pmClearBtn) pmClearBtn.style.display = 'none';
+      if (coordClearBtn) coordClearBtn.style.display = 'none';
+      return;
+    }
+
+    if (pmVal && !coordVal) {
+      applySelectLockState(pmEl, false, pmAutoTag);
+      applySelectLockState(coordEl, true, null);
+      if (pmClearBtn) pmClearBtn.style.display = 'inline';
+      if (coordClearBtn) coordClearBtn.style.display = 'none';
+    } else if (coordVal && !pmVal) {
+      applySelectLockState(pmEl, true, null);
+      applySelectLockState(coordEl, false, coordAutoTag);
+      if (pmClearBtn) pmClearBtn.style.display = 'none';
+      if (coordClearBtn) coordClearBtn.style.display = 'inline';
+    } else {
+      applySelectLockState(pmEl, false, pmAutoTag);
+      applySelectLockState(coordEl, false, coordAutoTag);
+      if (pmClearBtn) pmClearBtn.style.display = pmVal ? 'inline' : 'none';
+      if (coordClearBtn) coordClearBtn.style.display = coordVal ? 'inline' : 'none';
+    }
+  }
+
+  function bindExclusivePmCoordSelects(pmEl, coordEl, opts = {}) {
+    const { getSyncOpts = () => ({}), onAfterChange = null } = opts;
+    if (!pmEl || !coordEl || pmEl.dataset.exclusiveBound === '1') return;
+    pmEl.dataset.exclusiveBound = '1';
+    coordEl.dataset.exclusiveBound = '1';
+
+    const syncOpts = () => getSyncOpts();
+    const refresh = () => {
+      syncExclusivePmCoordFields(pmEl, coordEl, syncOpts());
+      if (typeof onAfterChange === 'function') onAfterChange();
+    };
+
+    pmEl.addEventListener('change', () => {
+      if (!isPlaceholderLeadershipValue(pmEl.value)) {
+        coordEl.value = '';
+      }
+      refresh();
+    });
+    coordEl.addEventListener('change', () => {
+      if (!isPlaceholderLeadershipValue(coordEl.value)) {
+        pmEl.value = '';
+      }
+      refresh();
+    });
+
+    const initial = syncOpts();
+    if (initial.pmClearBtn && initial.pmClearBtn.dataset.clearBound !== '1') {
+      initial.pmClearBtn.dataset.clearBound = '1';
+      initial.pmClearBtn.addEventListener('click', () => {
+        pmEl.value = '';
+        refresh();
+      });
+    }
+    if (initial.coordClearBtn && initial.coordClearBtn.dataset.clearBound !== '1') {
+      initial.coordClearBtn.dataset.clearBound = '1';
+      initial.coordClearBtn.addEventListener('click', () => {
+        coordEl.value = '';
+        refresh();
+      });
+    }
+  }
+
+  function validateLeadershipSelection(tlVal, pmVal, coordVal, opts = {}) {
+    const { requireTechLead = true, requireCommandForTl = false } = opts;
+    const hasTl = !isPlaceholderLeadershipValue(tlVal);
+    const hasPm = !isPlaceholderLeadershipValue(pmVal);
+    const hasCoord = !isPlaceholderLeadershipValue(coordVal);
+    if (requireTechLead && !hasTl) {
+      return { valid: false, focusTarget: 'techlead', message: 'Please select an Event Tech Lead.' };
+    }
+    if (hasPm && hasCoord) {
+      return { valid: false, focusTarget: 'pm', message: 'Please select either a Project Manager or an Event Coordinator (not both).' };
+    }
+    if (requireCommandForTl && isCurrentUserTechLeadOnly() && !hasPm && !hasCoord) {
+      return { valid: false, focusTarget: 'pm', message: 'Please select a Project Manager or Event Coordinator for this event.' };
+    }
+    return { valid: true };
   }
 
   function getEventTargetsProgressItems(targetsMap = {}, selectedIdSet = new Set()) {
@@ -9804,7 +10085,7 @@
         const assigned = b ? b.members.filter((m) => selectedIdSet.has(Number(m.id))).length : 0;
         const needNum = Number(need);
         const met = assigned >= needNum;
-        const dispDept = dept === 'Sound' ? 'Audio / Sound' : dept;
+        const dispDept = dept === 'Sound' ? 'Audio' : dept;
         return { dept, dispDept, assigned, need: needNum, met };
       });
   }
@@ -9889,7 +10170,7 @@
         ? 'status-badge-green-sm'
         : (st === 'needs_adjustment' ? 'status-badge-amber-sm' : 'status-badge-blue-sm');
       const badgeTxt = st === 'confirmed' ? '✓ Confirmed' : (st === 'needs_adjustment' ? '⚠ Needs Adjustment' : 'Comment');
-      const deptLabel = item.department === 'Sound' ? 'Audio / Sound' : (item.department || 'General');
+      const deptLabel = item.department === 'Sound' ? 'Audio' : (item.department || 'General');
       return `
         <div style="padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:12px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
@@ -9966,7 +10247,7 @@
     deptSel.innerHTML = buckets.map((b) => {
       const selCount = b.members.filter((m) => venueCrudSelectedCrewIds.has(Number(m.id))).length;
       const targetNeed = Number(venueCrudCurrentTargets[b.dept] || 0);
-      const dispDept = b.dept === 'Sound' ? 'Audio / Sound' : b.dept;
+      const dispDept = b.dept === 'Sound' ? 'Audio' : b.dept;
       let countText = `${b.members.length} crew`;
       if (targetNeed > 0) {
         countText += ` · ${selCount}/${targetNeed} needed`;
@@ -9999,7 +10280,7 @@
         const selMembers = b.members.filter((m) => venueCrudSelectedCrewIds.has(Number(m.id)));
         if (selMembers.length === 0) return '';
         const targetNeed = Number(venueCrudCurrentTargets[b.dept] || 0);
-        const dispDept = b.dept === 'Sound' ? 'Audio / Sound' : b.dept;
+        const dispDept = b.dept === 'Sound' ? 'Audio' : b.dept;
         const suffix = targetNeed > 0 ? `${selMembers.length}/${targetNeed}` : `${selMembers.length}`;
         return `<button type="button" class="status-badge status-badge-purple-sm js-venue-dept-chip" data-dept="${escapeHtml(b.dept)}" style="border:none;cursor:pointer;" title="Switch to ${escapeHtml(dispDept)}">${escapeHtml(dispDept)}: ${suffix} ✓</button>`;
       })
@@ -10112,7 +10393,12 @@
     resetDropzone('venue');
     const rmImgEl = document.getElementById('venue-crud-remove-image');
     const delModalBtn = document.getElementById('venue-crud-delete-btn');
+    const disableModalBtn = document.getElementById('venue-crud-disable-btn');
+    const enableModalBtn = document.getElementById('venue-crud-enable-btn');
+    const disabledBannerEl = document.getElementById('venue-crud-disabled-banner');
     const subModalBtn = document.getElementById('venue-crud-submit-btn');
+    const pmClearBtn = document.getElementById('venue-crud-pm-clear-btn');
+    const coordClearBtn = document.getElementById('venue-crud-coord-clear-btn');
     if (rmImgEl) rmImgEl.value = '0';
     const todayIso = new Date().toISOString().slice(0, 10);
     const leadGrid = document.getElementById('venue-crud-leadership-grid');
@@ -10120,6 +10406,17 @@
     const coordWrap = document.getElementById('venue-crud-coord-wrap');
     const leadView = getEventLeadershipViewState(venue);
     const { showPm, showCoord, disablePm, disableCoord, disableTechLead, pmValInit, coordValInit, techLeadValInit } = leadView;
+    const isVenueDisabled = Boolean(venue && Number(venue.is_active ?? 1) === 0);
+
+    if (disabledBannerEl) {
+      if (isVenueDisabled) {
+        disabledBannerEl.textContent = formatEventDisabledInfoText(venue);
+        disabledBannerEl.style.display = 'block';
+      } else {
+        disabledBannerEl.textContent = '';
+        disabledBannerEl.style.display = 'none';
+      }
+    }
 
     if (venue) {
       const startIso = venue.start_date || venue.date || todayIso;
@@ -10135,8 +10432,14 @@
       }
       if (durEl) durEl.value = venue.duration_label || computeEventDuration(startIso, endIso).label;
       if (ctEl) ctEl.value = venue.call_time || '08:00';
-      if (subModalBtn) subModalBtn.textContent = 'Save Event Changes';
-      if (delModalBtn) delModalBtn.style.display = canCurrentUserAssignEvents() ? 'inline-flex' : 'none';
+      if (subModalBtn) {
+        const readOnlyDisabled = isVenueDisabled && !isAdmin;
+        subModalBtn.disabled = readOnlyDisabled;
+        subModalBtn.textContent = readOnlyDisabled ? 'Event Disabled' : 'Save Event Changes';
+      }
+      if (disableModalBtn) disableModalBtn.style.display = (!isVenueDisabled && canCurrentUserDisableEvents()) ? 'inline-flex' : 'none';
+      if (enableModalBtn) enableModalBtn.style.display = (isVenueDisabled && canCurrentUserDeleteEvents()) ? 'inline-flex' : 'none';
+      if (delModalBtn) delModalBtn.style.display = canCurrentUserDeleteEvents() ? 'inline-flex' : 'none';
       populateLeadershipSelect(tlEl, techLeadValInit || venue.tech_lead || venue.lead_name || '', 'techlead');
       populateLeadershipSelect(pmEl, pmValInit, 'pm');
       populateLeadershipSelect(coordEl, coordValInit, 'coordinator');
@@ -10155,7 +10458,12 @@
       }
       if (durEl) durEl.value = '1 day';
       if (ctEl) ctEl.value = '08:00';
-      if (subModalBtn) subModalBtn.textContent = 'Save Event Venue';
+      if (subModalBtn) {
+        subModalBtn.disabled = false;
+        subModalBtn.textContent = 'Save Event Venue';
+      }
+      if (disableModalBtn) disableModalBtn.style.display = 'none';
+      if (enableModalBtn) enableModalBtn.style.display = 'none';
       if (delModalBtn) delModalBtn.style.display = 'none';
       populateLeadershipSelect(tlEl, techLeadValInit, 'techlead');
       populateLeadershipSelect(pmEl, pmValInit, 'pm');
@@ -10220,9 +10528,34 @@
       leadGrid.style.gridTemplateColumns = `repeat(${visibleCols}, minmax(0, 1fr))`;
     }
 
-    applySelectLockState(tlEl, disableTechLead, tlAutoTag);
-    applySelectLockState(pmEl, disablePm, pmAutoTag);
-    applySelectLockState(coordEl, disableCoord, coordAutoTag);
+    if (!leadView.showAutoTags) {
+      if (tlAutoTag) tlAutoTag.style.display = 'none';
+      if (pmAutoTag) pmAutoTag.style.display = 'none';
+      if (coordAutoTag) coordAutoTag.style.display = 'none';
+    }
+    applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null);
+    const getVenueLockState = () => {
+      const curId = document.getElementById('venue-crud-id')?.value.trim() || '';
+      const curEv = curId ? (state.checkpoints?.event_venues || []).find((x) => String(x.raw_id || x.id) === curId) || null : null;
+      const lv = getEventLeadershipViewState(curEv);
+      return {
+        disablePm: lv.disablePm,
+        disableCoord: lv.disableCoord,
+        pmAutoTag: lv.showAutoTags ? pmAutoTag : null,
+        coordAutoTag: lv.showAutoTags ? coordAutoTag : null,
+        pmClearBtn,
+        coordClearBtn,
+      };
+    };
+    bindExclusivePmCoordSelects(pmEl, coordEl, { getSyncOpts: getVenueLockState });
+    syncExclusivePmCoordFields(pmEl, coordEl, {
+      disablePm,
+      disableCoord,
+      pmAutoTag: leadView.showAutoTags ? pmAutoTag : null,
+      coordAutoTag: leadView.showAutoTags ? coordAutoTag : null,
+      pmClearBtn,
+      coordClearBtn,
+    });
 
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
@@ -11563,7 +11896,10 @@
   function syncDispatchEventSelect(selEl, ctx) {
     if (!selEl) return;
     selEl.innerHTML = '<option value="">All Crew Department Pool</option>' +
-      ctx.events.map((ev) => `<option value="${escapeHtml(String(ev.raw_id || ev.id))}">${escapeHtml(ev.title || ev.name)}</option>`).join('');
+      ctx.events.map((ev) => {
+        const disabledSuffix = Number(ev.is_active ?? 1) === 0 ? ' [DISABLED]' : '';
+        return `<option value="${escapeHtml(String(ev.raw_id || ev.id))}">${escapeHtml((ev.title || ev.name) + disabledSuffix)}</option>`;
+      }).join('');
     if (ctx.resolvedId) {
       selEl.value = ctx.resolvedId;
     }
@@ -11641,6 +11977,8 @@
       let commandExtrasHtml = '';
       let leadView = null;
       const inspPfx = inspectorEl.id || 'df-insp';
+      const isActiveEvDisabled = Boolean(activeEv && Number(activeEv.is_active ?? 1) === 0);
+      const activeEvDisabledBanner = activeEv ? buildEventDisabledBannerHtml(activeEv, '10px') : '';
       if (showTier1CommandExtras) {
         leadView = getEventLeadershipViewState(activeEv);
         const orig = ctx.originator || getEventRequestOriginatorInfo(activeEv);
@@ -11652,61 +11990,50 @@
           orig.targetsPrefix || leadView.targetsPrefix,
           'No department headcount targets set yet.'
         );
-        if (isTlOnlyCaller) {
-          // Tech Lead sees the incoming Tier 1 Request Originator (Admin / PM / Coordinator) + requested targets read-only
-          commandExtrasHtml = `
-            <div class="df-command-extras">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Incoming Dispatch Request (${escapeHtml(orig.roleLabel)} → Tech Lead)</span>
-                ${ctx.isApproved ? `<span class="status-badge status-badge-green-sm">✓ Approved by Tech Lead</span>` : `<span class="status-badge status-badge-amber-sm">Awaiting Your Approval</span>`}
+        const lockInputsBecauseDisabled = isActiveEvDisabled && !isCurrentUserAdmin();
+        const showAdminOriginBox = Boolean(orig.isAdminOrigin);
+        const visibleCols = 1 + (leadView.showPm ? 1 : 0) + (leadView.showCoord ? 1 : 0) + (showAdminOriginBox ? 1 : 0);
+        const tlHeaderBadge = isTlOnlyCaller
+          ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Dispatch Request (${escapeHtml(orig.roleLabel)} ↔ Tech Lead)</span>
+              ${ctx.isApproved ? `<span class="status-badge status-badge-green-sm">✓ Approved by Tech Lead</span>` : `<span class="status-badge status-badge-amber-sm">Awaiting Tech Lead Approval</span>`}
+            </div>`
+          : '';
+        commandExtrasHtml = `
+          <div class="df-command-extras">
+            ${activeEvDisabledBanner}
+            ${tlHeaderBadge}
+            <div class="df-leadership-grid" style="display: grid; grid-template-columns: repeat(${visibleCols}, minmax(0, 1fr)); gap: 12px;">
+              <div class="form-field" style="margin: 0;">
+                <label class="form-label" for="${escapeHtml(inspPfx)}-techlead">Technical Lead</label>
+                <select id="${escapeHtml(inspPfx)}-techlead" class="form-input js-df-techlead-select" ${lockInputsBecauseDisabled ? 'disabled' : ''}></select>
               </div>
-              <div class="df-leadership-grid" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
-                <div class="form-field" style="margin: 0;">
-                  <label class="form-label">${escapeHtml(orig.roleLabel)} <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span></label>
-                  <input type="text" class="form-input" value="${escapeHtml(orig.name)}" disabled style="background: var(--bg-subtle); cursor: not-allowed; opacity: 0.9;" />
-                </div>
-                <div class="form-field" style="margin: 0;">
-                  <label class="form-label">Assigned Technical Lead</label>
-                  <input type="text" class="form-input" value="${escapeHtml(ctx.tlName)}" disabled style="background: var(--bg-subtle); cursor: not-allowed; opacity: 0.9;" />
-                </div>
+              ${showAdminOriginBox ? `
+              <div class="form-field" style="margin: 0;">
+                <label class="form-label">Administrator <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span></label>
+                <input type="text" class="form-input" value="${escapeHtml(orig.name)}" disabled style="background: var(--bg-subtle); cursor: not-allowed; opacity: 0.85;" />
+              </div>` : ''}
+              <div class="form-field" style="margin: 0; display: ${leadView.showPm ? 'block' : 'none'};">
+                <label class="form-label" for="${escapeHtml(inspPfx)}-pm" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                  <span>Project Manager</span>
+                  <button type="button" class="js-df-clear-pm" style="display:none;background:none;border:none;padding:0;font-size:10.5px;font-weight:600;color:var(--brand-primary);cursor:pointer;">Clear</button>
+                </label>
+                <select id="${escapeHtml(inspPfx)}-pm" class="form-input js-df-pm-select" ${lockInputsBecauseDisabled ? 'disabled' : ''}></select>
               </div>
-              <div class="df-targets-banner" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 11.5px;">
-                ${targetsHtml}
+              <div class="form-field" style="margin: 0; display: ${leadView.showCoord ? 'block' : 'none'};">
+                <label class="form-label" for="${escapeHtml(inspPfx)}-coord" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                  <span>Event Coordinator</span>
+                  <button type="button" class="js-df-clear-coord" style="display:none;background:none;border:none;padding:0;font-size:10.5px;font-weight:600;color:var(--brand-primary);cursor:pointer;">Clear</button>
+                </label>
+                <select id="${escapeHtml(inspPfx)}-coord" class="form-input js-df-coord-select" ${lockInputsBecauseDisabled ? 'disabled' : ''}></select>
               </div>
-              ${briefNotes ? `<div style="font-size:11.5px;color:var(--text-secondary);"><strong>Command Brief:</strong> ${escapeHtml(briefNotes)}</div>` : ''}
             </div>
-          `;
-        } else {
-          const showAdminOriginBox = Boolean(orig.isAdminOrigin);
-          const visibleCols = 1 + (leadView.showPm ? 1 : 0) + (leadView.showCoord ? 1 : 0) + (showAdminOriginBox ? 1 : 0);
-          commandExtrasHtml = `
-            <div class="df-command-extras">
-              <div class="df-leadership-grid" style="display: grid; grid-template-columns: repeat(${visibleCols}, minmax(0, 1fr)); gap: 12px;">
-                <div class="form-field" style="margin: 0;">
-                  <label class="form-label" for="${escapeHtml(inspPfx)}-techlead">Technical Lead</label>
-                  <select id="${escapeHtml(inspPfx)}-techlead" class="form-input js-df-techlead-select"></select>
-                </div>
-                ${showAdminOriginBox ? `
-                <div class="form-field" style="margin: 0;">
-                  <label class="form-label">Administrator <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span></label>
-                  <input type="text" class="form-input" value="${escapeHtml(orig.name)}" disabled style="background: var(--bg-subtle); cursor: not-allowed; opacity: 0.85;" />
-                </div>` : ''}
-                <div class="form-field" style="margin: 0; display: ${leadView.showPm ? 'block' : 'none'};">
-                  <label class="form-label" for="${escapeHtml(inspPfx)}-pm">Project Manager <span style="display: ${leadView.disablePm ? 'inline' : 'none'}; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span></label>
-                  <select id="${escapeHtml(inspPfx)}-pm" class="form-input js-df-pm-select" ${leadView.disablePm ? 'disabled style="background: var(--bg-subtle); cursor: not-allowed; opacity: 0.85;"' : ''}></select>
-                </div>
-                <div class="form-field" style="margin: 0; display: ${leadView.showCoord ? 'block' : 'none'};">
-                  <label class="form-label" for="${escapeHtml(inspPfx)}-coord">Event Coordinator <span style="display: ${leadView.disableCoord ? 'inline' : 'none'}; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span></label>
-                  <select id="${escapeHtml(inspPfx)}-coord" class="form-input js-df-coord-select" ${leadView.disableCoord ? 'disabled style="background: var(--bg-subtle); cursor: not-allowed; opacity: 0.85;"' : ''}></select>
-                </div>
-              </div>
-              <div class="df-targets-banner" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 11.5px;">
-                ${targetsHtml}
-              </div>
-              ${briefNotes ? `<div style="font-size:11.5px;color:var(--text-secondary);"><strong>Brief Notes:</strong> ${escapeHtml(briefNotes)}</div>` : ''}
+            <div class="df-targets-banner" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 11.5px;">
+              ${targetsHtml}
             </div>
-          `;
-        }
+            ${briefNotes ? `<div style="font-size:11.5px;color:var(--text-secondary);"><strong>Command Brief:</strong> ${escapeHtml(briefNotes)}</div>` : ''}
+          </div>
+        `;
       } else if (showTier2TlSummary) {
         const orig = ctx.originator || getEventRequestOriginatorInfo(activeEv);
         const assignedSet = new Set((activeEv.assigned_technicians || []).map(Number));
@@ -11846,43 +12173,114 @@
         `;
       }
 
-      if (showTier1CommandExtras && leadView && !isTlOnlyCaller) {
+      if (showTier1CommandExtras && leadView) {
         const tlSel = inspectorEl.querySelector('.js-df-techlead-select');
         const pmSel = inspectorEl.querySelector('.js-df-pm-select');
         const coordSel = inspectorEl.querySelector('.js-df-coord-select');
+        const pmClearBtn = inspectorEl.querySelector('.js-df-clear-pm');
+        const coordClearBtn = inspectorEl.querySelector('.js-df-clear-coord');
+        const lockInputsBecauseDisabled = isActiveEvDisabled && !isCurrentUserAdmin();
+
         populateLeadershipSelect(tlSel, activeEv.tech_lead || activeEv.lead_name || '', 'techlead');
         populateLeadershipSelect(pmSel, leadView.pmValInit, 'pm');
         populateLeadershipSelect(coordSel, leadView.coordValInit, 'coordinator');
+        applySelectLockState(tlSel, lockInputsBecauseDisabled);
+        syncExclusivePmCoordFields(pmSel, coordSel, {
+          disablePm: lockInputsBecauseDisabled,
+          disableCoord: lockInputsBecauseDisabled,
+          pmClearBtn: lockInputsBecauseDisabled ? null : pmClearBtn,
+          coordClearBtn: lockInputsBecauseDisabled ? null : coordClearBtn,
+        });
 
-        if (tlSel) {
+        const saveDispatchLeadershipChange = async (fields, toastMsg) => {
+          const evId = String(activeEv.raw_id || activeEv.id || '');
+          if (!evId) return;
+          if (tlSel) tlSel.disabled = true;
+          if (pmSel) pmSel.disabled = true;
+          if (coordSel) coordSel.disabled = true;
+          try {
+            const fd = new FormData();
+            fd.append('event_id', evId);
+            fd.append('call_time', activeEv.call_time || '08:00');
+            if (Object.prototype.hasOwnProperty.call(fields, 'tech_lead')) {
+              fd.append('tech_lead', fields.tech_lead);
+            }
+            if (Object.prototype.hasOwnProperty.call(fields, 'project_manager')) {
+              fd.append('project_manager', fields.project_manager);
+            }
+            if (Object.prototype.hasOwnProperty.call(fields, 'event_coordinator')) {
+              fd.append('event_coordinator', fields.event_coordinator);
+            }
+            const res = await fetch('api.php?action=save_event', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok || !data || !data.ok) {
+              throw new Error((data && data.error) || 'Failed to update event leadership.');
+            }
+            applyBootstrapPayload(data, true);
+            renderAll();
+            showToast(toastMsg || 'Event leadership updated.', 'success');
+          } catch (err) {
+            showToast(err.message || 'Failed to update event leadership.', 'error');
+            renderDispatchViews();
+          }
+        };
+
+        if (tlSel && !lockInputsBecauseDisabled) {
           tlSel.addEventListener('change', async () => {
             const nextTl = tlSel.value.trim();
-            const evId = String(activeEv.raw_id || activeEv.id || '');
-            if (!evId) return;
             if (!nextTl) {
               tlSel.value = activeEv.tech_lead || '';
               showToast('Please select a Technical Lead.', 'warning');
               return;
             }
-            tlSel.disabled = true;
-            try {
-              const fd = new FormData();
-              fd.append('event_id', evId);
-              fd.append('call_time', activeEv.call_time || '08:00');
-              fd.append('tech_lead', nextTl);
-              const res = await fetch('api.php?action=save_event', { method: 'POST', body: fd });
-              const data = await res.json();
-              if (!res.ok || !data || !data.ok) {
-                throw new Error((data && data.error) || 'Failed to update Technical Lead.');
-              }
-              applyBootstrapPayload(data, true);
-              renderVenueSecurityPage();
-              renderDispatchViews();
-              showToast(`Technical Lead updated to ${nextTl} — awaiting approval.`, 'success');
-            } catch (err) {
-              showToast(err.message || 'Failed to update Technical Lead.', 'error');
-              renderDispatchViews();
+            await saveDispatchLeadershipChange(
+              { tech_lead: nextTl },
+              `Technical Lead reassigned to ${nextTl} — awaiting approval.`
+            );
+          });
+        }
+        if (pmSel && !lockInputsBecauseDisabled) {
+          pmSel.addEventListener('change', async () => {
+            const nextPm = pmSel.value.trim();
+            if (!nextPm && !isCurrentUserAdmin()) {
+              syncExclusivePmCoordFields(pmSel, coordSel, { pmClearBtn, coordClearBtn });
+              showToast('Please select an Event Coordinator or another Project Manager.', 'warning');
+              return;
             }
+            if (coordSel) coordSel.value = '';
+            await saveDispatchLeadershipChange(
+              { project_manager: nextPm, event_coordinator: '' },
+              nextPm ? `Project Manager assigned to ${nextPm}.` : 'Project Manager cleared.'
+            );
+          });
+        }
+        if (coordSel && !lockInputsBecauseDisabled) {
+          coordSel.addEventListener('change', async () => {
+            const nextCoord = coordSel.value.trim();
+            if (!nextCoord && !isCurrentUserAdmin()) {
+              syncExclusivePmCoordFields(pmSel, coordSel, { pmClearBtn, coordClearBtn });
+              showToast('Please select a Project Manager or another Event Coordinator.', 'warning');
+              return;
+            }
+            if (pmSel) pmSel.value = '';
+            await saveDispatchLeadershipChange(
+              { project_manager: '', event_coordinator: nextCoord },
+              nextCoord ? `Event Coordinator assigned to ${nextCoord}.` : 'Event Coordinator cleared.'
+            );
+          });
+        }
+        if (pmClearBtn && !lockInputsBecauseDisabled) {
+          pmClearBtn.addEventListener('click', () => {
+            if (pmSel) pmSel.value = '';
+            syncExclusivePmCoordFields(pmSel, coordSel, { pmClearBtn, coordClearBtn });
+            showToast('Cleared Project Manager — choose an Event Coordinator or replacement PM to reassign.', 'info');
+          });
+        }
+        if (coordClearBtn && !lockInputsBecauseDisabled) {
+          coordClearBtn.addEventListener('click', () => {
+            if (coordSel) coordSel.value = '';
+            syncExclusivePmCoordFields(pmSel, coordSel, { pmClearBtn, coordClearBtn });
+            showToast('Cleared Event Coordinator — choose a Project Manager or replacement Coordinator to reassign.', 'info');
           });
         }
       }
@@ -12119,7 +12517,7 @@
     const orig = ctx.originator || getEventRequestOriginatorInfo(activeEv);
     const reqPillsHtml = [...deptNames, 'Support Staff']
       .filter((dn) => Number(reqBranches[dn] || 0) > 0)
-      .map((dn) => `<span class="status-badge status-badge-purple-sm">${escapeHtml(dn === 'Sound' ? 'Audio / Sound' : dn)}: ${Number(reqBranches[dn])} needed</span>`)
+      .map((dn) => `<span class="status-badge status-badge-purple-sm">${escapeHtml(dn === 'Sound' ? 'Audio' : dn)}: ${Number(reqBranches[dn])} needed</span>`)
       .join('');
 
     deck.innerHTML = `
@@ -12381,37 +12779,38 @@
     const coordEl = document.getElementById('ce-coordinator');
     const pmAutoTag = document.getElementById('ce-pm-auto-tag');
     const coordAutoTag = document.getElementById('ce-coord-auto-tag');
+    const pmClearBtn = document.getElementById('ce-pm-clear-btn');
+    const coordClearBtn = document.getElementById('ce-coord-clear-btn');
     const pmStar = document.getElementById('ce-pm-req-star');
     const coordStar = document.getElementById('ce-coord-req-star');
     const leadHint = document.getElementById('ce-leadership-hint');
 
     const leadView = getEventLeadershipViewState(ev);
-    const { isAdmin, isTechLead, disableTechLead, techLeadValInit, requirePmOrCoord } = leadView;
-
-    let showPm = leadView.showPm;
-    let showCoord = leadView.showCoord;
-    let disablePm = leadView.disablePm;
-    let disableCoord = leadView.disableCoord;
-    let pmValInit = leadView.pmValInit;
-    let coordValInit = leadView.coordValInit;
-
-    if (ev && (isTechLead || isAdmin)) {
-      showPm = true;
-      showCoord = true;
-      disablePm = false;
-      disableCoord = false;
-      const rawPm = String(ev.project_manager || '').trim();
-      pmValInit = rawPm.toLowerCase() === 'operations pm' ? '' : rawPm;
-      coordValInit = String(ev.event_coordinator || '').trim();
-    }
+    const {
+      showPm,
+      showCoord,
+      disablePm,
+      disableCoord,
+      disableTechLead,
+      showAutoTags,
+      pmValInit,
+      coordValInit,
+      techLeadValInit,
+      requirePmOrCoord,
+    } = leadView;
 
     const desiredTl = disableTechLead
       ? techLeadValInit
-      : (ev ? (techLeadValInit || ev.tech_lead || '') : (preserveSelections ? (tlEl?.value || '') : ''));
+      : (preserveSelections ? (tlEl?.value ?? techLeadValInit) : techLeadValInit);
     if (tlEl && (!preserveSelections || disableTechLead || !tlEl.matches(':focus'))) {
       populateLeadershipSelect(tlEl, desiredTl, 'techlead');
     }
-    applySelectLockState(tlEl, disableTechLead, tlAutoTag);
+    if (!leadView.showAutoTags) {
+      if (tlAutoTag) tlAutoTag.style.display = 'none';
+      if (pmAutoTag) pmAutoTag.style.display = 'none';
+      if (coordAutoTag) coordAutoTag.style.display = 'none';
+    }
+    applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null);
     if (tlRoleHint) tlRoleHint.style.display = disableTechLead ? 'none' : 'inline';
 
     if (pmWrap) pmWrap.style.display = showPm ? 'block' : 'none';
@@ -12423,10 +12822,10 @@
 
     const desiredPm = disablePm
       ? pmValInit
-      : (ev ? pmValInit : (preserveSelections ? (pmEl?.value || '') : ''));
+      : (preserveSelections ? (pmEl?.value ?? pmValInit) : pmValInit);
     const desiredCoord = disableCoord
       ? coordValInit
-      : (ev ? coordValInit : (preserveSelections ? (coordEl?.value || '') : ''));
+      : (preserveSelections ? (coordEl?.value ?? coordValInit) : coordValInit);
 
     if (pmEl && (!preserveSelections || disablePm || !pmEl.matches(':focus'))) {
       populateLeadershipSelect(pmEl, desiredPm, 'pm');
@@ -12434,12 +12833,44 @@
     if (coordEl && (!preserveSelections || disableCoord || !coordEl.matches(':focus'))) {
       populateLeadershipSelect(coordEl, desiredCoord, 'coordinator');
     }
-    applySelectLockState(pmEl, disablePm, pmAutoTag);
-    applySelectLockState(coordEl, disableCoord, coordAutoTag);
+
+    const getCeLockState = () => {
+      const editingCeId = document.getElementById('ce-event-id')?.value.trim() || '';
+      const editingEv = editingCeId
+        ? getVisibleEventsList().find((v) => String(v.raw_id || v.id) === String(editingCeId)) || null
+        : null;
+      const lv = getEventLeadershipViewState(editingEv);
+      return {
+        disablePm: lv.disablePm,
+        disableCoord: lv.disableCoord,
+        pmAutoTag: lv.showAutoTags ? pmAutoTag : null,
+        coordAutoTag: lv.showAutoTags ? coordAutoTag : null,
+        pmClearBtn,
+        coordClearBtn,
+      };
+    };
+
+    bindExclusivePmCoordSelects(pmEl, coordEl, {
+      getSyncOpts: getCeLockState,
+      onAfterChange: updateCreateEventLivePreview,
+    });
+    syncExclusivePmCoordFields(pmEl, coordEl, {
+      disablePm,
+      disableCoord,
+      pmAutoTag: leadView.showAutoTags ? pmAutoTag : null,
+      coordAutoTag: leadView.showAutoTags ? coordAutoTag : null,
+      pmClearBtn,
+      coordClearBtn,
+    });
 
     if (pmStar) pmStar.style.display = requirePmOrCoord ? 'inline' : 'none';
     if (coordStar) coordStar.style.display = requirePmOrCoord ? 'inline' : 'none';
-    if (leadHint) leadHint.style.display = requirePmOrCoord ? 'block' : 'none';
+    if (leadHint) {
+      leadHint.style.display = (showPm && showCoord) ? 'block' : 'none';
+      leadHint.textContent = requirePmOrCoord
+        ? 'Required: Select either a Project Manager or an Event Coordinator (not both).'
+        : 'Select either a Project Manager or an Event Coordinator (not both).';
+    }
   }
 
   function resetCreateEventForm() {
@@ -12454,6 +12885,10 @@
     const modeBadge = document.getElementById('ce-screen-mode-badge');
     const heading = document.getElementById('ce-form-heading');
     const cancelBtn = document.getElementById('ce-cancel-edit-btn');
+    const disableBtn = document.getElementById('ce-disable-btn');
+    const enableBtn = document.getElementById('ce-enable-btn');
+    const disabledBanner = document.getElementById('ce-disabled-banner');
+    const submitBtn = document.getElementById('ce-submit-btn');
     const submitLabel = document.querySelector('#ce-submit-btn span');
 
     if (idEl) idEl.value = '';
@@ -12466,6 +12901,13 @@
     if (modeBadge) modeBadge.textContent = 'New Event';
     if (heading) heading.textContent = 'Create Event Details';
     if (cancelBtn) cancelBtn.style.display = 'none';
+    if (disableBtn) disableBtn.style.display = 'none';
+    if (enableBtn) enableBtn.style.display = 'none';
+    if (disabledBanner) {
+      disabledBanner.style.display = 'none';
+      disabledBanner.textContent = '';
+    }
+    if (submitBtn) submitBtn.disabled = false;
     if (submitLabel) submitLabel.textContent = 'Save & Create Event';
     resetDropzone('ce');
     syncCreateEventLeadershipFields(null, false);
@@ -12477,6 +12919,8 @@
     const todayIso = new Date().toISOString().slice(0, 10);
     const startIso = ev.start_date || ev.date || todayIso;
     const endIso = ev.end_date || startIso;
+    const isDisabled = Number(ev.is_active ?? 1) === 0;
+    const isAdmin = isCurrentUserAdmin();
     const idEl = document.getElementById('ce-event-id');
     const titleEl = document.getElementById('ce-title');
     const locEl = document.getElementById('ce-location');
@@ -12487,6 +12931,10 @@
     const modeBadge = document.getElementById('ce-screen-mode-badge');
     const heading = document.getElementById('ce-form-heading');
     const cancelBtn = document.getElementById('ce-cancel-edit-btn');
+    const disableBtn = document.getElementById('ce-disable-btn');
+    const enableBtn = document.getElementById('ce-enable-btn');
+    const disabledBanner = document.getElementById('ce-disabled-banner');
+    const submitBtn = document.getElementById('ce-submit-btn');
     const submitLabel = document.querySelector('#ce-submit-btn span');
 
     if (idEl) idEl.value = String(ev.raw_id || ev.id || '');
@@ -12496,10 +12944,22 @@
     if (endEl) endEl.value = endIso;
     if (ctEl) ctEl.value = ev.call_time || '08:00';
     if (pinEl) pinEl.value = ev.terminal_pin || '1234';
-    if (modeBadge) modeBadge.textContent = 'Editing Event';
+    if (modeBadge) modeBadge.textContent = isDisabled ? 'Disabled Event' : 'Editing Event';
     if (heading) heading.textContent = `Edit Event: ${ev.title || ev.name}`;
     if (cancelBtn) cancelBtn.style.display = 'inline-flex';
-    if (submitLabel) submitLabel.textContent = 'Save Event Changes';
+    if (disableBtn) disableBtn.style.display = (!isDisabled && canCurrentUserDisableEvents()) ? 'inline-flex' : 'none';
+    if (enableBtn) enableBtn.style.display = (isDisabled && canCurrentUserDeleteEvents()) ? 'inline-flex' : 'none';
+    if (disabledBanner) {
+      if (isDisabled) {
+        disabledBanner.textContent = formatEventDisabledInfoText(ev);
+        disabledBanner.style.display = 'block';
+      } else {
+        disabledBanner.style.display = 'none';
+        disabledBanner.textContent = '';
+      }
+    }
+    if (submitBtn) submitBtn.disabled = isDisabled && !isAdmin;
+    if (submitLabel) submitLabel.textContent = (isDisabled && !isAdmin) ? 'Event Disabled' : 'Save Event Changes';
     resetDropzone('ce');
     if (ev.image) {
       setDropzonePreview('ce', ev.image, ev.image.split('/').pop());
@@ -12531,7 +12991,7 @@
     const q = String(state.createEventSearch || '').trim().toLowerCase();
     const filtered = allEvents.filter((ev) => {
       if (!q) return true;
-      const hay = `${ev.title || ''} ${ev.location || ''} ${ev.tech_lead || ''} ${ev.project_manager || ''} ${ev.event_coordinator || ''} ${ev.start_date || ev.date || ''}`.toLowerCase();
+      const hay = `${ev.title || ''} ${ev.location || ''} ${ev.tech_lead || ''} ${ev.project_manager || ''} ${ev.event_coordinator || ''} ${ev.disabled_reason || ''} ${ev.start_date || ev.date || ''}`.toLowerCase();
       return hay.includes(q);
     });
 
@@ -12547,24 +13007,35 @@
       return;
     }
 
-    const canManage = isCurrentUserAdmin() || isCurrentUserEventCommand() || isCurrentUserTechLead();
     gridEl.innerHTML = filtered.map((ev) => {
       const evIdStr = String(ev.raw_id || ev.id);
+      const isDisabled = Number(ev.is_active ?? 1) === 0;
       const startDate = ev.start_date || ev.date || todayIso;
       const endDate = ev.end_date || startDate;
       const durLabel = ev.duration_label || computeEventDuration(startDate, endDate).label;
       const heroStyle = ev.image ? ` style="background-image: url('${escapeHtml(ev.image)}');"` : '';
-      const statusText = String(ev.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase();
-      const pmTxt = String(ev.project_manager || '').trim();
-      const hasRealPm = pmTxt !== '' && pmTxt.toLowerCase() !== 'operations pm';
-      const coordTxt = String(ev.event_coordinator || '').trim();
-      const commandLeadText = [hasRealPm ? `PM: ${pmTxt}` : '', coordTxt ? `Coord: ${coordTxt}` : ''].filter(Boolean).join(' · ') || '—';
+      const statusText = isDisabled
+        ? 'DISABLED'
+        : String(ev.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase();
+      const pmTxt = !isPlaceholderLeadershipValue(ev.project_manager) ? String(ev.project_manager).trim() : '';
+      const coordTxt = !isPlaceholderLeadershipValue(ev.event_coordinator) ? String(ev.event_coordinator).trim() : '';
+      const commandLeadLabel = coordTxt && !pmTxt ? 'Event Coordinator' : 'Project Manager';
+      const commandLeadText = pmTxt || coordTxt || '—';
+      const disabledBanner = buildEventDisabledBannerHtml(ev, '8px');
+      const cardCrudBtns = buildEventCardCrudButtonsHtml(ev, {
+        editClass: 'js-ce-edit-btn',
+        disableClass: 'js-ce-disable-btn',
+        enableClass: 'js-ce-enable-btn',
+        deleteClass: 'js-ce-delete-btn',
+        editDataAttr: 'data-event-id',
+        titleAttr: 'data-event-title',
+      });
       return `
-        <article class="event-showcase-card" data-ce-card-id="${escapeHtml(evIdStr)}">
+        <article class="event-showcase-card" data-ce-card-id="${escapeHtml(evIdStr)}" style="${isDisabled ? 'border-color: rgba(245, 158, 11, 0.5); opacity: 0.92;' : ''}">
           <div class="event-showcase-hero"${heroStyle}>
             <div class="event-showcase-top">
               <span class="event-showcase-pill">${escapeHtml(durLabel)}</span>
-              <span class="event-showcase-pill">${escapeHtml(statusText)}</span>
+              <span class="event-showcase-pill" style="${isDisabled ? 'background: #b45309; color: #fff;' : ''}">${escapeHtml(statusText)}</span>
             </div>
             <div>
               <h3 style="margin:0;font-size:15px;font-weight:800;line-height:1.25;">${escapeHtml(ev.title || ev.name)}</h3>
@@ -12572,6 +13043,7 @@
             </div>
           </div>
           <div class="event-showcase-body">
+            ${disabledBanner}
             <div class="event-showcase-meta">
               <div class="event-showcase-meta-item">
                 <span class="event-showcase-meta-label">Start Date</span>
@@ -12586,7 +13058,7 @@
                 <span class="event-showcase-meta-val">${escapeHtml(ev.tech_lead || '—')}</span>
               </div>
               <div class="event-showcase-meta-item">
-                <span class="event-showcase-meta-label">PM / Coordinator</span>
+                <span class="event-showcase-meta-label">${commandLeadLabel}</span>
                 <span class="event-showcase-meta-val">${escapeHtml(commandLeadText)}</span>
               </div>
               <div class="event-showcase-meta-item" style="grid-column: 1 / -1;">
@@ -12595,9 +13067,8 @@
               </div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;">
-              ${canManage ? `<button type="button" class="btn btn-secondary-32-sm js-ce-edit-btn" data-event-id="${escapeHtml(evIdStr)}">Edit</button>` : ''}
               <button type="button" class="btn btn-primary-32 js-ce-dispatch-btn" data-event-id="${escapeHtml(evIdStr)}" style="flex:1;height:30px;font-size:11.5px;">Dispatch Flow →</button>
-              ${canCurrentUserAssignEvents() ? `<button type="button" class="btn btn-secondary-32-sm js-ce-delete-btn" data-event-id="${escapeHtml(evIdStr)}" data-event-title="${escapeHtml(ev.title || ev.name)}" style="color:#dc2626;border-color:#fecaca;">Delete</button>` : ''}
+              ${cardCrudBtns}
             </div>
           </div>
         </article>
@@ -12616,6 +13087,22 @@
       btn.addEventListener('click', () => {
         state.selectedDispatchEventId = String(btn.getAttribute('data-event-id') || '');
         switchScreen('dispatch-flow');
+      });
+    });
+
+    gridEl.querySelectorAll('.js-ce-disable-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const eid = btn.getAttribute('data-event-id');
+        const title = btn.getAttribute('data-event-title') || 'Event';
+        await confirmAndDisableEventVenue(eid, title);
+      });
+    });
+
+    gridEl.querySelectorAll('.js-ce-enable-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const eid = btn.getAttribute('data-event-id');
+        const title = btn.getAttribute('data-event-title') || 'Event';
+        await enableEventVenue(eid, title);
       });
     });
 
@@ -14775,6 +15262,16 @@
 
     document.getElementById('create-event-reset-btn')?.addEventListener('click', resetCreateEventForm);
     document.getElementById('ce-cancel-edit-btn')?.addEventListener('click', resetCreateEventForm);
+    document.getElementById('ce-disable-btn')?.addEventListener('click', async () => {
+      const evId = document.getElementById('ce-event-id')?.value.trim() || '';
+      const evTitle = document.getElementById('ce-title')?.value.trim() || 'this Event';
+      if (evId) await confirmAndDisableEventVenue(evId, evTitle);
+    });
+    document.getElementById('ce-enable-btn')?.addEventListener('click', async () => {
+      const evId = document.getElementById('ce-event-id')?.value.trim() || '';
+      const evTitle = document.getElementById('ce-title')?.value.trim() || 'this Event';
+      if (evId) await enableEventVenue(evId, evTitle);
+    });
     document.getElementById('create-event-open-dispatch-btn')?.addEventListener('click', () => switchScreen('dispatch-flow'));
     document.getElementById('create-event-open-new-tab-btn')?.addEventListener('click', () => {
       window.open('index.php#create-event', '_blank', 'noopener');
@@ -14797,9 +15294,10 @@
           showToast('Please complete Event Name, Start & End Dates, Location, and Event Tech Lead.');
           return;
         }
-        if (isCurrentUserTechLeadOnly() && !pmVal && !coordVal) {
-          showToast('Please select a Project Manager and/or Event Coordinator for this event.', 'warning');
-          document.getElementById('ce-pm')?.focus();
+        const leadCheck = validateLeadershipSelection(tlVal, pmVal, coordVal, { requireTechLead: true, requireCommandForTl: true });
+        if (!leadCheck.valid) {
+          showToast(leadCheck.message, 'warning');
+          document.getElementById(leadCheck.focusTarget === 'techlead' ? 'ce-techlead' : 'ce-pm')?.focus();
           return;
         }
         const durCheck = computeEventDuration(startVal, endVal);
@@ -16777,9 +17275,9 @@
       });
     }
 
-    const vsVenuesGrid = document.getElementById('vs-venues-grid');
-    if (vsVenuesGrid) {
-      vsVenuesGrid.addEventListener('click', async (e) => {
+    const attachEventVenueGridActions = (gridEl) => {
+      if (!gridEl) return;
+      gridEl.addEventListener('click', async (e) => {
         const launchBtn = e.target.closest('.js-vs-launch-kiosk');
         if (launchBtn) {
           if (state.stationLocked && state.checkpointType !== 'event_venue') {
@@ -16814,6 +17312,20 @@
           if (venue) openVenueCrudModal(venue);
           return;
         }
+        const disableBtn = e.target.closest('.js-vs-disable-venue');
+        if (disableBtn) {
+          const vid = disableBtn.getAttribute('data-venue-id') || '';
+          const vTitle = disableBtn.getAttribute('data-venue-title') || 'this Event';
+          await confirmAndDisableEventVenue(vid, vTitle);
+          return;
+        }
+        const enableBtn = e.target.closest('.js-vs-enable-venue');
+        if (enableBtn) {
+          const vid = enableBtn.getAttribute('data-venue-id') || '';
+          const vTitle = enableBtn.getAttribute('data-venue-title') || 'this Event';
+          await enableEventVenue(vid, vTitle);
+          return;
+        }
         const delBtn = e.target.closest('.js-vs-delete-venue');
         if (delBtn) {
           const vid = delBtn.getAttribute('data-venue-id') || '';
@@ -16821,7 +17333,10 @@
           await confirmAndDeleteEventVenue(vid, vTitle);
         }
       });
-    }
+    };
+
+    attachEventVenueGridActions(document.getElementById('vs-venues-grid'));
+    attachEventVenueGridActions(document.getElementById('sm-events-grid'));
 
     // Event Venue CRUD Modal Listeners
     document.querySelectorAll('.js-close-venue-crud-modal').forEach((btn) => {
@@ -16943,6 +17458,20 @@
       resetDropzone('venue');
       showToast('Event cover image marked for removal when you save.', 'warning');
     });
+    document.getElementById('venue-crud-disable-btn')?.addEventListener('click', async () => {
+      const evId = document.getElementById('venue-crud-id')?.value.trim() || '';
+      const evTitle = document.getElementById('venue-crud-title')?.value.trim() || 'this Event';
+      if (!evId) return;
+      const disabled = await confirmAndDisableEventVenue(evId, evTitle);
+      if (disabled) closeVenueCrudModal();
+    });
+    document.getElementById('venue-crud-enable-btn')?.addEventListener('click', async () => {
+      const evId = document.getElementById('venue-crud-id')?.value.trim() || '';
+      const evTitle = document.getElementById('venue-crud-title')?.value.trim() || 'this Event';
+      if (!evId) return;
+      const enabled = await enableEventVenue(evId, evTitle);
+      if (enabled) closeVenueCrudModal();
+    });
     document.getElementById('venue-crud-delete-btn')?.addEventListener('click', async () => {
       const evId = document.getElementById('venue-crud-id')?.value.trim() || '';
       const evTitle = document.getElementById('venue-crud-title')?.value.trim() || 'this Event';
@@ -16967,9 +17496,13 @@
         const coordWrapVisible = document.getElementById('venue-crud-coord-wrap')?.style.display !== 'none';
         const pmVal = pmWrapVisible ? (document.getElementById('venue-crud-pm')?.value.trim() || '') : '';
         const coordVal = coordWrapVisible ? (document.getElementById('venue-crud-coordinator')?.value.trim() || '') : '';
-        if (!editingEventId && isCurrentUserTechLeadOnly() && !pmVal && !coordVal) {
-          showToast('Please select a Project Manager and/or Event Coordinator for this event.', 'warning');
-          document.getElementById('venue-crud-pm')?.focus();
+        const leadCheck = validateLeadershipSelection(tlVal, pmVal, coordVal, {
+          requireTechLead: false,
+          requireCommandForTl: true,
+        });
+        if (!leadCheck.valid) {
+          showToast(leadCheck.message, 'warning');
+          document.getElementById(leadCheck.focusTarget === 'techlead' ? 'venue-crud-techlead' : 'venue-crud-pm')?.focus();
           return;
         }
         const btn = document.getElementById('venue-crud-submit-btn');
@@ -18276,16 +18809,34 @@
         const pmInput = document.getElementById('roster-event-pm');
         const coordInput = document.getElementById('roster-event-coordinator');
         const tlSelect = document.getElementById('roster-event-techlead');
+        const pmClearBtn = document.getElementById('roster-event-pm-clear-btn');
+        const coordClearBtn = document.getElementById('roster-event-coord-clear-btn');
         const dateLabel = document.getElementById('roster-event-date-label');
         if (callInput) callInput.value = (facility.call_time || '08:00').slice(0, 5);
         if (dateLabel) dateLabel.textContent = facility.date ? `Date: ${facility.date}` : '';
         const rosterLeadView = getEventLeadershipViewState(facility);
-        populateLeadershipSelect(pmInput, rosterLeadView.pmValInit || facility.project_manager || '', 'pm');
-        populateLeadershipSelect(coordInput, rosterLeadView.coordValInit || facility.event_coordinator || '', 'coordinator');
+        populateLeadershipSelect(pmInput, rosterLeadView.pmValInit, 'pm');
+        populateLeadershipSelect(coordInput, rosterLeadView.coordValInit, 'coordinator');
         populateLeadershipSelect(tlSelect, rosterLeadView.techLeadValInit || facility.tech_lead || facility.lead_name || '', 'techlead');
-        applySelectLockState(tlSelect, rosterLeadView.disableTechLead, document.getElementById('roster-event-techlead-auto-tag'));
-        applySelectLockState(pmInput, rosterLeadView.disablePm, document.getElementById('roster-event-pm-auto-tag'));
-        applySelectLockState(coordInput, rosterLeadView.disableCoord, document.getElementById('roster-event-coord-auto-tag'));
+        const rosterTlAutoTag = document.getElementById('roster-event-techlead-auto-tag');
+        const rosterPmAutoTag = document.getElementById('roster-event-pm-auto-tag');
+        const rosterCoordAutoTag = document.getElementById('roster-event-coord-auto-tag');
+        if (!rosterLeadView.showAutoTags) {
+          if (rosterTlAutoTag) rosterTlAutoTag.style.display = 'none';
+          if (rosterPmAutoTag) rosterPmAutoTag.style.display = 'none';
+          if (rosterCoordAutoTag) rosterCoordAutoTag.style.display = 'none';
+        }
+        applySelectLockState(tlSelect, rosterLeadView.disableTechLead, rosterLeadView.showAutoTags ? rosterTlAutoTag : null);
+        const getRosterLockOpts = () => ({
+          disablePm: rosterLeadView.disablePm,
+          disableCoord: rosterLeadView.disableCoord,
+          pmAutoTag: rosterLeadView.showAutoTags ? rosterPmAutoTag : null,
+          coordAutoTag: rosterLeadView.showAutoTags ? rosterCoordAutoTag : null,
+          pmClearBtn,
+          coordClearBtn,
+        });
+        bindExclusivePmCoordSelects(pmInput, coordInput, { getSyncOpts: getRosterLockOpts });
+        syncExclusivePmCoordFields(pmInput, coordInput, getRosterLockOpts());
         const hsBox = document.getElementById('roster-dispatch-handshake-box');
         const stPill = document.getElementById('roster-dispatch-status-pill');
         const reqSum = document.getElementById('roster-requirements-summary');
@@ -18500,6 +19051,14 @@
         const techLead = document.getElementById('roster-event-techlead')?.value || '';
         const pm = document.getElementById('roster-event-pm')?.value || '';
         const eventCoord = document.getElementById('roster-event-coordinator')?.value || '';
+        const leadCheck = validateLeadershipSelection(techLead, pm, eventCoord, {
+          requireTechLead: false,
+          requireCommandForTl: true,
+        });
+        if (!leadCheck.valid) {
+          showToast(leadCheck.message, 'warning');
+          return;
+        }
         const facility = findFacilityByLookupName(facilityName);
         const existingCrewIds = getFacilityCrewMembers(facility, state.crew || []).map((m) => Number(m.id));
         const crewToSave = rosterCheckedIds.size > 0 ? Array.from(rosterCheckedIds) : existingCrewIds;
@@ -18562,6 +19121,14 @@
         const techLead = document.getElementById('roster-event-techlead')?.value || '';
         const pm = document.getElementById('roster-event-pm')?.value || '';
         const eventCoord = document.getElementById('roster-event-coordinator')?.value || '';
+        const leadCheck = validateLeadershipSelection(techLead, pm, eventCoord, {
+          requireTechLead: false,
+          requireCommandForTl: true,
+        });
+        if (!leadCheck.valid) {
+          showToast(leadCheck.message, 'warning');
+          return;
+        }
         const crewIds = Array.from(rosterCheckedIds);
 
         rosterAssignCrewBtn.disabled = true;
@@ -21483,15 +22050,21 @@
     requirePassword = false,
     passwordLabel = 'Password',
     passwordPlaceholder = 'Enter your password...',
+    requireReason = false,
+    reasonLabel = 'Reason *',
+    reasonPlaceholder = 'Enter reason...',
   } = {}) {
     const modal = document.getElementById('app-confirm-modal');
     if (!modal) {
-      return Promise.resolve({ confirmed: false, password: '' });
+      return Promise.resolve({ confirmed: false, password: '', reason: '' });
     }
 
     const iconEl = document.getElementById('app-confirm-icon');
     const titleEl = document.getElementById('app-confirm-title');
     const descEl = document.getElementById('app-confirm-desc');
+    const reasonWrap = document.getElementById('app-confirm-reason-wrap');
+    const reasonLbl = document.getElementById('app-confirm-reason-label');
+    const reasonInp = document.getElementById('app-confirm-reason-input');
     const pwWrap = document.getElementById('app-confirm-password-wrap');
     const pwLbl = document.getElementById('app-confirm-password-label');
     const pwInp = document.getElementById('app-confirm-password-input');
@@ -21512,6 +22085,12 @@
       iconEl.classList.remove('tone-danger', 'tone-warning', 'tone-primary');
       iconEl.classList.add(`tone-${tone === 'warning' ? 'warning' : (tone === 'primary' ? 'primary' : 'danger')}`);
       iconEl.textContent = tone === 'primary' ? '?' : '!';
+    }
+    if (reasonWrap) reasonWrap.style.display = requireReason ? 'block' : 'none';
+    if (reasonLbl) reasonLbl.textContent = reasonLabel;
+    if (reasonInp) {
+      reasonInp.value = '';
+      reasonInp.placeholder = reasonPlaceholder;
     }
     if (pwWrap) pwWrap.style.display = requirePassword ? 'block' : 'none';
     if (pwLbl) pwLbl.textContent = passwordLabel;
@@ -21540,14 +22119,23 @@
         modal.setAttribute('aria-hidden', 'true');
       };
 
-      const finish = (confirmed, password = '') => {
+      const finish = (confirmed, password = '', reason = '') => {
         if (settled) return;
         settled = true;
         cleanup();
-        resolve({ confirmed, password });
+        resolve({ confirmed, password, reason });
       };
 
       const onConfirm = () => {
+        const reasonVal = reasonInp ? reasonInp.value.trim() : '';
+        if (requireReason && reasonVal.length < 3) {
+          if (errEl) {
+            errEl.textContent = 'Please provide a clear reason (at least 3 characters).';
+            errEl.style.display = 'block';
+          }
+          reasonInp?.focus();
+          return;
+        }
         const pwVal = pwInp ? pwInp.value : '';
         if (requirePassword && !pwVal) {
           if (errEl) {
@@ -21557,10 +22145,10 @@
           pwInp?.focus();
           return;
         }
-        finish(true, pwVal);
+        finish(true, pwVal, reasonVal);
       };
 
-      const onCancel = () => finish(false, '');
+      const onCancel = () => finish(false, '', '');
       const onBackdrop = (e) => {
         if (e.target === modal) onCancel();
       };
@@ -21581,7 +22169,8 @@
       pwInp?.addEventListener('keydown', onPwKeyDown);
 
       setTimeout(() => {
-        if (requirePassword && pwInp) pwInp.focus();
+        if (requireReason && reasonInp) reasonInp.focus();
+        else if (requirePassword && pwInp) pwInp.focus();
         else okBtn?.focus();
       }, 40);
     });
