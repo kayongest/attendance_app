@@ -26,7 +26,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261124_v32" />
+  <link rel="stylesheet" href="styles.css?v=20261124_v38" />
 </head>
 
 <body>
@@ -92,7 +92,7 @@
 
         <button type="button" class="nav-item" data-nav-target="dispatch-flow" id="nav-dispatch-flow-btn">
           <img src="assets/send-15.svg" alt="" class="svg-icon" id="nav-icon-dispatch-flow" />
-          <span class="nav-item-label">Operational Command &amp; Department Dispatch Flow</span>
+          <span class="nav-item-label">Dispatch Flow</span>
         </button>
       </nav>
 
@@ -337,7 +337,7 @@
             </div>
           </div>
 
-          <!-- Gate Activity Alerts Notifications (Administrator Only) -->
+          <!-- Gate Activity Alerts Notifications -->
           <div class="topbar-popover-wrap" id="topbar-notif-wrap" style="display: none;">
             <button type="button" class="icon-btn notifications-btn" id="topbar-notif-btn" title="Gate Activity Alerts"
               data-node-id="2:3342">
@@ -1825,6 +1825,9 @@
               <span class="kbd-hint-pill"><kbd>Enter</kbd> to verify</span>
             </div>
           </div>
+
+          <!-- Technician / Crew Event Dispatch Assignments (#pane-kiosk) -->
+          <div class="kiosk-assignments-inbox-card" id="pane-kiosk-assignments-card" style="display: none;"></div>
 
           <!-- Interactive Shift Call-Time Quickbar (Extension & Reset) -->
           <div class="kiosk-calltime-quickbar" id="kiosk-calltime-quickbar">
@@ -4043,7 +4046,7 @@
             <div
               style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
               <div>
-                <h2 class="directory-title-18" style="margin:0;">Operational Command &amp; Department Dispatch Flow</h2>
+                <h2 class="directory-title-18" style="margin:0;">Dispatch Flow</h2>
                 <p class="directory-desc" style="margin-top:2px;">Project Manager / Event Coordinator &rarr; Tech Lead
                   &rarr; Technicians (6 Departments) &rarr; Support Staff.</p>
               </div>
@@ -4633,14 +4636,14 @@
       </main>
 
       <!-- ================================================================== -->
-      <!-- SCREEN 14: OPERATIONAL COMMAND & DEPARTMENT DISPATCH FLOW          -->
+      <!-- SCREEN 14: DISPATCH FLOW                                           -->
       <!-- ================================================================== -->
       <main class="screen-view" id="screen-dispatch-flow">
         <div class="overview-top-block">
           <div class="page-intro">
             <div class="page-intro-heading">
               <div class="page-title-with-badge">
-                <!-- <h1 class="page-title">Operational Command &amp; Department Dispatch Flow</h1> -->
+                <!-- <h1 class="page-title">Dispatch Flow</h1> -->
                 <span class="status-badge status-badge-purple-sm" id="dispatch-page-status-badge">5-Tier Pipeline</span>
               </div>
               <p class="page-subtitle">
@@ -4666,9 +4669,7 @@
           <section class="flow-explorer-card" id="dispatch-flow-explorer-card">
             <div class="flow-explorer-header">
               <div>
-                <!-- Operational Command &amp; -->
-                <h2 class="directory-title-18">Department Dispatch Flow</h2>
-                <!-- Operational Command &amp; -->
+                <h2 class="directory-title-18">Dispatch Flow</h2>
                 <p class="directory-desc">Click any operational tier node below to inspect live leadership, role
                   permissions, sequential dispatch handoffs, and department readiness.</p>
               </div>
@@ -7364,7 +7365,7 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261124_v32"></script>
+  <script src="app.js?v=20261124_v38"></script>
 </body>
 
 </html>

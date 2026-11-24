@@ -642,9 +642,7 @@ function getDefaultNavigationItems(): array
         [
             'nav_group' => 'main',
             'nav_key' => 'dispatch_flow',
-            // Operational Command & 
-            'label' => 'Department Dispatch Flow',
-            // Operational Command & 
+            'label' => 'Dispatch Flow',
             'nav_target' => 'dispatch-flow',
             'dom_id' => 'nav-dispatch-flow-btn',
             'node_id' => '',
@@ -944,7 +942,7 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
             try {
                 $vSt = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_schema_version' LIMIT 1");
                 $vSt->execute();
-                if ((string) ($vSt->fetchColumn() ?: '') === '20261123_v28') {
+                if ((string) ($vSt->fetchColumn() ?: '') === '20261124_v29') {
                     $navVerifiedDbs[$currentDb] = true;
                     return;
                 }
@@ -1278,7 +1276,22 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
             }
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_settings_subitems_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
-        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_schema_version', '20261123_v28') ON DUPLICATE KEY UPDATE `setting_value` = '20261123_v28'")->execute();
+
+        // One-time migration: rename dispatch_flow Main Navigation item to Dispatch Flow
+        $migDispatchLabel = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_dispatch_flow_label_v1' LIMIT 1");
+        $migDispatchLabel->execute();
+        if (!$migDispatchLabel->fetchColumn()) {
+            $pdo->prepare("
+                UPDATE `navigation_items`
+                SET `label` = 'Dispatch Flow'
+                WHERE `is_system` = 1
+                  AND `nav_key` = 'dispatch_flow'
+                  AND `label` IN ('Operational Command & Department Dispatch Flow', 'Operational Command &amp; Department Dispatch Flow', 'Department Dispatch Flow')
+            ")->execute();
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_dispatch_flow_label_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_schema_version', '20261124_v29') ON DUPLICATE KEY UPDATE `setting_value` = '20261124_v29'")->execute();
         $navVerifiedDbs[$currentDb] = true;
     } catch (Throwable $e) {}
 }
@@ -6146,6 +6159,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         }
         $facilityName = trim((string) ($_POST['facility_name'] ?? $jsonBody['facility_name'] ?? $_POST['checkpoint_name'] ?? $jsonBody['checkpoint_name'] ?? ''));
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
+        $hasTlIn = array_key_exists('tech_lead', $_POST) || array_key_exists('tech_lead', $jsonBody);
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
         $hasPmIn = array_key_exists('project_manager', $_POST) || array_key_exists('project_manager', $jsonBody);
         $hasCoordIn = array_key_exists('event_coordinator', $_POST) || array_key_exists('event_coordinator', $jsonBody);
@@ -6435,6 +6449,24 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             if (!$isCallerAdmin && $hasPmIn && !$effPmIsReal) {
                 echo json_encode(['ok' => false, 'error' => 'Please select a Project Manager for this event.']);
                 exit;
+            }
+            $oldTechLead = trim((string) ($existingEvRow['tech_lead'] ?? ''));
+            $hasExistingTechLead = !isPlaceholderLeadershipValue($oldTechLead);
+            $oldPmEffective = !isPlaceholderLeadershipValue($oldPmRaw)
+                ? $oldPmRaw
+                : (!isPlaceholderLeadershipValue($oldCoordRaw) ? $oldCoordRaw : '');
+            $hasCreatorKnown = !empty($existingEvRow['created_by_id']) || !empty($existingEvRow['requirements_sent_by']);
+            if (!$isCallerAdmin) {
+                if ($hasTlIn && $hasExistingTechLead && ($techLead === '' || strcasecmp($techLead, $oldTechLead) !== 0)) {
+                    http_response_code(403);
+                    echo json_encode(['ok' => false, 'error' => 'Assigned Technical Lead is already locked and cannot be reassigned.']);
+                    exit;
+                }
+                if ($hasPmIn && $hasCreatorKnown && $oldPmEffective !== '' && ($effPmVal === '' || strcasecmp($effPmVal, $oldPmEffective) !== 0)) {
+                    http_response_code(403);
+                    echo json_encode(['ok' => false, 'error' => 'Assigned Project Manager is locked because the event creator is recorded.']);
+                    exit;
+                }
             }
             $evTitleFinal = $titleIn !== '' ? $titleIn : (string) ($existingEvRow['title'] ?? ('Event #' . $realEventId));
             $existingStart = trim((string) ($existingEvRow['start_date'] ?? $existingEvRow['date'] ?? ''));

@@ -1930,8 +1930,7 @@
       overview: 'Gate Operations Dashboard',
       events: 'Checkpoints & Venues',
       'create-event': 'Create Event',
-      'dispatch-flow': 'Department Dispatch Flow',
-      // Operational Command & 
+      'dispatch-flow': 'Dispatch Flow',
       users: 'Staff, Technicians & Role Management',
       attendees: 'Staff ID Badges',
       terminals: 'Terminals (#pane-kiosk)',
@@ -1951,6 +1950,9 @@
     if (resolvedKey === 'events') {
       loadStockManagerData();
       switchEventsHubTab(state.eventsHubTab || 'directory');
+    }
+    if (resolvedKey === 'dispatch-flow') {
+      renderDispatchFlowPage();
     }
     if (resolvedKey === 'standalone-portals' && typeof loadOnsiteShareIntoPortalsPage === 'function') {
       loadOnsiteShareIntoPortalsPage();
@@ -2168,9 +2170,12 @@
     const crewList = Array.isArray(state.crew) ? state.crew : [];
     const timeline = Array.isArray(state.activityTimeline) ? state.activityTimeline : [];
     const warehouses = Array.isArray(state.checkpoints?.stock_warehouses) ? state.checkpoints.stock_warehouses : [];
+    const canSeeOverviewAlerts = isCurrentUserAdmin() || isScreenPermittedForCurrentUser('overview');
+    const canSeeGateScanAlerts = canSeeOverviewAlerts || isCurrentUserStockController();
+    const canSeeUsersAlerts = isCurrentUserAdmin() || isScreenPermittedForCurrentUser('users');
 
     // 1. Users Added / Latest Staff Onboarded
-    if (crewList.length > 0) {
+    if (canSeeUsersAlerts && crewList.length > 0) {
       const sortedUsers = [...crewList].sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
       const latestUser = sortedUsers[0];
       const userIdKey = `user-added-${latestUser.id || latestUser.full_name || '0'}`;
@@ -2182,12 +2187,15 @@
         desc: `${latestUser.role_display || latestUser.role || 'Crew'} · ${latestUser.clearance_code || 'L1'} (${crewList.length} total staff in directory)`,
         time: latestUser.created_at ? String(latestUser.created_at).slice(0, 16) : 'Directory synced',
         unread: !state.readNotifIds.has(userIdKey),
+        targetScreen: 'attendees',
+        targetScrollId: '',
+        actionHint: 'Staff ID Badges →',
       });
     }
 
     // 2. Permission Granted (Latest granted gate scans or active clearance tiers)
     const grantedScans = timeline.filter((t) => String(t.status || '').toLowerCase() !== 'denied');
-    if (grantedScans.length > 0) {
+    if (canSeeGateScanAlerts && grantedScans.length > 0) {
       grantedScans.slice(0, 2).forEach((scan, idx) => {
         const grantKey = `perm-granted-${scan.id || scan.badge_code || idx}-${scan.time_formatted || scan.time || ''}`;
         const scanAction = String(scan.action || scan.event_type || 'Check-in').toUpperCase();
@@ -2199,9 +2207,12 @@
           desc: `${scanAction} · ${scan.clearance_code || 'L2'} verified at ${scan.checkpoint_name || 'Checkpoint'}`,
           time: scan.time_formatted || scan.time || 'Today',
           unread: !state.readNotifIds.has(grantKey),
+          targetScreen: 'attendees',
+          targetScrollId: '',
+          actionHint: 'Staff ID Badges →',
         });
       });
-    } else {
+    } else if (canSeeOverviewAlerts) {
       const badgeTotal = Number(state.kpis?.activeBadges ?? crewList.length);
       const grantKey = `perm-matrix-active-${badgeTotal}`;
       items.push({
@@ -2212,12 +2223,15 @@
         desc: 'Clearance matrix (L1–L4) active across event venues and stock gates',
         time: 'Live policy',
         unread: !state.readNotifIds.has(grantKey),
+        targetScreen: 'attendees',
+        targetScrollId: '',
+        actionHint: 'Staff ID Badges →',
       });
     }
 
     // 3. Active Stocks / Warehouses
     const activeWhs = warehouses.filter((w) => w && w.is_active !== 0);
-    if (activeWhs.length > 0) {
+    if (canSeeOverviewAlerts && activeWhs.length > 0) {
       const summaryParts = activeWhs.map((w) => {
         const wCrew = getFacilityCrewMembers(w, crewList);
         return `${w.name || 'Warehouse'} (${wCrew.length})`;
@@ -2231,12 +2245,15 @@
         desc: summaryParts.join(' · '),
         time: 'Active hubs',
         unread: !state.readNotifIds.has(stockKey),
+        targetScreen: 'attendees',
+        targetScrollId: '',
+        actionHint: 'Staff ID Badges →',
       });
     }
 
     // 4. Optional latest Denied Scan alert (using SVG dot icon, never emoji)
     const deniedScan = timeline.find((t) => String(t.status || '').toLowerCase() === 'denied');
-    if (deniedScan) {
+    if (canSeeGateScanAlerts && deniedScan) {
       const denyKey = `perm-denied-${deniedScan.id || deniedScan.badge_code || '0'}-${deniedScan.time_formatted || deniedScan.time || ''}`;
       items.push({
         id: denyKey,
@@ -2246,6 +2263,9 @@
         desc: `${deniedScan.denial_reason || 'Insufficient clearance'} at ${deniedScan.checkpoint_name || 'Checkpoint'}`,
         time: deniedScan.time_formatted || deniedScan.time || 'Today',
         unread: !state.readNotifIds.has(denyKey),
+        targetScreen: 'attendees',
+        targetScrollId: '',
+        actionHint: 'Staff ID Badges →',
       });
     }
 
@@ -2253,6 +2273,7 @@
     if (state.myPendingRollCall) {
       const rc = state.myPendingRollCall;
       const rcKey = `rollcall-ping-${rc.session_id}-${rc.entry_id}`;
+      const canOpenAttendees = isScreenPermittedForCurrentUser('attendees');
       items.unshift({
         id: rcKey,
         type: 'rollcall',
@@ -2261,22 +2282,30 @@
         desc: 'Verify you are still inside the venue via GPS geo-fence or live Gate QR before deadline.',
         time: `${Math.max(1, Math.ceil(Number(rc.seconds_left || 60) / 60))}m left`,
         unread: !state.readNotifIds.has(rcKey),
+        targetScreen: canOpenAttendees ? 'attendees' : 'rollcall',
+        targetScrollId: canOpenAttendees ? 'my-rollcall-alert-card' : 'page-rc-my-alert-card',
+        actionHint: canOpenAttendees ? 'Staff ID Badges · Verify →' : 'Roll-Call →',
       });
     }
 
     // 6. Pending Event Dispatch Confirmation for Crew / Techs / Support
     const pendingAssigns = (state.myPendingAssignments || []).filter((a) => String(a.confirmation_status) === 'pending');
     if (pendingAssigns.length > 0) {
-      pendingAssigns.slice(0, 2).forEach((a) => {
+      pendingAssigns.slice(0, 5).forEach((a) => {
         const asgKey = `event-asg-pending-${a.event_id}-${a.id}`;
         items.unshift({
           id: asgKey,
           type: 'dispatch',
           iconSvg: 'assets/nav-events-inactive.svg',
           title: `Confirm Event Assignment: ${a.event_title || a.event_id}`,
-          desc: `Branch: ${a.branch_dept || 'Crew'} · Call-time ${a.call_time || '08:00'}`,
+          desc: `Branch: ${a.branch_dept || 'Crew'} · Call-time ${a.call_time || '08:00'} · Click to open & confirm`,
           time: a.event_date || 'Pending',
           unread: !state.readNotifIds.has(asgKey),
+          targetScreen: 'attendees',
+          targetScrollId: 'my-assignments-inbox-card',
+          targetEventId: String(a.event_id || ''),
+          targetTierKey: String(a.branch_dept || '').toLowerCase() === 'support staff' ? 'tier4_support' : 'tier3_technicians',
+          actionHint: 'Staff ID Badges · Confirm →',
         });
       });
     }
@@ -2291,9 +2320,70 @@
         type: 'dispatch',
         iconSvg: 'assets/nav-team-members.svg',
         title: `${pendingSupport.length} Support Staff Request(s) Pending`,
-        desc: `${firstSup.event_title}: requested by ${firstSup.requested_by_name}`,
+        desc: `${firstSup.event_title}: requested by ${firstSup.requested_by_name} · Click to open Dispatch Flow`,
         time: 'Action needed',
         unread: !state.readNotifIds.has(supKey),
+        targetScreen: 'dispatch-flow',
+        targetScrollId: 'dispatch-flow-diagram',
+        targetEventId: String(firstSup.event_id || ''),
+        targetTierKey: 'tier4_support',
+        actionHint: 'Dispatch Flow · Tier 4 →',
+      });
+    }
+
+    // 7b. Unlocked Tier 2 Staffing & Tier 3 Declined Crew alerts for Tech Leads / PMs / Admins
+    if (canCurrentUserAssignEvents()) {
+      const staffingAlerts = [];
+      const declinedAlerts = [];
+      const approvedActiveEvents = (state.checkpoints?.event_venues || []).filter((ev) =>
+        Number(ev?.is_active ?? 1) !== 0 && isEventApprovedByTechLead(ev) && isEventVisibleToCurrentUser(ev)
+      );
+      for (const ev of approvedActiveEvents) {
+        if (staffingAlerts.length >= 2 && declinedAlerts.length >= 2) break;
+        const evKey = String(ev.raw_id || ev.id || '');
+        if (!evKey) continue;
+        const ctxEv = getDispatchContextData(evKey);
+        const tsEv = ctxEv.tierStates || {};
+        if (staffingAlerts.length < 2 && tsEv.tier2_tech_lead?.unlocked && !tsEv.tier2_tech_lead?.approved) {
+          staffingAlerts.push({ ev, evKey, lockReason: tsEv.tier2_tech_lead.lockReason });
+        }
+        if (declinedAlerts.length < 2 && (tsEv.metrics?.techDeclinedCount || 0) > 0) {
+          declinedAlerts.push({ ev, evKey, count: tsEv.metrics.techDeclinedCount });
+        }
+      }
+      declinedAlerts.forEach(({ ev, evKey, count }) => {
+        const decKey = `tier3-declined-${evKey}-${count}`;
+        items.unshift({
+          id: decKey,
+          type: 'dispatch',
+          iconSvg: 'assets/status-dot-red-5.svg',
+          title: `Crew Decline Needs Action: ${ev.title || ev.name}`,
+          desc: `${count} declined Tier 3 assignment(s) blocking Tier 4 · Click to open Dispatch Flow`,
+          time: ev.start_date || ev.date || 'Action needed',
+          unread: !state.readNotifIds.has(decKey),
+          targetScreen: 'dispatch-flow',
+          targetScrollId: 'dispatch-flow-diagram',
+          targetEventId: evKey,
+          targetTierKey: 'tier3_technicians',
+          actionHint: 'Dispatch Flow · Tier 3 →',
+        });
+      });
+      staffingAlerts.forEach(({ ev, evKey }) => {
+        const stKey = `tl-staffing-${evKey}`;
+        items.unshift({
+          id: stKey,
+          type: 'dispatch',
+          iconSvg: 'assets/send-15.svg',
+          title: `Tier 2 Crew Staffing Ready: ${ev.title || ev.name}`,
+          desc: 'Tier 1 approved · Allocate department crew to unlock Tier 3 in Dispatch Flow',
+          time: ev.start_date || ev.date || 'Tier 2 unlocked',
+          unread: !state.readNotifIds.has(stKey),
+          targetScreen: 'dispatch-flow',
+          targetScrollId: 'dispatch-flow-diagram',
+          targetEventId: evKey,
+          targetTierKey: 'tier2_tech_lead',
+          actionHint: 'Dispatch Flow · Tier 2 →',
+        });
       });
     }
 
@@ -2302,8 +2392,9 @@
       isEventTechLeadAssigned(ev) && !isEventApprovedByTechLead(ev) && canCurrentUserApproveTechLead(ev)
     );
     if (pendingTlApprovals.length > 0) {
-      pendingTlApprovals.slice(0, 2).forEach((ev) => {
-        const tlKey = `tl-approve-${ev.raw_id || ev.id}`;
+      pendingTlApprovals.slice(0, 5).forEach((ev) => {
+        const evKey = String(ev.raw_id || ev.id || '');
+        const tlKey = `tl-approve-${evKey}`;
         const orig = getEventRequestOriginatorInfo(ev);
         items.unshift({
           id: tlKey,
@@ -2313,6 +2404,11 @@
           desc: `From ${orig.name} (${orig.roleLabel}) · Click to review & approve in Dispatch Flow`,
           time: ev.start_date || ev.date || 'Awaiting approval',
           unread: !state.readNotifIds.has(tlKey),
+          targetScreen: 'dispatch-flow',
+          targetScrollId: 'dispatch-flow-diagram',
+          targetEventId: evKey,
+          targetTierKey: 'tier1_command',
+          actionHint: 'Dispatch Flow · Approve Tier 1 →',
         });
       });
     }
@@ -2321,7 +2417,8 @@
     const disabledEvents = (state.checkpoints?.event_venues || []).filter((ev) => Number(ev?.is_active ?? 1) === 0);
     if (disabledEvents.length > 0 && isCurrentUserAdmin()) {
       disabledEvents.slice(0, 3).forEach((ev) => {
-        const disKey = `ev-disabled-${ev.raw_id || ev.id}-${ev.disabled_at || ''}`;
+        const evKey = String(ev.raw_id || ev.id || '');
+        const disKey = `ev-disabled-${evKey}-${ev.disabled_at || ''}`;
         const byWho = ev.disabled_by_name
           ? `${ev.disabled_by_name}${ev.disabled_by_role_display ? ` (${ev.disabled_by_role_display})` : ''}`
           : 'Staff Member';
@@ -2334,12 +2431,82 @@
           desc: `Disabled by ${byWho} · Reason: ${reasonTxt}`,
           time: ev.disabled_at ? String(ev.disabled_at).slice(0, 16) : 'Disabled',
           unread: !state.readNotifIds.has(disKey),
+          targetScreen: 'dispatch-flow',
+          targetScrollId: 'dispatch-flow-diagram',
+          targetEventId: evKey,
+          targetTierKey: 'tier1_command',
+          actionHint: 'Dispatch Flow →',
         });
       });
     }
 
     state.notifications = items;
     state.unreadNotifCount = items.filter((n) => n.unread).length;
+  }
+
+  function focusElementTemporarily(targetId) {
+    if (!targetId) return;
+    setTimeout(() => {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      el.classList.remove('is-notif-focus');
+      void el.offsetWidth;
+      el.classList.add('is-notif-focus');
+      setTimeout(() => el.classList.remove('is-notif-focus'), 1800);
+    }, 120);
+  }
+
+  function selectDispatchTarget(eventId, tierKey = '') {
+    if (eventId !== undefined && eventId !== null) {
+      const targetEvId = String(eventId);
+      const visibleEvents = getVisibleEventsList();
+      if (!targetEvId || visibleEvents.some((ev) => String(ev.raw_id || ev.id) === targetEvId)) {
+        state.selectedDispatchEventId = targetEvId;
+        const pageSel = document.getElementById('dispatch-page-event-select');
+        const settingsSel = document.getElementById('dispatch-event-select');
+        if (pageSel) pageSel.value = targetEvId;
+        if (settingsSel) settingsSel.value = targetEvId;
+      }
+    }
+    if (tierKey) {
+      state.selectedDispatchTier = String(tierKey);
+    }
+  }
+
+  function handleNotificationItemClick(notif) {
+    if (!notif) return;
+    const notifId = String(notif.id || '');
+    if (notifId) {
+      state.readNotifIds.add(notifId);
+      notif.unread = false;
+      syncDynamicNotifications();
+      renderTopbarAndKpis();
+      fetch('api.php?action=mark_notifications_read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notif_ids: [notifId] }),
+      }).catch(() => {});
+    }
+
+    closeAllTopbarDropdowns();
+
+    selectDispatchTarget(notif.targetEventId || null, notif.targetTierKey || '');
+
+    let destScreen = String(notif.targetScreen || 'attendees');
+    if (!isScreenPermittedForCurrentUser(destScreen)) {
+      destScreen = isScreenPermittedForCurrentUser('dispatch-flow') ? 'dispatch-flow' : 'attendees';
+    }
+
+    if (destScreen === 'dispatch-flow') {
+      switchScreen('dispatch-flow', notif.targetScrollId || null);
+      renderDispatchViews();
+      focusElementTemporarily(notif.targetScrollId || 'dispatch-flow-inspector');
+    } else {
+      renderMyAssignmentsInboxCard();
+      renderMyRollCallAlertBanner();
+      switchScreen(destScreen, notif.targetScrollId || null);
+      focusElementTemporarily(notif.targetScrollId || '');
+    }
   }
 
   function renderNotificationsList() {
@@ -2350,17 +2517,20 @@
       list.innerHTML = `<div style="padding: 16px; text-align: center; font-size: 11px; color: var(--text-muted);">No recent alerts.</div>`;
       return;
     }
-    list.innerHTML = state.notifications.map((n) => `
-      <div class="notif-item ${n.unread ? 'unread' : ''}">
+    list.innerHTML = state.notifications.map((n, idx) => `
+      <button type="button" class="notif-item is-clickable ${n.unread ? 'unread' : ''}" data-notif-idx="${idx}" data-notif-id="${escapeHtml(n.id)}">
         <span class="notif-item-icon">
           <img src="${escapeHtml(n.iconSvg || 'assets/metric-users.svg')}" alt="" class="svg-icon notif-svg-icon" />
         </span>
         <div class="notif-item-content">
           <div class="notif-item-title">${escapeHtml(n.title)}</div>
           <div class="notif-item-desc">${escapeHtml(n.desc)}</div>
-          <div class="notif-item-time">${escapeHtml(n.time)}</div>
+          <div class="notif-item-meta">
+            <span class="notif-item-time">${escapeHtml(n.time)}</span>
+            <span class="notif-item-action-hint">${escapeHtml(n.actionHint || 'Open →')}</span>
+          </div>
         </div>
-      </div>
+      </button>
     `).join('');
   }
 
@@ -2702,16 +2872,22 @@
     if (tabNav) tabNav.style.display = isAdmin ? 'inline-flex' : 'none';
     if (tabOw) tabOw.style.display = isAdmin ? 'inline-flex' : 'none';
 
-    // 4. User Dropdown & Topbar Administrative Controls (ONLY ADMIN)
+    // 4. User Dropdown & Topbar Controls (Help is Admin-only; Notifications bell available to all signed-in roles)
     const helpWrap = document.getElementById('topbar-help-wrap');
     const notifWrap = document.getElementById('topbar-notif-wrap');
     const helpDrop = document.getElementById('topbar-help-dropdown');
     const notifDrop = document.getElementById('topbar-notif-dropdown');
+    const viewAllLogsFooter = document.getElementById('topbar-view-all-logs')?.closest('.topbar-dropdown-footer');
     if (helpWrap) helpWrap.style.display = isAdmin ? '' : 'none';
-    if (notifWrap) notifWrap.style.display = isAdmin ? '' : 'none';
-    if (!isAdmin) {
-      if (helpDrop) helpDrop.style.display = 'none';
-      if (notifDrop) notifDrop.style.display = 'none';
+    if (notifWrap) notifWrap.style.display = state.currentUser ? '' : 'none';
+    if (!isAdmin && helpDrop) {
+      helpDrop.style.display = 'none';
+    }
+    if (!state.currentUser && notifDrop) {
+      notifDrop.style.display = 'none';
+    }
+    if (viewAllLogsFooter) {
+      viewAllLogsFooter.style.display = isScreenPermittedForCurrentUser('overview') ? '' : 'none';
     }
     const menuSwitch = document.getElementById('topbar-menu-switch-user');
     const menuAuth = document.getElementById('topbar-menu-auth-modal');
@@ -3097,6 +3273,10 @@
       } else {
         notifBubble.style.display = 'none';
       }
+    }
+    const notifDropOpen = document.getElementById('topbar-notif-dropdown');
+    if (notifDropOpen && (notifDropOpen.style.display === 'flex' || notifDropOpen.style.display === 'block')) {
+      renderNotificationsList();
     }
 
     const k = state.kpis;
@@ -6344,21 +6524,41 @@
     );
   }
 
-  function renderMyAssignmentsInboxCard() {
-    const card = document.getElementById('my-assignments-inbox-card');
+  function sortAssignmentsPendingFirst(list) {
+    const rank = { pending: 0, declined: 1, confirmed: 2 };
+    return [...(Array.isArray(list) ? list : [])].sort((a, b) => {
+      const ra = rank[String(a?.confirmation_status || 'pending').toLowerCase()] ?? 9;
+      const rb = rank[String(b?.confirmation_status || 'pending').toLowerCase()] ?? 9;
+      if (ra !== rb) return ra - rb;
+      return Number(b?.id || 0) - Number(a?.id || 0);
+    });
+  }
+
+  function renderAssignmentInboxIntoCard(card, opts = {}) {
     if (!card) return;
-    const myAsg = Array.isArray(state.myPendingAssignments) ? state.myPendingAssignments : [];
-    const pendingSupReqs = (state.eventSupportRequests || []).filter((r) => String(r.status) === 'pending');
-    const canFulfillSupport = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand();
-    const showTechInbox = myAsg.length > 0;
-    const showSupInbox = canFulfillSupport && pendingSupReqs.length > 0;
+    const myAsg = sortAssignmentsPendingFirst(opts.assignments);
+    const pendingSupReqs = Array.isArray(opts.pendingSupReqs) ? opts.pendingSupReqs : [];
+    const showTechInbox = Boolean(opts.showAssignments && myAsg.length > 0);
+    const showSupInbox = Boolean(opts.showSupportReqs && pendingSupReqs.length > 0);
     if (!showTechInbox && !showSupInbox) {
       card.style.display = 'none';
       card.innerHTML = '';
       return;
     }
+
+    const canJumpDispatch = isScreenPermittedForCurrentUser('dispatch-flow');
+    const pendingCount = myAsg.filter((a) => String(a.confirmation_status || 'pending').toLowerCase() === 'pending').length;
+    const confirmedCount = myAsg.filter((a) => String(a.confirmation_status || '').toLowerCase() === 'confirmed').length;
+    const headerTitle = opts.kioskMode
+      ? (pendingCount > 0 ? 'Pending Event Dispatch Assignments' : 'My Event Dispatch Assignments')
+      : 'My Event Dispatch Assignments';
+    const statusBadgeHtml = pendingCount > 0
+      ? `<span class="status-badge status-badge-amber-sm">${pendingCount} Pending Confirmation</span>`
+      : (confirmedCount > 0 ? `<span class="status-badge status-badge-green-sm">✓ ${confirmedCount} Confirmed</span>` : '');
+
     const asgRowsHtml = myAsg.map((a) => {
       const st = String(a.confirmation_status || 'pending').toLowerCase();
+      const targetTier = String(a.branch_dept || '').toLowerCase() === 'support staff' ? 'tier4_support' : 'tier3_technicians';
       return `
         <div class="rc-entry-row">
           <div>
@@ -6371,21 +6571,23 @@
               ${escapeHtml(a.event_location || '')} · ${escapeHtml(a.event_date || '')} · Call-Time ${escapeHtml(a.call_time || '08:00')} · Lead: ${escapeHtml(a.tech_lead || 'Tech Lead')}
             </div>
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
             ${st !== 'confirmed' ? `<button type="button" class="btn btn-primary-32 js-confirm-my-assignment" data-event-id="${escapeHtml(a.event_id)}" style="background:#059669;border-color:#059669;">✓ Confirm</button>` : ''}
             ${st !== 'declined' ? `<button type="button" class="btn btn-secondary-32-sm js-decline-my-assignment" data-event-id="${escapeHtml(a.event_id)}" style="color:#dc2626;border-color:#fecaca;">✕ Decline</button>` : ''}
+            ${canJumpDispatch ? `<button type="button" class="btn btn-secondary-32-sm js-open-assignment-dispatch" data-event-id="${escapeHtml(a.event_id)}" data-tier-key="${escapeHtml(targetTier)}">Dispatch Flow →</button>` : ''}
           </div>
         </div>
       `;
     }).join('');
+
     const supRowsHtml = showSupInbox ? `
       <div style="margin-top:${showTechInbox ? '12px' : '0'};padding-top:${showTechInbox ? '10px' : '0'};${showTechInbox ? 'border-top:1px solid var(--border-color);' : ''}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
           <div>
             <strong style="font-size:13px;">Pending Tier 4 Support Staff Requests (${pendingSupReqs.length})</strong>
-            <div style="font-size:11.5px;color:var(--text-secondary);">${pendingSupReqs.map((r) => `${r.event_title} (by ${r.requested_by_name})`).join(' · ')}</div>
+            <div style="font-size:11.5px;color:var(--text-secondary);">${pendingSupReqs.map((r) => `${escapeHtml(r.event_title)} (by ${escapeHtml(r.requested_by_name)})`).join(' · ')}</div>
           </div>
-          <button type="button" class="btn btn-primary-32" id="inbox-open-dispatch-btn">Assign Support Staff →</button>
+          <button type="button" class="btn btn-primary-32 js-inbox-open-dispatch-btn">Assign Support Staff →</button>
         </div>
       </div>
     ` : '';
@@ -6393,10 +6595,13 @@
     card.style.display = 'block';
     card.innerHTML = `
       ${showTechInbox ? `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
           <div>
-            <h3 class="directory-title-18" style="margin:0;font-size:15px;">My Event Dispatch Assignments</h3>
-            <p class="directory-desc" style="margin:0;font-size:11.5px;">Confirm or decline scheduled event deployments assigned by Command / Tech Lead.</p>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <h3 class="directory-title-18" style="margin:0;font-size:15px;">${headerTitle}</h3>
+              ${statusBadgeHtml}
+            </div>
+            <p class="directory-desc" style="margin:2px 0 0;font-size:11.5px;">Confirm or decline scheduled event deployments assigned by Command / Tech Lead.</p>
           </div>
         </div>
         ${asgRowsHtml}
@@ -6414,9 +6619,42 @@
         respondMyEventAssignment(btn.getAttribute('data-event-id'), 'declined', reason);
       });
     });
-    card.querySelector('#inbox-open-dispatch-btn')?.addEventListener('click', () => {
+    card.querySelectorAll('.js-open-assignment-dispatch').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const evId = String(btn.getAttribute('data-event-id') || '');
+        const tierKey = String(btn.getAttribute('data-tier-key') || 'tier3_technicians');
+        selectDispatchTarget(evId, tierKey);
+        switchScreen('dispatch-flow', 'dispatch-flow-diagram');
+        renderDispatchViews();
+      });
+    });
+    card.querySelector('.js-inbox-open-dispatch-btn')?.addEventListener('click', () => {
       switchScreen('settings');
       switchSettingsTab('dispatch');
+    });
+  }
+
+  function renderMyAssignmentsInboxCard() {
+    const myAsg = Array.isArray(state.myPendingAssignments) ? state.myPendingAssignments : [];
+    const pendingSupReqs = (state.eventSupportRequests || []).filter((r) => String(r.status) === 'pending');
+    const canFulfillSupport = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand();
+
+    renderAssignmentInboxIntoCard(document.getElementById('my-assignments-inbox-card'), {
+      assignments: myAsg,
+      pendingSupReqs,
+      showAssignments: myAsg.length > 0,
+      showSupportReqs: canFulfillSupport && pendingSupReqs.length > 0,
+      kioskMode: false,
+    });
+
+    const pendingCount = myAsg.filter((a) => String(a.confirmation_status || 'pending').toLowerCase() === 'pending').length;
+    const showKioskAssignments = myAsg.length > 0 && (isCurrentUserTechnician() || pendingCount > 0);
+    renderAssignmentInboxIntoCard(document.getElementById('pane-kiosk-assignments-card'), {
+      assignments: myAsg,
+      pendingSupReqs: [],
+      showAssignments: showKioskAssignments,
+      showSupportReqs: false,
+      kioskMode: true,
     });
   }
 
@@ -10033,6 +10271,175 @@
     return !isEventApprovedByTechLead(ev);
   }
 
+  /**
+   * Computes progressive unlock and approval states across all 5 Dispatch Flow tiers.
+   * Each downstream tier stays locked until prerequisite actions/approvals on the request are met.
+   */
+  function computeDispatchTierStates(activeEv, metrics = {}) {
+    if (!activeEv) {
+      return {
+        tier1_command: { unlocked: true, locked: false, approved: true, lockReason: '' },
+        tier2_tech_lead: { unlocked: true, locked: false, approved: true, lockReason: '' },
+        tier3_technicians: { unlocked: true, locked: false, approved: true, lockReason: '' },
+        tier4_support: { unlocked: true, locked: false, approved: true, lockReason: '' },
+        site_ops: { unlocked: true, locked: false, approved: true, lockReason: '' },
+        metrics: {
+          techReqTotal: 0,
+          techConfirmedCount: 0,
+          techDeclinedCount: 0,
+          techTotal: 0,
+          confirmedDeptNotesCount: 0,
+          supportReqNeed: 0,
+          pendingSupportCount: 0,
+          supportConfirmedCount: 0,
+          supportTotal: 0,
+          hasAnySupportScope: false,
+        },
+      };
+    }
+
+    const deptNames = Array.isArray(metrics.deptNames) ? metrics.deptNames : CORE_DISPATCH_DEPTS;
+    const techMembers = Array.isArray(metrics.techMembers) ? metrics.techMembers : [];
+    const supportList = Array.isArray(metrics.supportList) ? metrics.supportList : [];
+    const asgMap = metrics.asgMap || {};
+    const supportReqs = Array.isArray(metrics.supportReqs) ? metrics.supportReqs : [];
+    const deptConfirmations = Array.isArray(metrics.deptConfirmations) ? metrics.deptConfirmations : [];
+    const reqBranches = (activeEv.requirements && activeEv.requirements.branches) || {};
+    const dispatchStatusRaw = String(activeEv.dispatch_status || 'draft').toLowerCase();
+
+    const hasTechLead = Boolean(metrics.hasTechLead ?? isEventTechLeadAssigned(activeEv));
+    const isTlApproved = Boolean(metrics.isApproved ?? isEventApprovedByTechLead(activeEv));
+
+    const deptCountsByBranch = {};
+    deptNames.forEach((d) => { deptCountsByBranch[d] = 0; });
+    techMembers.forEach((m) => {
+      const d = resolveCrewCanonicalDepartment(m);
+      deptCountsByBranch[d] = (deptCountsByBranch[d] || 0) + 1;
+    });
+
+    const requestedTechBranches = deptNames.filter((d) => Number(reqBranches[d] || 0) > 0);
+    const techReqTotal = requestedTechBranches.reduce((acc, d) => acc + Number(reqBranches[d] || 0), 0);
+    const allTechTargetsMet = requestedTechBranches.every((d) => (deptCountsByBranch[d] || 0) >= Number(reqBranches[d] || 0));
+    const confirmedDeptNotesCount = deptConfirmations.filter((c) => String(c?.confirmation_status || '').toLowerCase() === 'confirmed').length;
+
+    const techConfirmedCount = techMembers.filter((m) => String(asgMap[String(m.id)]?.confirmation_status || '').toLowerCase() === 'confirmed').length;
+    const techDeclinedCount = techMembers.filter((m) => String(asgMap[String(m.id)]?.confirmation_status || '').toLowerCase() === 'declined').length;
+    const techAllConfirmed = techMembers.length > 0 && techConfirmedCount === techMembers.length && techDeclinedCount === 0;
+
+    const supportReqNeed = Math.max(0, Number(reqBranches['Support Staff'] || 0));
+    const pendingSupportCount = supportReqs.filter((r) => String(r?.status || '').toLowerCase() === 'pending').length;
+    const supportConfirmedCount = supportList.filter((m) => String(asgMap[String(m.id)]?.confirmation_status || '').toLowerCase() === 'confirmed').length;
+    const supportDeclinedCount = supportList.filter((m) => String(asgMap[String(m.id)]?.confirmation_status || '').toLowerCase() === 'declined').length;
+    const supportAllConfirmed = supportList.length > 0 && supportConfirmedCount === supportList.length && supportDeclinedCount === 0;
+    const hasAnySupportScope = supportReqNeed > 0 || supportReqs.length > 0 || supportList.length > 0;
+
+    // Tier 1 (Command) -> unlocks Tier 2 (Tech Lead)
+    const tier1Approved = hasTechLead && isTlApproved;
+    const tier1LockReason = hasTechLead
+      ? 'Awaiting Tech Lead approval of Tier 1 request'
+      : 'Assign Technical Lead & approve Tier 1 request';
+
+    // Tier 2 (Tech Lead crew allocation) -> unlocks Tier 3 (Technicians)
+    const tier2Unlocked = tier1Approved;
+    let tier2Approved = false;
+    if (tier2Unlocked) {
+      if (dispatchStatusRaw === 'ready') {
+        tier2Approved = true;
+      } else if (techReqTotal > 0) {
+        tier2Approved = allTechTargetsMet && techMembers.length > 0;
+      } else {
+        tier2Approved = techMembers.length > 0
+          || confirmedDeptNotesCount > 0
+          || (supportReqNeed > 0 && (supportReqs.length > 0 || supportList.length > 0));
+      }
+    }
+    const tier2LockReason = !tier2Unlocked
+      ? tier1LockReason
+      : (techReqTotal > 0
+        ? 'Awaiting Tech Lead crew allocation to meet requested department targets'
+        : 'Awaiting Tier 2 Tech Lead crew allocation or dept confirmation');
+
+    // Tier 3 (Technicians confirming assignments) -> unlocks Tier 4 (Support Staff)
+    const tier3Unlocked = tier2Unlocked && tier2Approved;
+    let tier3Approved = false;
+    if (tier3Unlocked) {
+      if (dispatchStatusRaw === 'ready') {
+        tier3Approved = true;
+      } else if (techMembers.length > 0) {
+        tier3Approved = techAllConfirmed;
+      } else {
+        tier3Approved = confirmedDeptNotesCount > 0 || (supportReqNeed > 0 && techReqTotal === 0);
+      }
+    }
+    const tier3LockReason = !tier3Unlocked
+      ? tier2LockReason
+      : (techDeclinedCount > 0
+        ? `Resolve ${techDeclinedCount} declined Tier 3 assignment(s) before unlocking Tier 4`
+        : `Awaiting Tier 3 technician confirmations (${techConfirmedCount}/${techMembers.length})`);
+
+    // Tier 4 (Support fulfillment & confirmations) -> unlocks Tier 5 (Readiness & Gate Sync)
+    const tier4Unlocked = tier3Unlocked && tier3Approved;
+    let tier4Approved = false;
+    if (tier4Unlocked) {
+      if (dispatchStatusRaw === 'ready') {
+        tier4Approved = true;
+      } else if (!hasAnySupportScope) {
+        tier4Approved = true;
+      } else {
+        tier4Approved = pendingSupportCount === 0
+          && supportList.length >= supportReqNeed
+          && (supportList.length === 0 || supportAllConfirmed);
+      }
+    }
+    const tier4LockReason = !tier4Unlocked
+      ? tier3LockReason
+      : (pendingSupportCount > 0
+        ? `Fulfill ${pendingSupportCount} pending Tier 4 Support request(s) to unlock Tier 5`
+        : (supportList.length < supportReqNeed
+          ? `Assign Tier 4 Support Staff (${supportList.length}/${supportReqNeed}) to unlock Tier 5`
+          : (supportDeclinedCount > 0
+            ? `Resolve ${supportDeclinedCount} declined Tier 4 support slot(s) to unlock Tier 5`
+            : `Awaiting Tier 4 support confirmations (${supportConfirmedCount}/${supportList.length})`)));
+
+    const tier5Unlocked = tier4Unlocked && tier4Approved;
+    const tier5Approved = tier5Unlocked && (dispatchStatusRaw === 'ready' || techConfirmedCount > 0 || supportConfirmedCount > 0 || !hasAnySupportScope);
+
+    return {
+      tier1_command: { unlocked: true, locked: false, approved: tier1Approved, lockReason: '' },
+      tier2_tech_lead: { unlocked: tier2Unlocked, locked: !tier2Unlocked, approved: tier2Approved, lockReason: tier1LockReason },
+      tier3_technicians: { unlocked: tier3Unlocked, locked: !tier3Unlocked, approved: tier3Approved, lockReason: tier2LockReason },
+      tier4_support: { unlocked: tier4Unlocked, locked: !tier4Unlocked, approved: tier4Approved, lockReason: tier3LockReason },
+      site_ops: { unlocked: tier5Unlocked, locked: !tier5Unlocked, approved: tier5Approved, lockReason: tier4LockReason },
+      metrics: {
+        techReqTotal,
+        techConfirmedCount,
+        techDeclinedCount,
+        techTotal: techMembers.length,
+        confirmedDeptNotesCount,
+        supportReqNeed,
+        pendingSupportCount,
+        supportConfirmedCount,
+        supportTotal: supportList.length,
+        hasAnySupportScope,
+      },
+    };
+  }
+
+  /** Resolves a valid unlocked tier key for the given Dispatch Flow context. */
+  function resolveUnlockedDispatchTier(ctx, desiredTier = 'tier1_command') {
+    const nodes = Array.isArray(ctx?.nodes) ? ctx.nodes : [];
+    const tierStates = ctx?.tierStates || {};
+    const key = String(desiredTier || 'tier1_command');
+    if (tierStates[key] ? tierStates[key].unlocked : true) {
+      return key;
+    }
+    const unlockedNodes = nodes.filter((n) => !n.locked);
+    if (unlockedNodes.length > 0) {
+      return unlockedNodes[unlockedNodes.length - 1].tierKey;
+    }
+    return 'tier1_command';
+  }
+
   function canCurrentUserApproveTechLead(ev) {
     if (!ev) return false;
     if (isCurrentUserAdmin()) return true;
@@ -10116,12 +10523,124 @@
     return (m[4] && m[5]) ? `${dStr} · ${m[4]}:${m[5]} CAT` : dStr;
   }
 
-  function applySelectLockState(el, isLocked, tagEl = null) {
+  /** Returns true when the signed-in user matches the event's creator record. */
+  function isCurrentUserEventCreator(ev = null) {
+    if (!ev || !state.currentUser) return false;
+    const curId = Number(state.currentUser.id || 0);
+    const curFull = String(state.currentUser.full_name || '').trim().toLowerCase();
+    const curUser = String(state.currentUser.username || '').trim().toLowerCase();
+    const evCreatorId = Number(ev.created_by_id || 0);
+    if (evCreatorId > 0) {
+      return curId > 0 && evCreatorId === curId;
+    }
+    const evCreatorName = String(ev.created_by_name || '').trim().toLowerCase();
+    if (evCreatorName !== '') {
+      return (curFull !== '' && evCreatorName === curFull) || (curUser !== '' && evCreatorName === curUser);
+    }
+    const reqSenderId = Number(ev.requirements_sent_by || 0);
+    if (reqSenderId > 0 && curId > 0) {
+      return reqSenderId === curId;
+    }
+    return false;
+  }
+
+  /** Returns true when the event creator is identified as a Project Manager / Event Coordinator. */
+  function isEventCreatedByProjectManager(ev = null, pmVal = '') {
+    if (!ev) return false;
+    const creatorRole = String(ev.created_by_role || '').trim().toLowerCase();
+    if (creatorRole === 'project_manager' || creatorRole === 'event_coordinator') {
+      return true;
+    }
+    if (['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead'].includes(creatorRole)) {
+      return false;
+    }
+    const evCreatorId = Number(ev.created_by_id || 0);
+    if (evCreatorId > 0) {
+      const creatorMember = (state.crew || []).find((c) => Number(c.id) === evCreatorId);
+      if (creatorMember) {
+        const mRole = String(creatorMember.role || '').trim().toLowerCase();
+        if (mRole === 'project_manager' || mRole === 'event_coordinator') {
+          return true;
+        }
+        if (['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead'].includes(mRole)) {
+          return false;
+        }
+      }
+    }
+    const normPm = String(pmVal || '').trim().toLowerCase();
+    if (normPm !== '' && !isPlaceholderLeadershipValue(normPm)) {
+      const creatorName = String(ev.created_by_name || '').trim().toLowerCase();
+      if (creatorName !== '' && creatorName === normPm) {
+        return true;
+      }
+      const reqByName = String(ev.requirements_sent_by_name || '').trim().toLowerCase();
+      if (reqByName !== '' && reqByName === normPm) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Returns true when the event has a recorded creator identity (ID, name, or requirements sender). */
+  function hasKnownEventCreator(ev = null) {
+    if (!ev) return false;
+    if (Number(ev.created_by_id || 0) > 0) return true;
+    if (String(ev.created_by_name || '').trim() !== '') return true;
+    if (Number(ev.requirements_sent_by || 0) > 0) return true;
+    if (String(ev.requirements_sent_by_name || '').trim() !== '') return true;
+    return false;
+  }
+
+  /** Computes lock state and tooltip metadata for Tier 1 Dispatch Flow leadership selects. */
+  function getDispatchTier1SelectLocks(ev = null, leadView = null) {
+    const view = leadView || getEventLeadershipViewState(ev);
+    const isDisabledEvent = Boolean(ev && Number(ev.is_active ?? 1) === 0);
+    const lockBecauseEventDisabled = isDisabledEvent && !view.isAdmin;
+    const hasAssignedTechLead = !isPlaceholderLeadershipValue(view.techLeadValInit);
+    const hasAssignedPm = !isPlaceholderLeadershipValue(view.pmValInit);
+    const creatorKnown = hasKnownEventCreator(ev);
+    const isCreatorPm = Boolean(view.isPm && isCurrentUserEventCreator(ev));
+    const isPmCreatedEvent = Boolean(hasAssignedPm && isEventCreatedByProjectManager(ev, view.pmValInit));
+    const isLockedPmForTechLead = Boolean(view.isTechLead && hasAssignedPm);
+    const isLockedPmForKnownCreator = Boolean(!view.isAdmin && hasAssignedPm && creatorKnown);
+    const disableTechLead = lockBecauseEventDisabled || hasAssignedTechLead;
+    const disablePm = lockBecauseEventDisabled || isCreatorPm || isPmCreatedEvent || isLockedPmForTechLead || isLockedPmForKnownCreator;
+    const showPmOwnerTag = isCreatorPm || isPmCreatedEvent;
+    const pmTitle = lockBecauseEventDisabled
+      ? 'Event is disabled'
+      : (isCreatorPm
+        ? 'Locked to logged-in Project Manager who created this event'
+        : (isPmCreatedEvent
+          ? 'Locked to Project Manager who created this event'
+          : (isLockedPmForKnownCreator
+            ? 'Project Manager is locked because the event creator is already known'
+            : (isLockedPmForTechLead ? 'Project Manager already assigned' : ''))));
+    return {
+      hasAssignedTechLead,
+      hasAssignedPm,
+      isCreatorPm,
+      isPmCreatedEvent,
+      showPmOwnerTag,
+      disableTechLead,
+      disablePm,
+      techLeadTitle: lockBecauseEventDisabled
+        ? 'Event is disabled'
+        : (hasAssignedTechLead ? 'Technical Lead has already been assigned' : ''),
+      pmTitle,
+    };
+  }
+
+  function applySelectLockState(el, isLocked, tagEl = null, lockReason = '') {
     if (el) {
       el.disabled = Boolean(isLocked);
       el.style.background = isLocked ? 'var(--bg-subtle)' : '';
       el.style.cursor = isLocked ? 'not-allowed' : '';
       el.style.opacity = isLocked ? '0.85' : '';
+      if (isLocked && lockReason) {
+        el.setAttribute('title', lockReason);
+      } else if (!isLocked) {
+        el.removeAttribute('title');
+      }
     }
     if (tagEl) {
       tagEl.style.display = isLocked ? 'inline' : 'none';
@@ -10138,6 +10657,8 @@
 
     let disablePm = false;
     let disableTechLead = false;
+    let techLeadLockReason = '';
+    let pmLockReason = '';
     const showAutoTags = !ev;
     let pmValInit = '';
     let techLeadValInit = '';
@@ -10150,16 +10671,35 @@
       pmValInit = !isPlaceholderLeadershipValue(rawPm)
         ? rawPm
         : (!isPlaceholderLeadershipValue(legacyCoord) ? legacyCoord : '');
-      if (Number(ev.is_active ?? 1) === 0 && !isAdmin) {
+      const hasAssignedTechLead = !isPlaceholderLeadershipValue(techLeadValInit);
+      const hasAssignedPm = !isPlaceholderLeadershipValue(pmValInit);
+      const creatorKnown = hasKnownEventCreator(ev) || isEventCreatedByProjectManager(ev, pmValInit);
+      const isDisabledEvent = Number(ev.is_active ?? 1) === 0;
+      if (isDisabledEvent && !isAdmin) {
         disableTechLead = true;
         disablePm = true;
+        techLeadLockReason = 'Event is disabled';
+        pmLockReason = 'Event is disabled';
+      } else if (!isAdmin) {
+        if (hasAssignedTechLead) {
+          disableTechLead = true;
+          techLeadLockReason = 'Technical Lead has already been assigned';
+        }
+        if (hasAssignedPm && (creatorKnown || isPm || isTechLead)) {
+          disablePm = true;
+          pmLockReason = creatorKnown
+            ? 'Project Manager is locked because the event creator is already known'
+            : 'Project Manager has already been assigned';
+        }
       }
     } else if (isTechLead && curName) {
       disableTechLead = true;
       techLeadValInit = curName;
+      techLeadLockReason = 'Locked to logged-in Technical Lead';
     } else if (isPm && curName) {
       disablePm = true;
       pmValInit = curName;
+      pmLockReason = 'Locked to logged-in Project Manager';
     }
 
     return {
@@ -10168,6 +10708,8 @@
       isTechLead,
       disablePm,
       disableTechLead,
+      techLeadLockReason,
+      pmLockReason,
       showAutoTags,
       pmValInit,
       techLeadValInit,
@@ -10636,8 +11178,8 @@
       if (tlAutoTag) tlAutoTag.style.display = 'none';
       if (pmAutoTag) pmAutoTag.style.display = 'none';
     }
-    applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null);
-    applySelectLockState(pmEl, disablePm, leadView.showAutoTags ? pmAutoTag : null);
+    applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null, leadView.techLeadLockReason);
+    applySelectLockState(pmEl, disablePm, leadView.showAutoTags ? pmAutoTag : null, leadView.pmLockReason);
 
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
@@ -11836,7 +12378,8 @@
 
     const deptNames = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
     const deptMatches = (c, d) => resolveCrewCanonicalDepartment(c) === d;
-    const techDeptMemberCount = deptNames.reduce((acc, dn) => acc + pool.filter((c) => deptMatches(c, dn)).length, 0);
+    const techMembers = pool.filter((c) => deptNames.some((dn) => deptMatches(c, dn)));
+    const techDeptMemberCount = techMembers.length;
     const supportList = pool.filter((c) => {
       const canon = resolveCrewCanonicalDepartment(c);
       const role = String(c.role || '').toLowerCase();
@@ -11854,6 +12397,7 @@
 
     const evId = activeEv ? String(activeEv.raw_id || activeEv.id) : '';
     const supportReqs = (state.eventSupportRequests || []).filter((r) => !evId || String(r.event_id) === evId);
+    const deptConfirmations = (evId && state.eventDeptConfirmations && state.eventDeptConfirmations[evId]) || [];
     const evLogs = (state.eventDispatchLogs || []).filter((l) => !evId || String(l.event_id) === evId);
     const pendingSupportCount = supportReqs.filter((r) => r.status === 'pending').length;
     const confirmedCount = Object.values(asgMap).filter((rec) => String(rec?.confirmation_status || '') === 'confirmed').length;
@@ -11861,7 +12405,18 @@
     const dispatchStatusRaw = activeEv ? String(activeEv.dispatch_status || 'draft').toLowerCase() : '';
     const hasTechLead = isEventTechLeadAssigned(activeEv);
     const isApproved = isEventApprovedByTechLead(activeEv);
-    const isLockedAfterTier1 = isDispatchPipelineLockedAfterTier1(activeEv);
+    const tierStates = computeDispatchTierStates(activeEv, {
+      hasTechLead,
+      isApproved,
+      deptNames,
+      techMembers,
+      supportList,
+      asgMap,
+      supportReqs,
+      deptConfirmations,
+    });
+    const tierStats = tierStates.metrics || {};
+    const isLockedAfterTier1 = Boolean(activeEv && tierStates.tier2_tech_lead.locked);
     const dispatchStatusLabel = (!isApproved && activeEv)
       ? (hasTechLead ? 'AWAITING APPROVAL FROM TECH LEAD' : 'ASSIGN TECH LEAD TO REQUEST APPROVAL')
       : dispatchStatusRaw.replace(/_/g, ' ').toUpperCase();
@@ -11876,6 +12431,9 @@
       {
         tierKey: 'tier1_command',
         step: 'TIER 1 · COMMAND',
+        locked: tierStates.tier1_command.locked,
+        approved: tierStates.tier1_command.approved,
+        lockReason: tierStates.tier1_command.lockReason,
         tone: activeEv ? (!isApproved || dispatchStatusRaw === 'draft' ? 'warn' : 'ok') : 'chip',
         short: activeEv ? (activeEv.title || activeEv.name) : 'Create Event & Command',
         summary: `${ownerBadgeSummary} · ${durLabel}`,
@@ -11890,54 +12448,90 @@
       {
         tierKey: 'tier2_tech_lead',
         step: 'TIER 2 · TECH LEAD',
-        tone: !isApproved || !hasTechLead ? 'warn' : 'ok',
+        locked: tierStates.tier2_tech_lead.locked,
+        approved: tierStates.tier2_tech_lead.approved,
+        lockReason: tierStates.tier2_tech_lead.lockReason,
+        tone: (tierStates.tier2_tech_lead.locked || !tierStates.tier2_tech_lead.approved || !hasTechLead) ? 'warn' : 'ok',
         short: tlName,
-        summary: isLockedAfterTier1 ? 'Locked · Awaiting Tech Lead Approval' : 'System Role-Filtered Tech Lead',
+        summary: tierStates.tier2_tech_lead.locked
+          ? 'Locked · Awaiting Tech Lead Approval'
+          : (tierStates.tier2_tech_lead.approved ? `Crew Allocated (${techDeptMemberCount})` : 'Awaiting Crew Allocation'),
         title: `Tier 2 · Technical Supervision (${tlName})`,
         source: 'Filtered from users assigned Tech Lead system role',
         route: 'Review Requirements → Allocate 6 Dept Technicians → Request Support Manpower',
         detail: 'The Tech Lead receives production targets from Tier 1 (Admin / Project Manager), staffs specialists across Video, Sound, Lighting, Electrical, Rigging, and Interpretation + Support Staff, and posts department confirmations.',
-        outcome: isLockedAfterTier1
-          ? 'Locked until approved by Technical Lead'
-          : (hasTechLead ? `Assigned Lead: ${tlName} · ${techDeptMemberCount + supportList.length} Crew Assigned` : 'Assign Tech Lead in Create Event'),
+        outcome: tierStates.tier2_tech_lead.locked
+          ? tierStates.tier2_tech_lead.lockReason
+          : (tierStates.tier2_tech_lead.approved
+            ? `Assigned Lead: ${tlName} · ${techDeptMemberCount + supportList.length} Crew Assigned`
+            : 'Assign Dept Crew to Unlock Tier 3'),
         openCrewModal: true,
         jumpLabel: 'Assign Dept Crew & Confirmations',
       },
       {
         tierKey: 'tier3_technicians',
         step: 'TIER 3 · 6 DEPTS',
-        tone: techDeptMemberCount > 0 ? 'ok' : 'warn',
+        locked: tierStates.tier3_technicians.locked,
+        approved: tierStates.tier3_technicians.approved,
+        lockReason: tierStates.tier3_technicians.lockReason,
+        tone: (tierStates.tier3_technicians.locked || !tierStates.tier3_technicians.approved) ? 'warn' : 'ok',
         short: '6 Tech Departments',
-        summary: `Video · Sound · Light · Power · Rig · Interp (${techDeptMemberCount})`,
+        summary: tierStates.tier3_technicians.locked
+          ? 'Locked · Awaiting Tier 2 Action'
+          : `Video · Sound · Light · Power · Rig · Interp (${tierStats.techConfirmedCount || 0}/${techDeptMemberCount} Confirmed)`,
         title: `Tier 3 · 6 Technical Branches (${techDeptMemberCount} Assigned)`,
         source: 'Video · Sound · Lighting · Electrical · Rigging · Interpretation',
         route: 'Confirm Deployment Slot → Anti-Shadowing Gate Check-In → Respond to Roll-Call',
         detail: 'Specialty branch technicians view shift call times, confirm deployment readiness, and verify attendance at the event venue checkpoint via QR or supervisor gate check-in.',
-        outcome: `${techDeptMemberCount} Technical Crew Assigned`,
+        outcome: tierStates.tier3_technicians.locked
+          ? tierStates.tier3_technicians.lockReason
+          : (tierStates.tier3_technicians.approved
+            ? `✓ ${tierStats.techConfirmedCount || techDeptMemberCount}/${techDeptMemberCount} Technical Crew Confirmed`
+            : `Awaiting Crew Confirmation (${tierStats.techConfirmedCount || 0}/${techDeptMemberCount})`),
       },
       {
         tierKey: 'tier4_support',
         step: 'TIER 4 · SUPPORT',
-        tone: pendingSupportCount > 0 ? 'warn' : (supportList.length > 0 ? 'ok' : 'chip'),
+        locked: tierStates.tier4_support.locked,
+        approved: tierStates.tier4_support.approved,
+        lockReason: tierStates.tier4_support.lockReason,
+        tone: tierStates.tier4_support.locked
+          ? 'warn'
+          : (pendingSupportCount > 0 || !tierStates.tier4_support.approved ? 'warn' : (supportList.length > 0 || !tierStats.hasAnySupportScope ? 'ok' : 'chip')),
         short: `Support Staff (${supportList.length})`,
-        summary: pendingSupportCount > 0 ? `${pendingSupportCount} Pending Request(s)` : 'Logistics, Runners & Security Pool',
+        summary: tierStates.tier4_support.locked
+          ? 'Locked · Awaiting Tier 3 Confirmation'
+          : (pendingSupportCount > 0
+            ? `${pendingSupportCount} Pending Request(s)`
+            : (tierStats.hasAnySupportScope ? `${tierStats.supportConfirmedCount || 0}/${supportList.length} Support Confirmed` : 'No Support Needed · Passed')),
         title: `Tier 4 · Ground Support & Fulfillment (${supportList.length} Assigned)`,
         source: 'Operations Drivers, Runners & Venue Security',
         route: 'Request Submitted by Tier 1/2 → Fulfilled by Site Manager → Venue Gate Access Only',
         detail: 'Support crew fulfill general logistics and staging runs at assigned event venues while L1 perimeter rules automatically block unauthorized warehouse entry.',
-        outcome: pendingSupportCount > 0 ? `${pendingSupportCount} Request(s) Pending` : `${supportList.length} Support Members Ready`,
+        outcome: tierStates.tier4_support.locked
+          ? tierStates.tier4_support.lockReason
+          : (tierStates.tier4_support.approved
+            ? (tierStats.hasAnySupportScope ? `✓ ${supportList.length} Support Members Confirmed` : 'No Support Staffing Needed — Tier 5 Unlocked')
+            : tierStates.site_ops.lockReason),
       },
       {
         tierKey: 'site_ops',
         step: 'TIER 5 · AUDIT',
-        tone: confirmedCount > 0 || evLogs.length > 0 ? 'ok' : 'chip',
+        locked: tierStates.site_ops.locked,
+        approved: tierStates.site_ops.approved,
+        lockReason: tierStates.site_ops.lockReason,
+        tone: tierStates.site_ops.locked ? 'warn' : (confirmedCount > 0 || evLogs.length > 0 ? 'ok' : 'chip'),
         short: 'Readiness & Gate Sync',
-        summary: `${confirmedCount} Confirmed · ${evLogs.length} Audit Logs`,
+        summary: tierStates.site_ops.locked
+          ? 'Locked · Awaiting Upstream Approvals'
+          : `${confirmedCount} Confirmed · ${evLogs.length} Audit Logs`,
         title: 'Tier 5 · Readiness Audit & Gate Checkpoint Sync',
         source: 'Live Gate Terminals, Confirmation Pills & Audit Log',
         route: 'Crew Confirmations → Gate Check-In Sync → Random Roll-Call & Export',
         detail: 'Aggregates crew confirmation statuses, terminal check-in telemetry, and chronological dispatch audit trail across all leadership tiers and checkpoints.',
-        outcome: `${confirmedCount} Confirmed · ${evLogs.length} Logged Actions`,
+        outcome: tierStates.site_ops.locked
+          ? tierStates.site_ops.lockReason
+          : `${confirmedCount} Confirmed · ${evLogs.length} Logged Actions`,
         jumpScreen: 'terminals',
         jumpLabel: 'Launch Gate Terminal',
       },
@@ -11952,6 +12546,7 @@
       tlName,
       deptNames,
       deptMatches,
+      techMembers,
       techDeptMemberCount,
       supportList,
       asgMap,
@@ -11962,6 +12557,7 @@
       hasTechLead,
       isApproved,
       isLockedAfterTier1,
+      tierStates,
       hasRealPm,
       rawPm,
       originator,
@@ -11983,14 +12579,12 @@
 
   function renderDispatchPipelineInto(diagramEl, inspectorEl, statusPillEl, ctx) {
     if (!diagramEl) return;
-    const isLockedAfterTier1 = Boolean(ctx.isLockedAfterTier1);
-    if (isLockedAfterTier1 && state.selectedDispatchTier && state.selectedDispatchTier !== 'tier1_command') {
-      state.selectedDispatchTier = 'tier1_command';
+    const selTier = resolveUnlockedDispatchTier(ctx, state.selectedDispatchTier || 'tier1_command');
+    if (state.selectedDispatchTier !== selTier) {
+      state.selectedDispatchTier = selTier;
     }
-    const selTier = state.selectedDispatchTier || 'tier1_command';
     let activeIdx = ctx.nodes.findIndex((n) => n.tierKey === selTier);
     if (activeIdx < 0) activeIdx = 0;
-    if (isLockedAfterTier1 && activeIdx > 0) activeIdx = 0;
     const activeNode = ctx.nodes[activeIdx];
 
     if (statusPillEl) {
@@ -12000,10 +12594,11 @@
     }
 
     diagramEl.innerHTML = ctx.nodes.map((n, idx) => {
-      const isNodeLocked = isLockedAfterTier1 && idx > 0;
+      const isNodeLocked = Boolean(n.locked);
       const isActiveNode = idx === activeIdx && !isNodeLocked;
+      const lockTooltip = isNodeLocked ? ` title="${escapeHtml(n.lockReason || 'Locked until upstream approval is met')}"` : '';
       return `
-        <button type="button" class="flow-pipeline-node${isActiveNode ? ' is-active' : ''}${isNodeLocked ? ' is-locked' : ''}" data-node-idx="${idx}" data-dispatch-tier="${escapeHtml(n.tierKey)}" ${isNodeLocked ? 'disabled aria-disabled="true" title="Awaiting approval from Tech Lead before unlocking this tier"' : ''}>
+        <button type="button" class="flow-pipeline-node${isActiveNode ? ' is-active' : ''}${isNodeLocked ? ' is-locked' : ''}" data-node-idx="${idx}" data-dispatch-tier="${escapeHtml(n.tierKey)}" ${isNodeLocked ? `disabled aria-disabled="true"${lockTooltip}` : ''}>
           <div class="flow-node-top">
             <span class="flow-step-badge tone-${escapeHtml(n.tone)}">${escapeHtml(n.step)}</span>
             <span class="flow-node-arrow">${isNodeLocked ? '🔒' : (idx < ctx.nodes.length - 1 ? '→' : '●')}</span>
@@ -12024,7 +12619,7 @@
 
     if (inspectorEl) {
       const activeEv = ctx.activeEv;
-      const canJump = Boolean(activeNode.jumpScreen && isScreenPermittedForCurrentUser(activeNode.jumpScreen));
+      const canJump = Boolean(activeNode.jumpScreen && !activeNode.locked && isScreenPermittedForCurrentUser(activeNode.jumpScreen));
       const isCommandCaller = isCurrentUserAdmin() || isCurrentUserEventCommand();
       const isTlOnlyCaller = !isCommandCaller && isCurrentUserTechLead();
       const showTier1CommandExtras = Boolean(
@@ -12037,6 +12632,25 @@
         && activeEv
         && ctx.isApproved
       );
+      const showTier3CrewSummary = Boolean(
+        activeNode.tierKey === 'tier3_technicians'
+        && activeEv
+        && !activeNode.locked
+      );
+      const showTier4SupportSummary = Boolean(
+        activeNode.tierKey === 'tier4_support'
+        && activeEv
+        && !activeNode.locked
+      );
+      const myUid = Number(state.currentUser?.id || 0);
+      const myAsg = (activeEv && myUid > 0 && ctx.asgMap) ? ctx.asgMap[String(myUid)] : null;
+      const canConfirmMySlot = Boolean(
+        activeEv
+        && !activeNode.locked
+        && (activeNode.tierKey === 'tier3_technicians' || activeNode.tierKey === 'tier4_support')
+        && myAsg
+        && String(myAsg.confirmation_status || '').toLowerCase() !== 'confirmed'
+      );
       const canApproveHere = Boolean(
         activeNode.tierKey === 'tier1_command'
         && activeEv
@@ -12045,18 +12659,24 @@
       );
       const canOpenCrewFromTier2 = Boolean(
         activeNode.openCrewModal
+        && !activeNode.locked
         && activeEv
         && canCurrentUserAssignEvents()
       );
-      const nextDisabled = activeIdx >= ctx.nodes.length - 1 || (isLockedAfterTier1 && activeIdx === 0);
+      const nextNode = activeIdx < ctx.nodes.length - 1 ? ctx.nodes[activeIdx + 1] : null;
+      const nextLocked = Boolean(nextNode && nextNode.locked);
+      const nextDisabled = !nextNode || nextLocked;
+      const nextTitle = nextLocked ? String(nextNode.lockReason || 'Locked until upstream action is met') : '';
 
       let commandExtrasHtml = '';
       let leadView = null;
+      let tier1Locks = null;
       const inspPfx = inspectorEl.id || 'df-insp';
       const isActiveEvDisabled = Boolean(activeEv && Number(activeEv.is_active ?? 1) === 0);
       const activeEvDisabledBanner = activeEv ? buildEventDisabledBannerHtml(activeEv, '10px') : '';
       if (showTier1CommandExtras) {
         leadView = getEventLeadershipViewState(activeEv);
+        tier1Locks = getDispatchTier1SelectLocks(activeEv, leadView);
         const orig = ctx.originator || getEventRequestOriginatorInfo(activeEv);
         const assignedSet = new Set((activeEv.assigned_technicians || []).map(Number));
         const targetItems = getEventTargetsProgressItems(activeEv.requirements?.branches || {}, assignedSet);
@@ -12066,7 +12686,6 @@
           orig.targetsPrefix || leadView.targetsPrefix,
           'No department headcount targets set yet.'
         );
-        const lockInputsBecauseDisabled = isActiveEvDisabled && !isCurrentUserAdmin();
         const showAdminOriginBox = Boolean(orig.isAdminOrigin);
         const visibleCols = 2 + (showAdminOriginBox ? 1 : 0);
         const tlHeaderBadge = isTlOnlyCaller
@@ -12081,8 +12700,8 @@
             ${tlHeaderBadge}
             <div class="df-leadership-grid" style="display: grid; grid-template-columns: repeat(${visibleCols}, minmax(0, 1fr)); gap: 12px;">
               <div class="form-field" style="margin: 0;">
-                <label class="form-label" for="${escapeHtml(inspPfx)}-techlead">Technical Lead</label>
-                <select id="${escapeHtml(inspPfx)}-techlead" class="form-input js-df-techlead-select" ${lockInputsBecauseDisabled ? 'disabled' : ''}></select>
+                <label class="form-label" for="${escapeHtml(inspPfx)}-techlead">Technical Lead${tier1Locks.hasAssignedTechLead ? ' <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Assigned)</span>' : ''}</label>
+                <select id="${escapeHtml(inspPfx)}-techlead" class="form-input js-df-techlead-select" ${tier1Locks.disableTechLead ? `disabled title="${escapeHtml(tier1Locks.techLeadTitle)}"` : ''}></select>
               </div>
               ${showAdminOriginBox ? `
               <div class="form-field" style="margin: 0;">
@@ -12090,8 +12709,8 @@
                 <input type="text" class="form-input" value="${escapeHtml(orig.name)}" disabled style="background: var(--bg-subtle); cursor: not-allowed; opacity: 0.85;" />
               </div>` : ''}
               <div class="form-field" style="margin: 0;">
-                <label class="form-label" for="${escapeHtml(inspPfx)}-pm">Project Manager</label>
-                <select id="${escapeHtml(inspPfx)}-pm" class="form-input js-df-pm-select" ${lockInputsBecauseDisabled ? 'disabled' : ''}></select>
+                <label class="form-label" for="${escapeHtml(inspPfx)}-pm">Project Manager${tier1Locks.showPmOwnerTag ? ' <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span>' : (tier1Locks.disablePm && !isActiveEvDisabled ? ' <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Assigned)</span>' : '')}</label>
+                <select id="${escapeHtml(inspPfx)}-pm" class="form-input js-df-pm-select" ${tier1Locks.disablePm ? `disabled title="${escapeHtml(tier1Locks.pmTitle)}"` : ''}></select>
               </div>
             </div>
             <div class="df-targets-banner" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 11.5px;">
@@ -12122,6 +12741,34 @@
               ${targetsHtml}
             </div>
             ${briefNotes ? `<div style="font-size:11.5px;color:var(--text-secondary);"><strong>Request Brief:</strong> ${escapeHtml(briefNotes)}</div>` : ''}
+          </div>
+        `;
+      } else if (showTier3CrewSummary) {
+        const ts3 = ctx.tierStates?.metrics || {};
+        const badgesHtml = (ctx.techMembers || []).length
+          ? ctx.techMembers.map((m) => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--border-color);border-radius:999px;background:var(--bg-card);font-size:11px;">${ctx.formatMemberBadge(m)}</span>`).join('')
+          : '<span style="color:var(--text-muted);font-size:11.5px;">Confirmed via Department Lead readiness note.</span>';
+        commandExtrasHtml = `
+          <div class="df-command-extras">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:11.5px;color:var(--text-secondary);">Technical Confirmation Progress: <strong>${ts3.techConfirmedCount || 0}/${ts3.techTotal || 0}</strong></span>
+              <span class="status-badge ${activeNode.approved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${activeNode.approved ? '✓ Tier 3 Confirmed — Tier 4 Unlocked' : 'Awaiting Technician Confirmations'}</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-subtle);">${badgesHtml}</div>
+          </div>
+        `;
+      } else if (showTier4SupportSummary) {
+        const ts4 = ctx.tierStates?.metrics || {};
+        const supBadgesHtml = (ctx.supportList || []).length
+          ? ctx.supportList.map((s) => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--border-color);border-radius:999px;background:var(--bg-card);font-size:11px;">${ctx.formatMemberBadge(s)}</span>`).join('')
+          : `<span style="color:var(--text-muted);font-size:11.5px;">${ts4.hasAnySupportScope ? 'Assign/fulfill Support Staff requests in the Step 3 panel below.' : 'No support staff requested for this event — Tier 5 unlocked.'}</span>`;
+        commandExtrasHtml = `
+          <div class="df-command-extras">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:11.5px;color:var(--text-secondary);">Pending Support Requests: <strong>${ts4.pendingSupportCount || 0}</strong> · Confirmed Support: <strong>${ts4.supportConfirmedCount || 0}/${ts4.supportTotal || 0}</strong></span>
+              <span class="status-badge ${activeNode.approved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${activeNode.approved ? '✓ Tier 4 Approved — Tier 5 Unlocked' : 'Action Required in Step 3 Panel'}</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-subtle);">${supBadgesHtml}</div>
           </div>
         `;
       }
@@ -12197,7 +12844,7 @@
                 ${canApproveHere ? `<button type="button" class="btn btn-primary-32 js-df-approve-techlead-btn">✓ Approve Request (Tech Lead)</button>` : ''}
                 ${canJump ? `<button type="button" class="btn btn-primary-32 js-df-jump-btn" data-jump-screen="${escapeHtml(activeNode.jumpScreen)}">${escapeHtml(activeNode.jumpLabel || 'Open')} →</button>` : ''}
                 <button type="button" class="btn btn-secondary-32 js-df-prev-btn" ${activeIdx === 0 ? 'disabled' : ''}>← Prev Tier</button>
-                <button type="button" class="btn btn-secondary-32 js-df-next-btn" ${nextDisabled ? 'disabled title="Awaiting Tech Lead approval to unlock Tier 2"' : ''}>Next Tier →</button>
+                <button type="button" class="btn btn-secondary-32 js-df-next-btn" ${nextDisabled ? `disabled${nextTitle ? ` title="${escapeHtml(nextTitle)}"` : ''}` : ''}>Next Tier →</button>
               </div>
             </div>
           </div>
@@ -12231,23 +12878,23 @@
             <div class="flow-inspector-actions">
               ${canApproveHere ? `<button type="button" class="btn btn-primary-32 js-df-approve-techlead-btn">✓ Approve Request (Tech Lead)</button>` : ''}
               ${canOpenCrewFromTier2 ? `<button type="button" class="btn btn-primary-32 js-df-open-crew-modal-btn">${escapeHtml(activeNode.jumpLabel || 'Assign Dept Crew')} →</button>` : ''}
+              ${canConfirmMySlot ? `<button type="button" class="btn btn-primary-32 js-df-confirm-slot-btn" data-event-id="${escapeHtml(String(activeEv.raw_id || activeEv.id))}">✓ Confirm My Assignment</button>` : ''}
               ${canJump ? `<button type="button" class="btn btn-primary-32 js-df-jump-btn" data-jump-screen="${escapeHtml(activeNode.jumpScreen)}">${escapeHtml(activeNode.jumpLabel || 'Open')} →</button>` : ''}
               <button type="button" class="btn btn-secondary-32 js-df-prev-btn" ${activeIdx === 0 ? 'disabled' : ''}>← Prev Tier</button>
-              <button type="button" class="btn btn-secondary-32 js-df-next-btn" ${nextDisabled ? 'disabled title="Awaiting Tech Lead approval to unlock Tier 2"' : ''}>Next Tier →</button>
+              <button type="button" class="btn btn-secondary-32 js-df-next-btn" ${nextDisabled ? `disabled${nextTitle ? ` title="${escapeHtml(nextTitle)}"` : ''}` : ''}>Next Tier →</button>
             </div>
           </div>
         `;
       }
 
-      if (showTier1CommandExtras && leadView) {
+      if (showTier1CommandExtras && leadView && tier1Locks) {
         const tlSel = inspectorEl.querySelector('.js-df-techlead-select');
         const pmSel = inspectorEl.querySelector('.js-df-pm-select');
-        const lockInputsBecauseDisabled = isActiveEvDisabled && !isCurrentUserAdmin();
 
         populateLeadershipSelect(tlSel, activeEv.tech_lead || activeEv.lead_name || '', 'techlead');
         populateLeadershipSelect(pmSel, leadView.pmValInit, 'pm');
-        applySelectLockState(tlSel, lockInputsBecauseDisabled);
-        applySelectLockState(pmSel, lockInputsBecauseDisabled);
+        applySelectLockState(tlSel, tier1Locks.disableTechLead);
+        applySelectLockState(pmSel, tier1Locks.disablePm);
 
         const saveDispatchLeadershipChange = async (fields, toastMsg) => {
           const evId = String(activeEv.raw_id || activeEv.id || '');
@@ -12278,7 +12925,7 @@
           }
         };
 
-        if (tlSel && !lockInputsBecauseDisabled) {
+        if (tlSel && !tier1Locks.disableTechLead) {
           tlSel.addEventListener('change', async () => {
             const nextTl = tlSel.value.trim();
             if (!nextTl) {
@@ -12288,11 +12935,11 @@
             }
             await saveDispatchLeadershipChange(
               { tech_lead: nextTl },
-              `Technical Lead reassigned to ${nextTl} — awaiting approval.`
+              `Technical Lead assigned to ${nextTl} — awaiting approval.`
             );
           });
         }
-        if (pmSel && !lockInputsBecauseDisabled) {
+        if (pmSel && !tier1Locks.disablePm) {
           pmSel.addEventListener('change', async () => {
             const nextPm = pmSel.value.trim();
             if (!nextPm && !isCurrentUserAdmin()) {
@@ -12312,6 +12959,15 @@
         if (activeEv) {
           openVenueCrudModal(activeEv);
         }
+      });
+
+      inspectorEl.querySelector('.js-df-confirm-slot-btn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const targetEvId = btn.getAttribute('data-event-id') || '';
+        if (!targetEvId) return;
+        btn.disabled = true;
+        btn.textContent = 'Confirming...';
+        await respondMyEventAssignment(targetEvId, 'confirmed');
       });
 
       inspectorEl.querySelector('.js-df-approve-techlead-btn')?.addEventListener('click', async (e) => {
@@ -12336,7 +12992,7 @@
         }
       });
       inspectorEl.querySelector('.js-df-next-btn')?.addEventListener('click', () => {
-        if (isLockedAfterTier1 && activeIdx === 0) return;
+        if (nextDisabled) return;
         if (activeIdx < ctx.nodes.length - 1) {
           state.selectedDispatchTier = ctx.nodes[activeIdx + 1].tierKey;
           renderDispatchViews();
@@ -12352,8 +13008,8 @@
   function renderDispatchHierarchyCanvasInto(canvasEl, ctx) {
     if (!canvasEl) return;
     const caps = state.roleCapabilities || {};
-    const isLockedAfterTier1 = Boolean(ctx.isLockedAfterTier1);
-    const selTier = isLockedAfterTier1 ? 'tier1_command' : (state.selectedDispatchTier || 'tier1_command');
+    const tierStates = ctx.tierStates || {};
+    const selTier = resolveUnlockedDispatchTier(ctx, state.selectedDispatchTier || 'tier1_command');
     const renderTierPermChips = (tierKey) => {
       const spec = caps[tierKey];
       if (!spec || !Array.isArray(spec.allowed_actions)) return '';
@@ -12366,8 +13022,15 @@
     const tier1StatusText = ctx.activeEv
       ? (!ctx.isApproved ? 'AWAITING APPROVAL FROM TECH LEAD' : String(ctx.activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase())
       : '';
-    const lockedCardClass = isLockedAfterTier1 ? ' is-locked' : '';
-    const lockTag = isLockedAfterTier1 ? ' · 🔒 Locked until Tech Lead approval' : '';
+    const t2State = tierStates.tier2_tech_lead || {};
+    const t3State = tierStates.tier3_technicians || {};
+    const t4State = tierStates.tier4_support || {};
+    const t2LockedCls = t2State.locked ? ' is-locked' : '';
+    const t3LockedCls = t3State.locked ? ' is-locked' : '';
+    const t4LockedCls = t4State.locked ? ' is-locked' : '';
+    const t2LockTag = t2State.locked ? ` · 🔒 Locked · ${escapeHtml(t2State.lockReason || 'Awaiting approval')}` : '';
+    const t3LockTag = t3State.locked ? ` · 🔒 Locked · ${escapeHtml(t3State.lockReason || 'Awaiting approval')}` : '';
+    const t4LockTag = t4State.locked ? ` · 🔒 Locked · ${escapeHtml(t4State.lockReason || 'Awaiting approval')}` : '';
 
     canvasEl.innerHTML = `
       <div style="font-size:11.5px;color:var(--text-secondary);margin-bottom:4px;">Click any Role Tier card below to synchronize with the Flow Explorer Pipeline and inspect permissions.</div>
@@ -12381,8 +13044,8 @@
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-tier">
-        <div class="dispatch-node-card is-clickable${lockedCardClass} ${selTier === 'tier2_tech_lead' ? 'is-selected' : ''}" data-tier-key="tier2_tech_lead">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 2 · Technical Supervision${lockTag}</div>
+        <div class="dispatch-node-card is-clickable${t2LockedCls} ${!t2State.locked && selTier === 'tier2_tech_lead' ? 'is-selected' : ''}" data-tier-key="tier2_tech_lead"${t2State.locked ? ` title="${escapeHtml(t2State.lockReason || '')}"` : ''}>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 2 · Technical Supervision${t2LockTag}</div>
           <div style="font-size:14.5px;font-weight:800;margin-top:2px;">Tech Lead</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Lead: <strong>${escapeHtml(ctx.tlName)}</strong></div>
           ${renderTierPermChips('tier2_tech_lead')}
@@ -12390,8 +13053,8 @@
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-tier">
-        <div class="dispatch-node-card is-clickable${lockedCardClass} ${selTier === 'tier3_technicians' ? 'is-selected' : ''}" data-tier-key="tier3_technicians" style="min-width:220px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 3 · Technical Execution${lockTag}</div>
+        <div class="dispatch-node-card is-clickable${t3LockedCls} ${!t3State.locked && selTier === 'tier3_technicians' ? 'is-selected' : ''}" data-tier-key="tier3_technicians" style="min-width:220px;"${t3State.locked ? ` title="${escapeHtml(t3State.lockReason || '')}"` : ''}>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 3 · Technical Execution${t3LockTag}</div>
           <div style="font-size:14px;font-weight:800;margin-top:2px;">Technicians (${ctx.deptNames.length} Specialty Branches)</div>
           ${renderTierPermChips('tier3_technicians')}
         </div>
@@ -12402,7 +13065,7 @@
       const members = ctx.pool.filter((c) => ctx.deptMatches(c, dn));
       const reqNeed = Number(ctx.activeEv?.requirements?.branches?.[dn] || 0);
       return `
-            <div class="dispatch-dept-card is-clickable${lockedCardClass}" data-tier-key="tier3_technicians">
+            <div class="dispatch-dept-card is-clickable${t3LockedCls}" data-tier-key="tier3_technicians"${t3State.locked ? ` title="${escapeHtml(t3State.lockReason || '')}"` : ''}>
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <strong style="font-size:13px;">${escapeHtml(dn)}</strong>
                 <span class="status-badge status-badge-blue-sm">${members.length}${reqNeed > 0 ? ` / ${reqNeed} req` : ''}</span>
@@ -12416,8 +13079,8 @@
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-tier">
-        <div class="dispatch-node-card is-clickable${lockedCardClass} ${selTier === 'tier4_support' ? 'is-selected' : ''}" data-tier-key="tier4_support" style="width:100%;max-width:640px;">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 4 · Operations Ground Support${lockTag}</div>
+        <div class="dispatch-node-card is-clickable${t4LockedCls} ${!t4State.locked && selTier === 'tier4_support' ? 'is-selected' : ''}" data-tier-key="tier4_support" style="width:100%;max-width:640px;"${t4State.locked ? ` title="${escapeHtml(t4State.lockReason || '')}"` : ''}>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 4 · Operations Ground Support${t4LockTag}</div>
           <div style="font-size:14px;font-weight:800;margin-top:2px;">Support Staff (${ctx.supportList.length}${Number(ctx.activeEv?.requirements?.branches?.['Support Staff'] || 0) > 0 ? ` / ${Number(ctx.activeEv.requirements.branches['Support Staff'])} req` : ''})</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">
             ${ctx.supportList.length ? ctx.supportList.slice(0, 6).map((s) => ctx.formatMemberBadge(s)).join(' · ') : 'Assign runners, logistics drivers, or venue crew via Event Roster or Support Requests below.'}
@@ -12440,8 +13103,8 @@
     if (!drawer) return;
     const caps = state.roleCapabilities || {};
     const tierKeys = Object.keys(caps);
-    const isLockedAfterTier1 = Boolean(ctx.isLockedAfterTier1);
-    const desiredKey = isLockedAfterTier1 ? 'tier1_command' : state.selectedDispatchTier;
+    const tierStates = ctx.tierStates || {};
+    const desiredKey = resolveUnlockedDispatchTier(ctx, state.selectedDispatchTier || 'tier1_command');
     const activeKey = caps[desiredKey] ? desiredKey : (tierKeys[0] || 'tier1_command');
     const spec = caps[activeKey];
     if (!spec) {
@@ -12462,8 +13125,10 @@
 
     const tierTabs = tierKeys.map((k) => {
       const sp = caps[k];
-      const tabLocked = isLockedAfterTier1 && k !== 'tier1_command';
-      return `<button type="button" class="btn ${k === activeKey ? 'btn-primary-32' : 'btn-secondary-32-sm'} js-dispatch-tier-tab" data-tier-key="${escapeHtml(k)}" ${tabLocked ? 'disabled title="Awaiting Tech Lead approval to unlock downstream tiers"' : ''}>${tabLocked ? '🔒 ' : ''}${escapeHtml(sp.tier_title || k)}</button>`;
+      const tabState = tierStates[k];
+      const tabLocked = Boolean(tabState && tabState.locked);
+      const tabTip = tabLocked ? ` title="${escapeHtml(tabState.lockReason || 'Locked until upstream tier is approved')}"` : '';
+      return `<button type="button" class="btn ${k === activeKey ? 'btn-primary-32' : 'btn-secondary-32-sm'} js-dispatch-tier-tab" data-tier-key="${escapeHtml(k)}" ${tabLocked ? `disabled${tabTip}` : ''}>${tabLocked ? '🔒 ' : ''}${escapeHtml(sp.tier_title || k)}</button>`;
     }).join('');
 
     const combinedActions = [
@@ -12531,10 +13196,21 @@
     });
     const supportReqs = ctx.supportReqs;
     const evLogs = ctx.evLogs;
+    const tierStates = ctx.tierStates || computeDispatchTierStates(activeEv, {
+      deptNames,
+      techMembers: ctx.techMembers || [],
+      supportList: ctx.supportList || [],
+      asgMap: ctx.asgMap || {},
+      supportReqs,
+      deptConfirmations: (evId && state.eventDeptConfirmations && state.eventDeptConfirmations[evId]) || [],
+    });
+    const t2Unlocked = Boolean(tierStates.tier2_tech_lead?.unlocked);
+    const t4Unlocked = Boolean(tierStates.tier4_support?.unlocked);
+    const t5Unlocked = Boolean(tierStates.site_ops?.unlocked);
 
     const isTlViewer = !canSendReqs && isCurrentUserTechLead();
     const canApproveDeck = Boolean(activeEv && !ctx.isApproved && canCurrentUserApproveTechLead(activeEv));
-    const canOpenCrewDeck = Boolean(activeEv && ctx.isApproved && canCurrentUserAssignEvents());
+    const canOpenCrewDeck = Boolean(activeEv && t2Unlocked && canCurrentUserAssignEvents());
     const orig = ctx.originator || getEventRequestOriginatorInfo(activeEv);
     const reqPillsHtml = [...deptNames, 'Support Staff']
       .filter((dn) => Number(reqBranches[dn] || 0) > 0)
@@ -12569,15 +13245,17 @@
         `}
       </div>
 
-      <div class="dispatch-step-panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="dispatch-step-panel${activeEv && !t2Unlocked ? ' is-locked-panel' : ''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
           <strong style="font-size:13.5px;">Step 3 · Tier 4 Support Staff Requests</strong>
-          <span class="status-badge status-badge-amber-sm">${supportReqs.filter((r) => r.status === 'pending').length} Pending</span>
+          ${activeEv && !t2Unlocked
+            ? `<span class="status-badge status-badge-amber-sm">🔒 Locked · Awaiting Tier 1 Approval</span>`
+            : `<span class="status-badge status-badge-amber-sm">${supportReqs.filter((r) => r.status === 'pending').length} Pending</span>`}
         </div>
         ${evId && canReqSupport ? `
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <input type="text" class="form-input js-dp-sup-req-note" placeholder="Need e.g. 2x Runners, 1x Driver..." style="flex:1;min-width:140px;height:32px;font-size:12px;" />
-            <button type="button" class="btn btn-secondary-32-sm js-dp-request-support-btn">+ Request Support</button>
+            <input type="text" class="form-input js-dp-sup-req-note" placeholder="Need e.g. 2x Runners, 1x Driver..." style="flex:1;min-width:140px;height:32px;font-size:12px;" ${!t2Unlocked ? `disabled title="${escapeHtml(tierStates.tier2_tech_lead?.lockReason || '')}"` : ''} />
+            <button type="button" class="btn btn-secondary-32-sm js-dp-request-support-btn" ${!t2Unlocked ? `disabled title="${escapeHtml(tierStates.tier2_tech_lead?.lockReason || '')}"` : ''}>+ Request Support</button>
           </div>
         ` : ''}
         <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
@@ -12594,10 +13272,11 @@
                 ${sr.assigned_names?.length ? `<div style="margin-top:4px;color:#047857;">Assigned: <strong>${escapeHtml(sr.assigned_names.join(', '))}</strong></div>` : ''}
                 ${isPend && canFulfillSupport ? `
                   <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+                    ${!t4Unlocked ? `<div style="font-size:11px;color:#b45309;font-weight:600;">🔒 Fulfillment locked: ${escapeHtml(tierStates.tier4_support?.lockReason || 'Awaiting upstream tier approval')}</div>` : ''}
                     <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                      ${supportPool.map((sp) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;"><input type="checkbox" class="js-dp-sup-cb-${Number(sr.id)}" value="${Number(sp.id)}" /><span>${escapeHtml(sp.full_name)}</span></label>`).join('') || '<em>No support pool users</em>'}
+                      ${supportPool.map((sp) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;"><input type="checkbox" class="js-dp-sup-cb-${Number(sr.id)}" value="${Number(sp.id)}" ${!t4Unlocked ? 'disabled' : ''} /><span>${escapeHtml(sp.full_name)}</span></label>`).join('') || '<em>No support pool users</em>'}
                     </div>
-                    <button type="button" class="btn btn-primary-32 js-dp-fulfill-btn" data-request-id="${Number(sr.id)}" style="height:28px;font-size:11px;">Fulfill Request #${Number(sr.id)}</button>
+                    <button type="button" class="btn btn-primary-32 js-dp-fulfill-btn" data-request-id="${Number(sr.id)}" style="height:28px;font-size:11px;" ${!t4Unlocked ? `disabled title="${escapeHtml(tierStates.tier4_support?.lockReason || '')}"` : ''}>Fulfill Request #${Number(sr.id)}</button>
                   </div>
                 ` : ''}
               </div>
@@ -12606,11 +13285,14 @@
         </div>
       </div>
 
-      <div class="dispatch-step-panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="dispatch-step-panel${activeEv && !t5Unlocked ? ' is-locked-panel' : ''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
           <strong style="font-size:13.5px;">Step 4 &amp; 5 · Readiness &amp; Live Dispatch Audit</strong>
-          <span class="status-badge status-badge-blue-sm">${evLogs.length} Actions</span>
+          ${activeEv && !t5Unlocked
+            ? `<span class="status-badge status-badge-amber-sm" title="${escapeHtml(tierStates.site_ops?.lockReason || '')}">🔒 Locked · Upstream Needed</span>`
+            : `<span class="status-badge status-badge-blue-sm">${evLogs.length} Actions</span>`}
         </div>
+        ${activeEv && !t5Unlocked ? `<div style="font-size:11px;color:#b45309;">🔒 ${escapeHtml(tierStates.site_ops?.lockReason || 'Complete upstream tier approvals to unlock Tier 5 Readiness & Gate Sync.')}</div>` : ''}
         <div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
           ${evLogs.length ? evLogs.slice(0, 12).map((l) => `
             <div style="padding:6px 8px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:11.5px;">
@@ -12708,7 +13390,7 @@
 
   function renderSettingsDispatchSection() {
     const selEl = document.getElementById('dispatch-event-select');
-    const ctx = getDispatchContextData(selEl?.value || state.selectedDispatchEventId || '');
+    const ctx = getDispatchContextData(state.selectedDispatchEventId || selEl?.value || '');
     if (ctx.resolvedId && !state.selectedDispatchEventId) {
       state.selectedDispatchEventId = ctx.resolvedId;
     }
@@ -12726,7 +13408,7 @@
 
   function renderDispatchFlowPage() {
     const selEl = document.getElementById('dispatch-page-event-select');
-    const ctx = getDispatchContextData(selEl?.value || state.selectedDispatchEventId || '');
+    const ctx = getDispatchContextData(state.selectedDispatchEventId || selEl?.value || '');
     if (ctx.resolvedId && !state.selectedDispatchEventId) {
       state.selectedDispatchEventId = ctx.resolvedId;
     }
@@ -12815,7 +13497,7 @@
       if (tlAutoTag) tlAutoTag.style.display = 'none';
       if (pmAutoTag) pmAutoTag.style.display = 'none';
     }
-    applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null);
+    applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null, leadView.techLeadLockReason);
     if (tlRoleHint) tlRoleHint.style.display = disableTechLead ? 'none' : 'inline';
 
     if (pmWrap) pmWrap.style.display = 'block';
@@ -12828,7 +13510,7 @@
     if (pmEl && (!preserveSelections || disablePm || !pmEl.matches(':focus'))) {
       populateLeadershipSelect(pmEl, desiredPm, 'pm');
     }
-    applySelectLockState(pmEl, disablePm, leadView.showAutoTags ? pmAutoTag : null);
+    applySelectLockState(pmEl, disablePm, leadView.showAutoTags ? pmAutoTag : null, leadView.pmLockReason);
 
     if (pmStar) pmStar.style.display = requirePm ? 'inline' : 'none';
   }
@@ -15816,6 +16498,20 @@
           } catch (err) {
             // Local read state remains active in memory for this session
           }
+        }
+      });
+    }
+
+    const notifList = document.getElementById('topbar-notif-list');
+    if (notifList) {
+      notifList.addEventListener('click', (e) => {
+        const itemBtn = e.target.closest('.notif-item[data-notif-idx]');
+        if (!itemBtn) return;
+        e.stopPropagation();
+        const idx = Number(itemBtn.getAttribute('data-notif-idx'));
+        const notif = Number.isInteger(idx) && state.notifications ? state.notifications[idx] : null;
+        if (notif) {
+          handleNotificationItemClick(notif);
         }
       });
     }
@@ -18824,8 +19520,8 @@
           if (rosterTlAutoTag) rosterTlAutoTag.style.display = 'none';
           if (rosterPmAutoTag) rosterPmAutoTag.style.display = 'none';
         }
-        applySelectLockState(tlSelect, rosterLeadView.disableTechLead, rosterLeadView.showAutoTags ? rosterTlAutoTag : null);
-        applySelectLockState(pmInput, rosterLeadView.disablePm, rosterLeadView.showAutoTags ? rosterPmAutoTag : null);
+        applySelectLockState(tlSelect, rosterLeadView.disableTechLead, rosterLeadView.showAutoTags ? rosterTlAutoTag : null, rosterLeadView.techLeadLockReason);
+        applySelectLockState(pmInput, rosterLeadView.disablePm, rosterLeadView.showAutoTags ? rosterPmAutoTag : null, rosterLeadView.pmLockReason);
         const hsBox = document.getElementById('roster-dispatch-handshake-box');
         const stPill = document.getElementById('roster-dispatch-status-pill');
         const reqSum = document.getElementById('roster-requirements-summary');
