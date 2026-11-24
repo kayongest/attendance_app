@@ -1,8 +1,8 @@
 /* aBility Manager — Service Worker (Offline Shell + Static Asset Cache) */
-const CACHE_NAME = 'ability-pwa-v20261123-30';
+const CACHE_NAME = 'ability-pwa-v20261124-32';
 const CORE_ASSETS = [
-  './styles.css?v=20261123_v30',
-  './app.js?v=20261123_v30',
+  './styles.css?v=20261124_v32',
+  './app.js?v=20261124_v32',
   './assets/vendor/qrcode.js',
   './assets/vendor/driver/driver.css',
   './assets/vendor/driver/driver.js.iife.js',
@@ -48,13 +48,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never cache dynamic API writes or auth endpoints
-  if (url.pathname.endsWith('/api.php') || url.pathname.endsWith('api.php')) {
+  // Never cache dynamic API writes, auth endpoints, or server-rendered PHP portals (prevents cross-session HTML flash)
+  if (url.pathname.endsWith('/api.php') || url.pathname.endsWith('api.php') || url.pathname.endsWith('.php')) {
     return;
   }
 
-  // Network-First for HTML/PHP documents so session state & branding update live
-  if (req.mode === 'navigate' || url.pathname.endsWith('.php') || url.pathname.endsWith('.html')) {
+  // Network-First for static HTML documents
+  if (req.mode === 'navigate' || url.pathname.endsWith('.html')) {
     event.respondWith(
       fetch(req)
         .then((res) => {

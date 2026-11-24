@@ -199,8 +199,8 @@
     rosterDeptFilter: 'all',
     deferredPwaPrompt: null,
 
-    // Current Operator Session & Alerts
-    currentUser: null,
+    // Current Operator Session & Alerts (hydrated synchronously from SSR preload when available)
+    currentUser: (typeof window !== 'undefined' && window.__ABILITY_PRELOADED_USER__) ? window.__ABILITY_PRELOADED_USER__ : null,
     unreadNotifCount: 0,
     readNotifIds: new Set(),
     notifications: [],
@@ -278,19 +278,123 @@
   const TIER_CYCLE = ['all', 'L1', 'L2', 'L3', 'L4'];
   const GATE_STATE_CYCLE = ['all', 'ready', 'checked_in', 'checked_out'];
 
-  const BRANDING_FONT_STACKS = {
-    'Marvel': "'Marvel', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    'Inter': "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    'Plus Jakarta Sans': "'Plus Jakarta Sans', 'Segoe UI', Roboto, sans-serif",
-    'JetBrains Mono': "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+  let isBrandingSaveInFlight = false;
+  let brandingSaveSeq = 0;
+
+  const BRANDING_FONT_PRESETS = {
+    'Marvel': {
+      stack: "'Marvel', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      url: 'https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap',
+    },
+    'Inter': {
+      stack: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      url: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
+    },
+    'Plus Jakarta Sans': {
+      stack: "'Plus Jakarta Sans', 'Segoe UI', Roboto, sans-serif",
+      url: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
+    },
+    'JetBrains Mono': {
+      stack: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+      url: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap',
+    },
+    'Roboto': {
+      stack: "'Roboto', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif",
+      url: 'https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap',
+    },
+    'System UI': {
+      stack: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+      url: null,
+    },
   };
+
+  const BRANDING_FONT_STACKS = Object.fromEntries(
+    Object.entries(BRANDING_FONT_PRESETS).map(([name, spec]) => [name, spec.stack])
+  );
+
+  function normalizeBrandingFontUrlClient(rawUrl) {
+    const url = String(rawUrl || '').trim();
+    if (!url) return '';
+    const specimenMatch = url.match(/^https?:\/\/fonts\.google\.com\/specimen\/([^/?#]+)/i);
+    if (specimenMatch && specimenMatch[1]) {
+      const fam = decodeURIComponent(specimenMatch[1]).replace(/\+/g, ' ').trim();
+      if (fam) {
+        return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam).replace(/%20/g, '+')}:wght@400;500;600;700;800&display=swap`;
+      }
+    }
+    return url;
+  }
+
+  function resolveBrandingPresetEntry(fontName) {
+    const key = String(fontName || '').trim().toLowerCase();
+    if (!key) return null;
+    for (const [presetName, spec] of Object.entries(BRANDING_FONT_PRESETS)) {
+      if (presetName.toLowerCase() === key) {
+        return { font_name: presetName, css_stack: spec.stack, font_url: spec.url || '' };
+      }
+    }
+    return null;
+  }
+
+  function quoteCssFontName(name) {
+    return `'${String(name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+  }
+
+  function syncBrandingFontSelectOptions(activeFontName) {
+    if (typeof document === 'undefined') return;
+    const sel = document.getElementById('brand-font-family');
+    if (!sel) return;
+    const seen = new Set();
+    const entries = [];
+    Object.keys(BRANDING_FONT_PRESETS).forEach((name) => {
+      const k = name.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      entries.push({ value: name, label: name === 'Marvel' ? 'Marvel / Clean UI Sans' : name });
+    });
+    (state.brandingFonts || []).forEach((f) => {
+      if (!f || !f.font_name) return;
+      const isActiveFlag = Number(f.is_active ?? 1) === 1;
+      const matchesCurrent = String(f.font_name).trim().toLowerCase() === String(activeFontName || '').trim().toLowerCase();
+      if (!isActiveFlag && !matchesCurrent) return;
+      const k = String(f.font_name).trim().toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      entries.push({ value: String(f.font_name).trim(), label: String(f.font_name).trim() });
+    });
+    if (activeFontName && !seen.has(String(activeFontName).trim().toLowerCase())) {
+      const trimmed = String(activeFontName).trim();
+      entries.push({ value: trimmed, label: trimmed });
+    }
+    sel.innerHTML = entries
+      .map((item) => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`)
+      .join('');
+    const targetVal = entries.find((item) => item.value.toLowerCase() === String(activeFontName || 'Marvel').trim().toLowerCase())?.value || 'Marvel';
+    sel.value = targetVal;
+  }
+
+  function isMonospaceFontStack(fontName, fontStack) {
+    const combined = `${fontName || ''} ${fontStack || ''}`.toLowerCase();
+    return /\bmonospace\b|jetbrains|fira\s*code|ibm\s*plex\s*mono|source\s*code|consolas|menlo/.test(combined);
+  }
 
   function applyBrandingConfigClient(cfg = {}, fontsList = null) {
     if (Array.isArray(fontsList)) {
       state.brandingFonts = fontsList;
     }
     const merged = Object.assign({}, state.brandingConfig || {}, cfg || {});
+    const requestedFamily = String(merged.font_family || 'Marvel').trim() || 'Marvel';
+    const fonts = state.brandingFonts || [];
+    const customFontMatch = fonts.find(
+      (f) => f && String(f.font_name || '').trim().toLowerCase() === requestedFamily.toLowerCase()
+    );
+    const presetMatch = resolveBrandingPresetEntry(requestedFamily);
+    const resolvedFamily = (customFontMatch && customFontMatch.font_name)
+      || (presetMatch && presetMatch.font_name)
+      || requestedFamily;
+    merged.font_family = resolvedFamily;
     state.brandingConfig = merged;
+
     const root = document.documentElement;
     if (!root) return;
 
@@ -301,9 +405,8 @@
     if (merged.accent_color) root.style.setProperty('--brand-accent', merged.accent_color);
     if (merged.neutral_color) root.style.setProperty('--brand-neutral', merged.neutral_color);
 
-    // Inject @font-face rules & stylesheet links for custom fonts live
-    const fonts = state.brandingFonts || [];
-    if (fonts.length && typeof document !== 'undefined') {
+    // Inject @font-face rules & stylesheet links for custom + preset fonts live
+    if (typeof document !== 'undefined') {
       let rtStyle = document.getElementById('ability-branding-fonts-runtime');
       if (!rtStyle) {
         rtStyle = document.createElement('style');
@@ -311,31 +414,87 @@
         document.head.appendChild(rtStyle);
       }
       const cssRules = [];
-      fonts.forEach((f) => {
-        if (!f || Number(f.is_active ?? 1) !== 1) return;
+      const linkTargets = new Map();
+      const registerFontEntry = (f, forceLoad = false) => {
+        if (!f) return;
+        const fname = String(f.font_name || '').trim();
+        if (!fname) return;
+        const activeFlag = Number(f.is_active ?? 1) === 1;
+        if (!activeFlag && !forceLoad) return;
         if (f.file_path) {
-          const safeFam = String(f.font_name || '').replace(/[^A-Za-z0-9 _-]/g, '');
+          const safeFam = fname.replace(/['"\\]/g, '').trim() || fname;
           const fmt = ['woff2', 'woff', 'truetype', 'opentype'].includes(f.font_format) ? f.font_format : 'woff2';
-          cssRules.push(`@font-face{font-family:'${safeFam}';src:url('${f.file_path}') format('${fmt}');font-display:swap;}`);
+          const escapedPath = String(f.file_path).replace(/['\\]/g, '');
+          cssRules.push(`@font-face{font-family:${quoteCssFontName(safeFam)};src:url('${escapedPath}') format('${fmt}');font-weight:100 900;font-style:normal;font-display:swap;}`);
         }
-        if (f.font_url && /^https:\/\//i.test(f.font_url)) {
-          const linkId = `ability-font-link-${f.id || safeHashStr(f.font_url)}`;
-          if (!document.getElementById(linkId)) {
-            const lk = document.createElement('link');
-            lk.id = linkId;
-            lk.rel = 'stylesheet';
-            lk.href = f.font_url;
-            document.head.appendChild(lk);
-          }
+        const presetSpec = resolveBrandingPresetEntry(fname);
+        const normalizedUrl = normalizeBrandingFontUrlClient(f.font_url || presetSpec?.font_url || '');
+        if (normalizedUrl && (/^https?:\/\//i.test(normalizedUrl) || /^uploads\//i.test(normalizedUrl) || /^assets\//i.test(normalizedUrl))) {
+          const linkId = `ability-font-link-${f.id || safeHashStr(fname.toLowerCase())}`;
+          linkTargets.set(linkId, normalizedUrl);
+        }
+      };
+
+      fonts.forEach((f) => {
+        const isSelected = String(f?.font_name || '').trim().toLowerCase() === resolvedFamily.toLowerCase();
+        registerFontEntry(f, isSelected);
+      });
+      if (presetMatch && presetMatch.font_url) {
+        const alreadyInList = fonts.some(
+          (f) => f && String(f.font_name || '').trim().toLowerCase() === presetMatch.font_name.toLowerCase() && normalizeBrandingFontUrlClient(f.font_url || '')
+        );
+        if (!alreadyInList) {
+          registerFontEntry(presetMatch, true);
+        }
+      }
+      if (customFontMatch && !customFontMatch.font_url && presetMatch?.font_url) {
+        registerFontEntry({ id: customFontMatch.id, font_name: customFontMatch.font_name, font_url: presetMatch.font_url, is_active: 1 }, true);
+      }
+
+      linkTargets.forEach((hrefUrl, linkId) => {
+        let lk = document.getElementById(linkId);
+        if (!lk) {
+          lk = document.createElement('link');
+          lk.id = linkId;
+          lk.rel = 'stylesheet';
+          lk.href = hrefUrl;
+          document.head.appendChild(lk);
+        } else if (lk.getAttribute('href') !== hrefUrl) {
+          lk.href = hrefUrl;
         }
       });
+
       rtStyle.textContent = cssRules.join('\n');
     }
 
-    const customFontMatch = fonts.find((f) => f && f.font_name === merged.font_family);
-    const fontStack = (customFontMatch && customFontMatch.css_stack) || BRANDING_FONT_STACKS[merged.font_family] || BRANDING_FONT_STACKS.Marvel;
+    const customStack = customFontMatch && String(customFontMatch.css_stack || '').trim();
+    const fontStack = customStack
+      || (presetMatch && presetMatch.css_stack)
+      || (resolvedFamily && resolvedFamily !== 'Marvel'
+        ? `${quoteCssFontName(resolvedFamily)}, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+        : BRANDING_FONT_STACKS.Marvel);
+
+    const monoStack = isMonospaceFontStack(resolvedFamily, fontStack)
+      ? fontStack
+      : `${quoteCssFontName(resolvedFamily)}, ${fontStack}, ui-monospace, SFMono-Regular, 'Consolas', monospace`;
+
     root.style.setProperty('--brand-font-family', fontStack);
     root.style.setProperty('--font-sans', fontStack);
+    root.style.setProperty('--font-marvel', fontStack);
+    root.style.setProperty('--font-mono', monoStack);
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.style.fontFamily = fontStack;
+    }
+
+    if (typeof document !== 'undefined' && document.fonts && typeof document.fonts.load === 'function') {
+      try {
+        document.fonts.load(`400 16px ${quoteCssFontName(resolvedFamily)}`).catch(() => {});
+        document.fonts.load(`700 16px ${quoteCssFontName(resolvedFamily)}`).catch(() => {});
+      } catch (_) { }
+    }
+
+    syncBrandingFontSelectOptions(resolvedFamily);
+
     const scaleNum = Math.max(0.85, Math.min(1.25, Number(merged.font_scale || 1)));
     root.style.setProperty('--brand-font-scale', scaleNum.toFixed(2));
     const align = ['left', 'center', 'justify'].includes(String(merged.text_align)) ? merged.text_align : 'left';
@@ -498,6 +657,16 @@
       .replace(/'/g, '&#039;');
   }
 
+  function computeInitials(fullName) {
+    const clean = String(fullName ?? '').trim();
+    if (!clean) return 'CR';
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return clean.slice(0, 2).toUpperCase() || 'CR';
+  }
+
   function resolveToastTone(message, toneOrOpts) {
     if (toneOrOpts && typeof toneOrOpts === 'string' && toneOrOpts !== 'auto') {
       return toneOrOpts;
@@ -560,7 +729,7 @@
   function applyBootstrapPayload(data, preserveCurrentVerification = false) {
     if (!data || !data.ok) return;
     if (data.csrfToken) {
-      state.csrfToken = String(data.csrfToken);
+      applySessionCsrfToken(data.csrfToken);
     }
     state.dbSource = data.dbSource || 'ability_db';
     if (Array.isArray(data.clearanceMatrix) && data.clearanceMatrix.length > 0) {
@@ -644,8 +813,13 @@
       state.eventDeptConfirmations = data.eventDeptConfirmations;
     }
     if (data.brandingConfig && typeof data.brandingConfig === 'object') {
-      applyBrandingConfigClient(data.brandingConfig, data.brandingFonts || null);
-      applyAccessibilityPreferences();
+      const fontsPayload = Array.isArray(data.brandingFonts) ? data.brandingFonts : null;
+      if (isBrandingSaveInFlight) {
+        if (fontsPayload) state.brandingFonts = fontsPayload;
+      } else {
+        applyBrandingConfigClient(data.brandingConfig, fontsPayload);
+        applyAccessibilityPreferences();
+      }
     }
 
     if (data.navigationConfig && Array.isArray(data.navigationConfig.items)) {
@@ -671,8 +845,8 @@
 
     if (data.currentUser) {
       state.currentUser = data.currentUser;
-    } else if (!state.currentUser && state.crew.length > 0) {
-      state.currentUser = state.crew.find((c) => Number(c.id) === 2) || state.crew[0];
+    } else if (data.authenticated === false || (Object.prototype.hasOwnProperty.call(data, 'currentUser') && !data.currentUser)) {
+      state.currentUser = null;
     }
 
     AbilityMainOffline.saveRoster(state.crew, state.checkpoints);
@@ -693,7 +867,12 @@
   }
 
   function buildClientVerificationFromMember(member) {
-    const cp = state.activeCheckpoint;
+    const cp = state.activeCheckpoint || {
+      type: state.checkpointType || 'event_venue',
+      id: Number(state.checkpointId || 1),
+      name: 'Active Checkpoint',
+      call_time: '08:00',
+    };
     const isStock = cp.type === 'stock_warehouse';
     const cpCallTime = (cp && cp.call_time) || '08:00';
     const now = new Date();
@@ -836,14 +1015,39 @@
     });
   }
 
+  function applySessionCsrfToken(token) {
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) return;
+    state.csrfToken = cleanToken;
+    if (typeof document !== 'undefined') {
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      if (meta) meta.setAttribute('content', cleanToken);
+    }
+  }
+
   let isBootstrapInFlight = false;
-  async function fetchBootstrap(preserveVerification = false) {
-    if (isBootstrapInFlight) return;
+  let bootstrapRequestSeq = 0;
+  let activeBootstrapAbortCtrl = null;
+
+  async function fetchBootstrap(preserveVerification = false, options = {}) {
+    const force = Boolean(options && options.force);
+    if (isBootstrapInFlight) {
+      if (!force) return;
+      if (activeBootstrapAbortCtrl) {
+        try { activeBootstrapAbortCtrl.abort(); } catch (_) { }
+      }
+    }
+    const reqSeq = ++bootstrapRequestSeq;
+    const reqCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    activeBootstrapAbortCtrl = reqCtrl;
     isBootstrapInFlight = true;
     try {
       const url = `api.php?action=bootstrap&checkpoint_type=${encodeURIComponent(state.checkpointType)}&checkpoint_id=${encodeURIComponent(state.checkpointId)}`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const fetchOpts = { cache: 'no-store' };
+      if (reqCtrl) fetchOpts.signal = reqCtrl.signal;
+      const res = await fetch(url, fetchOpts);
       const text = await res.text();
+      if (reqSeq !== bootstrapRequestSeq) return;
       let data = null;
       try {
         data = JSON.parse(text);
@@ -851,13 +1055,38 @@
         console.error('Failed to parse API response as JSON:', parseErr, text.slice(0, 300));
         return;
       }
+      if (reqSeq !== bootstrapRequestSeq) return;
       if (data && data.ok) {
         applyBootstrapPayload(data, preserveVerification);
       }
     } catch (err) {
+      if (err && err.name === 'AbortError') return;
       console.warn('Bootstrap fetch fallback:', err);
     } finally {
+      if (activeBootstrapAbortCtrl === reqCtrl) {
+        activeBootstrapAbortCtrl = null;
+        isBootstrapInFlight = false;
+      }
+    }
+  }
+
+  async function commitSessionUserTransition(nextUser, responsePayload = null) {
+    if (responsePayload && responsePayload.csrfToken) {
+      applySessionCsrfToken(responsePayload.csrfToken);
+    }
+    bootstrapRequestSeq += 1;
+    if (activeBootstrapAbortCtrl) {
+      try { activeBootstrapAbortCtrl.abort(); } catch (_) { }
+      activeBootstrapAbortCtrl = null;
       isBootstrapInFlight = false;
+    }
+    state.myPendingRollCall = null;
+    state.myPendingAssignments = [];
+    state.readNotifIds = new Set();
+    state.currentUser = nextUser || null;
+    renderAll();
+    if (nextUser) {
+      await fetchBootstrap(false, { force: true });
     }
   }
 
@@ -2209,15 +2438,8 @@
       }
       return false;
     }
-    if (curRole === 'project_manager') {
-      if (matchesIdentity(pmVal)) return true;
-      if (isPlaceholderLeadershipValue(pmVal) && isPlaceholderLeadershipValue(ecVal) && curId > 0) {
-        return Number(ev.created_by_id || 0) === curId || Number(ev.requirements_sent_by || 0) === curId;
-      }
-      return false;
-    }
-    if (curRole === 'event_coordinator') {
-      if (matchesIdentity(ecVal)) return true;
+    if (curRole === 'project_manager' || curRole === 'event_coordinator') {
+      if (matchesIdentity(pmVal) || matchesIdentity(ecVal)) return true;
       if (isPlaceholderLeadershipValue(pmVal) && isPlaceholderLeadershipValue(ecVal) && curId > 0) {
         return Number(ev.created_by_id || 0) === curId || Number(ev.requirements_sent_by || 0) === curId;
       }
@@ -2738,9 +2960,8 @@
     }
 
     // Render User Avatar and Info in Topbar & Sidebar Account Footer
-    const u = state.currentUser || (state.crew.length > 0 ? (state.crew.find((c) => Number(c.id) === 2) || state.crew[0]) : null);
+    const u = state.currentUser || null;
     if (u) {
-      state.currentUser = u;
       const displayName = u.full_name || u.username || 'Active Operator';
       const displayRole = `${u.role_display || u.role || 'Staff'} · ${u.clearance_code || 'L2'}`;
       const initials = u.initials || computeInitials(displayName);
@@ -2774,7 +2995,7 @@
       if (menuRole) menuRole.textContent = displayRole;
 
       const menuBadge = document.getElementById('user-menu-badge');
-      if (menuBadge) menuBadge.textContent = u.badge_code || 'REW-BADGE-0002';
+      if (menuBadge) menuBadge.textContent = u.badge_code || '--';
 
       // Sidebar Account Footer (#account-footer-btn)
       const footerBtn = document.getElementById('account-footer-btn');
@@ -2815,6 +3036,37 @@
         authSub.textContent = isAdmin ? 'Admin toggle: Sign In & Register' : 'Login with personal credentials';
       }
 
+      applyNavigationRestrictions();
+    } else {
+      const topAvatar = document.getElementById('topbar-avatar');
+      if (topAvatar) {
+        topAvatar.textContent = '--';
+        topAvatar.title = 'User Account & Access';
+      }
+      const menuAvatar = document.getElementById('user-menu-avatar');
+      if (menuAvatar) menuAvatar.textContent = '--';
+      const menuName = document.getElementById('user-menu-name');
+      if (menuName) menuName.textContent = 'Not Signed In';
+      const topName = document.getElementById('topbar-user-name');
+      if (topName) topName.textContent = 'Not Signed In';
+      const topRole = document.getElementById('topbar-user-role-badge');
+      if (topRole) topRole.textContent = 'Sign In Required';
+      const menuRole = document.getElementById('user-menu-role');
+      if (menuRole) menuRole.textContent = 'Sign In Required';
+      const menuBadge = document.getElementById('user-menu-badge');
+      if (menuBadge) menuBadge.textContent = '--';
+      const footerAvatar = document.getElementById('account-footer-avatar');
+      if (footerAvatar) footerAvatar.textContent = '--';
+      const footerName = document.getElementById('account-footer-name');
+      if (footerName) {
+        footerName.textContent = 'Not Signed In';
+        footerName.title = 'Not Signed In';
+      }
+      const footerRole = document.getElementById('account-footer-role');
+      if (footerRole) {
+        footerRole.textContent = 'Sign In Required';
+        footerRole.title = 'Sign In Required';
+      }
       applyNavigationRestrictions();
     }
 
@@ -6936,16 +7188,12 @@
   }
 
   /**
-   * Populates a Technical Lead (strict system role filter) or Project Manager / Event Coordinator `<select>`.
+   * Populates a Technical Lead (strict system role filter) or Project Manager `<select>`.
    */
   function populateLeadershipSelect(selectEl, currentVal = '', mode = 'pm') {
     if (!selectEl) return;
-    const isPm = mode === 'pm';
-    const isCoord = mode === 'coordinator';
     const isTechLeadMode = mode === 'techlead';
-    const placeholder = isCoord
-      ? '-- Select Event Coordinator --'
-      : (isPm ? '-- Select Project Manager --' : '-- Select Event Tech Lead --');
+    const placeholder = isTechLeadMode ? '-- Select Event Tech Lead --' : '-- Select Project Manager --';
 
     const crewList = (state.crew || []).filter((u) => {
       if (!u) return false;
@@ -6992,16 +7240,15 @@
         others.push(u);
       }
     });
-    const primaryRole = isCoord ? 'event_coordinator' : 'project_manager';
     preferred.sort((a, b) => {
-      const aExact = String(a.role || '').toLowerCase() === primaryRole ? 0 : 1;
-      const bExact = String(b.role || '').toLowerCase() === primaryRole ? 0 : 1;
+      const aExact = String(a.role || '').toLowerCase() === 'project_manager' ? 0 : 1;
+      const bExact = String(b.role || '').toLowerCase() === 'project_manager' ? 0 : 1;
       return aExact - bExact;
     });
 
     let html = `<option value="">${placeholder}</option>`;
     if (preferred.length > 0) {
-      html += `<optgroup label="${isCoord ? 'Event Coordinators &amp; PMs' : 'Project Managers &amp; Coordinators'}">${preferred.map(buildOpt).join('')}</optgroup>`;
+      html += `<optgroup label="Project Managers &amp; Operations Leads">${preferred.map(buildOpt).join('')}</optgroup>`;
     }
     if (others.length > 0) {
       html += `<optgroup label="All Team Members">${others.map(buildOpt).join('')}</optgroup>`;
@@ -7414,8 +7661,9 @@
       const crudBtns = buildEventCardCrudButtonsHtml(ev);
       const disabledBanner = buildEventDisabledBannerHtml(ev, '8px');
       const pmTxt = !isPlaceholderLeadershipValue(ev.project_manager) ? ev.project_manager : '';
-      const coordTxt = !isPlaceholderLeadershipValue(ev.event_coordinator) ? ev.event_coordinator : '';
-      const cmdLabel = pmTxt ? `PM: ${pmTxt}` : (coordTxt ? `Coord: ${coordTxt}` : 'Command: Unassigned');
+      const legacyCoordTxt = !isPlaceholderLeadershipValue(ev.event_coordinator) ? ev.event_coordinator : '';
+      const cmdLead = pmTxt || legacyCoordTxt;
+      const cmdLabel = cmdLead ? `PM: ${cmdLead}` : 'Command: Unassigned';
 
       const evFallbackSvg = `<img src="assets/metric-calendar-clock.svg" alt="" class="svg-icon" style="width: 36px; height: 36px; filter: brightness(0) invert(1); opacity: 0.9;" />`;
       const bannerHtml = ev.image
@@ -9721,7 +9969,7 @@
     return 'General';
   }
 
-  function buildStructuredEventRoster(pm, eventCoord, techLead, crewIds) {
+  function buildStructuredEventRoster(pm, techLead, crewIds) {
     const idSet = new Set((crewIds || []).map(Number));
     const depts = { Video: [], Sound: [], Lighting: [], Electrical: [], Rigging: [], Interpretation: [] };
     const supportStaff = [];
@@ -9737,7 +9985,6 @@
     });
     return {
       project_manager: pm,
-      event_coordinator: eventCoord,
       tech_lead: techLead,
       departments: depts,
       support_staff: supportStaff,
@@ -9801,7 +10048,7 @@
   function getEventRequestOriginatorInfo(ev = null) {
     if (!ev) {
       return {
-        roleLabel: 'Project Manager / Coordinator',
+        roleLabel: 'Project Manager',
         name: 'Command',
         summaryBadge: 'Command',
         targetsPrefix: 'PM Targets:',
@@ -9809,47 +10056,30 @@
       };
     }
     const rawPm = String(ev.project_manager || '').trim();
-    const rawCoord = String(ev.event_coordinator || '').trim();
-    const hasRealPm = rawPm !== '' && rawPm.toLowerCase() !== 'operations pm';
-    const hasCoord = rawCoord !== '';
+    const legacyCoord = String(ev.event_coordinator || '').trim();
+    const effectivePm = !isPlaceholderLeadershipValue(rawPm)
+      ? rawPm
+      : (!isPlaceholderLeadershipValue(legacyCoord) ? legacyCoord : '');
     const creatorName = String(ev.created_by_name || ev.requirements_sent_by_name || '').trim();
     const creatorRole = String(ev.created_by_role || '').toLowerCase();
     const isAdminRole = ['admin', 'administrator', 'manager'].includes(creatorRole);
 
-    if (hasCoord && !hasRealPm) {
-      return {
-        roleLabel: 'Event Coordinator',
-        name: rawCoord,
-        summaryBadge: `Coord: ${rawCoord}`,
-        targetsPrefix: 'Coordinator Targets:',
-        isAdminOrigin: false,
-      };
-    }
-    if (hasRealPm && hasCoord) {
-      return {
-        roleLabel: 'Project Manager / Event Coordinator',
-        name: `${rawPm} / ${rawCoord}`,
-        summaryBadge: `PM: ${rawPm} · Coord: ${rawCoord}`,
-        targetsPrefix: 'Command Targets:',
-        isAdminOrigin: false,
-      };
-    }
-    if (hasRealPm) {
+    if (effectivePm !== '') {
       return {
         roleLabel: 'Project Manager',
-        name: rawPm,
-        summaryBadge: `PM: ${rawPm}`,
+        name: effectivePm,
+        summaryBadge: `PM: ${effectivePm}`,
         targetsPrefix: 'PM Targets:',
         isAdminOrigin: false,
       };
     }
     if (creatorName !== '') {
-      const rLbl = isAdminRole ? 'Administrator' : (creatorRole === 'event_coordinator' ? 'Event Coordinator' : 'Project Manager');
+      const rLbl = isAdminRole ? 'Administrator' : 'Project Manager';
       return {
         roleLabel: rLbl,
         name: creatorName,
-        summaryBadge: `${isAdminRole ? 'Admin' : 'Cmd'}: ${creatorName}`,
-        targetsPrefix: isAdminRole ? 'Admin Targets:' : 'Command Targets:',
+        summaryBadge: `${isAdminRole ? 'Admin' : 'PM'}: ${creatorName}`,
+        targetsPrefix: isAdminRole ? 'Admin Targets:' : 'PM Targets:',
         isAdminOrigin: isAdminRole,
       };
     }
@@ -9866,7 +10096,7 @@
       roleLabel: 'Administrator / Command',
       name: 'Operations Command',
       summaryBadge: 'Command',
-      targetsPrefix: 'Command Targets:',
+      targetsPrefix: 'PM Targets:',
       isAdminOrigin: true,
     };
   }
@@ -9903,175 +10133,58 @@
     const curRole = String(curUser.role || '').toLowerCase();
     const curName = String(curUser.full_name || curUser.username || '').trim();
     const isAdmin = isCurrentUserAdmin();
-    const isPm = curRole === 'project_manager' && !isAdmin;
-    const isCoord = curRole === 'event_coordinator' && !isAdmin;
+    const isPm = (curRole === 'project_manager' || curRole === 'event_coordinator') && !isAdmin;
     const isTechLead = !isAdmin && (curRole === 'tech_lead' || curRole === 'technical_lead');
 
-    let showPm = true;
-    let showCoord = true;
     let disablePm = false;
-    let disableCoord = false;
     let disableTechLead = false;
-    let showAutoTags = !ev;
+    const showAutoTags = !ev;
     let pmValInit = '';
-    let coordValInit = '';
     let techLeadValInit = '';
 
     if (ev) {
-      // Editing / reassigning an existing event: unlock all 3 roles so Tech Lead, PM, and Coordinator can hand off dynamically
-      // (unless event is disabled and caller is not an Admin, in which case keep it read-only)
       const rawTl = String(ev.tech_lead || ev.lead_name || '').trim();
       techLeadValInit = !isPlaceholderLeadershipValue(rawTl) ? rawTl : '';
       const rawPm = String(ev.project_manager || '').trim();
-      const rawCoord = String(ev.event_coordinator || '').trim();
-      pmValInit = !isPlaceholderLeadershipValue(rawPm) ? rawPm : '';
-      coordValInit = !isPlaceholderLeadershipValue(rawCoord) ? rawCoord : '';
+      const legacyCoord = String(ev.event_coordinator || '').trim();
+      pmValInit = !isPlaceholderLeadershipValue(rawPm)
+        ? rawPm
+        : (!isPlaceholderLeadershipValue(legacyCoord) ? legacyCoord : '');
       if (Number(ev.is_active ?? 1) === 0 && !isAdmin) {
         disableTechLead = true;
         disablePm = true;
-        disableCoord = true;
       }
     } else if (isTechLead && curName) {
       disableTechLead = true;
       techLeadValInit = curName;
     } else if (isPm && curName) {
-      showPm = true;
-      showCoord = false;
       disablePm = true;
       pmValInit = curName;
-    } else if (isCoord && curName) {
-      showPm = false;
-      showCoord = true;
-      disableCoord = true;
-      coordValInit = curName;
     }
-
-    const hasCoordInit = !isPlaceholderLeadershipValue(coordValInit);
-    const hasPmInit = !isPlaceholderLeadershipValue(pmValInit);
-    const targetsPrefix = hasCoordInit && !hasPmInit
-      ? 'Coordinator Targets:'
-      : ((!showPm && showCoord) ? 'Coordinator Targets:' : 'PM Targets:');
 
     return {
       isAdmin,
       isPm,
-      isCoord,
       isTechLead,
-      showPm,
-      showCoord,
       disablePm,
-      disableCoord,
       disableTechLead,
       showAutoTags,
       pmValInit,
-      coordValInit,
       techLeadValInit,
-      requirePmOrCoord: isTechLead,
-      targetsPrefix,
+      requirePm: isTechLead,
+      targetsPrefix: 'PM Targets:',
     };
   }
 
-  function syncExclusivePmCoordFields(pmEl, coordEl, opts = {}) {
-    const {
-      disablePm = false,
-      disableCoord = false,
-      pmAutoTag = null,
-      coordAutoTag = null,
-      pmClearBtn = null,
-      coordClearBtn = null,
-    } = opts;
-    if (!pmEl || !coordEl) {
-      if (pmEl) applySelectLockState(pmEl, disablePm, pmAutoTag);
-      if (coordEl) applySelectLockState(coordEl, disableCoord, coordAutoTag);
-      if (pmClearBtn) pmClearBtn.style.display = 'none';
-      if (coordClearBtn) coordClearBtn.style.display = 'none';
-      return;
-    }
-
-    const pmVal = isPlaceholderLeadershipValue(pmEl.value) ? '' : String(pmEl.value).trim();
-    const coordVal = isPlaceholderLeadershipValue(coordEl.value) ? '' : String(coordEl.value).trim();
-
-    if (disablePm || disableCoord) {
-      applySelectLockState(pmEl, disablePm, pmAutoTag);
-      applySelectLockState(coordEl, disableCoord, coordAutoTag);
-      if (pmClearBtn) pmClearBtn.style.display = 'none';
-      if (coordClearBtn) coordClearBtn.style.display = 'none';
-      return;
-    }
-
-    if (pmVal && !coordVal) {
-      applySelectLockState(pmEl, false, pmAutoTag);
-      applySelectLockState(coordEl, true, null);
-      if (pmClearBtn) pmClearBtn.style.display = 'inline';
-      if (coordClearBtn) coordClearBtn.style.display = 'none';
-    } else if (coordVal && !pmVal) {
-      applySelectLockState(pmEl, true, null);
-      applySelectLockState(coordEl, false, coordAutoTag);
-      if (pmClearBtn) pmClearBtn.style.display = 'none';
-      if (coordClearBtn) coordClearBtn.style.display = 'inline';
-    } else {
-      applySelectLockState(pmEl, false, pmAutoTag);
-      applySelectLockState(coordEl, false, coordAutoTag);
-      if (pmClearBtn) pmClearBtn.style.display = pmVal ? 'inline' : 'none';
-      if (coordClearBtn) coordClearBtn.style.display = coordVal ? 'inline' : 'none';
-    }
-  }
-
-  function bindExclusivePmCoordSelects(pmEl, coordEl, opts = {}) {
-    const { getSyncOpts = () => ({}), onAfterChange = null } = opts;
-    if (!pmEl || !coordEl || pmEl.dataset.exclusiveBound === '1') return;
-    pmEl.dataset.exclusiveBound = '1';
-    coordEl.dataset.exclusiveBound = '1';
-
-    const syncOpts = () => getSyncOpts();
-    const refresh = () => {
-      syncExclusivePmCoordFields(pmEl, coordEl, syncOpts());
-      if (typeof onAfterChange === 'function') onAfterChange();
-    };
-
-    pmEl.addEventListener('change', () => {
-      if (!isPlaceholderLeadershipValue(pmEl.value)) {
-        coordEl.value = '';
-      }
-      refresh();
-    });
-    coordEl.addEventListener('change', () => {
-      if (!isPlaceholderLeadershipValue(coordEl.value)) {
-        pmEl.value = '';
-      }
-      refresh();
-    });
-
-    const initial = syncOpts();
-    if (initial.pmClearBtn && initial.pmClearBtn.dataset.clearBound !== '1') {
-      initial.pmClearBtn.dataset.clearBound = '1';
-      initial.pmClearBtn.addEventListener('click', () => {
-        pmEl.value = '';
-        refresh();
-      });
-    }
-    if (initial.coordClearBtn && initial.coordClearBtn.dataset.clearBound !== '1') {
-      initial.coordClearBtn.dataset.clearBound = '1';
-      initial.coordClearBtn.addEventListener('click', () => {
-        coordEl.value = '';
-        refresh();
-      });
-    }
-  }
-
-  function validateLeadershipSelection(tlVal, pmVal, coordVal, opts = {}) {
+  function validateLeadershipSelection(tlVal, pmVal, opts = {}) {
     const { requireTechLead = true, requireCommandForTl = false } = opts;
     const hasTl = !isPlaceholderLeadershipValue(tlVal);
     const hasPm = !isPlaceholderLeadershipValue(pmVal);
-    const hasCoord = !isPlaceholderLeadershipValue(coordVal);
     if (requireTechLead && !hasTl) {
       return { valid: false, focusTarget: 'techlead', message: 'Please select an Event Tech Lead.' };
     }
-    if (hasPm && hasCoord) {
-      return { valid: false, focusTarget: 'pm', message: 'Please select either a Project Manager or an Event Coordinator (not both).' };
-    }
-    if (requireCommandForTl && isCurrentUserTechLeadOnly() && !hasPm && !hasCoord) {
-      return { valid: false, focusTarget: 'pm', message: 'Please select a Project Manager or Event Coordinator for this event.' };
+    if (requireCommandForTl && isCurrentUserTechLeadOnly() && !hasPm) {
+      return { valid: false, focusTarget: 'pm', message: 'Please select a Project Manager for this event.' };
     }
     return { valid: true };
   }
@@ -10332,10 +10445,8 @@
     const ctEl = document.getElementById('venue-crud-calltime');
     const tlEl = document.getElementById('venue-crud-techlead');
     const pmEl = document.getElementById('venue-crud-pm');
-    const coordEl = document.getElementById('venue-crud-coordinator');
     const tlAutoTag = document.getElementById('venue-crud-techlead-auto-tag');
     const pmAutoTag = document.getElementById('venue-crud-pm-auto-tag');
-    const coordAutoTag = document.getElementById('venue-crud-coord-auto-tag');
     const deptCountsSection = document.getElementById('venue-crud-dept-counts-section');
     const techLeadCrewSection = document.getElementById('venue-crud-techlead-crew-section');
 
@@ -10397,15 +10508,12 @@
     const enableModalBtn = document.getElementById('venue-crud-enable-btn');
     const disabledBannerEl = document.getElementById('venue-crud-disabled-banner');
     const subModalBtn = document.getElementById('venue-crud-submit-btn');
-    const pmClearBtn = document.getElementById('venue-crud-pm-clear-btn');
-    const coordClearBtn = document.getElementById('venue-crud-coord-clear-btn');
     if (rmImgEl) rmImgEl.value = '0';
     const todayIso = new Date().toISOString().slice(0, 10);
     const leadGrid = document.getElementById('venue-crud-leadership-grid');
     const pmWrap = document.getElementById('venue-crud-pm-wrap');
-    const coordWrap = document.getElementById('venue-crud-coord-wrap');
     const leadView = getEventLeadershipViewState(venue);
-    const { showPm, showCoord, disablePm, disableCoord, disableTechLead, pmValInit, coordValInit, techLeadValInit } = leadView;
+    const { disablePm, disableTechLead, pmValInit, techLeadValInit } = leadView;
     const isVenueDisabled = Boolean(venue && Number(venue.is_active ?? 1) === 0);
 
     if (disabledBannerEl) {
@@ -10442,7 +10550,6 @@
       if (delModalBtn) delModalBtn.style.display = canCurrentUserDeleteEvents() ? 'inline-flex' : 'none';
       populateLeadershipSelect(tlEl, techLeadValInit || venue.tech_lead || venue.lead_name || '', 'techlead');
       populateLeadershipSelect(pmEl, pmValInit, 'pm');
-      populateLeadershipSelect(coordEl, coordValInit, 'coordinator');
       if (venue.image) {
         setDropzonePreview('venue', venue.image, venue.image.split('/').pop());
       }
@@ -10467,7 +10574,6 @@
       if (delModalBtn) delModalBtn.style.display = 'none';
       populateLeadershipSelect(tlEl, techLeadValInit, 'techlead');
       populateLeadershipSelect(pmEl, pmValInit, 'pm');
-      populateLeadershipSelect(coordEl, coordValInit, 'coordinator');
     }
 
     const approvalBanner = document.getElementById('venue-crud-approval-banner');
@@ -10521,41 +10627,17 @@
       }
     }
 
-    if (pmWrap) pmWrap.style.display = showPm ? 'block' : 'none';
-    if (coordWrap) coordWrap.style.display = showCoord ? 'block' : 'none';
+    if (pmWrap) pmWrap.style.display = 'block';
     if (leadGrid) {
-      const visibleCols = 1 + (showPm ? 1 : 0) + (showCoord ? 1 : 0);
-      leadGrid.style.gridTemplateColumns = `repeat(${visibleCols}, minmax(0, 1fr))`;
+      leadGrid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
     }
 
     if (!leadView.showAutoTags) {
       if (tlAutoTag) tlAutoTag.style.display = 'none';
       if (pmAutoTag) pmAutoTag.style.display = 'none';
-      if (coordAutoTag) coordAutoTag.style.display = 'none';
     }
     applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null);
-    const getVenueLockState = () => {
-      const curId = document.getElementById('venue-crud-id')?.value.trim() || '';
-      const curEv = curId ? (state.checkpoints?.event_venues || []).find((x) => String(x.raw_id || x.id) === curId) || null : null;
-      const lv = getEventLeadershipViewState(curEv);
-      return {
-        disablePm: lv.disablePm,
-        disableCoord: lv.disableCoord,
-        pmAutoTag: lv.showAutoTags ? pmAutoTag : null,
-        coordAutoTag: lv.showAutoTags ? coordAutoTag : null,
-        pmClearBtn,
-        coordClearBtn,
-      };
-    };
-    bindExclusivePmCoordSelects(pmEl, coordEl, { getSyncOpts: getVenueLockState });
-    syncExclusivePmCoordFields(pmEl, coordEl, {
-      disablePm,
-      disableCoord,
-      pmAutoTag: leadView.showAutoTags ? pmAutoTag : null,
-      coordAutoTag: leadView.showAutoTags ? coordAutoTag : null,
-      pmClearBtn,
-      coordClearBtn,
-    });
+    applySelectLockState(pmEl, disablePm, leadView.showAutoTags ? pmAutoTag : null);
 
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
@@ -11749,8 +11831,7 @@
       ? (state.crew || []).filter((c) => assignedSet.has(Number(c.id)))
       : (state.crew || []);
 
-    const pmName = activeEv?.project_manager || ((state.crew || []).find((c) => c.role === 'project_manager')?.full_name || 'Project Manager');
-    const coordName = activeEv?.event_coordinator || ((state.crew || []).find((c) => c.role === 'event_coordinator')?.full_name || 'Event Coordinator');
+    const pmName = activeEv?.project_manager || ((state.crew || []).find((c) => c.role === 'project_manager' || c.role === 'event_coordinator')?.full_name || 'Project Manager');
     const tlName = activeEv?.tech_lead || activeEv?.lead_name || ((state.crew || []).find((c) => isUserAssignedTechLeadRole(c))?.full_name || 'Technical Lead');
 
     const deptNames = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
@@ -11786,11 +11867,9 @@
       : dispatchStatusRaw.replace(/_/g, ' ').toUpperCase();
 
     const rawPm = activeEv ? String(activeEv.project_manager || '').trim() : '';
-    const rawCoord = activeEv ? String(activeEv.event_coordinator || '').trim() : '';
     const hasRealPm = rawPm !== '' && rawPm.toLowerCase() !== 'operations pm';
-    const hasCoord = rawCoord !== '';
     const originator = getEventRequestOriginatorInfo(activeEv);
-    const tier1OwnerTitle = activeEv ? `${originator.name} (${originator.roleLabel})` : `${pmName} / ${coordName}`;
+    const tier1OwnerTitle = activeEv ? `${originator.name} (${originator.roleLabel})` : pmName;
     const ownerBadgeSummary = activeEv ? originator.summaryBadge : `PM: ${pmName}`;
 
     const nodes = [
@@ -11803,7 +11882,7 @@
         title: `Tier 1 · Command Initiation (${tier1OwnerTitle})`,
         source: activeEv ? `${activeEv.location || 'Venue'} · ${activeEv.start_date || activeEv.date || ''} → ${activeEv.end_date || activeEv.start_date || activeEv.date || ''} (${durLabel})` : 'Create Event & Dispatch Initiation',
         route: 'Create Event (Dates & Auto Duration, Cover, Tech Lead) → Send Branch Targets',
-        detail: 'Administrators, Project Managers, and Event Coordinators create events, set call times & duration, assign the system-filtered Tech Lead, and issue department headcount requirements.',
+        detail: 'Administrators and Project Managers create events, set call times & duration, assign the system-filtered Tech Lead, and issue department headcount requirements.',
         outcome: activeEv ? `Status: ${dispatchStatusLabel}` : 'Ready for Event Creation',
         jumpScreen: 'create-event',
         jumpLabel: 'Open Create Event Tab',
@@ -11817,7 +11896,7 @@
         title: `Tier 2 · Technical Supervision (${tlName})`,
         source: 'Filtered from users assigned Tech Lead system role',
         route: 'Review Requirements → Allocate 6 Dept Technicians → Request Support Manpower',
-        detail: 'The Tech Lead receives production targets from Tier 1 (Admin / PM / Event Coordinator), staffs specialists across Video, Sound, Lighting, Electrical, Rigging, and Interpretation + Support Staff, and posts department confirmations.',
+        detail: 'The Tech Lead receives production targets from Tier 1 (Admin / Project Manager), staffs specialists across Video, Sound, Lighting, Electrical, Rigging, and Interpretation + Support Staff, and posts department confirmations.',
         outcome: isLockedAfterTier1
           ? 'Locked until approved by Technical Lead'
           : (hasTechLead ? `Assigned Lead: ${tlName} · ${techDeptMemberCount + supportList.length} Crew Assigned` : 'Assign Tech Lead in Create Event'),
@@ -11870,7 +11949,6 @@
       activeEv,
       pool,
       pmName,
-      coordName,
       tlName,
       deptNames,
       deptMatches,
@@ -11885,9 +11963,7 @@
       isApproved,
       isLockedAfterTier1,
       hasRealPm,
-      hasCoord,
       rawPm,
-      rawCoord,
       originator,
       nodes,
     };
@@ -11992,7 +12068,7 @@
         );
         const lockInputsBecauseDisabled = isActiveEvDisabled && !isCurrentUserAdmin();
         const showAdminOriginBox = Boolean(orig.isAdminOrigin);
-        const visibleCols = 1 + (leadView.showPm ? 1 : 0) + (leadView.showCoord ? 1 : 0) + (showAdminOriginBox ? 1 : 0);
+        const visibleCols = 2 + (showAdminOriginBox ? 1 : 0);
         const tlHeaderBadge = isTlOnlyCaller
           ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
               <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Dispatch Request (${escapeHtml(orig.roleLabel)} ↔ Tech Lead)</span>
@@ -12013,19 +12089,9 @@
                 <label class="form-label">Administrator <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span></label>
                 <input type="text" class="form-input" value="${escapeHtml(orig.name)}" disabled style="background: var(--bg-subtle); cursor: not-allowed; opacity: 0.85;" />
               </div>` : ''}
-              <div class="form-field" style="margin: 0; display: ${leadView.showPm ? 'block' : 'none'};">
-                <label class="form-label" for="${escapeHtml(inspPfx)}-pm" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                  <span>Project Manager</span>
-                  <button type="button" class="js-df-clear-pm" style="display:none;background:none;border:none;padding:0;font-size:10.5px;font-weight:600;color:var(--brand-primary);cursor:pointer;">Clear</button>
-                </label>
+              <div class="form-field" style="margin: 0;">
+                <label class="form-label" for="${escapeHtml(inspPfx)}-pm">Project Manager</label>
                 <select id="${escapeHtml(inspPfx)}-pm" class="form-input js-df-pm-select" ${lockInputsBecauseDisabled ? 'disabled' : ''}></select>
-              </div>
-              <div class="form-field" style="margin: 0; display: ${leadView.showCoord ? 'block' : 'none'};">
-                <label class="form-label" for="${escapeHtml(inspPfx)}-coord" style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                  <span>Event Coordinator</span>
-                  <button type="button" class="js-df-clear-coord" style="display:none;background:none;border:none;padding:0;font-size:10.5px;font-weight:600;color:var(--brand-primary);cursor:pointer;">Clear</button>
-                </label>
-                <select id="${escapeHtml(inspPfx)}-coord" class="form-input js-df-coord-select" ${lockInputsBecauseDisabled ? 'disabled' : ''}></select>
               </div>
             </div>
             <div class="df-targets-banner" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 11.5px;">
@@ -12064,14 +12130,14 @@
         const orig = activeEv ? (ctx.originator || getEventRequestOriginatorInfo(activeEv)) : null;
         const curU = state.currentUser || {};
         const curRoleLower = String(curU.role || '').toLowerCase();
-        const fallbackRoleLbl = curRoleLower === 'event_coordinator'
-          ? 'Event Coordinator'
-          : (curRoleLower === 'project_manager' ? 'Project Manager' : (curU.role_display || 'Administrator'));
+        const fallbackRoleLbl = (curRoleLower === 'project_manager' || curRoleLower === 'event_coordinator')
+          ? 'Project Manager'
+          : (curU.role_display || 'Administrator');
         const ownerDisplay = orig ? orig.name : String(curU.full_name || curU.username || 'Command').trim();
         const roleLabelDisplay = orig ? orig.roleLabel : fallbackRoleLbl;
         const reqPrefixShort = orig
-          ? (orig.roleLabel === 'Event Coordinator' ? 'Coordinator' : (orig.isAdminOrigin ? 'Admin' : 'PM'))
-          : (curRoleLower === 'event_coordinator' ? 'Coordinator' : (curRoleLower === 'project_manager' ? 'PM' : 'Admin'));
+          ? (orig.isAdminOrigin ? 'Admin' : 'PM')
+          : ((curRoleLower === 'project_manager' || curRoleLower === 'event_coordinator') ? 'PM' : 'Admin');
         const statusShortText = activeEv
           ? String(activeNode.outcome || '').replace(/^Status:\s*/i, '').trim()
           : 'Ready for Event Creation';
@@ -12176,28 +12242,18 @@
       if (showTier1CommandExtras && leadView) {
         const tlSel = inspectorEl.querySelector('.js-df-techlead-select');
         const pmSel = inspectorEl.querySelector('.js-df-pm-select');
-        const coordSel = inspectorEl.querySelector('.js-df-coord-select');
-        const pmClearBtn = inspectorEl.querySelector('.js-df-clear-pm');
-        const coordClearBtn = inspectorEl.querySelector('.js-df-clear-coord');
         const lockInputsBecauseDisabled = isActiveEvDisabled && !isCurrentUserAdmin();
 
         populateLeadershipSelect(tlSel, activeEv.tech_lead || activeEv.lead_name || '', 'techlead');
         populateLeadershipSelect(pmSel, leadView.pmValInit, 'pm');
-        populateLeadershipSelect(coordSel, leadView.coordValInit, 'coordinator');
         applySelectLockState(tlSel, lockInputsBecauseDisabled);
-        syncExclusivePmCoordFields(pmSel, coordSel, {
-          disablePm: lockInputsBecauseDisabled,
-          disableCoord: lockInputsBecauseDisabled,
-          pmClearBtn: lockInputsBecauseDisabled ? null : pmClearBtn,
-          coordClearBtn: lockInputsBecauseDisabled ? null : coordClearBtn,
-        });
+        applySelectLockState(pmSel, lockInputsBecauseDisabled);
 
         const saveDispatchLeadershipChange = async (fields, toastMsg) => {
           const evId = String(activeEv.raw_id || activeEv.id || '');
           if (!evId) return;
           if (tlSel) tlSel.disabled = true;
           if (pmSel) pmSel.disabled = true;
-          if (coordSel) coordSel.disabled = true;
           try {
             const fd = new FormData();
             fd.append('event_id', evId);
@@ -12207,9 +12263,6 @@
             }
             if (Object.prototype.hasOwnProperty.call(fields, 'project_manager')) {
               fd.append('project_manager', fields.project_manager);
-            }
-            if (Object.prototype.hasOwnProperty.call(fields, 'event_coordinator')) {
-              fd.append('event_coordinator', fields.event_coordinator);
             }
             const res = await fetch('api.php?action=save_event', { method: 'POST', body: fd });
             const data = await res.json();
@@ -12243,44 +12296,14 @@
           pmSel.addEventListener('change', async () => {
             const nextPm = pmSel.value.trim();
             if (!nextPm && !isCurrentUserAdmin()) {
-              syncExclusivePmCoordFields(pmSel, coordSel, { pmClearBtn, coordClearBtn });
-              showToast('Please select an Event Coordinator or another Project Manager.', 'warning');
+              pmSel.value = leadView.pmValInit || '';
+              showToast('Please select a Project Manager.', 'warning');
               return;
             }
-            if (coordSel) coordSel.value = '';
             await saveDispatchLeadershipChange(
-              { project_manager: nextPm, event_coordinator: '' },
+              { project_manager: nextPm },
               nextPm ? `Project Manager assigned to ${nextPm}.` : 'Project Manager cleared.'
             );
-          });
-        }
-        if (coordSel && !lockInputsBecauseDisabled) {
-          coordSel.addEventListener('change', async () => {
-            const nextCoord = coordSel.value.trim();
-            if (!nextCoord && !isCurrentUserAdmin()) {
-              syncExclusivePmCoordFields(pmSel, coordSel, { pmClearBtn, coordClearBtn });
-              showToast('Please select a Project Manager or another Event Coordinator.', 'warning');
-              return;
-            }
-            if (pmSel) pmSel.value = '';
-            await saveDispatchLeadershipChange(
-              { project_manager: '', event_coordinator: nextCoord },
-              nextCoord ? `Event Coordinator assigned to ${nextCoord}.` : 'Event Coordinator cleared.'
-            );
-          });
-        }
-        if (pmClearBtn && !lockInputsBecauseDisabled) {
-          pmClearBtn.addEventListener('click', () => {
-            if (pmSel) pmSel.value = '';
-            syncExclusivePmCoordFields(pmSel, coordSel, { pmClearBtn, coordClearBtn });
-            showToast('Cleared Project Manager — choose an Event Coordinator or replacement PM to reassign.', 'info');
-          });
-        }
-        if (coordClearBtn && !lockInputsBecauseDisabled) {
-          coordClearBtn.addEventListener('click', () => {
-            if (coordSel) coordSel.value = '';
-            syncExclusivePmCoordFields(pmSel, coordSel, { pmClearBtn, coordClearBtn });
-            showToast('Cleared Event Coordinator — choose a Project Manager or replacement Coordinator to reassign.', 'info');
           });
         }
       }
@@ -12338,10 +12361,8 @@
     };
     const orig = ctx.originator || getEventRequestOriginatorInfo(ctx.activeEv);
     const ownerLineHtml = ctx.activeEv
-      ? (ctx.hasRealPm && ctx.hasCoord
-        ? `PM: <strong>${escapeHtml(ctx.rawPm)}</strong> · Coordinator: <strong>${escapeHtml(ctx.rawCoord)}</strong>`
-        : `${escapeHtml(orig.roleLabel)}: <strong>${escapeHtml(orig.name)}</strong>`)
-      : `PM: <strong>${escapeHtml(ctx.pmName)}</strong> · Coordinator: <strong>${escapeHtml(ctx.coordName)}</strong>`;
+      ? `${escapeHtml(orig.roleLabel)}: <strong>${escapeHtml(orig.name)}</strong>`
+      : `PM: <strong>${escapeHtml(ctx.pmName)}</strong>`;
     const tier1StatusText = ctx.activeEv
       ? (!ctx.isApproved ? 'AWAITING APPROVAL FROM TECH LEAD' : String(ctx.activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase())
       : '';
@@ -12353,7 +12374,7 @@
       <div class="dispatch-tier">
         <div class="dispatch-node-card is-root is-clickable ${selTier === 'tier1_command' ? 'is-selected' : ''}" data-tier-key="tier1_command">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Tier 1 · Command ${ctx.activeEv ? `· Status: ${escapeHtml(tier1StatusText)}` : ''}</div>
-          <div style="font-size:15px;font-weight:800;margin-top:2px;">Project Manager / Event Coordinator</div>
+          <div style="font-size:15px;font-weight:800;margin-top:2px;">Project Manager</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${ownerLineHtml}</div>
           ${renderTierPermChips('tier1_command')}
         </div>
@@ -12730,9 +12751,7 @@
     const locVal = document.getElementById('ce-location')?.value.trim() || 'Location pending';
     const tlVal = document.getElementById('ce-techlead')?.value.trim() || 'Unassigned';
     const pmWrapVis = document.getElementById('ce-pm-wrap')?.style.display !== 'none';
-    const coordWrapVis = document.getElementById('ce-coord-wrap')?.style.display !== 'none';
     const pmVal = pmWrapVis ? (document.getElementById('ce-pm')?.value.trim() || '') : '';
-    const coordVal = coordWrapVis ? (document.getElementById('ce-coordinator')?.value.trim() || '') : '';
     const sDate = document.getElementById('ce-start-date')?.value || new Date().toISOString().slice(0, 10);
     const eDate = document.getElementById('ce-end-date')?.value || sDate;
     const dur = computeEventDuration(sDate, eDate);
@@ -12750,7 +12769,6 @@
     if (pMeta) {
       const metaParts = [`${locVal}`, `Tech Lead: ${tlVal}`];
       if (pmVal) metaParts.push(`PM: ${pmVal}`);
-      if (coordVal) metaParts.push(`Coord: ${coordVal}`);
       pMeta.textContent = metaParts.join(' · ');
     }
 
@@ -12773,30 +12791,18 @@
     const tlRoleHint = document.getElementById('ce-techlead-role-hint');
     const tlAutoTag = document.getElementById('ce-techlead-auto-tag');
     const pmWrap = document.getElementById('ce-pm-wrap');
-    const coordWrap = document.getElementById('ce-coord-wrap');
     const leadGrid = document.getElementById('ce-leadership-grid');
     const pmEl = document.getElementById('ce-pm');
-    const coordEl = document.getElementById('ce-coordinator');
     const pmAutoTag = document.getElementById('ce-pm-auto-tag');
-    const coordAutoTag = document.getElementById('ce-coord-auto-tag');
-    const pmClearBtn = document.getElementById('ce-pm-clear-btn');
-    const coordClearBtn = document.getElementById('ce-coord-clear-btn');
     const pmStar = document.getElementById('ce-pm-req-star');
-    const coordStar = document.getElementById('ce-coord-req-star');
-    const leadHint = document.getElementById('ce-leadership-hint');
 
     const leadView = getEventLeadershipViewState(ev);
     const {
-      showPm,
-      showCoord,
       disablePm,
-      disableCoord,
       disableTechLead,
-      showAutoTags,
       pmValInit,
-      coordValInit,
       techLeadValInit,
-      requirePmOrCoord,
+      requirePm,
     } = leadView;
 
     const desiredTl = disableTechLead
@@ -12808,69 +12814,23 @@
     if (!leadView.showAutoTags) {
       if (tlAutoTag) tlAutoTag.style.display = 'none';
       if (pmAutoTag) pmAutoTag.style.display = 'none';
-      if (coordAutoTag) coordAutoTag.style.display = 'none';
     }
     applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null);
     if (tlRoleHint) tlRoleHint.style.display = disableTechLead ? 'none' : 'inline';
 
-    if (pmWrap) pmWrap.style.display = showPm ? 'block' : 'none';
-    if (coordWrap) coordWrap.style.display = showCoord ? 'block' : 'none';
-    if (leadGrid) {
-      const visibleCols = Math.max(1, (showPm ? 1 : 0) + (showCoord ? 1 : 0));
-      leadGrid.style.gridTemplateColumns = `repeat(${visibleCols}, minmax(0, 1fr))`;
-    }
+    if (pmWrap) pmWrap.style.display = 'block';
+    if (leadGrid) leadGrid.style.gridTemplateColumns = '1fr';
 
     const desiredPm = disablePm
       ? pmValInit
       : (preserveSelections ? (pmEl?.value ?? pmValInit) : pmValInit);
-    const desiredCoord = disableCoord
-      ? coordValInit
-      : (preserveSelections ? (coordEl?.value ?? coordValInit) : coordValInit);
 
     if (pmEl && (!preserveSelections || disablePm || !pmEl.matches(':focus'))) {
       populateLeadershipSelect(pmEl, desiredPm, 'pm');
     }
-    if (coordEl && (!preserveSelections || disableCoord || !coordEl.matches(':focus'))) {
-      populateLeadershipSelect(coordEl, desiredCoord, 'coordinator');
-    }
+    applySelectLockState(pmEl, disablePm, leadView.showAutoTags ? pmAutoTag : null);
 
-    const getCeLockState = () => {
-      const editingCeId = document.getElementById('ce-event-id')?.value.trim() || '';
-      const editingEv = editingCeId
-        ? getVisibleEventsList().find((v) => String(v.raw_id || v.id) === String(editingCeId)) || null
-        : null;
-      const lv = getEventLeadershipViewState(editingEv);
-      return {
-        disablePm: lv.disablePm,
-        disableCoord: lv.disableCoord,
-        pmAutoTag: lv.showAutoTags ? pmAutoTag : null,
-        coordAutoTag: lv.showAutoTags ? coordAutoTag : null,
-        pmClearBtn,
-        coordClearBtn,
-      };
-    };
-
-    bindExclusivePmCoordSelects(pmEl, coordEl, {
-      getSyncOpts: getCeLockState,
-      onAfterChange: updateCreateEventLivePreview,
-    });
-    syncExclusivePmCoordFields(pmEl, coordEl, {
-      disablePm,
-      disableCoord,
-      pmAutoTag: leadView.showAutoTags ? pmAutoTag : null,
-      coordAutoTag: leadView.showAutoTags ? coordAutoTag : null,
-      pmClearBtn,
-      coordClearBtn,
-    });
-
-    if (pmStar) pmStar.style.display = requirePmOrCoord ? 'inline' : 'none';
-    if (coordStar) coordStar.style.display = requirePmOrCoord ? 'inline' : 'none';
-    if (leadHint) {
-      leadHint.style.display = (showPm && showCoord) ? 'block' : 'none';
-      leadHint.textContent = requirePmOrCoord
-        ? 'Required: Select either a Project Manager or an Event Coordinator (not both).'
-        : 'Select either a Project Manager or an Event Coordinator (not both).';
-    }
+    if (pmStar) pmStar.style.display = requirePm ? 'inline' : 'none';
   }
 
   function resetCreateEventForm() {
@@ -12881,7 +12841,6 @@
     const startEl = document.getElementById('ce-start-date');
     const endEl = document.getElementById('ce-end-date');
     const ctEl = document.getElementById('ce-calltime');
-    const pinEl = document.getElementById('ce-pin');
     const modeBadge = document.getElementById('ce-screen-mode-badge');
     const heading = document.getElementById('ce-form-heading');
     const cancelBtn = document.getElementById('ce-cancel-edit-btn');
@@ -12897,7 +12856,6 @@
     if (startEl) startEl.value = todayIso;
     if (endEl) endEl.value = todayIso;
     if (ctEl) ctEl.value = '08:00';
-    if (pinEl) pinEl.value = '1234';
     if (modeBadge) modeBadge.textContent = 'New Event';
     if (heading) heading.textContent = 'Create Event Details';
     if (cancelBtn) cancelBtn.style.display = 'none';
@@ -12927,7 +12885,6 @@
     const startEl = document.getElementById('ce-start-date');
     const endEl = document.getElementById('ce-end-date');
     const ctEl = document.getElementById('ce-calltime');
-    const pinEl = document.getElementById('ce-pin');
     const modeBadge = document.getElementById('ce-screen-mode-badge');
     const heading = document.getElementById('ce-form-heading');
     const cancelBtn = document.getElementById('ce-cancel-edit-btn');
@@ -12943,7 +12900,6 @@
     if (startEl) startEl.value = startIso;
     if (endEl) endEl.value = endIso;
     if (ctEl) ctEl.value = ev.call_time || '08:00';
-    if (pinEl) pinEl.value = ev.terminal_pin || '1234';
     if (modeBadge) modeBadge.textContent = isDisabled ? 'Disabled Event' : 'Editing Event';
     if (heading) heading.textContent = `Edit Event: ${ev.title || ev.name}`;
     if (cancelBtn) cancelBtn.style.display = 'inline-flex';
@@ -13019,7 +12975,7 @@
         : String(ev.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase();
       const pmTxt = !isPlaceholderLeadershipValue(ev.project_manager) ? String(ev.project_manager).trim() : '';
       const coordTxt = !isPlaceholderLeadershipValue(ev.event_coordinator) ? String(ev.event_coordinator).trim() : '';
-      const commandLeadLabel = coordTxt && !pmTxt ? 'Event Coordinator' : 'Project Manager';
+      const commandLeadLabel = 'Project Manager';
       const commandLeadText = pmTxt || coordTxt || '—';
       const disabledBanner = buildEventDisabledBannerHtml(ev, '8px');
       const cardCrudBtns = buildEventCardCrudButtonsHtml(ev, {
@@ -13232,24 +13188,29 @@
 
     const fontsListEl = document.getElementById('branding-fonts-crud-list');
     if (fontsListEl) {
+      const activeFamilyLower = String(cfg.font_family || 'Marvel').trim().toLowerCase();
+      syncBrandingFontSelectOptions(cfg.font_family || 'Marvel');
       fontsListEl.innerHTML = fonts.map((f) => {
-        const isCurrent = (cfg.font_family || 'Marvel') === f.font_name;
+        const fname = String(f.font_name || '').trim();
+        const isCurrent = activeFamilyLower === fname.toLowerCase();
         const isSys = Number(f.is_system) === 1;
+        const presetSpec = resolveBrandingPresetEntry(fname);
+        const previewStack = String(f.css_stack || presetSpec?.css_stack || `${quoteCssFontName(fname)}, inherit`).trim();
         return `
           <div style="border:1px solid var(--border-color);border-radius:10px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
             <div style="min-width:0;flex:1;">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                <strong style="font-size:13px;font-family:${escapeHtml(f.css_stack || 'inherit')};">${escapeHtml(f.font_name)}</strong>
+                <strong style="font-size:13px;font-family:${escapeHtml(previewStack)};">${escapeHtml(fname)}</strong>
                 ${isCurrent ? '<span class="status-badge status-badge-green-sm">Selected</span>' : ''}
                 <span class="status-badge ${isSys ? 'status-badge-blue-sm' : 'status-badge-amber-sm'}">${isSys ? 'Preset' : 'Custom'}</span>
                 ${Number(f.is_active ?? 1) === 0 ? '<span class="status-badge status-badge-red-sm">Disabled</span>' : ''}
               </div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.css_stack || '')}${f.file_path ? ` · ${escapeHtml(f.file_path)}` : ''}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(f.css_stack || presetSpec?.css_stack || '')}${f.file_path ? ` · ${escapeHtml(f.file_path)}` : ''}</div>
             </div>
             <div style="display:flex;gap:5px;flex-shrink:0;">
-              ${!isCurrent && Number(f.is_active ?? 1) === 1 ? `<button type="button" class="btn btn-secondary-32-sm js-font-use-btn" data-font-name="${escapeHtml(f.font_name)}" data-online-only="1">Use</button>` : ''}
+              ${isAdmin && !isCurrent && Number(f.is_active ?? 1) === 1 ? `<button type="button" class="btn btn-secondary-32-sm js-font-use-btn" data-font-name="${escapeHtml(fname)}" data-online-only="1">Use</button>` : ''}
               ${isAdmin ? `<button type="button" class="btn btn-secondary-32-sm js-font-edit-btn" data-font-id="${Number(f.id)}">Edit</button>` : ''}
-              ${isAdmin && !isSys ? `<button type="button" class="btn btn-secondary-32-sm js-font-delete-btn" data-font-id="${Number(f.id)}" data-font-name="${escapeHtml(f.font_name)}" style="color:#dc2626;" data-online-only="1">Delete</button>` : ''}
+              ${isAdmin && !isSys ? `<button type="button" class="btn btn-secondary-32-sm js-font-delete-btn" data-font-id="${Number(f.id)}" data-font-name="${escapeHtml(fname)}" style="color:#dc2626;" data-online-only="1">Delete</button>` : ''}
             </div>
           </div>
         `;
@@ -15247,7 +15208,7 @@
     bindDateRangeDuration('ce-start-date', 'ce-end-date', 'ce-duration', 'ce-duration-pill', updateCreateEventLivePreview);
     bindDateRangeDuration('venue-crud-date', 'venue-crud-end-date', 'venue-crud-duration', null, null);
 
-    ['ce-title', 'ce-location', 'ce-techlead', 'ce-pm', 'ce-coordinator'].forEach((id) => {
+    ['ce-title', 'ce-location', 'ce-techlead', 'ce-pm'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) {
         el.addEventListener('input', updateCreateEventLivePreview);
@@ -15287,14 +15248,12 @@
         const locVal = document.getElementById('ce-location')?.value.trim() || '';
         const tlVal = document.getElementById('ce-techlead')?.value.trim() || '';
         const pmWrapVis = document.getElementById('ce-pm-wrap')?.style.display !== 'none';
-        const coordWrapVis = document.getElementById('ce-coord-wrap')?.style.display !== 'none';
         const pmVal = pmWrapVis ? (document.getElementById('ce-pm')?.value.trim() || '') : '';
-        const coordVal = coordWrapVis ? (document.getElementById('ce-coordinator')?.value.trim() || '') : '';
         if (!titleVal || !startVal || !endVal || !locVal || !tlVal) {
           showToast('Please complete Event Name, Start & End Dates, Location, and Event Tech Lead.');
           return;
         }
-        const leadCheck = validateLeadershipSelection(tlVal, pmVal, coordVal, { requireTechLead: true, requireCommandForTl: true });
+        const leadCheck = validateLeadershipSelection(tlVal, pmVal, { requireTechLead: true, requireCommandForTl: true });
         if (!leadCheck.valid) {
           showToast(leadCheck.message, 'warning');
           document.getElementById(leadCheck.focusTarget === 'techlead' ? 'ce-techlead' : 'ce-pm')?.focus();
@@ -15321,9 +15280,7 @@
         fd.append('location', locVal);
         fd.append('tech_lead', tlVal);
         fd.append('project_manager', pmVal);
-        fd.append('event_coordinator', coordVal);
         fd.append('call_time', document.getElementById('ce-calltime')?.value || '08:00');
-        fd.append('terminal_pin', document.getElementById('ce-pin')?.value.trim() || '1234');
         const ceImgInput = document.getElementById('ce-modal-image');
         if (ceImgInput && ceImgInput.files && ceImgInput.files[0]) {
           fd.append('image', ceImgInput.files[0]);
@@ -15431,7 +15388,13 @@
     const saveBrandBtn = document.getElementById('btn-save-branding');
     if (saveBrandBtn) {
       saveBrandBtn.addEventListener('click', async () => {
+        if (!isCurrentUserAdmin()) {
+          showToast('Only Administrators can update global portal branding.', 'error');
+          return;
+        }
         if (!navigator.onLine) { showToast('Online Only: reconnect to save Branding globally.'); return; }
+        const saveSeq = ++brandingSaveSeq;
+        isBrandingSaveInFlight = true;
         saveBrandBtn.disabled = true;
         try {
           const res = await fetch('api.php?action=save_branding_config', {
@@ -15439,18 +15402,23 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(readBrandingForm()),
           });
-          const data = await res.json();
+          const data = await res.json().catch(() => null);
           if (res.ok && data && data.ok) {
-            if (data.brandingConfig) applyBrandingConfigClient(data.brandingConfig, data.brandingFonts || null);
+            if (saveSeq === brandingSaveSeq && data.brandingConfig) {
+              applyBrandingConfigClient(data.brandingConfig, data.brandingFonts || null);
+            }
             applyAccessibilityPreferences();
             renderSettingsBrandingSection();
-            showToast(data.message || 'Branding configuration saved globally.');
+            showToast(data.message || 'Branding configuration saved globally.', 'success');
           } else {
-            showToast((data && data.error) || 'Failed to save branding.');
+            showToast((data && data.error) || 'Failed to save branding.', 'error');
           }
         } catch (_) {
-          showToast('Network error saving branding.');
+          showToast('Network error saving branding.', 'error');
         } finally {
+          if (saveSeq === brandingSaveSeq) {
+            isBrandingSaveInFlight = false;
+          }
           saveBrandBtn.disabled = false;
         }
       });
@@ -15558,13 +15526,15 @@
         e.preventDefault();
         if (!navigator.onLine) { showToast('Online Only: reconnect to save fonts.'); return; }
         const btn = document.getElementById('btn-save-branding-font');
+        const saveSeq = ++brandingSaveSeq;
+        isBrandingSaveInFlight = true;
         if (btn) btn.disabled = true;
         try {
           const fd = new FormData();
           fd.append('id', document.getElementById('brand-font-crud-id')?.value || '0');
           fd.append('font_name', (document.getElementById('brand-font-crud-name')?.value || '').trim());
           fd.append('css_stack', (document.getElementById('brand-font-crud-stack')?.value || '').trim());
-          fd.append('font_url', (document.getElementById('brand-font-crud-url')?.value || '').trim());
+          fd.append('font_url', normalizeBrandingFontUrlClient(document.getElementById('brand-font-crud-url')?.value || ''));
           fd.append('is_active', document.getElementById('brand-font-crud-active')?.checked ? '1' : '0');
           fd.append('activate', document.getElementById('brand-font-crud-activate')?.checked ? '1' : '0');
           const fInp = document.getElementById('brand-font-crud-file');
@@ -15572,18 +15542,23 @@
             fd.append('font_file', fInp.files[0]);
           }
           const res = await fetch('api.php?action=save_branding_font', { method: 'POST', body: fd });
-          const data = await res.json();
+          const data = await res.json().catch(() => null);
           if (res.ok && data && data.ok) {
             resetFontCrudForm();
-            applyBrandingConfigClient(data.brandingConfig || state.brandingConfig, data.brandingFonts || null);
+            if (saveSeq === brandingSaveSeq) {
+              applyBrandingConfigClient(data.brandingConfig || state.brandingConfig, data.brandingFonts || null);
+            }
             renderSettingsBrandingSection();
-            showToast(data.message || 'Font saved.');
+            showToast(data.message || 'Font saved.', 'success');
           } else {
-            showToast((data && data.error) || 'Failed to save font.');
+            showToast((data && data.error) || 'Failed to save font.', 'error');
           }
         } catch (_) {
-          showToast('Network error saving font.');
+          showToast('Network error saving font.', 'error');
         } finally {
+          if (saveSeq === brandingSaveSeq) {
+            isBrandingSaveInFlight = false;
+          }
           if (btn) btn.disabled = false;
         }
       });
@@ -15594,24 +15569,56 @@
       fontsCrudListEl.addEventListener('click', async (e) => {
         const useBtn = e.target.closest('.js-font-use-btn');
         if (useBtn) {
-          const fname = useBtn.getAttribute('data-font-name') || '';
-          const nextCfg = Object.assign({}, readBrandingForm(), { font_family: fname });
-          applyBrandingConfigClient(nextCfg);
-          const sel = document.getElementById('brand-font-family');
-          if (sel) sel.value = fname;
-          if (isCurrentUserAdmin() && navigator.onLine) {
-            try {
-              const r = await fetch('api.php?action=save_branding_config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ font_family: fname }),
-              });
-              const d = await r.json();
-              if (r.ok && d && d.ok && d.brandingConfig) applyBrandingConfigClient(d.brandingConfig, d.brandingFonts || null);
-            } catch (_) { }
+          if (!isCurrentUserAdmin()) {
+            showToast('Only Administrators can change the active portal font.', 'error');
+            return;
           }
+          if (!navigator.onLine) {
+            showToast('Online Only: reconnect to apply and save font changes.', 'warning');
+            return;
+          }
+          const fname = (useBtn.getAttribute('data-font-name') || '').trim();
+          if (!fname) return;
+          const prevConfig = Object.assign({}, state.brandingConfig || {});
+          const prevFonts = Array.isArray(state.brandingFonts) ? state.brandingFonts.slice() : null;
+          const nextCfg = Object.assign({}, readBrandingForm(), { font_family: fname });
+          const saveSeq = ++brandingSaveSeq;
+          isBrandingSaveInFlight = true;
+          useBtn.disabled = true;
+          applyBrandingConfigClient(nextCfg);
           renderSettingsBrandingSection();
-          showToast(`Active font set to ${fname}.`);
+          try {
+            const r = await fetch('api.php?action=save_branding_config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ font_family: fname }),
+            });
+            const d = await r.json().catch(() => null);
+            if (!r.ok || !d || !d.ok) {
+              if (saveSeq === brandingSaveSeq) {
+                applyBrandingConfigClient(prevConfig, prevFonts);
+                renderSettingsBrandingSection();
+              }
+              showToast((d && d.error) || `Failed to save active font '${fname}'.`, 'error');
+              return;
+            }
+            if (saveSeq === brandingSaveSeq && d.brandingConfig) {
+              applyBrandingConfigClient(d.brandingConfig, d.brandingFonts || null);
+            }
+            renderSettingsBrandingSection();
+            showToast(`Active font set to ${d.brandingConfig?.font_family || fname}.`, 'success');
+          } catch (err) {
+            if (saveSeq === brandingSaveSeq) {
+              applyBrandingConfigClient(prevConfig, prevFonts);
+              renderSettingsBrandingSection();
+            }
+            showToast(err?.message || `Network error applying font '${fname}'.`, 'error');
+          } finally {
+            if (saveSeq === brandingSaveSeq) {
+              isBrandingSaveInFlight = false;
+            }
+            useBtn.disabled = false;
+          }
           return;
         }
         const editBtn = e.target.closest('.js-font-edit-btn');
@@ -15836,7 +15843,7 @@
       if (!isCurrentUserAdmin()) {
         // Non-Admin: Direct access to personal Digital ID Badge (User Dropdown is restricted to Admin)
         closeAllTopbarDropdowns();
-        const u = state.currentUser || state.crew[0];
+        const u = state.currentUser;
         if (u) {
           state.selectedCrewId = u.id;
           state.currentVerification = buildClientVerificationFromMember(u);
@@ -15862,7 +15869,7 @@
     if (menuMyBadge) {
       menuMyBadge.addEventListener('click', () => {
         closeAllTopbarDropdowns();
-        const u = state.currentUser || state.crew[0];
+        const u = state.currentUser;
         if (u) {
           switchScreen('terminals', 'pane-kiosk');
           state.selectedCrewId = u.id;
@@ -15894,6 +15901,16 @@
     if (menuLogout) {
       menuLogout.addEventListener('click', async () => {
         closeAllTopbarDropdowns();
+        if (liveGateSyncTimer) {
+          clearInterval(liveGateSyncTimer);
+          liveGateSyncTimer = null;
+        }
+        bootstrapRequestSeq += 1;
+        if (activeBootstrapAbortCtrl) {
+          try { activeBootstrapAbortCtrl.abort(); } catch (_) { }
+          activeBootstrapAbortCtrl = null;
+          isBootstrapInFlight = false;
+        }
         try {
           await fetch('api.php?action=logout');
         } catch (e) { }
@@ -15982,19 +15999,19 @@
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({ username, password }),
           });
-          const data = await res.json();
-          if (data && data.ok) {
-            state.currentUser = data.user;
+          const data = await res.json().catch(() => null);
+          if (res.ok && data && data.ok) {
+            const nextUser = data.user || data.currentUser || null;
             closeAuthModal();
-            renderTopbarAndKpis();
-            if (isCurrentUserStockController()) {
+            await commitSessionUserTransition(nextUser, data);
+            if (isCurrentUserStockController() || isCurrentUserTechnician()) {
               switchScreen('terminals', 'pane-kiosk');
-              showToast(data.message || `Welcome back, ${data.user.full_name}! Redirected to Staff ID Badges & Gate Terminal.`);
+              showToast(data.message || `Welcome back, ${nextUser?.full_name || 'Operator'}! Redirected to Staff ID Badges & Gate Terminal.`);
             } else {
-              showToast(data.message || `Welcome back, ${data.user.full_name}!`);
+              showToast(data.message || `Welcome back, ${nextUser?.full_name || 'Operator'}!`);
             }
           } else {
-            showToast(data?.error || 'Invalid credentials.');
+            showToast(data?.error || 'Invalid credentials.', 'error');
           }
         } catch (err) {
           showToast('Unable to reach authentication server. Please verify your connection.');
@@ -16103,29 +16120,19 @@
               role: role,
             }),
           });
-          const data = await res.json();
-          if (data && data.ok) {
-            state.currentUser = data.user;
-            renderTopbarAndKpis();
+          const data = await res.json().catch(() => null);
+          if (res.ok && data && data.ok) {
+            const nextUser = data.user || data.currentUser || null;
+            await commitSessionUserTransition(nextUser, data);
             if (isCurrentUserStockController() || isCurrentUserTechnician()) {
               switchScreen('terminals', 'pane-kiosk');
             }
-            showToast(data.message || `Switched active operator to ${data.user.full_name}`);
+            showToast(data.message || `Switched active operator to ${nextUser?.full_name || 'Operator'}`, 'success');
           } else {
-            const localUser = state.crew.find((c) => Number(c.id) === uid);
-            if (localUser) {
-              state.currentUser = localUser;
-              renderTopbarAndKpis();
-              showToast(`Switched active operator to ${localUser.full_name}`);
-            }
+            showToast((data && data.error) || 'Unable to switch user account. Please verify permissions.', 'error');
           }
         } catch (err) {
-          const localUser = state.crew.find((c) => Number(c.id) === uid);
-          if (localUser) {
-            state.currentUser = localUser;
-            renderTopbarAndKpis();
-            showToast(`Switched active operator to ${localUser.full_name}`);
-          }
+          showToast('Unable to switch user account due to a network error.', 'error');
         }
       }
     });
@@ -17493,10 +17500,8 @@
         const editingEventId = document.getElementById('venue-crud-id')?.value.trim() || '';
         const tlVal = document.getElementById('venue-crud-techlead')?.value.trim() || '';
         const pmWrapVisible = document.getElementById('venue-crud-pm-wrap')?.style.display !== 'none';
-        const coordWrapVisible = document.getElementById('venue-crud-coord-wrap')?.style.display !== 'none';
         const pmVal = pmWrapVisible ? (document.getElementById('venue-crud-pm')?.value.trim() || '') : '';
-        const coordVal = coordWrapVisible ? (document.getElementById('venue-crud-coordinator')?.value.trim() || '') : '';
-        const leadCheck = validateLeadershipSelection(tlVal, pmVal, coordVal, {
+        const leadCheck = validateLeadershipSelection(tlVal, pmVal, {
           requireTechLead: false,
           requireCommandForTl: true,
         });
@@ -17526,14 +17531,13 @@
         fd.append('call_time', document.getElementById('venue-crud-calltime')?.value || '08:00');
         fd.append('tech_lead', tlVal);
         fd.append('project_manager', pmVal);
-        fd.append('event_coordinator', coordVal);
         fd.append('remove_image', document.getElementById('venue-crud-remove-image')?.value || '0');
         if (showDeptCounts) {
           fd.append('requirements', JSON.stringify(getVenueCrudDeptCountsPayload()));
         }
         if (canAssignCrew) {
           fd.append('assigned_technicians', JSON.stringify(assignedTechs));
-          fd.append('assigned_roster', JSON.stringify(buildStructuredEventRoster(pmVal, coordVal, tlVal, assignedTechs)));
+          fd.append('assigned_roster', JSON.stringify(buildStructuredEventRoster(pmVal, tlVal, assignedTechs)));
         }
         const pendingCommentText = canAssignCrew ? (document.getElementById('venue-comment-text')?.value || '').trim() : '';
         const pendingCommentDept = document.getElementById('venue-comment-dept')?.value || 'Video';
@@ -18807,36 +18811,21 @@
       if (isEventVenue) {
         const callInput = document.getElementById('roster-event-calltime');
         const pmInput = document.getElementById('roster-event-pm');
-        const coordInput = document.getElementById('roster-event-coordinator');
         const tlSelect = document.getElementById('roster-event-techlead');
-        const pmClearBtn = document.getElementById('roster-event-pm-clear-btn');
-        const coordClearBtn = document.getElementById('roster-event-coord-clear-btn');
         const dateLabel = document.getElementById('roster-event-date-label');
         if (callInput) callInput.value = (facility.call_time || '08:00').slice(0, 5);
         if (dateLabel) dateLabel.textContent = facility.date ? `Date: ${facility.date}` : '';
         const rosterLeadView = getEventLeadershipViewState(facility);
         populateLeadershipSelect(pmInput, rosterLeadView.pmValInit, 'pm');
-        populateLeadershipSelect(coordInput, rosterLeadView.coordValInit, 'coordinator');
         populateLeadershipSelect(tlSelect, rosterLeadView.techLeadValInit || facility.tech_lead || facility.lead_name || '', 'techlead');
         const rosterTlAutoTag = document.getElementById('roster-event-techlead-auto-tag');
         const rosterPmAutoTag = document.getElementById('roster-event-pm-auto-tag');
-        const rosterCoordAutoTag = document.getElementById('roster-event-coord-auto-tag');
         if (!rosterLeadView.showAutoTags) {
           if (rosterTlAutoTag) rosterTlAutoTag.style.display = 'none';
           if (rosterPmAutoTag) rosterPmAutoTag.style.display = 'none';
-          if (rosterCoordAutoTag) rosterCoordAutoTag.style.display = 'none';
         }
         applySelectLockState(tlSelect, rosterLeadView.disableTechLead, rosterLeadView.showAutoTags ? rosterTlAutoTag : null);
-        const getRosterLockOpts = () => ({
-          disablePm: rosterLeadView.disablePm,
-          disableCoord: rosterLeadView.disableCoord,
-          pmAutoTag: rosterLeadView.showAutoTags ? rosterPmAutoTag : null,
-          coordAutoTag: rosterLeadView.showAutoTags ? rosterCoordAutoTag : null,
-          pmClearBtn,
-          coordClearBtn,
-        });
-        bindExclusivePmCoordSelects(pmInput, coordInput, { getSyncOpts: getRosterLockOpts });
-        syncExclusivePmCoordFields(pmInput, coordInput, getRosterLockOpts());
+        applySelectLockState(pmInput, rosterLeadView.disablePm, rosterLeadView.showAutoTags ? rosterPmAutoTag : null);
         const hsBox = document.getElementById('roster-dispatch-handshake-box');
         const stPill = document.getElementById('roster-dispatch-status-pill');
         const reqSum = document.getElementById('roster-requirements-summary');
@@ -19050,8 +19039,7 @@
         const callTime = document.getElementById('roster-event-calltime')?.value || '08:00';
         const techLead = document.getElementById('roster-event-techlead')?.value || '';
         const pm = document.getElementById('roster-event-pm')?.value || '';
-        const eventCoord = document.getElementById('roster-event-coordinator')?.value || '';
-        const leadCheck = validateLeadershipSelection(techLead, pm, eventCoord, {
+        const leadCheck = validateLeadershipSelection(techLead, pm, {
           requireTechLead: false,
           requireCommandForTl: true,
         });
@@ -19070,9 +19058,8 @@
             call_time: callTime,
             tech_lead: techLead,
             project_manager: pm,
-            event_coordinator: eventCoord,
             assigned_technicians: crewToSave,
-            assigned_roster: buildStructuredEventRoster(pm, eventCoord, techLead, crewToSave),
+            assigned_roster: buildStructuredEventRoster(pm, techLead, crewToSave),
           }, 'Event call-time and details saved.');
         } catch (err) {
           console.error('save_event error:', err);
@@ -19120,8 +19107,7 @@
         const callTime = document.getElementById('roster-event-calltime')?.value || '08:00';
         const techLead = document.getElementById('roster-event-techlead')?.value || '';
         const pm = document.getElementById('roster-event-pm')?.value || '';
-        const eventCoord = document.getElementById('roster-event-coordinator')?.value || '';
-        const leadCheck = validateLeadershipSelection(techLead, pm, eventCoord, {
+        const leadCheck = validateLeadershipSelection(techLead, pm, {
           requireTechLead: false,
           requireCommandForTl: true,
         });
@@ -19138,9 +19124,8 @@
             call_time: callTime,
             tech_lead: techLead,
             project_manager: pm,
-            event_coordinator: eventCoord,
             assigned_technicians: crewIds,
-            assigned_roster: buildStructuredEventRoster(pm, eventCoord, techLead, crewIds),
+            assigned_roster: buildStructuredEventRoster(pm, techLead, crewIds),
           }, 'Event crew roster synced.');
         } catch (err) {
           console.error('assign_event_crew error:', err);
@@ -22447,7 +22432,13 @@
   // Initialize
   document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
+    if (typeof window !== 'undefined' && (window.__ABILITY_BRANDING__ || window.__ABILITY_FONTS__)) {
+      applyBrandingConfigClient(window.__ABILITY_BRANDING__ || {}, window.__ABILITY_FONTS__ || null);
+    }
     applyAccessibilityPreferences();
+    if (state.currentUser) {
+      renderTopbarAndKpis();
+    }
     updateNetworkStatusUi();
     window.addEventListener('online', () => { updateNetworkStatusUi(); syncOfflineScans(true); });
     window.addEventListener('offline', () => { updateNetworkStatusUi(); showToast('Offline mode active: Online-Only controls locked.'); });

@@ -1433,16 +1433,62 @@ function resolveBrandingFaviconUrl(?string $rawFavPath, ?string $rawLogoPath = '
     return getDefaultBrandingFaviconPath();
 }
 
-function getBuiltInBrandingFontPresets(): array
+function normalizeBrandingFontUrl(string $rawUrl): string
+{
+    $url = trim($rawUrl);
+    if ($url === '') {
+        return '';
+    }
+    if (preg_match('#^https?://fonts\.google\.com/specimen/([^/?\#]+)#i', $url, $m)) {
+        $family = trim(urldecode((string) $m[1]));
+        if ($family !== '') {
+            $encodedFamily = str_replace('%20', '+', rawurlencode(str_replace('+', ' ', $family)));
+            return 'https://fonts.googleapis.com/css2?family=' . $encodedFamily . ':wght@400;500;600;700;800&display=swap';
+        }
+    }
+    return $url;
+}
+
+/**
+ * Single source of truth for built-in typography presets and their webfont CSS URLs.
+ */
+function getBuiltInBrandingFontPresetSpecs(): array
 {
     return [
-        'Marvel' => '"Marvel", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif',
-        'Inter' => '"Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif',
-        'Plus Jakarta Sans' => '"Plus Jakarta Sans", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
-        'JetBrains Mono' => '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-        'Roboto' => '"Roboto", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
-        'System UI' => '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+        'Marvel' => [
+            'css_stack' => '"Marvel", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif',
+            'font_url' => 'https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap',
+        ],
+        'Inter' => [
+            'css_stack' => '"Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif',
+            'font_url' => 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
+        ],
+        'Plus Jakarta Sans' => [
+            'css_stack' => '"Plus Jakarta Sans", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
+            'font_url' => 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
+        ],
+        'JetBrains Mono' => [
+            'css_stack' => '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+            'font_url' => 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap',
+        ],
+        'Roboto' => [
+            'css_stack' => '"Roboto", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
+            'font_url' => 'https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap',
+        ],
+        'System UI' => [
+            'css_stack' => '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+            'font_url' => null,
+        ],
     ];
+}
+
+function getBuiltInBrandingFontPresets(): array
+{
+    $stacks = [];
+    foreach (getBuiltInBrandingFontPresetSpecs() as $name => $spec) {
+        $stacks[$name] = $spec['css_stack'];
+    }
+    return $stacks;
 }
 
 function ensureBrandingFontsTable(PDO $pdo): void
@@ -1462,12 +1508,18 @@ function ensureBrandingFontsTable(PDO $pdo): void
                 `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         ");
-        $chk = $pdo->prepare("SELECT COUNT(*) FROM `branding_fonts` WHERE `font_name` = ?");
-        $ins = $pdo->prepare("INSERT INTO `branding_fonts` (`font_name`, `css_stack`, `is_system`, `is_active`) VALUES (?, ?, 1, 1)");
-        foreach (getBuiltInBrandingFontPresets() as $fName => $stack) {
+        $chk = $pdo->prepare("SELECT `id`, `font_url` FROM `branding_fonts` WHERE `font_name` = ? LIMIT 1");
+        $ins = $pdo->prepare("INSERT INTO `branding_fonts` (`font_name`, `css_stack`, `font_url`, `is_system`, `is_active`) VALUES (?, ?, ?, 1, 1)");
+        $updUrl = $pdo->prepare("UPDATE `branding_fonts` SET `css_stack` = ?, `font_url` = ? WHERE `id` = ? AND `is_system` = 1");
+        foreach (getBuiltInBrandingFontPresetSpecs() as $fName => $spec) {
+            $stack = $spec['css_stack'];
+            $fUrl = $spec['font_url'];
             $chk->execute([$fName]);
-            if ((int) $chk->fetchColumn() === 0) {
-                $ins->execute([$fName, $stack]);
+            $existingRow = $chk->fetch(PDO::FETCH_ASSOC);
+            if (!$existingRow) {
+                $ins->execute([$fName, $stack, $fUrl]);
+            } elseif ((string) ($existingRow['font_url'] ?? '') === '' && $fUrl !== null) {
+                $updUrl->execute([$stack, $fUrl, (int) $existingRow['id']]);
             }
         }
     } catch (Throwable $e) {}
@@ -1476,17 +1528,23 @@ function ensureBrandingFontsTable(PDO $pdo): void
 function getBrandingFontsList(PDO $pdo, bool $onlyActive = false): array
 {
     ensureBrandingFontsTable($pdo);
+    $presetSpecs = getBuiltInBrandingFontPresetSpecs();
     $rows = [];
     try {
         $sql = "SELECT * FROM `branding_fonts`" . ($onlyActive ? " WHERE `is_active` = 1" : "") . " ORDER BY `is_system` DESC, `font_name` ASC, `id` ASC";
         foreach ($pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $fName = (string) ($r['font_name'] ?? '');
             $fp = ltrim(str_replace('\\', '/', trim((string) ($r['file_path'] ?? ''))), '/');
             $fpValid = ($fp !== '' && strpos($fp, '..') === false && strpos($fp, 'uploads/branding/fonts/') === 0 && is_file(__DIR__ . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $fp)));
+            $rawUrl = trim((string) ($r['font_url'] ?? ''));
+            if ($rawUrl === '' && (int) ($r['is_system'] ?? 0) === 1 && isset($presetSpecs[$fName]['font_url'])) {
+                $rawUrl = (string) $presetSpecs[$fName]['font_url'];
+            }
             $rows[] = [
                 'id' => (int) ($r['id'] ?? 0),
-                'font_name' => (string) ($r['font_name'] ?? ''),
-                'css_stack' => (string) ($r['css_stack'] ?? ''),
-                'font_url' => (string) ($r['font_url'] ?? ''),
+                'font_name' => $fName,
+                'css_stack' => (string) ($r['css_stack'] ?? ($presetSpecs[$fName]['css_stack'] ?? '')),
+                'font_url' => normalizeBrandingFontUrl($rawUrl),
                 'file_path' => $fpValid ? $fp : '',
                 'font_format' => (string) ($r['font_format'] ?? ''),
                 'is_system' => (int) ($r['is_system'] ?? 0),
@@ -1496,12 +1554,12 @@ function getBrandingFontsList(PDO $pdo, bool $onlyActive = false): array
     } catch (Throwable $e) {}
     if (empty($rows)) {
         $idx = 1;
-        foreach (getBuiltInBrandingFontPresets() as $fName => $stack) {
+        foreach ($presetSpecs as $fName => $spec) {
             $rows[] = [
                 'id' => $idx++,
                 'font_name' => $fName,
-                'css_stack' => $stack,
-                'font_url' => '',
+                'css_stack' => $spec['css_stack'],
+                'font_url' => (string) ($spec['font_url'] ?? ''),
                 'file_path' => '',
                 'font_format' => '',
                 'is_system' => 1,
@@ -1525,6 +1583,23 @@ function getAllowedBrandingFonts(?PDO $pdo = null): array
     return $map;
 }
 
+function resolveAllowedBrandingFontKey(array $fonts, ?string $requested): ?string
+{
+    $req = trim((string) $requested);
+    if ($req === '') {
+        return null;
+    }
+    if (isset($fonts[$req])) {
+        return $req;
+    }
+    foreach ($fonts as $name => $_stack) {
+        if (strcasecmp((string) $name, $req) === 0) {
+            return (string) $name;
+        }
+    }
+    return null;
+}
+
 function getBrandingConfig(PDO $pdo): array
 {
     $defaults = getDefaultBrandingConfig();
@@ -1537,7 +1612,8 @@ function getBrandingConfig(PDO $pdo): array
             if (is_array($dec)) {
                 $fonts = getAllowedBrandingFonts($pdo);
                 $safeHex = static fn($v, $fb) => (is_string($v) && preg_match('/^#[0-9a-fA-F]{6}$/', trim($v))) ? strtolower(trim($v)) : $fb;
-                $font = isset($dec['font_family'], $fonts[$dec['font_family']]) ? (string) $dec['font_family'] : $defaults['font_family'];
+                $matchedFont = resolveAllowedBrandingFontKey($fonts, isset($dec['font_family']) ? (string) $dec['font_family'] : null);
+                $font = $matchedFont ?? $defaults['font_family'];
                 $scale = max(0.88, min(1.2, round((float) ($dec['font_scale'] ?? 1.0), 2)));
                 $align = in_array($dec['text_align'] ?? '', ['left', 'center', 'justify'], true) ? (string) $dec['text_align'] : 'left';
                 $defTheme = in_array($dec['default_theme'] ?? '', ['light', 'dark', 'system'], true) ? (string) $dec['default_theme'] : 'system';
@@ -1608,7 +1684,7 @@ function saveBrandingConfig(PDO $pdo, array $in): array
         'light_accent' => $safeHex($in['light_accent'] ?? '', $accent),
         'dark_primary' => $safeHex($in['dark_primary'] ?? '', $cur['dark_primary']),
         'dark_accent' => $safeHex($in['dark_accent'] ?? '', $cur['dark_accent']),
-        'font_family' => isset($in['font_family'], $fonts[$in['font_family']]) ? (string) $in['font_family'] : $cur['font_family'],
+        'font_family' => resolveAllowedBrandingFontKey($fonts, isset($in['font_family']) ? (string) $in['font_family'] : null) ?? $cur['font_family'],
         'font_scale' => max(0.88, min(1.2, round((float) ($in['font_scale'] ?? $cur['font_scale']), 2))),
         'text_align' => in_array($in['text_align'] ?? '', ['left', 'center', 'justify'], true) ? (string) $in['text_align'] : $cur['text_align'],
         'default_theme' => in_array($in['default_theme'] ?? '', ['light', 'dark', 'system'], true) ? (string) $in['default_theme'] : $cur['default_theme'],
@@ -1633,7 +1709,13 @@ function renderBrandingHeadHtml(PDO $pdo): string
     $b = getBrandingConfig($pdo);
     $fontsList = getBrandingFontsList($pdo, true);
     $fonts = getAllowedBrandingFonts($pdo);
-    $fontStack = $fonts[$b['font_family']] ?? $fonts['Marvel'];
+    $presetSpecs = getBuiltInBrandingFontPresetSpecs();
+    $activeFontKey = resolveAllowedBrandingFontKey($fonts, (string) ($b['font_family'] ?? 'Marvel')) ?? 'Marvel';
+    $fontStack = $fonts[$activeFontKey] ?? $fonts['Marvel'];
+    $isMonoActive = (bool) preg_match('/\bmonospace\b|jetbrains|fira\s*code|ibm\s*plex\s*mono|source\s*code|consolas|menlo/i', $activeFontKey . ' ' . $fontStack);
+    $monoStack = $isMonoActive
+        ? $fontStack
+        : ("'" . str_replace("'", "\\'", $activeFontKey) . "', " . $fontStack . ", ui-monospace, SFMono-Regular, 'Consolas', monospace");
     $scaleNum = number_format((float) $b['font_scale'], 2, '.', '');
     $primary = htmlspecialchars($b['primary_color'], ENT_QUOTES, 'UTF-8');
     $accent = htmlspecialchars($b['accent_color'], ENT_QUOTES, 'UTF-8');
@@ -1660,16 +1742,28 @@ function renderBrandingHeadHtml(PDO $pdo): string
     ];
 
     $fontFaceCss = '';
+    $emittedUrls = [];
     foreach ($fontsList as $fItem) {
-        $fUrl = trim((string) ($fItem['font_url'] ?? ''));
-        if ($fUrl !== '' && preg_match('#^https://#i', $fUrl)) {
+        $fUrl = normalizeBrandingFontUrl((string) ($fItem['font_url'] ?? ''));
+        if ($fUrl === '' && isset($presetSpecs[$fItem['font_name']]['font_url'])) {
+            $fUrl = (string) $presetSpecs[$fItem['font_name']]['font_url'];
+        }
+        if ($fUrl !== '' && !isset($emittedUrls[$fUrl]) && preg_match('#^https?://#i', $fUrl)) {
+            $emittedUrls[$fUrl] = true;
             $lines[] = '  <link rel="stylesheet" href="' . htmlspecialchars($fUrl, ENT_QUOTES, 'UTF-8') . '" />';
         }
         $fp = trim((string) ($fItem['file_path'] ?? ''));
         if ($fp !== '') {
-            $safeFamily = preg_replace('/[^A-Za-z0-9 _-]/', '', $fItem['font_name']);
+            $safeFamily = str_replace(['\'', '"', '\\'], '', trim((string) $fItem['font_name']));
             $fmt = in_array($fItem['font_format'], ['woff2', 'woff', 'truetype', 'opentype'], true) ? $fItem['font_format'] : 'woff2';
-            $fontFaceCss .= "@font-face{font-family:'{$safeFamily}';src:url('" . htmlspecialchars($fp, ENT_QUOTES, 'UTF-8') . "') format('{$fmt}');font-display:swap;}\n";
+            $fontFaceCss .= "@font-face{font-family:'{$safeFamily}';src:url('" . htmlspecialchars($fp, ENT_QUOTES, 'UTF-8') . "') format('{$fmt}');font-weight:100 900;font-style:normal;font-display:swap;}\n";
+        }
+    }
+    if (isset($presetSpecs[$activeFontKey]['font_url'])) {
+        $activePresetUrl = (string) $presetSpecs[$activeFontKey]['font_url'];
+        if ($activePresetUrl !== '' && !isset($emittedUrls[$activePresetUrl])) {
+            $emittedUrls[$activePresetUrl] = true;
+            $lines[] = '  <link rel="stylesheet" href="' . htmlspecialchars($activePresetUrl, ENT_QUOTES, 'UTF-8') . '" />';
         }
     }
     if ($fontFaceCss !== '') {
@@ -1684,11 +1778,16 @@ function renderBrandingHeadHtml(PDO $pdo): string
     $lines[] = '      --brand-purple: ' . $primary . ';';
     $lines[] = '      --brand-logo-size: ' . $logoSizePx . ';';
     $lines[] = '      --font-sans: ' . $fontStack . ';';
+    $lines[] = '      --font-marvel: ' . $fontStack . ';';
+    $lines[] = '      --font-mono: ' . $monoStack . ';';
     $lines[] = '      --brand-font-family: ' . $fontStack . ';';
     $lines[] = '      --brand-font-scale: ' . $scaleNum . ';';
     $lines[] = '      --app-font-scale: ' . $scaleNum . ';';
     $lines[] = '      --brand-text-align: ' . $align . ';';
     $lines[] = '      --app-text-align: ' . $align . ';';
+    $lines[] = '    }';
+    $lines[] = '    body, button, input, select, textarea {';
+    $lines[] = '      font-family: var(--brand-font-family, var(--font-sans));';
     $lines[] = '    }';
     $lines[] = '    [data-theme="dark"] {';
     $lines[] = '      --brand-primary: ' . $darkPrimary . ';';

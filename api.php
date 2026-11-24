@@ -2277,18 +2277,8 @@ function canCallerAccessEventRecord(array $ev, ?array $caller, array $resolvedAs
         }
         return false;
     }
-    if ($callerRole === 'project_manager') {
-        if ($matchesCallerIdentity($pmVal)) {
-            return true;
-        }
-        if (isPlaceholderLeadershipValue($pmVal) && isPlaceholderLeadershipValue($ecVal) && $callerId > 0) {
-            return (int) ($ev['created_by_id'] ?? 0) === $callerId
-                || (int) ($ev['requirements_sent_by'] ?? 0) === $callerId;
-        }
-        return false;
-    }
-    if ($callerRole === 'event_coordinator') {
-        if ($matchesCallerIdentity($ecVal)) {
+    if (in_array($callerRole, ['project_manager', 'event_coordinator'], true)) {
+        if ($matchesCallerIdentity($pmVal) || $matchesCallerIdentity($ecVal)) {
             return true;
         }
         if (isPlaceholderLeadershipValue($pmVal) && isPlaceholderLeadershipValue($ecVal) && $callerId > 0) {
@@ -5136,6 +5126,9 @@ try {
         $_SESSION['auth_user_id'] = (int) $userRow['id'];
         $_SESSION['auth_user_role'] = strtolower((string)$userRow['role']);
         $freshCsrf = getSessionCsrfToken();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
 
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $matchedMember = $full['currentUser'] ?? null;
@@ -5348,6 +5341,10 @@ try {
 
         $_SESSION['auth_user_id'] = (int) $found['id'];
         $_SESSION['auth_user_role'] = strtolower((string)($found['role'] ?? ''));
+        $freshCsrf = getSessionCsrfToken();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_write_close();
+        }
 
         $full = buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId);
         $found = $full['currentUser'] ?: $found;
@@ -5356,6 +5353,8 @@ try {
             'ok' => true,
             'message' => "Switched active operator to {$found['full_name']} ({$found['role_display']}).",
             'user' => $found,
+            'currentUser' => $found,
+            'csrfToken' => $freshCsrf,
         ]);
         exit;
     }
@@ -6227,7 +6226,6 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $assignedTechsInt = array_values(array_unique(array_merge($assignedTechsInt, $supportIds)));
             $assignedRosterJson = json_encode([
                 'project_manager' => trim((string) ($assignedRosterIn['project_manager'] ?? $projectManager)),
-                'event_coordinator' => trim((string) ($assignedRosterIn['event_coordinator'] ?? $eventCoordinator)),
                 'tech_lead' => trim((string) ($assignedRosterIn['tech_lead'] ?? $techLead)),
                 'departments' => $normDepts,
                 'support_staff' => $supportIds,
@@ -6391,34 +6389,25 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $msg = 'Event updated successfully';
         $isRealPmIn = !isPlaceholderLeadershipValue($projectManager);
         $isRealCoordIn = !isPlaceholderLeadershipValue($eventCoordinator);
+        if (!$isRealPmIn && $isRealCoordIn) {
+            $projectManager = $eventCoordinator;
+            $isRealPmIn = true;
+        }
         if (!$isRealPmIn) {
             $projectManager = '';
         }
-        if (!$isRealCoordIn) {
-            $eventCoordinator = '';
-        }
-        if ($isRealPmIn && $isRealCoordIn) {
-            echo json_encode(['ok' => false, 'error' => 'Please select either a Project Manager or an Event Coordinator, not both.']);
-            exit;
-        }
+        $eventCoordinator = '';
         if ($eventId === '') {
-            if ($callerRoleLower === 'project_manager' && $callerDisplayName !== '') {
+            if (in_array($callerRoleLower, ['project_manager', 'event_coordinator'], true) && $callerDisplayName !== '') {
                 $projectManager = $callerDisplayName;
                 $eventCoordinator = '';
                 $isRealPmIn = true;
-                $isRealCoordIn = false;
-            }
-            if ($callerRoleLower === 'event_coordinator' && $callerDisplayName !== '') {
-                $eventCoordinator = $callerDisplayName;
-                $projectManager = '';
-                $isRealCoordIn = true;
-                $isRealPmIn = false;
             }
             if ($isCallerTlOnly && $callerDisplayName !== '') {
                 $techLead = $callerDisplayName;
             }
-            if ($isCallerTlOnly && !$isRealPmIn && !$isRealCoordIn) {
-                echo json_encode(['ok' => false, 'error' => 'Please select either a Project Manager or an Event Coordinator for this event.']);
+            if ($isCallerTlOnly && !$isRealPmIn) {
+                echo json_encode(['ok' => false, 'error' => 'Please select a Project Manager for this event.']);
                 exit;
             }
         }
@@ -6438,16 +6427,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             }
             $oldPmRaw = trim((string) ($existingEvRow['project_manager'] ?? ''));
             $oldCoordRaw = trim((string) ($existingEvRow['event_coordinator'] ?? ''));
-            $effPmVal = $hasPmIn ? $projectManager : ($hasCoordIn && $isRealCoordIn ? '' : $oldPmRaw);
-            $effCoordVal = $hasCoordIn ? $eventCoordinator : ($hasPmIn && $isRealPmIn ? '' : $oldCoordRaw);
+            $effPmVal = $hasPmIn
+                ? $projectManager
+                : (!isPlaceholderLeadershipValue($oldPmRaw) ? $oldPmRaw : (!isPlaceholderLeadershipValue($oldCoordRaw) ? $oldCoordRaw : $oldPmRaw));
+            $effCoordVal = '';
             $effPmIsReal = !isPlaceholderLeadershipValue($effPmVal);
-            $effCoordIsReal = !isPlaceholderLeadershipValue($effCoordVal);
-            if ($effPmIsReal && $effCoordIsReal) {
-                echo json_encode(['ok' => false, 'error' => 'Please select either a Project Manager or an Event Coordinator, not both.']);
-                exit;
-            }
-            if (!$isCallerAdmin && ($hasPmIn || $hasCoordIn) && !$effPmIsReal && !$effCoordIsReal) {
-                echo json_encode(['ok' => false, 'error' => 'Please select either a Project Manager or an Event Coordinator for this event.']);
+            if (!$isCallerAdmin && $hasPmIn && !$effPmIsReal) {
+                echo json_encode(['ok' => false, 'error' => 'Please select a Project Manager for this event.']);
                 exit;
             }
             $evTitleFinal = $titleIn !== '' ? $titleIn : (string) ($existingEvRow['title'] ?? ('Event #' . $realEventId));
@@ -6650,8 +6636,8 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $durationDaysVal,
                 $durationLabelVal,
                 $formattedTime,
-                $projectManager !== '' ? $projectManager : (($eventCoordinator !== '' || $isCallerAdmin) ? '' : 'Operations PM'),
-                $eventCoordinator,
+                $projectManager !== '' ? $projectManager : ($isCallerAdmin ? '' : 'Operations PM'),
+                '',
                 $techLead !== '' ? $techLead : 'Tech Lead',
                 json_encode($assignedTechsInt),
                 $assignedRosterJson,
@@ -9256,7 +9242,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $fontName = trim((string) preg_replace('/[^A-Za-z0-9 _-]+/', '', $fontNameRaw));
         $cssStackIn = trim((string) ($_POST['css_stack'] ?? $jsonBody['css_stack'] ?? ''));
         $cssStack = trim((string) preg_replace('/[<>;{}]/', '', $cssStackIn));
-        $fontUrl = trim((string) ($_POST['font_url'] ?? $jsonBody['font_url'] ?? ''));
+        $fontUrl = normalizeBrandingFontUrl((string) ($_POST['font_url'] ?? $jsonBody['font_url'] ?? ''));
         $isActive = isset($_POST['is_active']) ? ((int) $_POST['is_active'] ? 1 : 0) : ((int) ($jsonBody['is_active'] ?? 1) ? 1 : 0);
         $activateAfterSave = !empty($_POST['activate']) || !empty($jsonBody['activate']);
 

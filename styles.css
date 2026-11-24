@@ -47,25 +47,25 @@
 
 /* User-specified font family utility classes */
 .marvel-regular {
-  font-family: "Marvel", sans-serif;
+  font-family: var(--font-marvel, var(--brand-font-family, var(--font-sans)));
   font-weight: 400;
   font-style: normal;
 }
 
 .marvel-bold {
-  font-family: "Marvel", sans-serif;
+  font-family: var(--font-marvel, var(--brand-font-family, var(--font-sans)));
   font-weight: 700;
   font-style: normal;
 }
 
 .marvel-regular-italic {
-  font-family: "Marvel", sans-serif;
+  font-family: var(--font-marvel, var(--brand-font-family, var(--font-sans)));
   font-weight: 400;
   font-style: italic;
 }
 
 .marvel-bold-italic {
-  font-family: "Marvel", sans-serif;
+  font-family: var(--font-marvel, var(--brand-font-family, var(--font-sans)));
   font-weight: 700;
   font-style: italic;
 }
@@ -7515,7 +7515,7 @@ html.theme-transitioning *::after {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: "Marvel", sans-serif;
+  font-family: var(--brand-font-family, var(--font-sans));
   font-size: 14.5px;
   font-weight: 700;
   color: #c4b5fd;
@@ -7711,7 +7711,7 @@ html.theme-transitioning *::after {
 
 .timeline-audit-log-id {
   font-size: 11px;
-  font-family: "Marvel", monospace;
+  font-family: var(--font-mono);
   font-weight: 700;
   color: var(--text-secondary, #94a3b8);
 }
@@ -8382,7 +8382,7 @@ html.theme-transitioning *::after {
   font-size: 14px;
   font-weight: 700;
   color: var(--text-primary, #f8fafc);
-  font-family: "Marvel", monospace;
+  font-family: var(--font-mono);
   line-height: 1.1;
 }
 
@@ -8471,7 +8471,7 @@ html.theme-transitioning *::after {
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.05em;
-  font-family: "Marvel", monospace;
+  font-family: var(--font-mono);
 }
 
 /* Facility Pins DOM Layer */
@@ -8547,7 +8547,7 @@ html.theme-transitioning *::after {
   color: #fff;
   font-size: 10.5px;
   font-weight: 800;
-  font-family: "Marvel", monospace;
+  font-family: var(--font-mono);
   padding: 1px 6px;
   border-radius: 10px;
   border: 1.5px solid #0f172a;
@@ -9885,7 +9885,7 @@ html.theme-transitioning *::after {
   gap: 4px;
 }
 .crew-pass-badge-code {
-  font-family: "Marvel", monospace;
+  font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.6px;

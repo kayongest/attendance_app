@@ -26,7 +26,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261123_v30" />
+  <link rel="stylesheet" href="styles.css?v=20261124_v32" />
 </head>
 
 <body>
@@ -2306,7 +2306,7 @@
               style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px;">
               <div class="page-intro-heading">
                 <h2 class="page-title"
-                  style="font-family: 'Marvel', sans-serif; font-size: 26px; margin: 0 0 4px; font-weight: 700; letter-spacing: -0.01em;">
+                  style="font-family: var(--brand-font-family, var(--font-sans)); font-size: 26px; margin: 0 0 4px; font-weight: 700; letter-spacing: -0.01em;">
                   Security Clearance Matrix</h2>
                 <p class="page-subtitle" style="margin: 0; font-size: 12px; color: var(--text-secondary);">
                   Active security clearance tier specifications, gate perimeter policies, and physical checkpoint
@@ -3020,7 +3020,7 @@
               <div class="form-field" style="margin-bottom: 14px;">
                 <label class="form-label" for="page-ct-input">Scheduled Call Time (24h CAT · Kigali)</label>
                 <input type="time" id="page-ct-input" class="form-input"
-                  style="font-size: 18px; font-weight: 700; font-family: 'Marvel', monospace; height: 44px; padding: 0 12px;"
+                  style="font-size: 18px; font-weight: 700; font-family: var(--font-mono); height: 44px; padding: 0 12px;"
                   value="08:00" required />
               </div>
 
@@ -4136,6 +4136,8 @@
                   <option value="Inter">Inter / System UI</option>
                   <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
                   <option value="JetBrains Mono">JetBrains Mono (Technical)</option>
+                  <option value="Roboto">Roboto</option>
+                  <option value="System UI">System UI</option>
                 </select>
               </div>
               <div class="form-field">
@@ -4530,7 +4532,7 @@
                 </div>
 
                 <div id="ce-leadership-section" style="margin-bottom: 12px;">
-                  <div id="ce-leadership-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div id="ce-leadership-grid" style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                     <div class="form-field" id="ce-pm-wrap" style="margin: 0;">
                       <label class="form-label" for="ce-pm"
                         style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
@@ -4540,41 +4542,15 @@
                             style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
                             Owner)</span>
                         </span>
-                        <button type="button" id="ce-pm-clear-btn" class="ce-role-clear-btn"
-                          style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
                       </label>
                       <select id="ce-pm" class="form-input"></select>
                     </div>
-                    <div class="form-field" id="ce-coord-wrap" style="margin: 0;">
-                      <label class="form-label" for="ce-coordinator"
-                        style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-                        <span>
-                          Event Coordinator <span id="ce-coord-req-star" style="display: none;">*</span>
-                          <span id="ce-coord-auto-tag"
-                            style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                            Owner)</span>
-                        </span>
-                        <button type="button" id="ce-coord-clear-btn" class="ce-role-clear-btn"
-                          style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
-                      </label>
-                      <select id="ce-coordinator" class="form-input"></select>
-                    </div>
-                  </div>
-                  <div id="ce-leadership-hint" class="muted-text" style="display: none; font-size: 11px; margin-top: 4px;">
-                    Select either a Project Manager or an Event Coordinator (not both).
                   </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-                  <div class="form-field" style="margin: 0;">
-                    <label class="form-label" for="ce-calltime">Call Time (24h CAT)</label>
-                    <input type="time" id="ce-calltime" class="form-input" value="08:00" required />
-                  </div>
-                  <div class="form-field" style="margin: 0;">
-                    <label class="form-label" for="ce-pin">Terminal PIN (4–12 chars)</label>
-                    <input type="text" id="ce-pin" class="form-input" value="1234" minlength="4" maxlength="12"
-                      autocomplete="off" />
-                  </div>
+                <div class="form-field" style="margin-bottom: 12px;">
+                  <label class="form-label" for="ce-calltime">Call Time (24h CAT)</label>
+                  <input type="time" id="ce-calltime" class="form-input" value="08:00" required />
                 </div>
 
                 <div class="form-field" style="margin-bottom: 12px;">
@@ -5318,29 +5294,14 @@
             <select id="roster-event-techlead" class="form-input" style="height: 36px;"></select>
           </div>
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-          <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="roster-event-pm"
-              style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-              <span>Project Manager <span id="roster-event-pm-auto-tag"
-                  style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                  Owner)</span></span>
-              <button type="button" id="roster-event-pm-clear-btn" class="ce-role-clear-btn"
-                style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
-            </label>
-            <select id="roster-event-pm" class="form-input" style="height: 36px;"></select>
-          </div>
-          <div class="form-field" style="margin: 0;">
-            <label class="form-label" for="roster-event-coordinator"
-              style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-              <span>Event Coordinator <span id="roster-event-coord-auto-tag"
-                  style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                  Owner)</span></span>
-              <button type="button" id="roster-event-coord-clear-btn" class="ce-role-clear-btn"
-                style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
-            </label>
-            <select id="roster-event-coordinator" class="form-input" style="height: 36px;"></select>
-          </div>
+        <div class="form-field" style="margin-bottom: 10px;">
+          <label class="form-label" for="roster-event-pm"
+            style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+            <span>Project Manager <span id="roster-event-pm-auto-tag"
+                style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
+                Owner)</span></span>
+          </label>
+          <select id="roster-event-pm" class="form-input" style="height: 36px;"></select>
         </div>
         <div id="roster-dept-filter-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
         <div id="roster-dispatch-handshake-box"
@@ -5553,7 +5514,7 @@
         <div class="form-field" style="margin-bottom: 14px;">
           <label class="form-label" for="call-time-input">Scheduled Call Time (24h CAT · Kigali)</label>
           <input type="time" id="call-time-input" class="form-input"
-            style="font-size: 16px; font-weight: 700; font-family: 'Marvel', monospace; height: 42px; padding: 0 12px;"
+            style="font-size: 16px; font-weight: 700; font-family: var(--font-mono); height: 42px; padding: 0 12px;"
             required value="08:00" />
         </div>
 
@@ -5660,8 +5621,8 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
           <div class="form-field">
             <label class="form-label" for="wh-modal-controller">Stock Controller Lead</label>
-            <input type="text" id="wh-modal-controller" class="form-input" placeholder="e.g. Mirene Uwase"
-              value="Mirene Uwase" />
+            <input type="text" id="wh-modal-controller" class="form-input" placeholder="e.g. Stock Controller Name"
+              value="" />
           </div>
           <div class="form-field">
             <label class="form-label" for="wh-modal-phone">Controller Phone</label>
@@ -6149,7 +6110,7 @@
       aria-labelledby="dept-crud-modal-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
         <h3 class="modal-title" id="dept-crud-modal-title"
-          style="font-family: 'Marvel', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Add New Department
+          style="font-family: var(--brand-font-family, var(--font-sans)); font-size: 20px; font-weight: 700; margin: 0;">Add New Department
         </h3>
         <span class="status-badge status-badge-blue-sm" id="dept-crud-modal-tag">Department</span>
       </div>
@@ -6195,7 +6156,7 @@
       aria-labelledby="nav-crud-modal-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
         <h3 class="modal-title" id="nav-crud-modal-title"
-          style="font-family: 'Marvel', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Add Navigation Item
+          style="font-family: var(--brand-font-family, var(--font-sans)); font-size: 20px; font-weight: 700; margin: 0;">Add Navigation Item
         </h3>
         <span class="status-badge status-badge-blue-sm" id="nav-crud-modal-tag">Main Nav</span>
       </div>
@@ -6744,7 +6705,7 @@
       aria-labelledby="tl-crud-modal-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
         <h3 class="modal-title" id="tl-crud-modal-title"
-          style="font-family: 'Marvel', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Record Gate Activity
+          style="font-family: var(--brand-font-family, var(--font-sans)); font-size: 20px; font-weight: 700; margin: 0;">Record Gate Activity
           Log</h3>
         <button type="button" class="icon-btn js-close-timeline-crud-modal" aria-label="Close">✕</button>
       </div>
@@ -6832,7 +6793,7 @@
       role="dialog" aria-labelledby="venue-crud-modal-title">
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
         <h3 class="modal-title" id="venue-crud-modal-title"
-          style="font-family: 'Marvel', sans-serif; font-size: 20px; font-weight: 700; margin: 0;">Add Event Venue
+          style="font-family: var(--brand-font-family, var(--font-sans)); font-size: 20px; font-weight: 700; margin: 0;">Add Event Venue
           Station</h3>
         <button type="button" class="icon-btn js-close-venue-crud-modal" aria-label="Close">✕</button>
       </div>
@@ -6878,7 +6839,7 @@
         </div>
 
         <div id="venue-crud-leadership-grid"
-          style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
           <div class="form-field" id="venue-crud-techlead-wrap">
             <label class="form-label" for="venue-crud-techlead">Technical Lead <span id="venue-crud-techlead-auto-tag"
                 style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Logged-in
@@ -6891,21 +6852,8 @@
               <span>Project Manager <span id="venue-crud-pm-auto-tag"
                   style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
                   Owner)</span></span>
-              <button type="button" id="venue-crud-pm-clear-btn" class="ce-role-clear-btn"
-                style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
             </label>
             <select id="venue-crud-pm" class="form-input"></select>
-          </div>
-          <div class="form-field" id="venue-crud-coord-wrap">
-            <label class="form-label" for="venue-crud-coordinator"
-              style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-              <span>Event Coordinator <span id="venue-crud-coord-auto-tag"
-                  style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request
-                  Owner)</span></span>
-              <button type="button" id="venue-crud-coord-clear-btn" class="ce-role-clear-btn"
-                style="display: none; background: none; border: none; padding: 0; font-size: 11px; font-weight: 600; color: var(--brand-primary); cursor: pointer;">Clear</button>
-            </label>
-            <select id="venue-crud-coordinator" class="form-input"></select>
           </div>
         </div>
 
@@ -7416,7 +7364,7 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261123_v30"></script>
+  <script src="app.js?v=20261124_v32"></script>
 </body>
 
 </html>
