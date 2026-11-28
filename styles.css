@@ -11692,13 +11692,34 @@ html[data-reduced-motion="1"] *::after {
   opacity: 0.9;
 }
 
+.tech-asg-qr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #4f46e5, #7147eb);
+  border-color: #4f46e5;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.24);
+  transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+}
+
+.tech-asg-qr-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px rgba(79, 70, 229, 0.32);
+  filter: brightness(1.05);
+}
+
 .tech-asg-withdraw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--text-secondary);
+  transition: color 0.14s ease, border-color 0.14s ease, background-color 0.14s ease;
 }
 
 .tech-asg-withdraw-btn:hover {
   color: #dc2626;
   border-color: #fecaca;
+  background-color: rgba(220, 38, 38, 0.06);
 }
 
 .tech-past-assignments-group {
@@ -11749,16 +11770,67 @@ html[data-reduced-motion="1"] *::after {
 }
 
 .tech-pass-modal-card {
-  width: 420px;
+  width: 430px;
   max-width: 94vw;
+  padding: 0 !important;
+  overflow: hidden;
+  gap: 0 !important;
 }
 
-.tech-pass-modal-header {
+.tech-pass-modal-hero {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 12px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #1e1b4b 0%, #4f46e5 62%, #7147eb 100%);
+  color: #ffffff;
+}
+
+.tech-pass-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+}
+
+.tech-pass-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.3);
+}
+
+.tech-pass-modal-close-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+
+.tech-pass-modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.tech-pass-modal-body {
+  padding: 16px 20px 20px;
 }
 
 .tech-pass-modal-event-bar {
@@ -11786,6 +11858,25 @@ html[data-reduced-motion="1"] *::after {
   background: var(--bg-subtle);
 }
 
+.tech-pass-modal-qr-frame {
+  position: relative;
+  padding: 6px;
+}
+
+.tech-pass-modal-qr-frame .qr-corner {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-color: #7147eb;
+  border-style: solid;
+  pointer-events: none;
+}
+
+.tech-pass-modal-qr-frame .qr-corner.tl { top: 0; left: 0; border-width: 3px 0 0 3px; border-top-left-radius: 6px; }
+.tech-pass-modal-qr-frame .qr-corner.tr { top: 0; right: 0; border-width: 3px 3px 0 0; border-top-right-radius: 6px; }
+.tech-pass-modal-qr-frame .qr-corner.bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-bottom-left-radius: 6px; }
+.tech-pass-modal-qr-frame .qr-corner.br { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-bottom-right-radius: 6px; }
+
 .tech-pass-modal-qr-box {
   display: flex;
   align-items: center;
@@ -11796,12 +11887,29 @@ html[data-reduced-motion="1"] *::after {
   border: 1px solid rgba(15, 23, 42, 0.08);
   min-width: 216px;
   min-height: 216px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
 }
 
 .tech-pass-modal-qr-box svg {
   width: 196px;
   height: 196px;
   display: block;
+}
+
+.tech-pass-modal-progress-wrap {
+  width: 216px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-color);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.tech-pass-modal-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #10b981, #7147eb);
+  transition: width 0.85s linear;
 }
 
 .tech-pass-modal-timer {
@@ -11825,7 +11933,7 @@ html[data-reduced-motion="1"] *::after {
 
 .tech-pass-modal-identity {
   margin-top: 12px;
-  padding: 10px 12px;
+  padding: 12px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
   background: var(--bg-subtle);
@@ -11837,6 +11945,154 @@ html[data-reduced-motion="1"] *::after {
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.tech-pass-modal-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tech-pass-modal-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4f46e5, #7147eb);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.tech-pass-modal-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Technician Assignment Withdraw / Decline Modal */
+.tech-withdraw-modal-card {
+  width: 460px;
+  max-width: 94vw;
+  gap: 14px !important;
+}
+
+.tech-withdraw-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tech-withdraw-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.tech-withdraw-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.tech-withdraw-event-summary {
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+}
+
+.tech-withdraw-summary-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+}
+
+.tech-withdraw-summary-meta {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.tech-withdraw-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tech-reason-chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.tech-reason-chip:hover {
+  border-color: rgba(113, 71, 235, 0.45);
+  color: var(--text-primary);
+}
+
+.tech-reason-chip.active {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.45);
+  color: #dc2626;
+}
+
+[data-theme="dark"] .tech-reason-chip.active {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fca5a5;
+}
+
+.tech-withdraw-textarea {
+  height: auto !important;
+  min-height: 76px;
+  padding: 9px 11px !important;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.tech-withdraw-error {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #dc2626;
+  margin-top: 4px;
+}
+
+.tech-withdraw-notice {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.09);
+  border: 1px solid rgba(245, 158, 11, 0.26);
+}
+
+[data-theme="dark"] .tech-withdraw-notice {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fde68a;
 }
 
 .tech-attendance-logs-card {

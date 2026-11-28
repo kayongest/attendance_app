@@ -26,7 +26,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261128_v41" />
+  <link rel="stylesheet" href="styles.css?v=20261128_v42" />
 </head>
 
 <body>
@@ -7421,30 +7421,91 @@
   <div class="modal-backdrop" id="tech-pass-qr-modal" aria-hidden="true">
     <div class="modal-card tech-pass-modal-card" role="dialog" aria-modal="true"
       aria-labelledby="tech-pass-modal-title">
-      <div class="tech-pass-modal-header">
-        <div>
-          <span class="crew-pass-kicker">MY DIGITAL CREW PASS · 30S DYNAMIC QR</span>
-          <h3 class="modal-title" id="tech-pass-modal-title" style="margin: 2px 0 0;">Gate Check-In / Check-Out Pass</h3>
+      <div class="tech-pass-modal-hero">
+        <div class="tech-pass-modal-hero-left">
+          <div class="tech-pass-live-pill">
+            <span class="tech-pass-live-dot"></span>
+            <span>LIVE 30S ANTI-SHADOWING PASS</span>
+          </div>
+          <h3 class="modal-title" id="tech-pass-modal-title" style="margin: 4px 0 0; color: #ffffff;">Digital Crew Gate Pass</h3>
         </div>
-        <button type="button" class="btn btn-secondary-32-sm" id="close-tech-pass-qr-modal" aria-label="Close Pass QR">✕</button>
+        <button type="button" class="tech-pass-modal-close-btn" id="close-tech-pass-qr-modal" aria-label="Close Pass QR">✕</button>
       </div>
 
-      <div class="tech-pass-modal-event-bar" id="tech-pass-modal-event-bar" style="display: none;"></div>
+      <div class="tech-pass-modal-body">
+        <div class="tech-pass-modal-event-bar" id="tech-pass-modal-event-bar" style="display: none;"></div>
 
-      <div class="tech-pass-modal-qr-stage">
-        <div class="tech-pass-modal-qr-box" id="tech-pass-modal-qr-box"></div>
-        <div class="tech-pass-modal-timer" id="tech-pass-modal-rotate-label">Anti-Shadowing QR · Rotates every 30s</div>
-        <div class="tech-pass-modal-codes">
-          <span class="crew-pass-badge-code" id="tech-pass-modal-badge-code">REW-BADGE-0000</span>
-          <span class="crew-pass-rfid" id="tech-pass-modal-live-code">Loading live token…</span>
+        <div class="tech-pass-modal-qr-stage">
+          <div class="tech-pass-modal-qr-frame">
+            <span class="qr-corner tl"></span>
+            <span class="qr-corner tr"></span>
+            <span class="qr-corner bl"></span>
+            <span class="qr-corner br"></span>
+            <div class="tech-pass-modal-qr-box" id="tech-pass-modal-qr-box"></div>
+          </div>
+          <div class="tech-pass-modal-progress-wrap" aria-hidden="true">
+            <div class="tech-pass-modal-progress-bar" id="tech-pass-modal-progress-bar" style="width: 100%;"></div>
+          </div>
+          <div class="tech-pass-modal-timer" id="tech-pass-modal-rotate-label">Anti-Shadowing QR · Rotates every 30s</div>
+          <div class="tech-pass-modal-codes">
+            <span class="crew-pass-badge-code" id="tech-pass-modal-badge-code">REW-BADGE-0000</span>
+            <span class="crew-pass-rfid" id="tech-pass-modal-live-code">Loading live token…</span>
+          </div>
+        </div>
+
+        <div class="tech-pass-modal-identity" id="tech-pass-modal-identity"></div>
+
+        <div class="modal-actions" style="margin-top: 14px; justify-content: space-between;">
+          <button type="button" class="btn btn-secondary-32-sm" id="tech-pass-modal-rotate-btn">↻ Rotate QR Now</button>
+          <button type="button" class="btn btn-primary-32" id="tech-pass-modal-done-btn">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Technician Assignment Withdraw / Decline Modal (Replaces native browser prompt) -->
+  <div class="modal-backdrop" id="tech-asg-withdraw-modal" aria-hidden="true">
+    <div class="modal-card tech-withdraw-modal-card" role="dialog" aria-modal="true"
+      aria-labelledby="tech-withdraw-modal-title">
+      <div class="tech-withdraw-modal-header">
+        <div class="tech-withdraw-header-left">
+          <div class="tech-withdraw-icon-badge" id="tech-withdraw-icon-badge" aria-hidden="true">!</div>
+          <div>
+            <h3 class="modal-title" id="tech-withdraw-modal-title" style="margin: 0;">Withdraw from Assignment</h3>
+            <p id="tech-withdraw-modal-subtitle" style="margin: 2px 0 0; font-size: 12px; color: var(--text-secondary);">
+              Let your Tech Lead know why you cannot attend so this slot can be reassigned.
+            </p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-secondary-32-sm" id="close-tech-withdraw-modal" aria-label="Close">✕</button>
+      </div>
+
+      <div class="tech-withdraw-event-summary" id="tech-withdraw-event-summary"></div>
+
+      <div class="form-field" style="margin: 0;">
+        <label class="form-label" style="margin-bottom: 4px;">Quick Reason</label>
+        <div class="tech-withdraw-chips" id="tech-withdraw-chips">
+          <button type="button" class="tech-reason-chip" data-reason="Schedule conflict">Schedule conflict</button>
+          <button type="button" class="tech-reason-chip" data-reason="Assigned to another event">Assigned elsewhere</button>
+          <button type="button" class="tech-reason-chip" data-reason="Medical or personal emergency">Medical / Emergency</button>
+          <button type="button" class="tech-reason-chip" data-reason="Transport or logistics issue">Transport issue</button>
         </div>
       </div>
 
-      <div class="tech-pass-modal-identity" id="tech-pass-modal-identity"></div>
+      <div class="form-field" style="margin: 0;">
+        <label class="form-label" for="tech-withdraw-reason-input" id="tech-withdraw-reason-label">Reason / Note *</label>
+        <textarea id="tech-withdraw-reason-input" class="form-input tech-withdraw-textarea" rows="3" maxlength="300"
+          placeholder="Add a brief explanation for your Tech Lead..."></textarea>
+        <div id="tech-withdraw-error" class="tech-withdraw-error" style="display: none;"></div>
+      </div>
 
-      <div class="modal-actions" style="margin-top: 14px; justify-content: space-between;">
-        <button type="button" class="btn btn-secondary-32-sm" id="tech-pass-modal-rotate-btn">↻ Rotate QR Now</button>
-        <button type="button" class="btn btn-primary-32" id="tech-pass-modal-done-btn">Done</button>
+      <div class="tech-withdraw-notice" id="tech-withdraw-notice">
+        Your Tech Lead will be notified immediately once submitted.
+      </div>
+
+      <div class="modal-actions" style="margin-top: 4px; justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary-38" id="tech-withdraw-cancel-btn">Keep Assignment</button>
+        <button type="button" class="btn btn-primary-38 btn-confirm-danger" id="tech-withdraw-confirm-btn">Confirm Withdrawal</button>
       </div>
     </div>
   </div>
@@ -7490,7 +7551,7 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261128_v41"></script>
+  <script src="app.js?v=20261128_v42"></script>
 </body>
 
 </html>

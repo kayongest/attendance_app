@@ -2881,6 +2881,11 @@
       setVis(navUsers, isAdmin || isManager || isTech);
       setVis(navAttendees, true);
       setVis(navTerminals, true);
+      if (navTerminals) {
+        const termLbl = navTerminals.querySelector('.nav-item-label');
+        if (termLbl) termLbl.textContent = isTechCrew ? 'Technician Workspace' : 'Terminals';
+        navTerminals.title = isTechCrew ? 'Technician Workspace' : 'Terminals';
+      }
     }
 
     // Sub-tabs on Checkpoints & Venues Hub
@@ -3007,6 +3012,7 @@
     // 6. Support Card Context
     const supportTitle = document.querySelector('.support-card .support-card-title');
     const supportDesc = document.querySelector('.support-card .support-card-desc') || document.getElementById('sidebar-support-desc');
+    const supportLink = document.getElementById('support-center-link');
     if (supportTitle && supportDesc) {
       if (isStockCtrl) {
         supportTitle.textContent = 'Gate Controller Terminal';
@@ -3014,8 +3020,8 @@
           ? `Locked to ${state.currentUser.assigned_checkpoint_name} for attendance verification.`
           : 'Terminal assignment pending Administrator / Site Manager approval.';
       } else if (isTechCrew) {
-        supportTitle.textContent = 'Technician Terminal';
-        supportDesc.textContent = 'Personal RFID credentials & event call time check-in.';
+        supportTitle.textContent = 'Technician Workspace';
+        supportDesc.textContent = 'Event dispatch confirmations, 30s Pass QR & personal attendance logs.';
       } else if (isTech) {
         supportTitle.textContent = 'Tech Lead Operations';
         supportDesc.textContent = 'Event rosters, call time scheduling & L1/L2 technical onboarding.';
@@ -3025,6 +3031,15 @@
       } else {
         supportTitle.textContent = 'Clearance Enforcement';
         supportDesc.textContent = `All ${state.clearanceMatrix?.length || 7} security tiers and physical perimeter checkpoints active.`;
+      }
+    }
+    if (supportLink) {
+      const linkText = isTechCrew ? 'Open Technician Workspace' : 'Open #pane-kiosk';
+      const arrowImg = supportLink.querySelector('img');
+      if (arrowImg) {
+        supportLink.innerHTML = `${escapeHtml(linkText)} ${arrowImg.outerHTML}`;
+      } else {
+        supportLink.textContent = linkText;
       }
     }
 
@@ -3858,13 +3873,18 @@
       const modalOpen = Boolean(modalEl && modalEl.classList.contains('open'));
       if (!inlineBox && !modalOpen) return;
       const secInSlice = Math.floor(Date.now() / 1000) % 30;
+      const secsLeft = Math.max(1, 30 - secInSlice);
       const labelTxt = state.passQrData?.token
-        ? `Anti-Shadowing QR · Rotates in ${Math.max(1, 30 - secInSlice)}s`
+        ? `Anti-Shadowing QR · Rotates in ${secsLeft}s`
         : 'Static Fallback Badge QR';
       const timerEl = document.getElementById('crew-pass-rotate-label');
       if (timerEl && state.passQrData?.token) timerEl.textContent = labelTxt;
       const modalTimerEl = document.getElementById('tech-pass-modal-rotate-label');
       if (modalTimerEl && modalOpen) modalTimerEl.textContent = labelTxt;
+      const modalProgEl = document.getElementById('tech-pass-modal-progress-bar');
+      if (modalProgEl && modalOpen) {
+        modalProgEl.style.width = `${Math.max(4, Math.round((secsLeft / 30) * 100))}%`;
+      }
       if (Math.floor(Date.now() / 30000) !== Number(state.passQrSlice)) {
         fetchLiveDynamicPassQr(false);
       }
@@ -3896,6 +3916,7 @@
     const modalQrBox = document.getElementById('tech-pass-modal-qr-box');
     const modalTimerEl = document.getElementById('tech-pass-modal-rotate-label');
     const modalTokenEl = document.getElementById('tech-pass-modal-live-code');
+    const modalProgEl = document.getElementById('tech-pass-modal-progress-bar');
     if (modalQrBox) {
       if (window.AbilityQRCode && typeof window.AbilityQRCode.toSvg === 'function') {
         modalQrBox.innerHTML = window.AbilityQRCode.toSvg(payloadStr, 196);
@@ -3904,6 +3925,7 @@
       }
       if (modalTokenEl) modalTokenEl.textContent = tokenTxt;
       if (modalTimerEl) modalTimerEl.textContent = timerTxt;
+      if (modalProgEl) modalProgEl.style.width = `${Math.max(4, Math.round((secs / 30) * 100))}%`;
     }
   }
 
@@ -3912,6 +3934,11 @@
     if (!modal || !state.currentUser) return;
     const meCrew = (state.crew || []).find((c) => Number(c.id) === Number(state.currentUser.id)) || state.currentUser;
     const fullName = meCrew.full_name || state.currentUser.full_name || 'Crew Member';
+    const initials = meCrew.initials || fullName.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'CR';
+    const avatarSrc = meCrew.photo_url || meCrew.profile_image_url || '';
+    const avatarHtml = avatarSrc
+      ? `<img src="${escapeHtml(avatarSrc)}" alt="${escapeHtml(fullName)}" />`
+      : escapeHtml(initials);
     const roleLabel = meCrew.role_display || meCrew.role || 'Technician';
     const dept = meCrew.department || 'Operations';
     const clearance = meCrew.clearance_code || 'L2';
@@ -3950,16 +3977,19 @@
     if (identityEl) {
       identityEl.innerHTML = `
         <div class="tech-pass-modal-id-row">
-          <div>
-            <div style="font-size: 13.5px; font-weight: 700; color: var(--text-primary);">${escapeHtml(fullName)}</div>
-            <div style="font-size: 11.5px; color: var(--text-secondary);">${escapeHtml(roleLabel)} · ${escapeHtml(dept)}</div>
+          <div class="tech-pass-modal-person">
+            <div class="tech-pass-modal-avatar">${avatarHtml}</div>
+            <div>
+              <div style="font-size: 13.5px; font-weight: 700; color: var(--text-primary);">${escapeHtml(fullName)}</div>
+              <div style="font-size: 11.5px; color: var(--text-secondary);">${escapeHtml(roleLabel)} · ${escapeHtml(dept)}</div>
+            </div>
           </div>
           <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
             <span class="tier-code-badge tier-code-${escapeHtml(clearance)}">${escapeHtml(clearance)}</span>
             <span class="status-badge ${stClass}">${escapeHtml(stLabel)}</span>
           </div>
         </div>
-        <p style="margin: 6px 0 0; font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+        <p style="margin: 8px 0 0; font-size: 11px; color: var(--text-muted); line-height: 1.45;">
           Present this live 30-second QR code to the Gate Controller at the venue entrance to record your Check-In or Check-Out.
         </p>
       `;
@@ -3977,6 +4007,82 @@
     if (!modal) return;
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
+  }
+
+  let pendingWithdrawAssignment = null;
+
+  function openAssignmentWithdrawModal(assignment, isWithdraw = false) {
+    const modal = document.getElementById('tech-asg-withdraw-modal');
+    if (!modal || !assignment) return;
+    pendingWithdrawAssignment = { assignment, isWithdraw: Boolean(isWithdraw) };
+
+    const titleEl = document.getElementById('tech-withdraw-modal-title');
+    const subEl = document.getElementById('tech-withdraw-modal-subtitle');
+    const sumEl = document.getElementById('tech-withdraw-event-summary');
+    const reasonLbl = document.getElementById('tech-withdraw-reason-label');
+    const reasonInp = document.getElementById('tech-withdraw-reason-input');
+    const errEl = document.getElementById('tech-withdraw-error');
+    const noticeEl = document.getElementById('tech-withdraw-notice');
+    const cancelBtn = document.getElementById('tech-withdraw-cancel-btn');
+    const confirmBtn = document.getElementById('tech-withdraw-confirm-btn');
+
+    if (titleEl) {
+      titleEl.textContent = isWithdraw ? 'Withdraw from Confirmed Assignment' : 'Decline Event Assignment';
+    }
+    if (subEl) {
+      subEl.textContent = isWithdraw
+        ? 'You already confirmed this event. Let your Tech Lead know why you need to withdraw.'
+        : 'Provide a quick reason for declining so your Tech Lead can assign a replacement.';
+    }
+    if (sumEl) {
+      sumEl.innerHTML = `
+        <div class="tech-withdraw-summary-top">
+          <strong>${escapeHtml(assignment.event_title || 'Scheduled Event')}</strong>
+          <span class="status-badge status-badge-purple-sm">${escapeHtml(assignment.branch_dept || 'Crew')}</span>
+        </div>
+        <div class="tech-withdraw-summary-meta">
+          ${escapeHtml([
+            assignment.event_location || '',
+            assignment.event_date || '',
+            `Call-Time ${assignment.call_time || '08:00'}`,
+            `Lead: ${assignment.tech_lead || 'Tech Lead'}`,
+          ].filter(Boolean).join(' · '))}
+        </div>
+      `;
+    }
+    if (reasonLbl) reasonLbl.textContent = isWithdraw ? 'Withdrawal Reason *' : 'Decline Reason *';
+    if (reasonInp) {
+      reasonInp.value = '';
+      reasonInp.placeholder = isWithdraw
+        ? 'Explain briefly why you need to withdraw from this shift...'
+        : 'Explain briefly why you are unavailable for this event...';
+    }
+    if (errEl) {
+      errEl.style.display = 'none';
+      errEl.textContent = '';
+    }
+    if (noticeEl) {
+      const leadName = assignment.tech_lead || 'your Tech Lead';
+      noticeEl.textContent = `Lead (${leadName}) will be notified immediately so the ${assignment.branch_dept || 'crew'} slot can be reassigned.`;
+    }
+    if (cancelBtn) cancelBtn.textContent = isWithdraw ? 'Keep Assignment' : 'Cancel';
+    if (confirmBtn) {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = isWithdraw ? 'Confirm Withdrawal' : 'Confirm Decline';
+    }
+
+    modal.querySelectorAll('.tech-reason-chip').forEach((chip) => chip.classList.remove('active'));
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => reasonInp?.focus(), 40);
+  }
+
+  function closeAssignmentWithdrawModal() {
+    const modal = document.getElementById('tech-asg-withdraw-modal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    pendingWithdrawAssignment = null;
   }
 
   function renderCrewDigitalPassCard() {
@@ -6915,10 +7021,12 @@
         metaParts.push(shift.respondedNote);
       }
 
+      const qrBtnSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><path d="M14 14h3v3h-3zM20 14v3h-1M14 20h3M20 20h.01"></path></svg>';
+      const withdrawSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>';
       const actionsHtml = isConfirmed
         ? `
-          ${shift.showPassQr ? `<button type="button" class="btn btn-primary-32 js-show-my-pass-qr" data-event-id="${escapeHtml(a.event_id)}">🪪 Show My Pass QR</button>` : ''}
-          ${shift.canWithdraw ? `<button type="button" class="btn btn-secondary-32-sm js-decline-my-assignment tech-asg-withdraw-btn" data-event-id="${escapeHtml(a.event_id)}" data-is-withdraw="1">Withdraw</button>` : ''}
+          ${shift.showPassQr ? `<button type="button" class="btn btn-primary-32 tech-asg-qr-btn js-show-my-pass-qr" data-event-id="${escapeHtml(a.event_id)}">${qrBtnSvg}<span>Show My Pass QR</span></button>` : ''}
+          ${shift.canWithdraw ? `<button type="button" class="btn btn-secondary-32-sm js-decline-my-assignment tech-asg-withdraw-btn" data-event-id="${escapeHtml(a.event_id)}" data-is-withdraw="1">${withdrawSvg}<span>Withdraw</span></button>` : ''}
           ${canJumpDispatch ? `<button type="button" class="btn btn-secondary-32-sm js-open-assignment-dispatch" data-event-id="${escapeHtml(a.event_id)}" data-tier-key="${escapeHtml(targetTier)}">Dispatch Flow →</button>` : ''}
         `
         : `
@@ -7015,13 +7123,10 @@
     });
     card.querySelectorAll('.js-decline-my-assignment').forEach((btn) => {
       btn.addEventListener('click', () => {
+        const evId = String(btn.getAttribute('data-event-id') || '');
         const isWithdraw = btn.getAttribute('data-is-withdraw') === '1';
-        const promptLabel = isWithdraw
-          ? 'Enter a brief reason for withdrawing from this confirmed event assignment:'
-          : 'Optional reason for declining this event assignment:';
-        const reason = window.prompt(promptLabel, 'Schedule conflict');
-        if (reason === null) return;
-        respondMyEventAssignment(btn.getAttribute('data-event-id'), 'declined', reason);
+        const matched = myAsg.find((item) => String(item.event_id) === evId) || { event_id: evId };
+        openAssignmentWithdrawModal(matched, isWithdraw);
       });
     });
     card.querySelectorAll('.js-show-my-pass-qr').forEach((btn) => {
@@ -9657,13 +9762,25 @@
       (state.activeScreen === 'events' && (target === 'stock-manager' || target === 'venue-security')) ||
       (state.activeScreen === 'users' && state.usersViewMode === 'matrix' && (target === 'access-matrix' || target === 'analytics'))
     );
-    const visible = isNavItemPermittedForCurrentUser(item);
+    const isTechWorkspaceNav = isCurrentUserTechnician() && target === 'terminals';
+    const visible = isTechWorkspaceNav ? true : isNavItemPermittedForCurrentUser(item);
+    const displayLabel = isTechWorkspaceNav ? 'Technician Workspace' : (item.label || target);
     const idAttr = item.dom_id ? `id="${escapeHtml(item.dom_id)}"` : '';
     const nodeAttr = item.node_id ? `data-node-id="${escapeHtml(item.node_id)}"` : '';
     const targetAttr = (!isShortcut && !isCustomUrl)
       ? `data-nav-target="${escapeHtml(target)}"`
       : `data-nav-action="${escapeHtml(target)}"`;
-    const badge = getNavBadgeValueAndId(item);
+    let badge = getNavBadgeValueAndId(item);
+    if (isTechWorkspaceNav) {
+      const pendingAsgCount = (state.myPendingAssignments || []).filter((a) => String(a.confirmation_status || 'pending').toLowerCase() === 'pending').length;
+      if (pendingAsgCount > 0) {
+        badge = {
+          id: 'sidebar-tech-pending-badge',
+          style: 'background: #fef3c7; color: #b45309;',
+          text: String(pendingAsgCount),
+        };
+      }
+    }
     const badgeHtml = badge
       ? `<span class="nav-item-count${badge.className ? ` ${escapeHtml(badge.className)}` : ''}"${badge.id ? ` id="${escapeHtml(badge.id)}"` : ''}${badge.style ? ` style="${escapeHtml(badge.style)}"` : ''}>${escapeHtml(badge.text)}</span>`
       : '';
@@ -9708,9 +9825,9 @@
     }
 
     return `
-      <button type="button" class="nav-item${isActive ? ' active' : ''}" ${idAttr} ${targetAttr} data-nav-group="${escapeHtml(item.nav_group || 'main')}" data-nav-key="${escapeHtml(item.nav_key)}" data-nav-id="${Number(item.id)}" ${nodeAttr} title="${escapeHtml(item.label)}" style="display: ${visible ? 'flex' : 'none'}; opacity: 1; filter: none; cursor: pointer;" ${visible ? '' : 'data-restricted="true" tabindex="-1"'}>
+      <button type="button" class="nav-item${isActive ? ' active' : ''}" ${idAttr} ${targetAttr} data-nav-group="${escapeHtml(item.nav_group || 'main')}" data-nav-key="${escapeHtml(item.nav_key)}" data-nav-id="${Number(item.id)}" ${nodeAttr} title="${escapeHtml(displayLabel)}" style="display: ${visible ? 'flex' : 'none'}; opacity: 1; filter: none; cursor: pointer;" ${visible ? '' : 'data-restricted="true" tabindex="-1"'}>
         ${renderNavItemIconHtml(item, isActive)}
-        <span class="nav-item-label">${escapeHtml(item.label)}</span>
+        <span class="nav-item-label">${escapeHtml(displayLabel)}</span>
         ${badgeHtml}
       </button>
     `;
@@ -9725,15 +9842,39 @@
     const isMainEnabled = cfg.main_nav_enabled !== false;
     const isWorkspaceEnabled = cfg.workspace_nav_enabled !== false;
     const isAdmin = isCurrentUserAdmin();
+    const isTechUser = isCurrentUserTechnician();
     const allItems = Array.isArray(cfg.items) ? cfg.items : [];
     const sortByOrder = (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || Number(a.id || 0) - Number(b.id || 0);
 
     if (navGroup) {
-      const mainItems = allItems.filter((it) => (it.nav_group || 'main') === 'main').sort(sortByOrder);
+      let mainItems = allItems.filter((it) => (it.nav_group || 'main') === 'main').sort(sortByOrder);
+      if (isTechUser && mainItems.length > 0) {
+        const termIdx = mainItems.findIndex((it) => String(it.nav_target) === 'terminals');
+        if (termIdx === -1) {
+          mainItems = [{
+            id: 0,
+            nav_group: 'main',
+            nav_key: 'terminals',
+            label: 'Technician Workspace',
+            nav_target: 'terminals',
+            dom_id: 'nav-terminals-btn',
+            icon: 'assets/scan-line-13.svg',
+            active_icon: '',
+            icon_id: 'nav-icon-terminals',
+            badge_type: 'none',
+            allowed_roles: 'all',
+            is_enabled: 1,
+            sort_order: 0,
+          }, ...mainItems];
+        } else if (termIdx > 0) {
+          const [termItem] = mainItems.splice(termIdx, 1);
+          mainItems = [termItem, ...mainItems];
+        }
+      }
       if (mainItems.length > 0) {
         navGroup.innerHTML = mainItems.map(buildSidebarNavButtonHtml).join('');
       }
-      navGroup.style.display = isMainEnabled ? 'flex' : 'none';
+      navGroup.style.display = (isMainEnabled || isTechUser) ? 'flex' : 'none';
     }
 
     if (wsGroup) {
@@ -23378,6 +23519,64 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && passModal && passModal.classList.contains('open')) {
         closeTechnicianPassQrModal();
+      }
+    });
+
+    // Technician Assignment Withdraw / Decline Modal bindings
+    const withdrawModal = document.getElementById('tech-asg-withdraw-modal');
+    const withdrawReasonInp = document.getElementById('tech-withdraw-reason-input');
+    const withdrawErrEl = document.getElementById('tech-withdraw-error');
+    const withdrawConfirmBtn = document.getElementById('tech-withdraw-confirm-btn');
+    document.getElementById('close-tech-withdraw-modal')?.addEventListener('click', closeAssignmentWithdrawModal);
+    document.getElementById('tech-withdraw-cancel-btn')?.addEventListener('click', closeAssignmentWithdrawModal);
+    if (withdrawModal) {
+      withdrawModal.addEventListener('click', (e) => {
+        if (e.target === withdrawModal) closeAssignmentWithdrawModal();
+      });
+      withdrawModal.querySelectorAll('.tech-reason-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          const val = chip.getAttribute('data-reason') || '';
+          withdrawModal.querySelectorAll('.tech-reason-chip').forEach((c) => c.classList.toggle('active', c === chip));
+          if (withdrawReasonInp) {
+            withdrawReasonInp.value = val;
+            withdrawReasonInp.focus();
+          }
+          if (withdrawErrEl) {
+            withdrawErrEl.style.display = 'none';
+            withdrawErrEl.textContent = '';
+          }
+        });
+      });
+    }
+    if (withdrawConfirmBtn) {
+      withdrawConfirmBtn.addEventListener('click', async () => {
+        if (!pendingWithdrawAssignment || !pendingWithdrawAssignment.assignment) {
+          closeAssignmentWithdrawModal();
+          return;
+        }
+        const reasonVal = (withdrawReasonInp?.value || '').trim();
+        if (reasonVal.length < 3) {
+          if (withdrawErrEl) {
+            withdrawErrEl.textContent = 'Please select a quick reason or type at least 3 characters.';
+            withdrawErrEl.style.display = 'block';
+          }
+          withdrawReasonInp?.focus();
+          return;
+        }
+        const evId = pendingWithdrawAssignment.assignment.event_id;
+        withdrawConfirmBtn.disabled = true;
+        withdrawConfirmBtn.textContent = 'Submitting…';
+        try {
+          await respondMyEventAssignment(evId, 'declined', reasonVal);
+          closeAssignmentWithdrawModal();
+        } finally {
+          withdrawConfirmBtn.disabled = false;
+        }
+      });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && withdrawModal && withdrawModal.classList.contains('open')) {
+        closeAssignmentWithdrawModal();
       }
     });
 
