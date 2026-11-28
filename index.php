@@ -73,6 +73,7 @@ try {
                     'event_coordinator' => 'Event Coordinator',
                     'tech_lead' => 'Technical Lead',
                     'technical_lead' => 'Technical Lead',
+                    'security_manager' => 'Security Manager',
                     'stock_manager' => 'Site Manager',
                     'stock_controller' => 'Gate Controller',
                     'technician' => 'Technician',
@@ -85,7 +86,7 @@ try {
                 : (strpos($clrRaw, 'L3') === 0 ? 'L3'
                 : (strpos($clrRaw, 'L2') === 0 ? 'L2'
                 : (strpos($clrRaw, 'L1') === 0 ? 'L1'
-                : (in_array($roleKey, ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'technical_lead', 'stock_manager'], true) ? 'L4' : ($roleKey === 'stock_controller' ? 'L3' : 'L2')))));
+                : (in_array($roleKey, ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'technical_lead', 'security_manager', 'stock_manager'], true) ? 'L4' : ($roleKey === 'stock_controller' ? 'L3' : 'L2')))));
             $avatarImgUrl = resolveProfileImageUrl($uRow['profile_image'] ?? null);
             $initials = computeInitials($displayName);
             $badgeCode = trim((string) ($uRow['badge_code'] ?? '')) ?: ('REW-BADGE-' . str_pad((string) $authUid, 4, '0', STR_PAD_LEFT));

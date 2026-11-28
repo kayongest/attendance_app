@@ -2358,7 +2358,7 @@
 
     // 7. Pending Tier 4 Support Staff Requests & Requirements alerts for Supervisors
     const pendingSupport = (state.eventSupportRequests || []).filter((r) => String(r.status) === 'pending');
-    if (pendingSupport.length > 0 && (isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand() || isCurrentUserTechLead())) {
+    if (pendingSupport.length > 0 && (isCurrentUserAdmin() || isCurrentUserSecurityManager() || isCurrentUserStockManager() || isCurrentUserEventCommand() || isCurrentUserTechLead())) {
       const firstSup = pendingSupport[0];
       const supKey = `support-req-${firstSup.id}`;
       items.unshift({
@@ -2404,7 +2404,7 @@
           type: 'dispatch',
           iconSvg: 'assets/status-dot-red-5.svg',
           title: `Crew Decline Needs Action: ${ev.title || ev.name}`,
-          desc: `${count} declined Tier 3 assignment(s) blocking Tier 4 · Click to open Dispatch Flow`,
+          desc: `${count} declined Tier 3 assignment(s) blocking Tier 5 Readiness · Click to open Dispatch Flow`,
           time: ev.start_date || ev.date || 'Action needed',
           unread: !state.readNotifIds.has(decKey),
           targetScreen: 'dispatch-flow',
@@ -2435,7 +2435,7 @@
 
     // 8. Incoming Tier 1 Dispatch Requests Awaiting Tech Lead Approval
     const pendingTlApprovals = (state.checkpoints?.event_venues || []).filter((ev) =>
-      isEventTechLeadAssigned(ev) && !isEventApprovedByTechLead(ev) && canCurrentUserApproveTechLead(ev)
+      Number(ev?.is_active ?? 1) !== 0 && isEventTechLeadAssigned(ev) && !isEventApprovedByTechLead(ev) && canCurrentUserApproveTechLead(ev)
     );
     if (pendingTlApprovals.length > 0) {
       pendingTlApprovals.slice(0, 5).forEach((ev) => {
@@ -2457,6 +2457,64 @@
           actionHint: 'Dispatch Flow · Approve Tier 1 →',
         });
       });
+    }
+
+    // 8b. Parallel Tier 4 Support Requests Awaiting Security Manager Approval or Support Staff Selection
+    const activeSupportEvents = (state.checkpoints?.event_venues || []).filter((ev) =>
+      Number(ev?.is_active ?? 1) !== 0 && isEventVisibleToCurrentUser(ev)
+    );
+    const pendingSmApprovals = activeSupportEvents.filter((ev) =>
+      isEventSecurityManagerAssigned(ev) && !isEventApprovedBySecurityManager(ev) && canCurrentUserApproveSecurityManager(ev)
+    );
+    pendingSmApprovals.slice(0, 5).forEach((ev) => {
+      const evKey = String(ev.raw_id || ev.id || '');
+      const smKey = `sm-approve-${evKey}`;
+      const orig = getEventRequestOriginatorInfo(ev);
+      const supNeed = Number(ev.requirements?.branches?.['Support Staff'] || 0);
+      items.unshift({
+        id: smKey,
+        type: 'dispatch',
+        iconSvg: 'assets/send-15.svg',
+        title: `Support Dispatch Approval Needed: ${ev.title || ev.name}`,
+        desc: `From ${orig.name} (${orig.roleLabel})${supNeed > 0 ? ` · ${supNeed} Support Staff requested` : ''} · Approve & confirm Support Staff`,
+        time: ev.start_date || ev.date || 'Awaiting Security Manager',
+        unread: !state.readNotifIds.has(smKey),
+        targetScreen: 'dispatch-flow',
+        targetScrollId: 'dispatch-flow-diagram',
+        targetEventId: evKey,
+        targetTierKey: 'tier4_support',
+        actionHint: 'Dispatch Flow · Tier 4 →',
+      });
+    });
+
+    if (isCurrentUserSecurityManager()) {
+      let smStaffCount = 0;
+      for (const ev of activeSupportEvents) {
+        if (smStaffCount >= 3) break;
+        if (!isEventApprovedBySecurityManager(ev) || !canCurrentUserAssignSupportStaff(ev)) continue;
+        const evKey = String(ev.raw_id || ev.id || '');
+        if (!evKey) continue;
+        const ctxEv = getDispatchContextData(evKey);
+        const tsEv = ctxEv.tierStates || {};
+        if (tsEv.metrics?.hasAnySupportScope && !tsEv.tier4_support?.approved) {
+          smStaffCount++;
+          const stKey = `sm-staffing-${evKey}`;
+          items.unshift({
+            id: stKey,
+            type: 'dispatch',
+            iconSvg: 'assets/nav-team-members.svg',
+            title: `Tier 4 Support Staffing Ready: ${ev.title || ev.name}`,
+            desc: `Approved · Select & confirm Support Staff (${tsEv.metrics?.supportConfirmedCount || 0}/${tsEv.metrics?.supportReqNeed || 'needed'}) in Dispatch Flow`,
+            time: ev.start_date || ev.date || 'Tier 4 active',
+            unread: !state.readNotifIds.has(stKey),
+            targetScreen: 'dispatch-flow',
+            targetScrollId: 'dispatch-flow-diagram',
+            targetEventId: evKey,
+            targetTierKey: 'tier4_support',
+            actionHint: 'Dispatch Flow · Confirm Support →',
+          });
+        }
+      }
     }
 
     // 9. Disabled Events Audit Alert for Administrators (and visible owners)
@@ -2604,15 +2662,28 @@
     return role === 'tech_lead' || role === 'technical_lead';
   }
 
+  function isCurrentUserSecurityManager() {
+    if (!state.currentUser) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return role === 'security_manager' || isCurrentUserAdmin();
+  }
+
+  function isCurrentUserSecurityManagerOnly() {
+    if (!state.currentUser || isCurrentUserAdmin()) return false;
+    const role = (state.currentUser.role || '').toLowerCase();
+    return role === 'security_manager';
+  }
+
   function isCurrentUserEventScopedRole() {
     if (!state.currentUser || isCurrentUserAdmin()) return false;
     const role = (state.currentUser.role || '').toLowerCase();
-    return role === 'tech_lead' || role === 'technical_lead' || role === 'project_manager' || role === 'event_coordinator';
+    return role === 'tech_lead' || role === 'technical_lead' || role === 'security_manager' || role === 'project_manager' || role === 'event_coordinator';
   }
 
   const IGNORED_LEADERSHIP_PLACEHOLDERS = new Set([
     'tech lead',
     'technical lead',
+    'security manager',
     'operations pm',
     'project manager',
     'event coordinator',
@@ -2643,6 +2714,7 @@
     };
 
     const tlVal = String(ev.tech_lead || '');
+    const smVal = String(ev.security_manager || '');
     const pmVal = String(ev.project_manager || '');
     const ecVal = String(ev.event_coordinator || '');
 
@@ -2651,6 +2723,13 @@
       // Only fall back to creator/approver while no specific Tech Lead is assigned on the event
       if (isPlaceholderLeadershipValue(tlVal) && curId > 0) {
         return Number(ev.created_by_id || 0) === curId || Number(ev.tech_lead_approved_by || 0) === curId;
+      }
+      return false;
+    }
+    if (curRole === 'security_manager') {
+      if (matchesIdentity(smVal)) return true;
+      if (isPlaceholderLeadershipValue(smVal) && curId > 0) {
+        return Number(ev.created_by_id || 0) === curId || Number(ev.security_manager_approved_by || 0) === curId;
       }
       return false;
     }
@@ -2684,7 +2763,7 @@
   function isCurrentUserTechnician() {
     if (!state.currentUser) return false;
     const role = (state.currentUser.role || '').toLowerCase();
-    return role === 'technician' || (!isCurrentUserAdmin() && !isCurrentUserEventCommand() && !isCurrentUserTechLead() && !isCurrentUserStockManager() && !isCurrentUserStockController());
+    return role === 'technician' || (!isCurrentUserAdmin() && !isCurrentUserEventCommand() && !isCurrentUserTechLead() && !isCurrentUserSecurityManager() && !isCurrentUserStockManager() && !isCurrentUserStockController());
   }
 
   function isScreenPermittedForCurrentUser(screenKey) {
@@ -2709,6 +2788,7 @@
     const isAdmin = isCurrentUserAdmin();
     const isManager = (rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator') && !isAdmin;
     const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isAdmin;
+    const isSecMgr = (rawRole === 'security_manager') && !isAdmin;
     const isStockMgr = (rawRole === 'stock_manager') && !isAdmin;
     const isStockCtrl = (rawRole === 'stock_controller');
 
@@ -2720,6 +2800,9 @@
     }
     if (isTech) {
       return ['overview', 'events', 'create-event', 'dispatch-flow', 'users', 'attendees', 'terminals', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
+    }
+    if (isSecMgr) {
+      return ['overview', 'events', 'dispatch-flow', 'attendees', 'terminals', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
     }
     if (isStockMgr) {
       return ['overview', 'events', 'dispatch-flow', 'attendees', 'terminals', 'shift-relief', 'calltime', 'rollcall', 'standalone-portals', 'settings'].includes(normalizedKey);
@@ -2760,7 +2843,7 @@
     if (!state.currentUser) return false;
     const rawRole = (state.currentUser.role || '').toLowerCase();
     const isManager = rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator';
-    return isCurrentUserAdmin() || isManager || isCurrentUserTechLead() || isCurrentUserStockManager();
+    return isCurrentUserAdmin() || isManager || isCurrentUserTechLead() || isCurrentUserSecurityManager() || isCurrentUserStockManager();
   }
 
   function canCurrentUserAssignEvents() {
@@ -2790,6 +2873,7 @@
     if (!bannerEl) return;
     const isAdmin = isCurrentUserAdmin();
     const isTech = (state.currentUser?.role || '').toLowerCase() === 'tech_lead' && !isAdmin;
+    const isSecMgr = (state.currentUser?.role || '').toLowerCase() === 'security_manager' && !isAdmin;
     const isStockMgr = (state.currentUser?.role || '').toLowerCase() === 'stock_manager' && !isAdmin;
 
     const iconEl = document.getElementById('users-page-delegation-icon');
@@ -2809,6 +2893,19 @@
         pillEl.textContent = 'Site Manager · L1–L3';
         pillEl.style.background = 'rgba(217, 119, 6, 0.15)';
         pillEl.style.color = '#b45309';
+      }
+    } else if (isSecMgr) {
+      bannerEl.style.display = 'flex';
+      bannerEl.style.background = 'rgba(13, 148, 136, 0.08)';
+      bannerEl.style.border = '1px solid rgba(13, 148, 136, 0.3)';
+      bannerEl.style.color = '#115e59';
+      if (iconEl) iconEl.textContent = '🛡️';
+      if (titleEl) titleEl.textContent = 'Security Manager Delegation Active';
+      if (descEl) descEl.innerHTML = 'You are authorized to review Tier 4 Support requests, confirm Support Staff deployments, and onboard Support &amp; Security personnel with <strong>Level 1 or Level 2</strong> clearance.';
+      if (pillEl) {
+        pillEl.textContent = 'Security Manager · L1 / L2';
+        pillEl.style.background = 'rgba(13, 148, 136, 0.15)';
+        pillEl.style.color = '#0f766e';
       }
     } else if (isTech) {
       bannerEl.style.display = 'flex';
@@ -2834,9 +2931,10 @@
     const isAdmin = isCurrentUserAdmin();
     const isManager = (rawRole === 'manager' || rawRole === 'project_manager' || rawRole === 'event_coordinator') && !isAdmin;
     const isTech = (rawRole === 'tech_lead' || rawRole === 'technical_lead') && !isAdmin;
+    const isSecMgr = (rawRole === 'security_manager') && !isAdmin;
     const isStockMgr = (rawRole === 'stock_manager') && !isAdmin;
     const isStockCtrl = (rawRole === 'stock_controller');
-    const isFieldCrew = !isAdmin && !isManager && !isTech && !isStockMgr && !isStockCtrl;
+    const isFieldCrew = !isAdmin && !isManager && !isTech && !isSecMgr && !isStockMgr && !isStockCtrl;
     const isTechCrew = isFieldCrew;
 
     document.body.setAttribute('data-user-role', rawRole);
@@ -2876,8 +2974,8 @@
     const navTerminals = document.getElementById('nav-terminals-btn') || document.querySelector('.sidebar .nav-item[data-nav-target="terminals"]');
 
     if (!state.navigationConfig || !Array.isArray(state.navigationConfig.items) || state.navigationConfig.items.length === 0) {
-      setVis(navOverview, isAdmin || isManager || isTech || isStockMgr);
-      setVis(navEvents, isAdmin || isManager || isTech || isStockMgr || isStockCtrl);
+      setVis(navOverview, isAdmin || isManager || isTech || isSecMgr || isStockMgr);
+      setVis(navEvents, isAdmin || isManager || isTech || isSecMgr || isStockMgr || isStockCtrl);
       setVis(navUsers, isAdmin || isManager || isTech);
       setVis(navAttendees, true);
       setVis(navTerminals, true);
@@ -2891,7 +2989,7 @@
     // Sub-tabs on Checkpoints & Venues Hub
     const cpHubTabVenues = document.getElementById('cp-hub-tab-venues');
     const cpHubTabWarehouses = document.getElementById('cp-hub-tab-warehouses');
-    const canSeeVenuesHub = isAdmin || isManager || isTech;
+    const canSeeVenuesHub = isAdmin || isManager || isTech || isSecMgr;
     if (cpHubTabVenues) cpHubTabVenues.style.display = canSeeVenuesHub ? 'inline-flex' : 'none';
     if (cpHubTabWarehouses) cpHubTabWarehouses.style.display = (isAdmin || isManager || isStockMgr || isStockCtrl) ? 'inline-flex' : 'none';
     if (!canSeeVenuesHub && state.eventsHubTab === 'venues') {
@@ -2914,8 +3012,8 @@
       cpNav.style.display = 'flex';
       // Shift Relief & Swaps: Admin, Manager, Stock Manager, Stock Controller
       setVis(btnShiftRelief, isAdmin || isManager || isStockMgr || isStockCtrl);
-      // Set Call Time: Admin, Manager, Project Manager, Event Coordinator, Tech Lead, Stock Manager
-      setVis(btnCallTime, isAdmin || isManager || isTech || isStockMgr);
+      // Set Call Time: Admin, Manager, Project Manager, Event Coordinator, Tech Lead, Security Manager, Stock Manager
+      setVis(btnCallTime, isAdmin || isManager || isTech || isSecMgr || isStockMgr);
       // On-Site Roll-Call: Read-only directory visible to all authenticated personnel
       setVis(btnRollCall, true);
       // Station Lock PIN: Admin ONLY
@@ -2923,9 +3021,9 @@
       // Reset Today's Scans: Admin ONLY
       setVis(btnResetDemo, isAdmin);
       // Unified Standalone Gates & On-Site Portal Links
-      setVis(btnOnsiteShare, isAdmin || isManager || isTech || isStockMgr || isStockCtrl);
+      setVis(btnOnsiteShare, isAdmin || isManager || isTech || isSecMgr || isStockMgr || isStockCtrl);
       // Settings & Interactive System Flow Explorer
-      const settingsAllowed = isAdmin || isManager || isTech || isStockMgr || isStockCtrl;
+      const settingsAllowed = isAdmin || isManager || isTech || isSecMgr || isStockMgr || isStockCtrl;
       setVis(grpSettings || btnSettings, settingsAllowed);
       if (btnSettings) setVis(btnSettings, settingsAllowed);
     }
@@ -2985,6 +3083,8 @@
         bcRoot.textContent = 'aBility Site Hub (Site Manager)';
       } else if (isTech) {
         bcRoot.textContent = 'aBility Production Deck (Tech Lead)';
+      } else if (isSecMgr) {
+        bcRoot.textContent = 'aBility Security Deck (Security Manager)';
       } else if (isManager) {
         bcRoot.textContent = 'aBility Operations Deck (Project Manager)';
       } else if (isFieldCrew) {
@@ -3025,6 +3125,9 @@
       } else if (isTech) {
         supportTitle.textContent = 'Tech Lead Operations';
         supportDesc.textContent = 'Event rosters, call time scheduling & L1/L2 technical onboarding.';
+      } else if (isSecMgr) {
+        supportTitle.textContent = 'Security Manager Operations';
+        supportDesc.textContent = 'Tier 4 Support Staff approvals, deployment confirmations & venue roll-call.';
       } else if (isStockMgr) {
         supportTitle.textContent = 'Site Manager Hub';
         supportDesc.textContent = 'Facility checkpoints, Gate Controller relief approvals & site attendance.';
@@ -6300,7 +6403,7 @@
   }
 
   function switchEventsHubTab(tab = 'directory') {
-    const canSeeVenuesHub = isCurrentUserAdmin() || canCurrentUserAssignEvents();
+    const canSeeVenuesHub = isCurrentUserAdmin() || canCurrentUserAssignEvents() || isCurrentUserSecurityManager();
     const canSeeWhHub = isCurrentUserAdmin() || canCurrentUserManageWarehouses() || isCurrentUserStockController();
     let safeTab = ['directory', 'warehouses', 'venues'].includes(tab) ? tab : 'directory';
     if (safeTab === 'venues' && !canSeeVenuesHub) safeTab = 'directory';
@@ -8201,13 +8304,52 @@
     return techLeadRoleKeys.has(userRole) || userRoleDisplay === 'tech lead' || userRoleDisplay === 'technical lead';
   }
 
+  function isUserAssignedSecurityManagerRole(u) {
+    if (!u || Number(u.is_active ?? 1) === 0) return false;
+    const smRoleKeys = new Set(['security_manager']);
+    (state.roles || []).forEach((r) => {
+      const rKey = String(r?.role_key || '').trim().toLowerCase();
+      const rTitle = String(r?.title || '').trim().toLowerCase();
+      if (rKey === 'security_manager' || rTitle.includes('security manager')) {
+        smRoleKeys.add(rKey);
+      }
+    });
+    const userRole = String(u.role || '').trim().toLowerCase();
+    const userRoleDisplay = String(u.role_display || '').trim().toLowerCase();
+    return smRoleKeys.has(userRole) || userRoleDisplay === 'security manager';
+  }
+
+  function isUserEligibleSupportStaff(u) {
+    if (!u || Number(u.is_active ?? 1) === 0) return false;
+    const role = String(u.role || '').trim().toLowerCase();
+    const dept = String(u.department || '').trim().toLowerCase();
+    const excludedRoles = new Set([
+      'admin', 'administrator', 'manager', 'project_manager', 'event_coordinator',
+      'tech_lead', 'technical_lead', 'security_manager', 'stock_manager', 'stock_controller',
+    ]);
+    if (excludedRoles.has(role) || isUserAssignedTechLeadRole(u) || isUserAssignedSecurityManagerRole(u)) {
+      return false;
+    }
+    const coreTechDepts = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
+    const canon = resolveCrewCanonicalDepartment(u);
+    if (coreTechDepts.includes(canon)) return false;
+    return [
+      'driver', 'security', 'user', 'support_staff', 'operations', 'operations_crew',
+      'runner', 'venue_crew', 'cleaning', 'catering', 'logistics', 'decorator',
+    ].includes(role) || dept.includes('support') || dept.includes('logistic') || dept.includes('secur');
+  }
+
   /**
-   * Populates a Technical Lead (strict system role filter) or Project Manager `<select>`.
+   * Populates a Technical Lead (strict system role filter), Security Manager (strict system role filter),
+   * or Project Manager `<select>`.
    */
   function populateLeadershipSelect(selectEl, currentVal = '', mode = 'pm') {
     if (!selectEl) return;
     const isTechLeadMode = mode === 'techlead';
-    const placeholder = isTechLeadMode ? '-- Select Event Tech Lead --' : '-- Select Project Manager --';
+    const isSecMgrMode = mode === 'securitymanager';
+    const placeholder = isTechLeadMode
+      ? '-- Select Event Tech Lead --'
+      : (isSecMgrMode ? '-- No Security Manager (Optional) --' : '-- Select Project Manager --');
 
     const crewList = (state.crew || []).filter((u) => {
       if (!u) return false;
@@ -8234,6 +8376,21 @@
         html += '<option value="" disabled>-- No active users assigned the Tech Lead role --</option>';
       }
       if (currentVal && !matched) {
+        html += `<option value="${escapeHtml(currentVal)}" selected>${escapeHtml(currentVal)} (Current)</option>`;
+      }
+      selectEl.innerHTML = html;
+      return;
+    }
+
+    if (isSecMgrMode) {
+      const roleFiltered = crewList.filter((u) => isUserAssignedSecurityManagerRole(u));
+      let html = `<option value="">${placeholder}</option>`;
+      if (roleFiltered.length > 0) {
+        html += `<optgroup label="System-Assigned Security Managers">${roleFiltered.map(buildOpt).join('')}</optgroup>`;
+      } else {
+        html += '<option value="" disabled>-- No active users assigned the Security Manager role --</option>';
+      }
+      if (currentVal && !matched && !isPlaceholderLeadershipValue(currentVal)) {
         html += `<option value="${escapeHtml(currentVal)}" selected>${escapeHtml(currentVal)} (Current)</option>`;
       }
       selectEl.innerHTML = html;
@@ -10730,7 +10887,7 @@
   function resolveRollCallRoleCategory(rc) {
     if (rc && rc.role_category) return rc.role_category;
     const r = String((rc && rc.role) || (rc && rc.role_display) || '').toLowerCase();
-    if (r.includes('stock_manager') || r.includes('site manager') || r.includes('admin') || r.includes('project_manager') || r.includes('tech_lead') || r.includes('technical lead') || r === 'manager') {
+    if (r.includes('stock_manager') || r.includes('site manager') || r.includes('admin') || r.includes('project_manager') || r.includes('tech_lead') || r.includes('technical lead') || r.includes('security_manager') || r.includes('security manager') || r === 'manager') {
       return 'supervisor';
     }
     if (r.includes('stock_controller') || r.includes('gate controller')) {
@@ -10852,7 +11009,11 @@
       const ctrlLabel = assignedCtrls.length > 0
         ? assignedCtrls.map((u) => escapeHtml(u.full_name)).join(', ')
         : (v.lead_name ? escapeHtml(v.lead_name) : 'Unassigned');
-      const crudRow = canManageVenues ? buildEventCardCrudButtonsHtml(v, { compact: true }) : '';
+      const crudRow = canManageVenues
+        ? buildEventCardCrudButtonsHtml(v, { compact: true })
+        : (isCurrentUserSecurityManagerOnly() && !isDisabled
+          ? `<button type="button" class="btn btn-secondary-32 js-vs-edit-venue" data-venue-id="${escapeHtml(String(v.raw_id || v.id))}" style="height: 28px; font-size: 11px;">Confirm Support Staff</button>`
+          : '');
       const disabledBanner = buildEventDisabledBannerHtml(v, '2px');
       const thumbStrip = v.image
         ? `<div style="height: 88px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: #312e81;"><img src="${escapeHtml(v.image)}" alt="${escapeHtml(v.title || v.name)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.parentElement.style.display='none';" /></div>`
@@ -10874,6 +11035,7 @@
           <div style="font-size: 11.5px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 3px;">
             <span>Call Time: <strong>${escapeHtml(v.call_time || '08:00')} CAT</strong> · Assigned: <strong>${Number(v.assigned_count || 0)}</strong></span>
             <span>Gate Controller / Lead: <strong>${ctrlLabel}</strong></span>
+            ${isEventSecurityManagerAssigned(v) ? `<span>Security Manager (Tier 4): <strong>${escapeHtml(v.security_manager)}</strong>${isEventApprovedBySecurityManager(v) ? ' · ✓ Approved' : ' · Pending'}</span>` : ''}
           </div>
           ${disabledBanner}
           <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 6px;">
@@ -11019,7 +11181,7 @@
     return 'General';
   }
 
-  function buildStructuredEventRoster(pm, techLead, crewIds) {
+  function buildStructuredEventRoster(pm, techLead, crewIds, securityManager = '') {
     const idSet = new Set((crewIds || []).map(Number));
     const depts = { Video: [], Sound: [], Lighting: [], Electrical: [], Rigging: [], Interpretation: [] };
     const supportStaff = [];
@@ -11036,6 +11198,7 @@
     return {
       project_manager: pm,
       tech_lead: techLead,
+      security_manager: securityManager,
       departments: depts,
       support_staff: supportStaff,
     };
@@ -11044,12 +11207,14 @@
   function getVenueCrudDepartmentBuckets(selectedIdSet = venueCrudSelectedCrewIds) {
     const bucketMap = new Map();
     CORE_DISPATCH_DEPTS.forEach((d) => bucketMap.set(d, []));
+    const coreTechDepts = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
     (state.crew || []).forEach((c) => {
       if (!c) return;
       const uid = Number(c.id);
       const isActive = Number(c.is_active ?? 1) !== 0;
       if (!isActive && !(selectedIdSet && selectedIdSet.has(uid))) return;
-      const dept = resolveCrewCanonicalDepartment(c);
+      const canon = resolveCrewCanonicalDepartment(c);
+      const dept = (!coreTechDepts.includes(canon) && isUserEligibleSupportStaff(c)) ? 'Support Staff' : canon;
       if (!bucketMap.has(dept)) bucketMap.set(dept, []);
       bucketMap.get(dept).push(c);
     });
@@ -11066,6 +11231,7 @@
   }
 
   let venueCrudCurrentTargets = {};
+  let venueCrudCurrentSupportNotes = '';
 
   function isEventTechLeadAssigned(ev) {
     if (!ev) return false;
@@ -11078,6 +11244,42 @@
     return Boolean(ev.tech_lead_approved);
   }
 
+  function isEventSecurityManagerAssigned(ev) {
+    if (!ev) return false;
+    const sm = String(ev.security_manager || '').trim();
+    return !isPlaceholderLeadershipValue(sm);
+  }
+
+  function isEventApprovedBySecurityManager(ev) {
+    if (!ev) return true;
+    return Boolean(ev.security_manager_approved);
+  }
+
+  function canCurrentUserApproveSecurityManager(ev) {
+    if (!ev) return false;
+    if (isCurrentUserAdmin()) return true;
+    const role = String(state.currentUser?.role || '').toLowerCase();
+    if (role !== 'security_manager') return false;
+    const sm = String(ev.security_manager || '').trim().toLowerCase();
+    if (isPlaceholderLeadershipValue(sm)) return true;
+    const myName = String(state.currentUser?.full_name || '').trim().toLowerCase();
+    const myUser = String(state.currentUser?.username || '').trim().toLowerCase();
+    return (myName !== '' && myName === sm) || (myUser !== '' && myUser === sm);
+  }
+
+  function canCurrentUserAssignSupportStaff(ev) {
+    if (!ev) return false;
+    if (isCurrentUserAdmin()) return true;
+    const role = String(state.currentUser?.role || '').toLowerCase();
+    if (role === 'security_manager') {
+      return canCurrentUserApproveSecurityManager(ev);
+    }
+    if ((role === 'project_manager' || role === 'event_coordinator') && !isEventSecurityManagerAssigned(ev)) {
+      return true;
+    }
+    return false;
+  }
+
   function isDispatchPipelineLockedAfterTier1(ev) {
     if (!ev) return false;
     return !isEventApprovedByTechLead(ev);
@@ -11085,7 +11287,8 @@
 
   /**
    * Computes progressive unlock and approval states across all 5 Dispatch Flow tiers.
-   * Each downstream tier stays locked until prerequisite actions/approvals on the request are met.
+   * Technical Track (Tier 2 -> Tier 3) and Support Track (Tier 4: Security Manager -> Support Staff)
+   * execute in parallel from Tier 1 and converge at Tier 5 (Readiness & Gate Sync).
    */
   function computeDispatchTierStates(activeEv, metrics = {}) {
     if (!activeEv) {
@@ -11101,9 +11304,12 @@
           techDeclinedCount: 0,
           techTotal: 0,
           confirmedDeptNotesCount: 0,
+          hasSecurityManager: false,
+          isSmApproved: true,
           supportReqNeed: 0,
           pendingSupportCount: 0,
           supportConfirmedCount: 0,
+          supportDeclinedCount: 0,
           supportTotal: 0,
           hasAnySupportScope: false,
         },
@@ -11121,6 +11327,8 @@
 
     const hasTechLead = Boolean(metrics.hasTechLead ?? isEventTechLeadAssigned(activeEv));
     const isTlApproved = Boolean(metrics.isApproved ?? isEventApprovedByTechLead(activeEv));
+    const hasSecurityManager = Boolean(metrics.hasSecurityManager ?? isEventSecurityManagerAssigned(activeEv));
+    const isSmApproved = Boolean(metrics.isSmApproved ?? isEventApprovedBySecurityManager(activeEv));
 
     const deptCountsByBranch = {};
     deptNames.forEach((d) => { deptCountsByBranch[d] = 0; });
@@ -11143,9 +11351,9 @@
     const supportConfirmedCount = supportList.filter((m) => String(asgMap[String(m.id)]?.confirmation_status || '').toLowerCase() === 'confirmed').length;
     const supportDeclinedCount = supportList.filter((m) => String(asgMap[String(m.id)]?.confirmation_status || '').toLowerCase() === 'declined').length;
     const supportAllConfirmed = supportList.length > 0 && supportConfirmedCount === supportList.length && supportDeclinedCount === 0;
-    const hasAnySupportScope = supportReqNeed > 0 || supportReqs.length > 0 || supportList.length > 0;
+    const hasAnySupportScope = hasSecurityManager || supportReqNeed > 0 || supportReqs.length > 0 || supportList.length > 0;
 
-    // Tier 1 (Command) -> unlocks Tier 2 (Tech Lead)
+    // Tier 1 (Command) -> unlocks Tier 2 (Tech Lead) on the Technical Track
     const tier1Approved = hasTechLead && isTlApproved;
     const tier1LockReason = hasTechLead
       ? 'Awaiting Tech Lead approval of Tier 1 request'
@@ -11171,7 +11379,7 @@
         ? 'Awaiting Tech Lead crew allocation to meet requested department targets'
         : 'Awaiting Tier 2 Tech Lead crew allocation or dept confirmation');
 
-    // Tier 3 (Technicians confirming assignments) -> unlocks Tier 4 (Support Staff)
+    // Tier 3 (Technicians confirming assignments)
     const tier3Unlocked = tier2Unlocked && tier2Approved;
     let tier3Approved = false;
     if (tier3Unlocked) {
@@ -11186,51 +11394,61 @@
     const tier3LockReason = !tier3Unlocked
       ? tier2LockReason
       : (techDeclinedCount > 0
-        ? `Resolve ${techDeclinedCount} declined Tier 3 assignment(s) before unlocking Tier 4`
+        ? `Resolve ${techDeclinedCount} declined Tier 3 assignment(s)`
         : `Awaiting Tier 3 technician confirmations (${techConfirmedCount}/${techMembers.length})`);
 
-    // Tier 4 (Support fulfillment & confirmations) -> unlocks Tier 5 (Readiness & Gate Sync)
-    const tier4Unlocked = tier3Unlocked && tier3Approved;
+    // Tier 4 (Security Manager & Support Staff) — PARALLEL track unlocked right after Tier 1 creation!
+    const tier4Unlocked = true;
     let tier4Approved = false;
-    if (tier4Unlocked) {
-      if (dispatchStatusRaw === 'ready') {
-        tier4Approved = true;
-      } else if (!hasAnySupportScope) {
-        tier4Approved = true;
-      } else {
-        tier4Approved = pendingSupportCount === 0
-          && supportList.length >= supportReqNeed
-          && (supportList.length === 0 || supportAllConfirmed);
-      }
+    if (dispatchStatusRaw === 'ready' || !hasAnySupportScope) {
+      tier4Approved = true;
+    } else {
+      const smGateOk = !hasSecurityManager || isSmApproved;
+      const countOk = supportReqNeed > 0
+        ? supportConfirmedCount >= supportReqNeed
+        : (supportList.length > 0 ? supportAllConfirmed : isSmApproved);
+      tier4Approved = smGateOk && pendingSupportCount === 0 && countOk && supportDeclinedCount === 0;
     }
-    const tier4LockReason = !tier4Unlocked
-      ? tier3LockReason
-      : (pendingSupportCount > 0
-        ? `Fulfill ${pendingSupportCount} pending Tier 4 Support request(s) to unlock Tier 5`
-        : (supportList.length < supportReqNeed
-          ? `Assign Tier 4 Support Staff (${supportList.length}/${supportReqNeed}) to unlock Tier 5`
-          : (supportDeclinedCount > 0
-            ? `Resolve ${supportDeclinedCount} declined Tier 4 support slot(s) to unlock Tier 5`
-            : `Awaiting Tier 4 support confirmations (${supportConfirmedCount}/${supportList.length})`)));
+    const smDisplay = isEventSecurityManagerAssigned(activeEv) ? String(activeEv.security_manager || '').trim() : 'Security Manager';
+    const tier4StatusReason = tier4Approved
+      ? ''
+      : (hasSecurityManager && !isSmApproved
+        ? `Awaiting Security Manager (${smDisplay}) approval of Tier 4 support request`
+        : (pendingSupportCount > 0
+          ? `Fulfill ${pendingSupportCount} pending Tier 4 Support request(s)`
+          : (supportReqNeed > 0 && supportConfirmedCount < supportReqNeed
+            ? `Confirm Tier 4 Support Staff (${supportConfirmedCount}/${supportReqNeed})`
+            : (supportDeclinedCount > 0
+              ? `Resolve ${supportDeclinedCount} declined Tier 4 support slot(s)`
+              : `Confirm Tier 4 Support Staff (${supportConfirmedCount}/${supportList.length || 1})`))));
 
-    const tier5Unlocked = tier4Unlocked && tier4Approved;
+    // Tier 5 (Readiness & Gate Sync) unlocks once BOTH Technical Track (Tier 3) AND Support Track (Tier 4) pass
+    const tier5Unlocked = tier3Unlocked && tier3Approved && tier4Approved;
+    const tier5LockReason = tier5Unlocked
+      ? ''
+      : (!tier3Approved && !tier4Approved
+        ? `Tech Track: ${tier3LockReason} · Support Track: ${tier4StatusReason}`
+        : (!tier3Approved ? tier3LockReason : tier4StatusReason));
     const tier5Approved = tier5Unlocked && (dispatchStatusRaw === 'ready' || techConfirmedCount > 0 || supportConfirmedCount > 0 || !hasAnySupportScope);
 
     return {
       tier1_command: { unlocked: true, locked: false, approved: tier1Approved, lockReason: '' },
       tier2_tech_lead: { unlocked: tier2Unlocked, locked: !tier2Unlocked, approved: tier2Approved, lockReason: tier1LockReason },
       tier3_technicians: { unlocked: tier3Unlocked, locked: !tier3Unlocked, approved: tier3Approved, lockReason: tier2LockReason },
-      tier4_support: { unlocked: tier4Unlocked, locked: !tier4Unlocked, approved: tier4Approved, lockReason: tier3LockReason },
-      site_ops: { unlocked: tier5Unlocked, locked: !tier5Unlocked, approved: tier5Approved, lockReason: tier4LockReason },
+      tier4_support: { unlocked: tier4Unlocked, locked: false, approved: tier4Approved, lockReason: tier4StatusReason },
+      site_ops: { unlocked: tier5Unlocked, locked: !tier5Unlocked, approved: tier5Approved, lockReason: tier5LockReason },
       metrics: {
         techReqTotal,
         techConfirmedCount,
         techDeclinedCount,
         techTotal: techMembers.length,
         confirmedDeptNotesCount,
+        hasSecurityManager,
+        isSmApproved,
         supportReqNeed,
         pendingSupportCount,
         supportConfirmedCount,
+        supportDeclinedCount,
         supportTotal: supportList.length,
         hasAnySupportScope,
       },
@@ -11578,7 +11796,7 @@
       }
     });
     const notes = (document.getElementById('venue-dept-count-notes')?.value || '').trim();
-    return { branches, notes };
+    return { branches, notes, support_notes: venueCrudCurrentSupportNotes || '' };
   }
 
   function updateVenueCrudDeptCountsTotal() {
@@ -11672,6 +11890,51 @@
     return data;
   }
 
+  async function approveEventSecurityManager(eventId, note = '') {
+    const res = await fetch('api.php?action=approve_event_security_manager', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'approve_event_security_manager',
+        event_id: String(eventId),
+        note: String(note || '').trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || 'Failed to approve Tier 4 support request.');
+    }
+    applyBootstrapPayload(data, true);
+    renderVenueSecurityPage();
+    renderDispatchViews();
+    showToast(data.message || 'Tier 4 support request approved by Security Manager.', 'success');
+    return data;
+  }
+
+  async function assignEventSupportStaff(eventId, userIds = [], note = '', allowEmpty = false) {
+    const cleanIds = Array.from(new Set((userIds || []).map(Number).filter((n) => n > 0)));
+    const res = await fetch('api.php?action=assign_event_support_staff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'assign_event_support_staff',
+        event_id: String(eventId),
+        user_ids: cleanIds,
+        note: String(note || '').trim(),
+        allow_empty: allowEmpty ? '1' : '0',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data || !data.ok) {
+      throw new Error((data && data.error) || 'Failed to confirm deployed Support Staff.');
+    }
+    applyBootstrapPayload(data, true);
+    renderVenueSecurityPage();
+    renderDispatchViews();
+    showToast(data.message || 'Support Staff deployment confirmed.', 'success');
+    return data;
+  }
+
   async function postVenueDeptConfirmation(eventId, dept, status, comment, silentToast = false) {
     const res = await fetch('api.php?action=save_event_dept_confirmation', {
       method: 'POST',
@@ -11700,8 +11963,12 @@
   function renderVenueCrudDepartmentSelect(preferredDept = '') {
     const deptSel = document.getElementById('venue-crud-dept-select');
     if (!deptSel) return '';
-    const buckets = getVenueCrudDepartmentBuckets();
-    const curVal = preferredDept || deptSel.value || '';
+    const isSecMgrOnly = isCurrentUserSecurityManagerOnly();
+    const allBuckets = getVenueCrudDepartmentBuckets();
+    const buckets = isSecMgrOnly
+      ? allBuckets.filter((b) => b.dept === 'Support Staff')
+      : allBuckets;
+    const curVal = isSecMgrOnly ? 'Support Staff' : (preferredDept || deptSel.value || '');
     let chosenDept = '';
     if (curVal && buckets.some((b) => b.dept === curVal)) {
       chosenDept = curVal;
@@ -11724,6 +11991,7 @@
       return `<option value="${escapeHtml(b.dept)}" ${b.dept === chosenDept ? 'selected' : ''}>${escapeHtml(dispDept)} (${escapeHtml(countText)})</option>`;
     }).join('');
     deptSel.value = chosenDept;
+    deptSel.disabled = isSecMgrOnly;
     return chosenDept;
   }
 
@@ -11799,6 +12067,7 @@
     const ctEl = document.getElementById('venue-crud-calltime');
     const tlEl = document.getElementById('venue-crud-techlead');
     const pmEl = document.getElementById('venue-crud-pm');
+    const smEl = document.getElementById('venue-crud-security-manager');
     const tlAutoTag = document.getElementById('venue-crud-techlead-auto-tag');
     const pmAutoTag = document.getElementById('venue-crud-pm-auto-tag');
     const deptCountsSection = document.getElementById('venue-crud-dept-counts-section');
@@ -11811,14 +12080,25 @@
     const isPm = curRole === 'project_manager' && !isAdmin;
     const isCoord = curRole === 'event_coordinator' && !isAdmin;
     const isPmOrCoord = isPm || isCoord;
+    const isSecMgrOnly = isCurrentUserSecurityManagerOnly();
     const showDeptCounts = isAdmin || isPmOrCoord;
-    const canAssignCrew = isAdmin || (!isPmOrCoord && isCurrentUserTechLead());
+    const canAssignCrew = isAdmin || isSecMgrOnly || (!isPmOrCoord && isCurrentUserTechLead());
 
     if (deptCountsSection) deptCountsSection.style.display = showDeptCounts ? 'block' : 'none';
     if (techLeadCrewSection) techLeadCrewSection.style.display = canAssignCrew ? 'block' : 'none';
 
+    // Lock core event fields when Security Manager opens modal to confirm Support Staff only
+    [titleEl, locEl, dateEl, endDateEl, ctEl].forEach((inp) => {
+      if (!inp) return;
+      inp.disabled = isSecMgrOnly;
+      inp.style.background = isSecMgrOnly ? 'var(--bg-subtle)' : '';
+    });
+
     const reqBranches = (venue && venue.requirements && venue.requirements.branches) || {};
-    venueCrudCurrentTargets = { ...reqBranches };
+    venueCrudCurrentTargets = isSecMgrOnly
+      ? (Number(reqBranches['Support Staff'] || 0) > 0 ? { 'Support Staff': Number(reqBranches['Support Staff']) } : {})
+      : { ...reqBranches };
+    venueCrudCurrentSupportNotes = (venue && venue.requirements && venue.requirements.support_notes) || '';
     document.querySelectorAll('#venue-crud-dept-counts-section .js-venue-dept-count-input').forEach((inp) => {
       const deptKey = inp.getAttribute('data-dept');
       inp.value = String(Math.max(0, Number(reqBranches[deptKey] || 0)));
@@ -11830,13 +12110,27 @@
     updateVenueCrudDeptCountsTotal();
 
     venueCrudSelectedCrewIds.clear();
-    if (venue && Array.isArray(venue.assigned_technicians)) {
+    if (venue && isSecMgrOnly) {
+      const evIdStr = String(venue.raw_id || venue.id || '');
+      const asgEv = (evIdStr && state.eventCrewAssignments && state.eventCrewAssignments[evIdStr]) || {};
+      const rosterSup = Array.isArray(venue.assigned_roster?.support_staff) ? venue.assigned_roster.support_staff : [];
+      rosterSup.forEach((uid) => {
+        const n = Number(uid);
+        if (n > 0) venueCrudSelectedCrewIds.add(n);
+      });
+      Object.entries(asgEv).forEach(([uidStr, rec]) => {
+        if (String(rec?.branch_dept || '').toLowerCase() === 'support staff') {
+          const n = Number(uidStr);
+          if (n > 0) venueCrudSelectedCrewIds.add(n);
+        }
+      });
+    } else if (venue && Array.isArray(venue.assigned_technicians)) {
       venue.assigned_technicians.forEach((uid) => {
         const n = Number(uid);
         if (n > 0) venueCrudSelectedCrewIds.add(n);
       });
     }
-    renderVenueCrudDepartmentSelect('');
+    renderVenueCrudDepartmentSelect(isSecMgrOnly ? 'Support Staff' : '');
     renderVenueCrudCrewChecklist();
 
     const commentDeptSel = document.getElementById('venue-comment-dept');
@@ -11883,7 +12177,7 @@
     if (venue) {
       const startIso = venue.start_date || venue.date || todayIso;
       const endIso = venue.end_date || startIso;
-      if (titleHead) titleHead.textContent = `Edit Event: ${venue.title || venue.name}`;
+      if (titleHead) titleHead.textContent = isSecMgrOnly ? `Confirm Support Staff: ${venue.title || venue.name}` : `Edit Event: ${venue.title || venue.name}`;
       if (idEl) idEl.value = String(venue.raw_id || venue.id || '');
       if (titleEl) titleEl.value = venue.title || venue.name || '';
       if (locEl) locEl.value = venue.location || '';
@@ -11897,13 +12191,16 @@
       if (subModalBtn) {
         const readOnlyDisabled = isVenueDisabled && !isAdmin;
         subModalBtn.disabled = readOnlyDisabled;
-        subModalBtn.textContent = readOnlyDisabled ? 'Event Disabled' : 'Save Event Changes';
+        subModalBtn.textContent = readOnlyDisabled
+          ? 'Event Disabled'
+          : (isSecMgrOnly ? '✓ Confirm Deployed Support Staff' : 'Save Event Changes');
       }
-      if (disableModalBtn) disableModalBtn.style.display = (!isVenueDisabled && canCurrentUserDisableEvents()) ? 'inline-flex' : 'none';
+      if (disableModalBtn) disableModalBtn.style.display = (!isVenueDisabled && !isSecMgrOnly && canCurrentUserDisableEvents()) ? 'inline-flex' : 'none';
       if (enableModalBtn) enableModalBtn.style.display = (isVenueDisabled && canCurrentUserDeleteEvents()) ? 'inline-flex' : 'none';
       if (delModalBtn) delModalBtn.style.display = canCurrentUserDeleteEvents() ? 'inline-flex' : 'none';
       populateLeadershipSelect(tlEl, techLeadValInit || venue.tech_lead || venue.lead_name || '', 'techlead');
       populateLeadershipSelect(pmEl, pmValInit, 'pm');
+      populateLeadershipSelect(smEl, !isPlaceholderLeadershipValue(venue.security_manager) ? String(venue.security_manager || '').trim() : '', 'securitymanager');
       if (venue.image) {
         setDropzonePreview('venue', venue.image, venue.image.split('/').pop());
       }
@@ -11928,6 +12225,7 @@
       if (delModalBtn) delModalBtn.style.display = 'none';
       populateLeadershipSelect(tlEl, techLeadValInit, 'techlead');
       populateLeadershipSelect(pmEl, pmValInit, 'pm');
+      populateLeadershipSelect(smEl, '', 'securitymanager');
     }
 
     const approvalBanner = document.getElementById('venue-crud-approval-banner');
@@ -11981,17 +12279,71 @@
       }
     }
 
+    const smApprovalBanner = document.getElementById('venue-crud-sm-approval-banner');
+    const smApprovalPill = document.getElementById('venue-crud-sm-approval-pill');
+    const smApprovalMeta = document.getElementById('venue-crud-sm-approval-meta');
+    const smApproveBtn = document.getElementById('venue-crud-sm-approve-btn');
+    if (smApprovalBanner) {
+      const hasSmScope = Boolean(venue && (isEventSecurityManagerAssigned(venue) || Number(venue.requirements?.branches?.['Support Staff'] || 0) > 0));
+      if (!hasSmScope) {
+        smApprovalBanner.style.display = 'none';
+      } else {
+        const smApproved = isEventApprovedBySecurityManager(venue);
+        const canApproveSmHere = !smApproved && canCurrentUserApproveSecurityManager(venue);
+        smApprovalBanner.style.display = 'flex';
+        if (smApprovalPill) {
+          smApprovalPill.className = `status-badge ${smApproved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}`;
+          smApprovalPill.textContent = smApproved ? '✓ Tier 4 Approved by Security Manager' : 'Tier 4: Awaiting Approval from Security Manager';
+        }
+        if (smApprovalMeta) {
+          if (smApproved) {
+            const byWho = venue.security_manager_approved_by_name || venue.security_manager || 'Security Manager';
+            const atWhen = venue.security_manager_approved_at ? String(venue.security_manager_approved_at).slice(0, 16) : '';
+            smApprovalMeta.textContent = atWhen ? `${byWho} · ${atWhen}` : byWho;
+          } else {
+            smApprovalMeta.textContent = canApproveSmHere
+              ? 'Approve this request (or confirm Support Staff below) to satisfy Tier 4 in parallel.'
+              : `Assigned to ${venue.security_manager || 'Security Manager'} for Tier 4 support approval.`;
+          }
+        }
+        if (smApproveBtn) {
+          smApproveBtn.style.display = canApproveSmHere ? 'inline-flex' : 'none';
+          smApproveBtn.disabled = false;
+          smApproveBtn.textContent = '✓ Approve Support Request (Security Manager)';
+          smApproveBtn.onclick = async () => {
+            const targetId = String(venue.raw_id || venue.id || '');
+            if (!targetId) return;
+            smApproveBtn.disabled = true;
+            smApproveBtn.textContent = 'Approving...';
+            try {
+              const payload = await approveEventSecurityManager(targetId);
+              const refreshedEv = (payload.checkpoints?.event_venues || []).find((x) => String(x.raw_id || x.id) === targetId);
+              if (refreshedEv) {
+                openVenueCrudModal(refreshedEv);
+              }
+            } catch (err) {
+              showToast(err.message || 'Failed to approve support request.', 'error');
+              smApproveBtn.disabled = false;
+              smApproveBtn.textContent = '✓ Approve Support Request (Security Manager)';
+            }
+          };
+        }
+      }
+    }
+
     if (pmWrap) pmWrap.style.display = 'block';
     if (leadGrid) {
-      leadGrid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+      leadGrid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(170px, 1fr))';
     }
 
     if (!leadView.showAutoTags) {
       if (tlAutoTag) tlAutoTag.style.display = 'none';
       if (pmAutoTag) pmAutoTag.style.display = 'none';
     }
-    applySelectLockState(tlEl, disableTechLead, leadView.showAutoTags ? tlAutoTag : null, leadView.techLeadLockReason);
-    applySelectLockState(pmEl, disablePm, leadView.showAutoTags ? pmAutoTag : null, leadView.pmLockReason);
+    const disableSmSelect = isSecMgrOnly || (isVenueDisabled && !isAdmin) || (!isAdmin && !isPmOrCoord);
+    applySelectLockState(tlEl, disableTechLead || isSecMgrOnly, leadView.showAutoTags ? tlAutoTag : null, leadView.techLeadLockReason);
+    applySelectLockState(pmEl, disablePm || isSecMgrOnly, leadView.showAutoTags ? pmAutoTag : null, leadView.pmLockReason);
+    applySelectLockState(smEl, disableSmSelect, null, disableSmSelect ? 'Only Admin or Project Manager can change Security Manager' : '');
 
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
@@ -13187,18 +13539,26 @@
 
     const pmName = activeEv?.project_manager || ((state.crew || []).find((c) => c.role === 'project_manager' || c.role === 'event_coordinator')?.full_name || 'Project Manager');
     const tlName = activeEv?.tech_lead || activeEv?.lead_name || ((state.crew || []).find((c) => isUserAssignedTechLeadRole(c))?.full_name || 'Technical Lead');
+    const hasSecurityManager = isEventSecurityManagerAssigned(activeEv);
+    const isSmApproved = isEventApprovedBySecurityManager(activeEv);
+    const smName = hasSecurityManager
+      ? String(activeEv.security_manager || '').trim()
+      : 'Unassigned (Optional)';
 
+    const asgMap = (activeEv && state.eventCrewAssignments && state.eventCrewAssignments[String(activeEv.raw_id || activeEv.id)]) || {};
     const deptNames = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'];
     const deptMatches = (c, d) => resolveCrewCanonicalDepartment(c) === d;
     const techMembers = pool.filter((c) => deptNames.some((dn) => deptMatches(c, dn)));
     const techDeptMemberCount = techMembers.length;
     const supportList = pool.filter((c) => {
-      const canon = resolveCrewCanonicalDepartment(c);
       const role = String(c.role || '').toLowerCase();
-      return canon === 'Support Staff' || (!deptNames.includes(canon) && (role === 'security' || role === 'user'));
+      if (role === 'security_manager' || isUserAssignedSecurityManagerRole(c)) return false;
+      const asgRec = asgMap[String(c.id)];
+      if (asgRec && String(asgRec.branch_dept || '').toLowerCase() === 'support staff') return true;
+      const canon = resolveCrewCanonicalDepartment(c);
+      return canon === 'Support Staff' || (!deptNames.includes(canon) && isUserEligibleSupportStaff(c));
     });
 
-    const asgMap = (activeEv && state.eventCrewAssignments && state.eventCrewAssignments[String(activeEv.raw_id || activeEv.id)]) || {};
     const formatMemberBadge = (m) => {
       const rec = asgMap[String(m.id)];
       if (!rec) return escapeHtml(m.full_name);
@@ -13220,6 +13580,8 @@
     const tierStates = computeDispatchTierStates(activeEv, {
       hasTechLead,
       isApproved,
+      hasSecurityManager,
+      isSmApproved,
       deptNames,
       techMembers,
       supportList,
@@ -13304,27 +13666,31 @@
       {
         tierKey: 'tier4_support',
         step: 'TIER 4 · SUPPORT',
-        locked: tierStates.tier4_support.locked,
+        locked: false,
         approved: tierStates.tier4_support.approved,
         lockReason: tierStates.tier4_support.lockReason,
-        tone: tierStates.tier4_support.locked
-          ? 'warn'
-          : (pendingSupportCount > 0 || !tierStates.tier4_support.approved ? 'warn' : (supportList.length > 0 || !tierStats.hasAnySupportScope ? 'ok' : 'chip')),
-        short: `Support Staff (${supportList.length})`,
-        summary: tierStates.tier4_support.locked
-          ? 'Locked · Awaiting Tier 3 Confirmation'
-          : (pendingSupportCount > 0
-            ? `${pendingSupportCount} Pending Request(s)`
-            : (tierStats.hasAnySupportScope ? `${tierStats.supportConfirmedCount || 0}/${supportList.length} Support Confirmed` : 'No Support Needed · Passed')),
-        title: `Tier 4 · Ground Support & Fulfillment (${supportList.length} Assigned)`,
-        source: 'Operations Drivers, Runners & Venue Security',
-        route: 'Request Submitted by Tier 1/2 → Fulfilled by Site Manager → Venue Gate Access Only',
-        detail: 'Support crew fulfill general logistics and staging runs at assigned event venues while L1 perimeter rules automatically block unauthorized warehouse entry.',
-        outcome: tierStates.tier4_support.locked
-          ? tierStates.tier4_support.lockReason
+        tone: !tierStats.hasAnySupportScope
+          ? 'ok'
+          : (tierStates.tier4_support.approved ? 'ok' : 'warn'),
+        short: hasSecurityManager
+          ? smName
+          : (supportList.length > 0 ? `Support Staff (${supportList.length})` : 'Support Staff (Optional)'),
+        summary: !tierStats.hasAnySupportScope
+          ? 'No Support Needed · Passed'
+          : (hasSecurityManager && !isSmApproved
+            ? 'Parallel · Awaiting Security Manager'
+            : (tierStates.tier4_support.approved
+              ? `✓ ${tierStats.supportConfirmedCount || 0}${tierStats.supportReqNeed > 0 ? `/${tierStats.supportReqNeed}` : ''} Support Confirmed`
+              : `Confirm Support (${tierStats.supportConfirmedCount || 0}${tierStats.supportReqNeed > 0 ? `/${tierStats.supportReqNeed}` : ''})`)),
+        title: `Tier 4 · Security Manager & Support Staff (${hasSecurityManager ? smName : 'Optional Support Track'})`,
+        source: 'Parallel Track · Security Manager confirms Support Staff from Initial Request',
+        route: 'Review Initial Support Request → Approve Tier 4 → Confirm Support Staff Deployment',
+        detail: 'Runs in parallel with Tech Lead (Tier 2/3) immediately after event creation. The assigned Security Manager approves the support request and directly confirms which Support Staff (Security Officers, Drivers, Runners, Venue Crew) to deploy.',
+        outcome: !tierStats.hasAnySupportScope
+          ? 'No Support Staffing Needed — Passed'
           : (tierStates.tier4_support.approved
-            ? (tierStats.hasAnySupportScope ? `✓ ${supportList.length} Support Members Confirmed` : 'No Support Staffing Needed — Tier 5 Unlocked')
-            : tierStates.site_ops.lockReason),
+            ? `✓ ${tierStats.supportConfirmedCount || supportList.length}${tierStats.supportReqNeed > 0 ? `/${tierStats.supportReqNeed}` : ''} Support Confirmed by ${activeEv?.security_manager_approved_by_name || smName}`
+            : (tierStates.tier4_support.lockReason || 'Awaiting Security Manager confirmation')),
       },
       {
         tierKey: 'site_ops',
@@ -13356,6 +13722,7 @@
       pool,
       pmName,
       tlName,
+      smName,
       deptNames,
       deptMatches,
       techMembers,
@@ -13368,6 +13735,8 @@
       confirmedCount,
       hasTechLead,
       isApproved,
+      hasSecurityManager,
+      isSmApproved,
       isLockedAfterTier1,
       tierStates,
       hasRealPm,
@@ -13434,10 +13803,11 @@
       const canJump = Boolean(activeNode.jumpScreen && !activeNode.locked && isScreenPermittedForCurrentUser(activeNode.jumpScreen));
       const isCommandCaller = isCurrentUserAdmin() || isCurrentUserEventCommand();
       const isTlOnlyCaller = !isCommandCaller && isCurrentUserTechLead();
+      const isSecMgrOnlyCaller = !isCommandCaller && isCurrentUserSecurityManagerOnly();
       const showTier1CommandExtras = Boolean(
         activeNode.tierKey === 'tier1_command'
         && activeEv
-        && (isCommandCaller || isTlOnlyCaller)
+        && (isCommandCaller || isTlOnlyCaller || isSecMgrOnlyCaller)
       );
       const showTier2TlSummary = Boolean(
         activeNode.tierKey === 'tier2_tech_lead'
@@ -13452,7 +13822,6 @@
       const showTier4SupportSummary = Boolean(
         activeNode.tierKey === 'tier4_support'
         && activeEv
-        && !activeNode.locked
       );
       const myUid = Number(state.currentUser?.id || 0);
       const myAsg = (activeEv && myUid > 0 && ctx.asgMap) ? ctx.asgMap[String(myUid)] : null;
@@ -13468,6 +13837,20 @@
         && activeEv
         && !ctx.isApproved
         && canCurrentUserApproveTechLead(activeEv)
+      );
+      const canApproveSecurityManagerHere = Boolean(
+        activeNode.tierKey === 'tier4_support'
+        && activeEv
+        && !ctx.isSmApproved
+        && ctx.tierStates?.metrics?.hasAnySupportScope
+        && canCurrentUserApproveSecurityManager(activeEv)
+        && Number(activeEv.is_active ?? 1) !== 0
+      );
+      const canAssignSupportHere = Boolean(
+        activeNode.tierKey === 'tier4_support'
+        && activeEv
+        && canCurrentUserAssignSupportStaff(activeEv)
+        && Number(activeEv.is_active ?? 1) !== 0
       );
       const canOpenCrewFromTier2 = Boolean(
         activeNode.openCrewModal
@@ -13499,21 +13882,28 @@
           'No department headcount targets set yet.'
         );
         const showAdminOriginBox = Boolean(orig.isAdminOrigin);
-        const visibleCols = 2 + (showAdminOriginBox ? 1 : 0);
-        const tlHeaderBadge = isTlOnlyCaller
+        const disableSmTier1 = !isCommandCaller || (isActiveEvDisabled && !isCurrentUserAdmin());
+        const visibleCols = 3 + (showAdminOriginBox ? 1 : 0);
+        const tlHeaderBadge = (isTlOnlyCaller || isSecMgrOnlyCaller)
           ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-              <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Dispatch Request (${escapeHtml(orig.roleLabel)} ↔ Tech Lead)</span>
-              ${ctx.isApproved ? `<span class="status-badge status-badge-green-sm">✓ Approved by Tech Lead</span>` : `<span class="status-badge status-badge-amber-sm">Awaiting Tech Lead Approval</span>`}
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">${isSecMgrOnlyCaller ? `Support Request (${escapeHtml(orig.roleLabel)} ↔ Security Manager)` : `Dispatch Request (${escapeHtml(orig.roleLabel)} ↔ Tech Lead)`}</span>
+              ${isSecMgrOnlyCaller
+                ? (ctx.isSmApproved ? `<span class="status-badge status-badge-green-sm">✓ Tier 4 Approved by Security Manager</span>` : `<span class="status-badge status-badge-amber-sm">Tier 4 Awaiting Security Manager</span>`)
+                : (ctx.isApproved ? `<span class="status-badge status-badge-green-sm">✓ Approved by Tech Lead</span>` : `<span class="status-badge status-badge-amber-sm">Awaiting Tech Lead Approval</span>`)}
             </div>`
           : '';
         commandExtrasHtml = `
           <div class="df-command-extras">
             ${activeEvDisabledBanner}
             ${tlHeaderBadge}
-            <div class="df-leadership-grid" style="display: grid; grid-template-columns: repeat(${visibleCols}, minmax(0, 1fr)); gap: 12px;">
+            <div class="df-leadership-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 12px;">
               <div class="form-field" style="margin: 0;">
                 <label class="form-label" for="${escapeHtml(inspPfx)}-techlead">Technical Lead${tier1Locks.hasAssignedTechLead ? ' <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Assigned)</span>' : ''}</label>
-                <select id="${escapeHtml(inspPfx)}-techlead" class="form-input js-df-techlead-select" ${tier1Locks.disableTechLead ? `disabled title="${escapeHtml(tier1Locks.techLeadTitle)}"` : ''}></select>
+                <select id="${escapeHtml(inspPfx)}-techlead" class="form-input js-df-techlead-select" ${(tier1Locks.disableTechLead || isSecMgrOnlyCaller) ? `disabled title="${escapeHtml(tier1Locks.techLeadTitle || 'Read-only')}"` : ''}></select>
+              </div>
+              <div class="form-field" style="margin: 0;">
+                <label class="form-label" for="${escapeHtml(inspPfx)}-secmgr">Security Manager${ctx.hasSecurityManager ? ' <span style="font-size: 10px; font-weight: 600; color: #0f766e;">(Tier 4)</span>' : ' <span style="font-size: 10px; font-weight: 400; color: var(--text-muted);">(Optional)</span>'}</label>
+                <select id="${escapeHtml(inspPfx)}-secmgr" class="form-input js-df-secmgr-select" ${disableSmTier1 ? 'disabled title="Only Admin or Project Manager can update Security Manager"' : ''}></select>
               </div>
               ${showAdminOriginBox ? `
               <div class="form-field" style="margin: 0;">
@@ -13522,13 +13912,14 @@
               </div>` : ''}
               <div class="form-field" style="margin: 0;">
                 <label class="form-label" for="${escapeHtml(inspPfx)}-pm">Project Manager${tier1Locks.showPmOwnerTag ? ' <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Request Owner)</span>' : (tier1Locks.disablePm && !isActiveEvDisabled ? ' <span style="font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Assigned)</span>' : '')}</label>
-                <select id="${escapeHtml(inspPfx)}-pm" class="form-input js-df-pm-select" ${tier1Locks.disablePm ? `disabled title="${escapeHtml(tier1Locks.pmTitle)}"` : ''}></select>
+                <select id="${escapeHtml(inspPfx)}-pm" class="form-input js-df-pm-select" ${(tier1Locks.disablePm || isSecMgrOnlyCaller) ? `disabled title="${escapeHtml(tier1Locks.pmTitle || 'Read-only')}"` : ''}></select>
               </div>
             </div>
             <div class="df-targets-banner" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 11.5px;">
               ${targetsHtml}
             </div>
             ${briefNotes ? `<div style="font-size:11.5px;color:var(--text-secondary);"><strong>Command Brief:</strong> ${escapeHtml(briefNotes)}</div>` : ''}
+            ${activeEv.requirements?.support_notes ? `<div style="font-size:11.5px;color:var(--text-secondary);"><strong>Tier 4 Support Brief:</strong> ${escapeHtml(activeEv.requirements.support_notes)}</div>` : ''}
           </div>
         `;
       } else if (showTier2TlSummary) {
@@ -13564,22 +13955,32 @@
           <div class="df-command-extras">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
               <span style="font-size:11.5px;color:var(--text-secondary);">Technical Confirmation Progress: <strong>${ts3.techConfirmedCount || 0}/${ts3.techTotal || 0}</strong></span>
-              <span class="status-badge ${activeNode.approved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${activeNode.approved ? '✓ Tier 3 Confirmed — Tier 4 Unlocked' : 'Awaiting Technician Confirmations'}</span>
+              <span class="status-badge ${activeNode.approved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${activeNode.approved ? '✓ Tech Track Confirmed' : 'Awaiting Technician Confirmations'}</span>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-subtle);">${badgesHtml}</div>
           </div>
         `;
       } else if (showTier4SupportSummary) {
         const ts4 = ctx.tierStates?.metrics || {};
+        const orig = ctx.originator || getEventRequestOriginatorInfo(activeEv);
+        const supNotes = String(activeEv.requirements?.support_notes || '').trim();
+        const smApproverTxt = activeEv.security_manager_approved_by_name || ctx.smName;
+        const smStatusBadge = !ts4.hasAnySupportScope
+          ? '<span class="status-badge status-badge-green-sm">✓ No Support Needed — Auto-Passed</span>'
+          : (ctx.isSmApproved
+            ? `<span class="status-badge status-badge-green-sm">✓ Approved by ${escapeHtml(smApproverTxt)}</span>`
+            : `<span class="status-badge status-badge-amber-sm">Awaiting Approval from Security Manager</span>`);
         const supBadgesHtml = (ctx.supportList || []).length
           ? ctx.supportList.map((s) => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--border-color);border-radius:999px;background:var(--bg-card);font-size:11px;">${ctx.formatMemberBadge(s)}</span>`).join('')
-          : `<span style="color:var(--text-muted);font-size:11.5px;">${ts4.hasAnySupportScope ? 'Assign/fulfill Support Staff requests in the Step 3 panel below.' : 'No support staff requested for this event — Tier 5 unlocked.'}</span>`;
+          : `<span style="color:var(--text-muted);font-size:11.5px;">${ts4.hasAnySupportScope ? 'Select and confirm Support Staff to deploy in the Step 3 panel below.' : 'No support staff requested for this event — Tier 4 automatically passed.'}</span>`;
         commandExtrasHtml = `
           <div class="df-command-extras">
+            ${activeEvDisabledBanner}
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:11.5px;color:var(--text-secondary);">Pending Support Requests: <strong>${ts4.pendingSupportCount || 0}</strong> · Confirmed Support: <strong>${ts4.supportConfirmedCount || 0}/${ts4.supportTotal || 0}</strong></span>
-              <span class="status-badge ${activeNode.approved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${activeNode.approved ? '✓ Tier 4 Approved — Tier 5 Unlocked' : 'Action Required in Step 3 Panel'}</span>
+              <span style="font-size:11.5px;color:var(--text-secondary);">Originator: <strong>${escapeHtml(orig.name)}</strong> · Security Manager: <strong>${escapeHtml(ctx.smName)}</strong> · Support Confirmed: <strong>${ts4.supportConfirmedCount || 0}${ts4.supportReqNeed > 0 ? `/${ts4.supportReqNeed}` : `/${ts4.supportTotal || 0}`}</strong></span>
+              ${smStatusBadge}
             </div>
+            ${supNotes ? `<div style="font-size:11.5px;color:var(--text-secondary);"><strong>Support / Security Brief:</strong> ${escapeHtml(supNotes)}</div>` : ''}
             <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-subtle);">${supBadgesHtml}</div>
           </div>
         `;
@@ -13611,13 +14012,14 @@
           ? `${sFmt} → ${eFmt} (${activeEv.duration_label || ''})`
           : sFmt;
 
-        const branchVals = activeEv && activeEv.requirements && activeEv.requirements.branches
-          ? Object.values(activeEv.requirements.branches)
-          : [];
-        const reqSum = branchVals.reduce((acc, v) => acc + Math.max(0, Number(v || 0)), 0);
+        const branchMapObj = (activeEv && activeEv.requirements && activeEv.requirements.branches) || {};
+        const supReqCount = Math.max(0, Number(branchMapObj['Support Staff'] || 0));
+        const techBranchSum = ['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation']
+          .reduce((acc, k) => acc + Math.max(0, Number(branchMapObj[k] || 0)), 0);
         const reqTechCount = activeEv
-          ? (reqSum > 0 ? reqSum : Math.max(0, Number(activeEv.assigned_count || 0)))
+          ? (techBranchSum > 0 ? techBranchSum : Math.max(0, Number(ctx.techDeptMemberCount || 0)))
           : 0;
+        const reqSummaryText = `${reqTechCount} technician${reqTechCount === 1 ? '' : 's'}${supReqCount > 0 ? ` · ${supReqCount} support staff` : ''}`;
         const reqCreatedText = activeEv
           ? formatRequestDateTime(activeEv.created_at || activeEv.requirements_sent_at || '')
           : '—';
@@ -13647,7 +14049,7 @@
           ${commandExtrasHtml}
           <div class="df-tier1-bottom">
             <div class="df-tier1-request-meta">
-              <div class="df-req-summary">${escapeHtml(reqPrefixShort)}: Requested for (${reqTechCount} technician${reqTechCount === 1 ? '' : 's'})</div>
+              <div class="df-req-summary">${escapeHtml(reqPrefixShort)}: Requested for (${escapeHtml(reqSummaryText)})</div>
               <div class="df-req-datetime">Request date &amp; time: <strong>${escapeHtml(reqCreatedText)}</strong></div>
             </div>
             <div class="df-tier1-bottom-right">
@@ -13689,6 +14091,8 @@
             </div>
             <div class="flow-inspector-actions">
               ${canApproveHere ? `<button type="button" class="btn btn-primary-32 js-df-approve-techlead-btn">✓ Approve Request (Tech Lead)</button>` : ''}
+              ${canApproveSecurityManagerHere ? `<button type="button" class="btn btn-primary-32 js-df-approve-secmgr-btn">✓ Approve Support Request (Security Manager)</button>` : ''}
+              ${canAssignSupportHere ? `<button type="button" class="btn btn-primary-32 js-df-focus-support-deck-btn">Select &amp; Confirm Support Staff →</button>` : ''}
               ${canOpenCrewFromTier2 ? `<button type="button" class="btn btn-primary-32 js-df-open-crew-modal-btn">${escapeHtml(activeNode.jumpLabel || 'Assign Dept Crew')} →</button>` : ''}
               ${canConfirmMySlot ? `<button type="button" class="btn btn-primary-32 js-df-confirm-slot-btn" data-event-id="${escapeHtml(String(activeEv.raw_id || activeEv.id))}">✓ Confirm My Assignment</button>` : ''}
               ${canJump ? `<button type="button" class="btn btn-primary-32 js-df-jump-btn" data-jump-screen="${escapeHtml(activeNode.jumpScreen)}">${escapeHtml(activeNode.jumpLabel || 'Open')} →</button>` : ''}
@@ -13702,17 +14106,22 @@
       if (showTier1CommandExtras && leadView && tier1Locks) {
         const tlSel = inspectorEl.querySelector('.js-df-techlead-select');
         const pmSel = inspectorEl.querySelector('.js-df-pm-select');
+        const smSel = inspectorEl.querySelector('.js-df-secmgr-select');
+        const disableSmTier1 = !isCommandCaller || (isActiveEvDisabled && !isCurrentUserAdmin());
 
         populateLeadershipSelect(tlSel, activeEv.tech_lead || activeEv.lead_name || '', 'techlead');
         populateLeadershipSelect(pmSel, leadView.pmValInit, 'pm');
-        applySelectLockState(tlSel, tier1Locks.disableTechLead);
-        applySelectLockState(pmSel, tier1Locks.disablePm);
+        populateLeadershipSelect(smSel, !isPlaceholderLeadershipValue(activeEv.security_manager) ? String(activeEv.security_manager || '').trim() : '', 'securitymanager');
+        applySelectLockState(tlSel, tier1Locks.disableTechLead || isSecMgrOnlyCaller);
+        applySelectLockState(pmSel, tier1Locks.disablePm || isSecMgrOnlyCaller);
+        applySelectLockState(smSel, disableSmTier1);
 
         const saveDispatchLeadershipChange = async (fields, toastMsg) => {
           const evId = String(activeEv.raw_id || activeEv.id || '');
           if (!evId) return;
           if (tlSel) tlSel.disabled = true;
           if (pmSel) pmSel.disabled = true;
+          if (smSel) smSel.disabled = true;
           try {
             const fd = new FormData();
             fd.append('event_id', evId);
@@ -13722,6 +14131,9 @@
             }
             if (Object.prototype.hasOwnProperty.call(fields, 'project_manager')) {
               fd.append('project_manager', fields.project_manager);
+            }
+            if (Object.prototype.hasOwnProperty.call(fields, 'security_manager')) {
+              fd.append('security_manager', fields.security_manager);
             }
             const res = await fetch('api.php?action=save_event', { method: 'POST', body: fd });
             const data = await res.json();
@@ -13737,7 +14149,7 @@
           }
         };
 
-        if (tlSel && !tier1Locks.disableTechLead) {
+        if (tlSel && !tier1Locks.disableTechLead && !isSecMgrOnlyCaller) {
           tlSel.addEventListener('change', async () => {
             const nextTl = tlSel.value.trim();
             if (!nextTl) {
@@ -13751,7 +14163,16 @@
             );
           });
         }
-        if (pmSel && !tier1Locks.disablePm) {
+        if (smSel && !disableSmTier1) {
+          smSel.addEventListener('change', async () => {
+            const nextSm = smSel.value.trim();
+            await saveDispatchLeadershipChange(
+              { security_manager: nextSm },
+              nextSm ? `Security Manager assigned to ${nextSm} — Tier 4 Support Track active.` : 'Security Manager cleared.'
+            );
+          });
+        }
+        if (pmSel && !tier1Locks.disablePm && !isSecMgrOnlyCaller) {
           pmSel.addEventListener('change', async () => {
             const nextPm = pmSel.value.trim();
             if (!nextPm && !isCurrentUserAdmin()) {
@@ -13766,6 +14187,35 @@
           });
         }
       }
+
+      inspectorEl.querySelector('.js-df-approve-secmgr-btn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const evId = activeEv ? String(activeEv.raw_id || activeEv.id || '') : '';
+        if (!evId) return;
+        btn.disabled = true;
+        btn.textContent = 'Approving...';
+        try {
+          await approveEventSecurityManager(evId);
+        } catch (err) {
+          showToast(err.message || 'Failed to approve support request.', 'error');
+          btn.disabled = false;
+          btn.textContent = '✓ Approve Support Request (Security Manager)';
+        }
+      });
+
+      inspectorEl.querySelector('.js-df-focus-support-deck-btn')?.addEventListener('click', () => {
+        const panel = document.querySelector('#dispatch-page-workflow-deck .js-df-tier4-panel')
+          || document.querySelector('#dispatch-workflow-deck .js-df-tier4-panel');
+        if (panel) {
+          panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          panel.classList.remove('is-notif-focus');
+          void panel.offsetWidth;
+          panel.classList.add('is-notif-focus');
+          setTimeout(() => panel.classList.remove('is-notif-focus'), 1800);
+        } else if (activeEv) {
+          openVenueCrudModal(activeEv);
+        }
+      });
 
       inspectorEl.querySelector('.js-df-open-crew-modal-btn')?.addEventListener('click', () => {
         if (activeEv) {
@@ -13837,67 +14287,115 @@
     const t2State = tierStates.tier2_tech_lead || {};
     const t3State = tierStates.tier3_technicians || {};
     const t4State = tierStates.tier4_support || {};
+    const t5State = tierStates.site_ops || {};
+    const tsMetrics = tierStates.metrics || {};
     const t2LockedCls = t2State.locked ? ' is-locked' : '';
     const t3LockedCls = t3State.locked ? ' is-locked' : '';
-    const t4LockedCls = t4State.locked ? ' is-locked' : '';
+    const t5LockedCls = t5State.locked ? ' is-locked' : '';
     const t2LockTag = t2State.locked ? ` · 🔒 Locked · ${escapeHtml(t2State.lockReason || 'Awaiting approval')}` : '';
     const t3LockTag = t3State.locked ? ` · 🔒 Locked · ${escapeHtml(t3State.lockReason || 'Awaiting approval')}` : '';
-    const t4LockTag = t4State.locked ? ` · 🔒 Locked · ${escapeHtml(t4State.lockReason || 'Awaiting approval')}` : '';
+    const t5LockTag = t5State.locked ? ` · 🔒 Locked` : ' · ✓ Ready';
+    const supReqNeed = Number(ctx.activeEv?.requirements?.branches?.['Support Staff'] || 0);
+    const t4StatusBadge = !tsMetrics.hasAnySupportScope
+      ? '<span class="status-badge status-badge-green-sm">No Support Needed · Passed</span>'
+      : (t4State.approved
+        ? '<span class="status-badge status-badge-green-sm">✓ Confirmed by Security Manager</span>'
+        : (ctx.hasSecurityManager && !ctx.isSmApproved
+          ? '<span class="status-badge status-badge-amber-sm">Awaiting Security Manager Approval</span>'
+          : '<span class="status-badge status-badge-amber-sm">Select &amp; Confirm Support Staff</span>'));
 
     canvasEl.innerHTML = `
-      <div style="font-size:11.5px;color:var(--text-secondary);margin-bottom:4px;">Click any Role Tier card below to synchronize with the Flow Explorer Pipeline and inspect permissions.</div>
+      <div style="font-size:11.5px;color:var(--text-secondary);margin-bottom:4px;">Click any Role Tier card below to synchronize with the Flow Explorer Pipeline and inspect permissions. Tier 2/3 (Technical) and Tier 4 (Security Manager / Support) execute in parallel from Tier 1.</div>
       <div class="dispatch-tier">
         <div class="dispatch-node-card is-root is-clickable ${selTier === 'tier1_command' ? 'is-selected' : ''}" data-tier-key="tier1_command">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--brand-primary);">Tier 1 · Command ${ctx.activeEv ? `· Status: ${escapeHtml(tier1StatusText)}` : ''}</div>
-          <div style="font-size:15px;font-weight:800;margin-top:2px;">Project Manager</div>
+          <div style="font-size:15px;font-weight:800;margin-top:2px;">Project Manager / Initial Request</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${ownerLineHtml}</div>
           ${renderTierPermChips('tier1_command')}
         </div>
       </div>
-      <div class="dispatch-arrow-down">&#8595;</div>
-      <div class="dispatch-tier">
-        <div class="dispatch-node-card is-clickable${t2LockedCls} ${!t2State.locked && selTier === 'tier2_tech_lead' ? 'is-selected' : ''}" data-tier-key="tier2_tech_lead"${t2State.locked ? ` title="${escapeHtml(t2State.lockReason || '')}"` : ''}>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 2 · Technical Supervision${t2LockTag}</div>
-          <div style="font-size:14.5px;font-weight:800;margin-top:2px;">Tech Lead</div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Lead: <strong>${escapeHtml(ctx.tlName)}</strong></div>
-          ${renderTierPermChips('tier2_tech_lead')}
-        </div>
+      <div class="dispatch-parallel-fork-label">
+        <span>&#8601; Technical Track (Tech Lead)</span>
+        <span>Support Track (Security Manager · Parallel) &#8600;</span>
       </div>
-      <div class="dispatch-arrow-down">&#8595;</div>
-      <div class="dispatch-tier">
-        <div class="dispatch-node-card is-clickable${t3LockedCls} ${!t3State.locked && selTier === 'tier3_technicians' ? 'is-selected' : ''}" data-tier-key="tier3_technicians" style="min-width:220px;"${t3State.locked ? ` title="${escapeHtml(t3State.lockReason || '')}"` : ''}>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 3 · Technical Execution${t3LockTag}</div>
-          <div style="font-size:14px;font-weight:800;margin-top:2px;">Technicians (${ctx.deptNames.length} Specialty Branches)</div>
-          ${renderTierPermChips('tier3_technicians')}
-        </div>
-      </div>
-      <div class="dispatch-arrow-down">&#8595;</div>
-      <div class="dispatch-dept-grid">
-        ${ctx.deptNames.map((dn) => {
+      <div class="dispatch-parallel-tracks">
+        <div class="dispatch-track-col">
+          <div class="dispatch-track-header">Technical Track · Tier 2 &amp; Tier 3</div>
+          <div class="dispatch-tier">
+            <div class="dispatch-node-card is-clickable${t2LockedCls} ${!t2State.locked && selTier === 'tier2_tech_lead' ? 'is-selected' : ''}" data-tier-key="tier2_tech_lead" style="width:100%;"${t2State.locked ? ` title="${escapeHtml(t2State.lockReason || '')}"` : ''}>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 2 · Technical Supervision${t2LockTag}</div>
+              <div style="font-size:14.5px;font-weight:800;margin-top:2px;">Tech Lead</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Lead: <strong>${escapeHtml(ctx.tlName)}</strong></div>
+              ${renderTierPermChips('tier2_tech_lead')}
+            </div>
+          </div>
+          <div class="dispatch-arrow-down">&#8595;</div>
+          <div class="dispatch-tier">
+            <div class="dispatch-node-card is-clickable${t3LockedCls} ${!t3State.locked && selTier === 'tier3_technicians' ? 'is-selected' : ''}" data-tier-key="tier3_technicians" style="width:100%;"${t3State.locked ? ` title="${escapeHtml(t3State.lockReason || '')}"` : ''}>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 3 · Technical Execution${t3LockTag}</div>
+              <div style="font-size:14px;font-weight:800;margin-top:2px;">Technicians (${ctx.deptNames.length} Specialty Branches)</div>
+              ${renderTierPermChips('tier3_technicians')}
+            </div>
+          </div>
+          <div class="dispatch-arrow-down">&#8595;</div>
+          <div class="dispatch-dept-grid">
+            ${ctx.deptNames.map((dn) => {
       const members = ctx.pool.filter((c) => ctx.deptMatches(c, dn));
       const reqNeed = Number(ctx.activeEv?.requirements?.branches?.[dn] || 0);
       return `
-            <div class="dispatch-dept-card is-clickable${t3LockedCls}" data-tier-key="tier3_technicians"${t3State.locked ? ` title="${escapeHtml(t3State.lockReason || '')}"` : ''}>
-              <div style="display:flex;justify-content:space-between;align-items:center;">
-                <strong style="font-size:13px;">${escapeHtml(dn)}</strong>
-                <span class="status-badge status-badge-blue-sm">${members.length}${reqNeed > 0 ? ` / ${reqNeed} req` : ''}</span>
-              </div>
-              <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.45;">
-                ${members.length ? members.slice(0, 4).map((m) => ctx.formatMemberBadge(m)).join('<br>') + (members.length > 4 ? `<br>+${members.length - 4} more` : '') : '<em>Unassigned</em>'}
-              </div>
-            </div>
-          `;
+                <div class="dispatch-dept-card is-clickable${t3LockedCls}" data-tier-key="tier3_technicians"${t3State.locked ? ` title="${escapeHtml(t3State.lockReason || '')}"` : ''}>
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <strong style="font-size:13px;">${escapeHtml(dn)}</strong>
+                    <span class="status-badge status-badge-blue-sm">${members.length}${reqNeed > 0 ? ` / ${reqNeed} req` : ''}</span>
+                  </div>
+                  <div style="font-size:11.5px;color:var(--text-secondary);line-height:1.45;">
+                    ${members.length ? members.slice(0, 4).map((m) => ctx.formatMemberBadge(m)).join('<br>') + (members.length > 4 ? `<br>+${members.length - 4} more` : '') : '<em>Unassigned</em>'}
+                  </div>
+                </div>
+              `;
     }).join('')}
+          </div>
+        </div>
+
+        <div class="dispatch-track-col dispatch-track-col-support">
+          <div class="dispatch-track-header dispatch-track-header-support">Support Track · Tier 4 (Parallel)</div>
+          <div class="dispatch-tier">
+            <div class="dispatch-node-card is-clickable ${selTier === 'tier4_support' ? 'is-selected' : ''}" data-tier-key="tier4_support" style="width:100%;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:11px;font-weight:700;text-transform:uppercase;color:#0f766e;">Tier 4 · Security Manager</span>
+                ${t4StatusBadge}
+              </div>
+              <div style="font-size:14.5px;font-weight:800;margin-top:4px;">${escapeHtml(ctx.hasSecurityManager ? ctx.smName : 'Security Manager (Optional)')}</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Reviews initial request in parallel &amp; confirms Support Staff directly.</div>
+              ${renderTierPermChips('tier4_support')}
+            </div>
+          </div>
+          <div class="dispatch-arrow-down">&#8595;</div>
+          <div class="dispatch-dept-card is-clickable" data-tier-key="tier4_support" style="width:100%;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong style="font-size:13.5px;">Deployed Support Staff</strong>
+              <span class="status-badge ${t4State.approved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${tsMetrics.supportConfirmedCount || 0}${supReqNeed > 0 ? ` / ${supReqNeed} req` : ` confirmed`}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-top:6px;">
+              ${ctx.supportList.length
+                ? ctx.supportList.slice(0, 8).map((s) => ctx.formatMemberBadge(s)).join('<br>') + (ctx.supportList.length > 8 ? `<br>+${ctx.supportList.length - 8} more` : '')
+                : (tsMetrics.hasAnySupportScope
+                  ? '<em>Security Manager has not confirmed Support Staff yet — select in Step 3 below.</em>'
+                  : '<em>No Support Staff requested — Tier 4 passed automatically.</em>')}
+            </div>
+          </div>
+        </div>
       </div>
       <div class="dispatch-arrow-down">&#8595;</div>
       <div class="dispatch-tier">
-        <div class="dispatch-node-card is-clickable${t4LockedCls} ${!t4State.locked && selTier === 'tier4_support' ? 'is-selected' : ''}" data-tier-key="tier4_support" style="width:100%;max-width:640px;"${t4State.locked ? ` title="${escapeHtml(t4State.lockReason || '')}"` : ''}>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 4 · Operations Ground Support${t4LockTag}</div>
-          <div style="font-size:14px;font-weight:800;margin-top:2px;">Support Staff (${ctx.supportList.length}${Number(ctx.activeEv?.requirements?.branches?.['Support Staff'] || 0) > 0 ? ` / ${Number(ctx.activeEv.requirements.branches['Support Staff'])} req` : ''})</div>
+        <div class="dispatch-node-card is-clickable${t5LockedCls} ${!t5State.locked && selTier === 'site_ops' ? 'is-selected' : ''}" data-tier-key="site_ops" style="width:100%;max-width:680px;"${t5State.locked ? ` title="${escapeHtml(t5State.lockReason || '')}"` : ''}>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Tier 5 · Readiness &amp; Gate Sync${t5LockTag}</div>
+          <div style="font-size:14px;font-weight:800;margin-top:2px;">Gate Terminals &amp; On-Site Roll-Call Sync</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">
-            ${ctx.supportList.length ? ctx.supportList.slice(0, 6).map((s) => ctx.formatMemberBadge(s)).join(' · ') : 'Assign runners, logistics drivers, or venue crew via Event Roster or Support Requests below.'}
+            ${t5State.locked
+              ? escapeHtml(t5State.lockReason || 'Unlocks once both Technical Track (Tier 3) and Support Track (Tier 4) are confirmed.')
+              : `✓ Both Technical Track (${tsMetrics.techConfirmedCount || 0}/${tsMetrics.techTotal || 0}) and Support Track (${tsMetrics.supportConfirmedCount || 0}${supReqNeed > 0 ? `/${supReqNeed}` : ''}) are ready for Gate Sync.`}
           </div>
-          ${renderTierPermChips('tier4_support')}
         </div>
       </div>
     `;
@@ -13995,17 +14493,14 @@
     const evTitle = activeEv ? (activeEv.title || activeEv.name) : 'Select an Event Venue';
     const canSendReqs = isCurrentUserAdmin() || isCurrentUserEventCommand();
     const canReqSupport = canSendReqs || isCurrentUserTechLead();
-    const canFulfillSupport = isCurrentUserAdmin() || isCurrentUserStockManager() || isCurrentUserEventCommand();
+    const canFulfillSupport = isCurrentUserAdmin() || isCurrentUserSecurityManager() || isCurrentUserStockManager() || isCurrentUserEventCommand();
 
     const deptNames = ctx.deptNames;
     const reqBranches = (activeEv && activeEv.requirements && activeEv.requirements.branches) || {};
     const reqNotes = (activeEv && activeEv.requirements && activeEv.requirements.notes) || '';
+    const supportBriefNotes = (activeEv && activeEv.requirements && activeEv.requirements.support_notes) || '';
 
-    const supportPool = (state.crew || []).filter((c) => {
-      const r = String(c.role || '').toLowerCase();
-      const d = String(c.department || '').toLowerCase();
-      return ['driver', 'security', 'user', 'support_staff', 'operations', 'operations_crew', 'runner'].includes(r) || d.includes('support') || d.includes('logistic');
-    });
+    const supportPool = (state.crew || []).filter((c) => isUserEligibleSupportStaff(c));
     const supportReqs = ctx.supportReqs;
     const evLogs = ctx.evLogs;
     const tierStates = ctx.tierStates || computeDispatchTierStates(activeEv, {
@@ -14016,27 +14511,47 @@
       supportReqs,
       deptConfirmations: (evId && state.eventDeptConfirmations && state.eventDeptConfirmations[evId]) || [],
     });
+    const tsMetrics = tierStates.metrics || {};
     const t2Unlocked = Boolean(tierStates.tier2_tech_lead?.unlocked);
-    const t4Unlocked = Boolean(tierStates.tier4_support?.unlocked);
+    const t4Approved = Boolean(tierStates.tier4_support?.approved);
     const t5Unlocked = Boolean(tierStates.site_ops?.unlocked);
+    const isActiveEvDisabled = Boolean(activeEv && Number(activeEv.is_active ?? 1) === 0);
 
     const isTlViewer = !canSendReqs && isCurrentUserTechLead();
+    const isSecMgrViewer = !canSendReqs && isCurrentUserSecurityManagerOnly();
     const canApproveDeck = Boolean(activeEv && !ctx.isApproved && canCurrentUserApproveTechLead(activeEv));
     const canOpenCrewDeck = Boolean(activeEv && t2Unlocked && canCurrentUserAssignEvents());
+    const canApproveSmDeck = Boolean(
+      activeEv && !isActiveEvDisabled && !ctx.isSmApproved && tsMetrics.hasAnySupportScope && canCurrentUserApproveSecurityManager(activeEv)
+    );
+    const canAssignSupportDeck = Boolean(
+      activeEv && !isActiveEvDisabled && canCurrentUserAssignSupportStaff(activeEv)
+    );
+    const deployedSupportIdSet = new Set((ctx.supportList || []).map((m) => Number(m.id)));
+    const supReqNeed = Number(reqBranches['Support Staff'] || 0);
     const orig = ctx.originator || getEventRequestOriginatorInfo(activeEv);
     const reqPillsHtml = [...deptNames, 'Support Staff']
       .filter((dn) => Number(reqBranches[dn] || 0) > 0)
       .map((dn) => `<span class="status-badge status-badge-purple-sm">${escapeHtml(dn === 'Sound' ? 'Audio' : dn)}: ${Number(reqBranches[dn])} needed</span>`)
       .join('');
+    const t4HeaderBadge = !activeEv
+      ? '<span class="status-badge status-badge-neutral-sm">NO EVENT</span>'
+      : (!tsMetrics.hasAnySupportScope
+        ? '<span class="status-badge status-badge-green-sm">No Support Needed · Passed</span>'
+        : (t4Approved
+          ? `<span class="status-badge status-badge-green-sm">✓ ${tsMetrics.supportConfirmedCount || 0}${supReqNeed > 0 ? `/${supReqNeed}` : ''} Confirmed</span>`
+          : (ctx.hasSecurityManager && !ctx.isSmApproved
+            ? '<span class="status-badge status-badge-amber-sm">Awaiting Security Manager</span>'
+            : `<span class="status-badge status-badge-amber-sm">${tsMetrics.supportConfirmedCount || 0}${supReqNeed > 0 ? `/${supReqNeed}` : ''} Deployed</span>`)));
 
     deck.innerHTML = `
       <div class="dispatch-step-panel">
         <div style="display:flex;justify-content:space-between;align-items:center;">
-          <strong style="font-size:13.5px;">${isTlViewer ? 'Step 1 &amp; 2 · Incoming Request (From Admin / PM / Coordinator)' : 'Step 1 &amp; 2 · Send Requirements to Tech Lead'}</strong>
+          <strong style="font-size:13.5px;">${(isTlViewer || isSecMgrViewer) ? 'Step 1 &amp; 2 · Incoming Request (From Admin / PM / Coordinator)' : 'Step 1 &amp; 2 · Send Requirements to Tech Lead'}</strong>
           <span class="status-badge ${ctx.isApproved ? 'status-badge-green-sm' : 'status-badge-amber-sm'}">${escapeHtml(activeEv ? (!ctx.isApproved ? 'AWAITING APPROVAL FROM TECH LEAD' : String(activeEv.dispatch_status || 'draft').replace(/_/g, ' ').toUpperCase()) : 'NO EVENT')}</span>
         </div>
         <div style="font-size:11.5px;color:var(--text-secondary);">Event: <strong>${escapeHtml(evTitle)}</strong> · From: <strong>${escapeHtml(orig.name)}</strong> (${escapeHtml(orig.roleLabel)}) · Tech Lead: <strong>${escapeHtml(activeEv?.tech_lead || '—')}</strong></div>
-        ${isTlViewer ? `
+        ${(isTlViewer || isSecMgrViewer) ? `
           <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);">
             ${reqPillsHtml || '<span style="font-size:11.5px;color:var(--text-muted);">No branch headcounts requested yet.</span>'}
           </div>
@@ -14057,44 +14572,81 @@
         `}
       </div>
 
-      <div class="dispatch-step-panel${activeEv && !t2Unlocked ? ' is-locked-panel' : ''}">
+      <div class="dispatch-step-panel js-df-tier4-panel">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
-          <strong style="font-size:13.5px;">Step 3 · Tier 4 Support Staff Requests</strong>
-          ${activeEv && !t2Unlocked
-            ? `<span class="status-badge status-badge-amber-sm">🔒 Locked · Awaiting Tier 1 Approval</span>`
-            : `<span class="status-badge status-badge-amber-sm">${supportReqs.filter((r) => r.status === 'pending').length} Pending</span>`}
+          <strong style="font-size:13.5px;">Step 3 · Tier 4 Support Staff (Parallel · Security Manager)</strong>
+          ${t4HeaderBadge}
         </div>
-        ${evId && canReqSupport ? `
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <input type="text" class="form-input js-dp-sup-req-note" placeholder="Need e.g. 2x Runners, 1x Driver..." style="flex:1;min-width:140px;height:32px;font-size:12px;" ${!t2Unlocked ? `disabled title="${escapeHtml(tierStates.tier2_tech_lead?.lockReason || '')}"` : ''} />
-            <button type="button" class="btn btn-secondary-32-sm js-dp-request-support-btn" ${!t2Unlocked ? `disabled title="${escapeHtml(tierStates.tier2_tech_lead?.lockReason || '')}"` : ''}>+ Request Support</button>
+        <div style="font-size:11.5px;color:var(--text-secondary);">
+          Security Manager: <strong>${escapeHtml(ctx.smName)}</strong>${supReqNeed > 0 ? ` · Target: <strong>${supReqNeed} Support Staff</strong>` : ''}
+        </div>
+        ${supportBriefNotes ? `<div style="font-size:11.5px;color:var(--text-secondary);padding:6px 8px;border-radius:6px;background:var(--bg-card);border:1px solid var(--border-color);"><strong>Support Brief:</strong> ${escapeHtml(supportBriefNotes)}</div>` : ''}
+        ${canApproveSmDeck ? `<button type="button" class="btn btn-primary-32 js-dp-approve-sm-btn">✓ Approve Support Request (Security Manager)</button>` : ''}
+
+        ${evId && (canAssignSupportDeck || ctx.supportList.length > 0 || tsMetrics.hasAnySupportScope) ? `
+          <div class="df-support-deploy-box">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+              <span style="font-size:11.5px;font-weight:700;color:var(--text-primary);">Select &amp; Confirm Support Staff to Deploy</span>
+              <span class="status-badge status-badge-purple-sm js-dp-sm-sel-count">${deployedSupportIdSet.size}${supReqNeed > 0 ? ` / ${supReqNeed} target` : ' selected'}</span>
+            </div>
+            <div class="df-support-checklist">
+              ${supportPool.length ? supportPool.map((sp) => {
+      const uid = Number(sp.id);
+      const isChecked = deployedSupportIdSet.has(uid);
+      const asgSt = String(ctx.asgMap[String(uid)]?.confirmation_status || '').toLowerCase();
+      return `
+                  <label class="df-support-check-item${isChecked ? ' is-checked' : ''}">
+                    <input type="checkbox" class="js-dp-sm-support-cb" value="${uid}" ${isChecked ? 'checked' : ''} ${!canAssignSupportDeck ? 'disabled' : ''} />
+                    <span class="df-support-check-meta">
+                      <strong>${escapeHtml(sp.full_name)}</strong>
+                      <small>${escapeHtml(sp.role_display || sp.role || 'Support Staff')}${sp.department ? ` · ${escapeHtml(sp.department)}` : ''}</small>
+                    </span>
+                    ${asgSt === 'confirmed' ? '<span class="assign-status-pill confirmed">✓</span>' : ''}
+                  </label>
+                `;
+    }).join('') : '<div style="font-size:11.5px;color:var(--text-muted);padding:6px 2px;">No eligible Support Staff / Security / Driver users found. Add staff in Users &amp; Roles first.</div>'}
+            </div>
+            ${canAssignSupportDeck ? `
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+                <input type="text" class="form-input js-dp-sm-deploy-note" value="${escapeHtml(activeEv?.security_manager_approval_note || '')}" placeholder="Deployment note (e.g. Gate A perimeter & loading bay)..." style="flex:1;min-width:140px;height:30px;font-size:11.5px;" />
+                <button type="button" class="btn btn-primary-32 js-dp-confirm-support-roster-btn" style="height:30px;font-size:11.5px;">✓ Confirm Deployed Support Staff</button>
+              </div>
+            ` : ''}
           </div>
         ` : ''}
-        <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
-          ${supportReqs.length ? supportReqs.map((sr) => {
+
+        ${evId && canReqSupport ? `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px dashed var(--border-color);">
+            <input type="text" class="form-input js-dp-sup-req-note" placeholder="Ad-hoc request: e.g. 2x Runners, 1x Driver..." style="flex:1;min-width:140px;height:30px;font-size:11.5px;" />
+            <button type="button" class="btn btn-secondary-32-sm js-dp-request-support-btn" style="height:30px;">+ Request Support</button>
+          </div>
+        ` : ''}
+        ${supportReqs.length ? `
+          <div style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+            ${supportReqs.map((sr) => {
       const isPend = sr.status === 'pending';
       const rolesStr = Object.entries(sr.requested_roles || {}).map(([k, v]) => `${v}x ${k}`).join(', ');
       return `
-              <div style="padding:8px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:11.5px;">
-                <div style="display:flex;justify-content:space-between;gap:6px;">
-                  <strong>#${Number(sr.id)} · ${escapeHtml(rolesStr || 'Support Crew')}</strong>
-                  <span class="assign-status-pill ${isPend ? 'pending' : 'confirmed'}">${escapeHtml(sr.status)}</span>
-                </div>
-                <div style="color:var(--text-secondary);margin-top:2px;">By ${escapeHtml(sr.requested_by_name)}${sr.notes ? ` · ${escapeHtml(sr.notes)}` : ''}</div>
-                ${sr.assigned_names?.length ? `<div style="margin-top:4px;color:#047857;">Assigned: <strong>${escapeHtml(sr.assigned_names.join(', '))}</strong></div>` : ''}
-                ${isPend && canFulfillSupport ? `
-                  <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
-                    ${!t4Unlocked ? `<div style="font-size:11px;color:#b45309;font-weight:600;">🔒 Fulfillment locked: ${escapeHtml(tierStates.tier4_support?.lockReason || 'Awaiting upstream tier approval')}</div>` : ''}
-                    <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                      ${supportPool.map((sp) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;"><input type="checkbox" class="js-dp-sup-cb-${Number(sr.id)}" value="${Number(sp.id)}" ${!t4Unlocked ? 'disabled' : ''} /><span>${escapeHtml(sp.full_name)}</span></label>`).join('') || '<em>No support pool users</em>'}
-                    </div>
-                    <button type="button" class="btn btn-primary-32 js-dp-fulfill-btn" data-request-id="${Number(sr.id)}" style="height:28px;font-size:11px;" ${!t4Unlocked ? `disabled title="${escapeHtml(tierStates.tier4_support?.lockReason || '')}"` : ''}>Fulfill Request #${Number(sr.id)}</button>
+                <div style="padding:8px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:11.5px;">
+                  <div style="display:flex;justify-content:space-between;gap:6px;">
+                    <strong>#${Number(sr.id)} · ${escapeHtml(rolesStr || 'Support Crew')}</strong>
+                    <span class="assign-status-pill ${isPend ? 'pending' : 'confirmed'}">${escapeHtml(sr.status)}</span>
                   </div>
-                ` : ''}
-              </div>
-            `;
-    }).join('') : '<div style="font-size:11.5px;color:var(--text-muted);">No Support Staff requests for this event yet.</div>'}
-        </div>
+                  <div style="color:var(--text-secondary);margin-top:2px;">By ${escapeHtml(sr.requested_by_name)}${sr.notes ? ` · ${escapeHtml(sr.notes)}` : ''}</div>
+                  ${sr.assigned_names?.length ? `<div style="margin-top:4px;color:#047857;">Assigned: <strong>${escapeHtml(sr.assigned_names.join(', '))}</strong></div>` : ''}
+                  ${isPend && canFulfillSupport ? `
+                    <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+                      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                        ${supportPool.map((sp) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;"><input type="checkbox" class="js-dp-sup-cb-${Number(sr.id)}" value="${Number(sp.id)}" /><span>${escapeHtml(sp.full_name)}</span></label>`).join('') || '<em>No support pool users</em>'}
+                      </div>
+                      <button type="button" class="btn btn-primary-32 js-dp-fulfill-btn" data-request-id="${Number(sr.id)}" style="height:28px;font-size:11px;">Fulfill Request #${Number(sr.id)}</button>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+    }).join('')}
+          </div>
+        ` : ''}
       </div>
 
       <div class="dispatch-step-panel${activeEv && !t5Unlocked ? ' is-locked-panel' : ''}">
@@ -14104,7 +14656,7 @@
             ? `<span class="status-badge status-badge-amber-sm" title="${escapeHtml(tierStates.site_ops?.lockReason || '')}">🔒 Locked · Upstream Needed</span>`
             : `<span class="status-badge status-badge-blue-sm">${evLogs.length} Actions</span>`}
         </div>
-        ${activeEv && !t5Unlocked ? `<div style="font-size:11px;color:#b45309;">🔒 ${escapeHtml(tierStates.site_ops?.lockReason || 'Complete upstream tier approvals to unlock Tier 5 Readiness & Gate Sync.')}</div>` : ''}
+        ${activeEv && !t5Unlocked ? `<div style="font-size:11px;color:#b45309;">🔒 ${escapeHtml(tierStates.site_ops?.lockReason || 'Complete Technical Track (Tier 3) and Support Track (Tier 4) to unlock Tier 5 Readiness & Gate Sync.')}</div>` : ''}
         <div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
           ${evLogs.length ? evLogs.slice(0, 12).map((l) => `
             <div style="padding:6px 8px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);font-size:11.5px;">
@@ -14116,6 +14668,54 @@
         </div>
       </div>
     `;
+
+    deck.querySelector('.js-dp-approve-sm-btn')?.addEventListener('click', async (e) => {
+      if (!evId) return;
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'Approving...';
+      try {
+        await approveEventSecurityManager(evId);
+      } catch (err) {
+        showToast(err.message || 'Failed to approve Tier 4 support request.', 'error');
+        btn.disabled = false;
+        btn.textContent = '✓ Approve Support Request (Security Manager)';
+      }
+    });
+
+    const updateSmSelBadge = () => {
+      const checkedCount = deck.querySelectorAll('.js-dp-sm-support-cb:checked').length;
+      const badge = deck.querySelector('.js-dp-sm-sel-count');
+      if (badge) {
+        badge.textContent = `${checkedCount}${supReqNeed > 0 ? ` / ${supReqNeed} target` : ' selected'}`;
+      }
+    };
+    deck.querySelectorAll('.js-dp-sm-support-cb').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        cb.closest('.df-support-check-item')?.classList.toggle('is-checked', cb.checked);
+        updateSmSelBadge();
+      });
+    });
+
+    deck.querySelector('.js-dp-confirm-support-roster-btn')?.addEventListener('click', async (e) => {
+      if (!evId) return;
+      const btn = e.currentTarget;
+      const selectedIds = Array.from(deck.querySelectorAll('.js-dp-sm-support-cb:checked')).map((cb) => Number(cb.value)).filter((n) => n > 0);
+      if (selectedIds.length === 0) {
+        showToast('Select at least one Support Staff member to confirm for deployment.', 'warning');
+        return;
+      }
+      const note = (deck.querySelector('.js-dp-sm-deploy-note')?.value || '').trim();
+      btn.disabled = true;
+      btn.textContent = 'Confirming...';
+      try {
+        await assignEventSupportStaff(evId, selectedIds, note, false);
+      } catch (err) {
+        showToast(err.message || 'Failed to confirm deployed Support Staff.', 'error');
+        btn.disabled = false;
+        btn.textContent = '✓ Confirm Deployed Support Staff';
+      }
+    });
 
     deck.querySelector('.js-dp-approve-req-btn')?.addEventListener('click', async (e) => {
       if (!evId) return;
@@ -14325,6 +14925,13 @@
     applySelectLockState(pmEl, disablePm, leadView.showAutoTags ? pmAutoTag : null, leadView.pmLockReason);
 
     if (pmStar) pmStar.style.display = requirePm ? 'inline' : 'none';
+
+    const smEl = document.getElementById('ce-security-manager');
+    if (smEl && (!preserveSelections || !smEl.matches(':focus'))) {
+      const evSm = ev && !isPlaceholderLeadershipValue(ev.security_manager) ? String(ev.security_manager || '').trim() : '';
+      const desiredSm = preserveSelections ? (smEl.value ?? evSm) : evSm;
+      populateLeadershipSelect(smEl, desiredSm, 'securitymanager');
+    }
   }
 
   function resetCreateEventForm() {
@@ -14335,6 +14942,8 @@
     const startEl = document.getElementById('ce-start-date');
     const endEl = document.getElementById('ce-end-date');
     const ctEl = document.getElementById('ce-calltime');
+    const supCntEl = document.getElementById('ce-support-count');
+    const supNotesEl = document.getElementById('ce-support-notes');
     const modeBadge = document.getElementById('ce-screen-mode-badge');
     const heading = document.getElementById('ce-form-heading');
     const cancelBtn = document.getElementById('ce-cancel-edit-btn');
@@ -14350,6 +14959,8 @@
     if (startEl) startEl.value = todayIso;
     if (endEl) endEl.value = todayIso;
     if (ctEl) ctEl.value = '08:00';
+    if (supCntEl) supCntEl.value = '0';
+    if (supNotesEl) supNotesEl.value = '';
     if (modeBadge) modeBadge.textContent = 'New Event';
     if (heading) heading.textContent = 'Create Event Details';
     if (cancelBtn) cancelBtn.style.display = 'none';
@@ -14379,6 +14990,8 @@
     const startEl = document.getElementById('ce-start-date');
     const endEl = document.getElementById('ce-end-date');
     const ctEl = document.getElementById('ce-calltime');
+    const supCntEl = document.getElementById('ce-support-count');
+    const supNotesEl = document.getElementById('ce-support-notes');
     const modeBadge = document.getElementById('ce-screen-mode-badge');
     const heading = document.getElementById('ce-form-heading');
     const cancelBtn = document.getElementById('ce-cancel-edit-btn');
@@ -14394,6 +15007,8 @@
     if (startEl) startEl.value = startIso;
     if (endEl) endEl.value = endIso;
     if (ctEl) ctEl.value = ev.call_time || '08:00';
+    if (supCntEl) supCntEl.value = String(Math.max(0, Number(ev.requirements?.branches?.['Support Staff'] || 0)));
+    if (supNotesEl) supNotesEl.value = String(ev.requirements?.support_notes || '');
     if (modeBadge) modeBadge.textContent = isDisabled ? 'Disabled Event' : 'Editing Event';
     if (heading) heading.textContent = `Edit Event: ${ev.title || ev.name}`;
     if (cancelBtn) cancelBtn.style.display = 'inline-flex';
@@ -14441,7 +15056,7 @@
     const q = String(state.createEventSearch || '').trim().toLowerCase();
     const filtered = allEvents.filter((ev) => {
       if (!q) return true;
-      const hay = `${ev.title || ''} ${ev.location || ''} ${ev.tech_lead || ''} ${ev.project_manager || ''} ${ev.event_coordinator || ''} ${ev.disabled_reason || ''} ${ev.start_date || ev.date || ''}`.toLowerCase();
+      const hay = `${ev.title || ''} ${ev.location || ''} ${ev.tech_lead || ''} ${ev.security_manager || ''} ${ev.project_manager || ''} ${ev.event_coordinator || ''} ${ev.disabled_reason || ''} ${ev.start_date || ev.date || ''}`.toLowerCase();
       return hay.includes(q);
     });
 
@@ -14511,6 +15126,11 @@
                 <span class="event-showcase-meta-label">${commandLeadLabel}</span>
                 <span class="event-showcase-meta-val">${escapeHtml(commandLeadText)}</span>
               </div>
+              ${isEventSecurityManagerAssigned(ev) || Number(ev.requirements?.branches?.['Support Staff'] || 0) > 0 ? `
+              <div class="event-showcase-meta-item" style="grid-column: 1 / -1;">
+                <span class="event-showcase-meta-label">Security Manager · Tier 4 Support</span>
+                <span class="event-showcase-meta-val">${escapeHtml(isEventSecurityManagerAssigned(ev) ? ev.security_manager : 'Optional')}${Number(ev.requirements?.branches?.['Support Staff'] || 0) > 0 ? ` · ${Number(ev.requirements.branches['Support Staff'])} support req` : ''}${isEventApprovedBySecurityManager(ev) ? ' · ✓ Approved' : ''}</span>
+              </div>` : ''}
               <div class="event-showcase-meta-item" style="grid-column: 1 / -1;">
                 <span class="event-showcase-meta-label">Call Time · Crew</span>
                 <span class="event-showcase-meta-val">${escapeHtml(ev.call_time || '08:00')} · ${Number(ev.assigned_count || 0)} crew</span>
@@ -16774,6 +17394,9 @@
         fd.append('location', locVal);
         fd.append('tech_lead', tlVal);
         fd.append('project_manager', pmVal);
+        fd.append('security_manager', document.getElementById('ce-security-manager')?.value.trim() || '');
+        fd.append('support_staff_count', String(Math.max(0, Math.min(99, Number(document.getElementById('ce-support-count')?.value || 0)))));
+        fd.append('support_notes', document.getElementById('ce-support-notes')?.value.trim() || '');
         fd.append('call_time', document.getElementById('ce-calltime')?.value || '08:00');
         const ceImgInput = document.getElementById('ce-modal-image');
         if (ceImgInput && ceImgInput.files && ceImgInput.files[0]) {
@@ -18826,8 +19449,8 @@
         }
         const editBtn = e.target.closest('.js-vs-edit-venue');
         if (editBtn) {
-          if (!canCurrentUserAssignEvents()) {
-            showToast('Permission Denied: Editing Event Venues requires Tech Lead, PM, or Administrator privileges.');
+          if (!canCurrentUserAssignEvents() && !isCurrentUserSecurityManagerOnly()) {
+            showToast('Permission Denied: Editing Event Venues requires Tech Lead, Security Manager, PM, or Administrator privileges.');
             return;
           }
           const vid = editBtn.getAttribute('data-venue-id') || '';
@@ -19014,9 +19637,36 @@
           return;
         }
         const editingEventId = document.getElementById('venue-crud-id')?.value.trim() || '';
+        const isSecMgrOnlyUser = isCurrentUserSecurityManagerOnly();
+        if (isSecMgrOnlyUser) {
+          const btnSm = document.getElementById('venue-crud-submit-btn');
+          const assignedSupportIds = Array.from(venueCrudSelectedCrewIds);
+          if (assignedSupportIds.length === 0) {
+            showToast('Select at least one Support Staff member to confirm for deployment.', 'warning');
+            return;
+          }
+          if (btnSm) {
+            btnSm.disabled = true;
+            btnSm.textContent = 'Confirming...';
+          }
+          try {
+            await assignEventSupportStaff(editingEventId, assignedSupportIds, '', false);
+            closeVenueCrudModal();
+            renderAll();
+          } catch (err) {
+            showToast(err.message || 'Failed to confirm deployed Support Staff.', 'error');
+          } finally {
+            if (btnSm) {
+              btnSm.disabled = false;
+              btnSm.textContent = '✓ Confirm Deployed Support Staff';
+            }
+          }
+          return;
+        }
         const tlVal = document.getElementById('venue-crud-techlead')?.value.trim() || '';
         const pmWrapVisible = document.getElementById('venue-crud-pm-wrap')?.style.display !== 'none';
         const pmVal = pmWrapVisible ? (document.getElementById('venue-crud-pm')?.value.trim() || '') : '';
+        const smVal = document.getElementById('venue-crud-security-manager')?.value.trim() || '';
         const leadCheck = validateLeadershipSelection(tlVal, pmVal, {
           requireTechLead: false,
           requireCommandForTl: true,
@@ -19047,13 +19697,14 @@
         fd.append('call_time', document.getElementById('venue-crud-calltime')?.value || '08:00');
         fd.append('tech_lead', tlVal);
         fd.append('project_manager', pmVal);
+        fd.append('security_manager', smVal);
         fd.append('remove_image', document.getElementById('venue-crud-remove-image')?.value || '0');
         if (showDeptCounts) {
           fd.append('requirements', JSON.stringify(getVenueCrudDeptCountsPayload()));
         }
         if (canAssignCrew) {
           fd.append('assigned_technicians', JSON.stringify(assignedTechs));
-          fd.append('assigned_roster', JSON.stringify(buildStructuredEventRoster(pmVal, tlVal, assignedTechs)));
+          fd.append('assigned_roster', JSON.stringify(buildStructuredEventRoster(pmVal, tlVal, assignedTechs, smVal)));
         }
         const pendingCommentText = canAssignCrew ? (document.getElementById('venue-comment-text')?.value || '').trim() : '';
         const pendingCommentDept = document.getElementById('venue-comment-dept')?.value || 'Video';

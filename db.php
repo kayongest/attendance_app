@@ -403,6 +403,17 @@ function ensureAbilitySchemaAndSeed(PDO $pdo, bool $forceReset = false): void
     try {
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `tech_lead_approval_note` VARCHAR(255) DEFAULT NULL");
     } catch (Throwable $e) {}
+    foreach ([
+        "ALTER TABLE `events` ADD COLUMN `security_manager` VARCHAR(120) DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `security_manager_approved` TINYINT(1) NOT NULL DEFAULT 0",
+        "ALTER TABLE `events` ADD COLUMN `security_manager_approved_by` INT DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `security_manager_approved_at` DATETIME DEFAULT NULL",
+        "ALTER TABLE `events` ADD COLUMN `security_manager_approval_note` VARCHAR(255) DEFAULT NULL",
+    ] as $evSmAlter) {
+        try {
+            $pdo->exec($evSmAlter);
+        } catch (Throwable $e) {}
+    }
     try {
         $pdo->exec("ALTER TABLE `events` ADD COLUMN `created_by_id` INT DEFAULT NULL");
     } catch (Throwable $e) {}
@@ -2095,7 +2106,7 @@ function logEventDispatchAction(
 function recalculateEventDispatchStatus(PDO $pdo, string $eventId): string
 {
     try {
-        $evSt = $pdo->prepare("SELECT `id`, `tech_lead`, `tech_lead_approved`, `requirements_json`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evSt = $pdo->prepare("SELECT `id`, `tech_lead`, `tech_lead_approved`, `security_manager`, `security_manager_approved`, `requirements_json`, `dispatch_status` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
         $evSt->execute([$eventId, $eventId]);
         $ev = $evSt->fetch(PDO::FETCH_ASSOC);
         if (!$ev) {
@@ -2103,40 +2114,49 @@ function recalculateEventDispatchStatus(PDO $pdo, string $eventId): string
         }
         $realId = (string) $ev['id'];
         $reqs = json_decode((string) ($ev['requirements_json'] ?? ''), true);
-        $hasReq = is_array($reqs) && !empty(array_filter((array) ($reqs['branches'] ?? []), static fn($v) => (int) $v > 0));
+        $branchesReq = is_array($reqs) ? (array) ($reqs['branches'] ?? []) : [];
+        $hasReq = !empty(array_filter($branchesReq, static fn($v) => (int) $v > 0));
         $tlClean = trim((string) ($ev['tech_lead'] ?? ''));
         $hasTechLead = ($tlClean !== '' && strtolower($tlClean) !== 'tech lead');
         $isTlApproved = ((int) ($ev['tech_lead_approved'] ?? 0) === 1);
 
-        if ($hasTechLead && !$isTlApproved) {
-            $next = 'awaiting_approval_from_tech_lead';
-            $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
-            return $next;
-        }
+        $smClean = trim((string) ($ev['security_manager'] ?? ''));
+        $hasSecMgr = ($smClean !== '' && !in_array(strtolower($smClean), ['security manager', 'unassigned'], true));
+        $isSmApproved = ((int) ($ev['security_manager_approved'] ?? 0) === 1);
+        $supportNeed = max(0, (int) ($branchesReq['Support Staff'] ?? 0));
+
+        $pendingSupReqs = 0;
+        try {
+            $srSt = $pdo->prepare("SELECT COUNT(*) FROM `event_support_requests` WHERE `event_id` = ? AND LOWER(`status`) = 'pending'");
+            $srSt->execute([$realId]);
+            $pendingSupReqs = (int) $srSt->fetchColumn();
+        } catch (Throwable $e) {}
 
         $asgSt = $pdo->prepare("SELECT `branch_dept`, `confirmation_status` FROM `event_crew_assignments` WHERE `event_id` = ?");
         $asgSt->execute([$realId]);
         $rows = $asgSt->fetchAll(PDO::FETCH_ASSOC);
 
-        if (empty($rows)) {
-            if ($hasTechLead && $isTlApproved) {
-                $next = 'approved_by_tech_lead';
-            } elseif ($hasTechLead) {
-                $next = 'awaiting_approval_from_tech_lead';
-            } elseif ($hasReq) {
-                $next = 'requirements_sent';
-            } else {
-                $next = 'draft';
-            }
-            $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
-            return $next;
-        }
-
         $confirmedByBranch = [];
-        $hasPendingOrDeclined = false;
+        $hasPendingOrDeclinedTech = false;
+        $hasPendingOrDeclinedSupport = false;
+        $techRowCount = 0;
+        $supportRowCount = 0;
+        $supportConfirmedCount = 0;
         foreach ($rows as $r) {
             $st = strtolower((string) ($r['confirmation_status'] ?? 'pending'));
-            $brRaw = (string) ($r['branch_dept'] ?? 'Sound');
+            $brRaw = trim((string) ($r['branch_dept'] ?? 'Sound'));
+            $isSupportRow = (strcasecmp($brRaw, 'Support Staff') === 0);
+            if ($isSupportRow) {
+                $supportRowCount++;
+                if ($st === 'confirmed') {
+                    $supportConfirmedCount++;
+                    $confirmedByBranch['Support Staff'] = ($confirmedByBranch['Support Staff'] ?? 0) + 1;
+                } else {
+                    $hasPendingOrDeclinedSupport = true;
+                }
+                continue;
+            }
+            $techRowCount++;
             $branches = array_filter(array_map('trim', explode('/', $brRaw)));
             if (empty($branches)) {
                 $branches = ['Sound'];
@@ -2146,21 +2166,66 @@ function recalculateEventDispatchStatus(PDO $pdo, string $eventId): string
                     $confirmedByBranch[$br] = ($confirmedByBranch[$br] ?? 0) + 1;
                 }
             } else {
-                $hasPendingOrDeclined = true;
+                $hasPendingOrDeclinedTech = true;
             }
         }
 
-        $allMet = !$hasPendingOrDeclined;
-        if ($allMet && $hasReq) {
-            foreach ((array) ($reqs['branches'] ?? []) as $brName => $needCnt) {
-                if ((int) $needCnt > 0 && ($confirmedByBranch[$brName] ?? 0) < (int) $needCnt) {
-                    $allMet = false;
-                    break;
+        $hasSupportScope = ($hasSecMgr || $supportNeed > 0 || $pendingSupReqs > 0 || $supportRowCount > 0);
+        $supportReady = true;
+        if ($hasSupportScope) {
+            $smGateOk = !$hasSecMgr || $isSmApproved;
+            $supportCountOk = ($supportNeed > 0) ? ($supportConfirmedCount >= $supportNeed) : ($supportRowCount > 0 || $isSmApproved);
+            $supportReady = $smGateOk && ($pendingSupReqs === 0) && !$hasPendingOrDeclinedSupport && $supportCountOk;
+        }
+
+        if ($hasTechLead && !$isTlApproved) {
+            $next = 'awaiting_approval_from_tech_lead';
+            $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
+            return $next;
+        }
+
+        if (empty($rows) && !$hasSupportScope) {
+            if ($hasTechLead && $isTlApproved) {
+                $next = 'approved_by_tech_lead';
+            } elseif ($hasReq) {
+                $next = 'requirements_sent';
+            } else {
+                $next = 'draft';
+            }
+            $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
+            return $next;
+        }
+
+        $techAllMet = !$hasPendingOrDeclinedTech;
+        $hasTechBranchReq = false;
+        foreach ($branchesReq as $brName => $needCnt) {
+            if (strcasecmp((string) $brName, 'Support Staff') === 0) {
+                continue;
+            }
+            if ((int) $needCnt > 0) {
+                $hasTechBranchReq = true;
+                if (($confirmedByBranch[$brName] ?? 0) < (int) $needCnt) {
+                    $techAllMet = false;
                 }
             }
         }
+        if ($hasTechLead && $techRowCount === 0 && $hasTechBranchReq) {
+            $techAllMet = false;
+        }
+        if ($hasTechLead && !$hasTechBranchReq && $techRowCount === 0) {
+            $techAllMet = false;
+        }
 
-        $next = $allMet ? 'ready' : 'staffing_in_progress';
+        if ($techAllMet && $supportReady) {
+            $next = 'ready';
+        } elseif ($techAllMet && $hasSupportScope && $hasSecMgr && !$isSmApproved) {
+            $next = 'awaiting_approval_from_security_manager';
+        } elseif ($hasTechLead && $isTlApproved && $techRowCount === 0 && $supportRowCount === 0) {
+            $next = 'approved_by_tech_lead';
+        } else {
+            $next = 'staffing_in_progress';
+        }
+
         $pdo->prepare("UPDATE `events` SET `dispatch_status` = ? WHERE `id` = ?")->execute([$next, $realId]);
         return $next;
     } catch (Throwable $e) {

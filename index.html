@@ -26,7 +26,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261128_v42" />
+  <link rel="stylesheet" href="styles.css?v=20261128_v43" />
 </head>
 
 <body>
@@ -4644,6 +4644,33 @@
                   </div>
                 </div>
 
+                <div class="ce-support-request-box" id="ce-support-request-box">
+                  <div class="ce-support-request-head">
+                    <div>
+                      <strong class="ce-support-request-title">Tier 4 · Support &amp; Security Request <span class="ce-optional-pill">Optional</span></strong>
+                      <div class="ce-support-request-desc">Assign a Security Manager to confirm Support Staff in parallel with Tech Lead. Leave at 0 / unassigned if no Support Staff are needed.</div>
+                    </div>
+                  </div>
+                  <div class="ce-support-request-grid">
+                    <div class="form-field" style="margin: 0;">
+                      <label class="form-label" for="ce-security-manager">
+                        Security Manager
+                        <span class="muted-text" style="font-weight: 400; font-size: 10.5px;">(Security Manager role)</span>
+                      </label>
+                      <select id="ce-security-manager" class="form-input"></select>
+                    </div>
+                    <div class="form-field" style="margin: 0;">
+                      <label class="form-label" for="ce-support-count">Support Staff Needed</label>
+                      <input type="number" id="ce-support-count" class="form-input" min="0" max="99" value="0" />
+                    </div>
+                  </div>
+                  <div class="form-field" style="margin: 8px 0 0 0;">
+                    <label class="form-label" for="ce-support-notes">Support / Security Brief <span class="muted-text" style="font-weight: 400; font-size: 10.5px;">(Optional)</span></label>
+                    <input type="text" id="ce-support-notes" class="form-input"
+                      placeholder="e.g. 2x perimeter security officers, 1x logistics driver, VIP gate runners..." />
+                  </div>
+                </div>
+
                 <div class="form-field" style="margin-bottom: 12px;">
                   <label class="form-label" for="ce-calltime">Call Time (24h CAT)</label>
                   <input type="time" id="ce-calltime" class="form-input" value="08:00" required />
@@ -6933,7 +6960,7 @@
         </div>
 
         <div id="venue-crud-leadership-grid"
-          style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 12px;">
           <div class="form-field" id="venue-crud-techlead-wrap">
             <label class="form-label" for="venue-crud-techlead">Technical Lead <span id="venue-crud-techlead-auto-tag"
                 style="display: none; font-size: 10px; font-weight: 600; color: var(--brand-primary);">(Logged-in
@@ -6949,6 +6976,11 @@
             </label>
             <select id="venue-crud-pm" class="form-input"></select>
           </div>
+          <div class="form-field" id="venue-crud-sm-wrap">
+            <label class="form-label" for="venue-crud-security-manager">Security Manager <span class="muted-text"
+                style="font-weight: 400; font-size: 10px;">(Tier 4 Support)</span></label>
+            <select id="venue-crud-security-manager" class="form-input"></select>
+          </div>
         </div>
 
         <div id="venue-crud-approval-banner"
@@ -6960,6 +6992,17 @@
           </div>
           <button type="button" class="btn btn-primary-32" id="venue-crud-approve-btn" style="display: none;">✓ Approve
             Request (Tech Lead)</button>
+        </div>
+
+        <div id="venue-crud-sm-approval-banner"
+          style="display: none; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 12px; margin-bottom: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-subtle); font-size: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="status-badge status-badge-amber-sm" id="venue-crud-sm-approval-pill">Awaiting Approval from Security
+              Manager</span>
+            <span id="venue-crud-sm-approval-meta" style="color: var(--text-secondary); font-size: 11.5px;"></span>
+          </div>
+          <button type="button" class="btn btn-primary-32" id="venue-crud-sm-approve-btn" style="display: none;">✓ Approve
+            Support Request (Security Manager)</button>
         </div>
 
         <!-- PM / Event Coordinator: Department Technician Headcount Targets -->
@@ -7551,7 +7594,7 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261128_v42"></script>
+  <script src="app.js?v=20261128_v43"></script>
 </body>
 
 </html>

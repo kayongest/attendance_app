@@ -371,6 +371,7 @@ function ensureRolesTable(PDO $pdo): void
                 ['stock_manager', 'Stock Logistics Manager', 'Stock Logistics Manager', 'L4_ALL_ACCESS', 'Warehouse', 'Oversees warehouse hubs, inventory movement, and logistics personnel onboarding.', 1],
                 ['stock_controller', 'Stock Controller', 'Stock Controller', 'L3_STOCK_WAREHOUSE', 'Warehouse', 'Gate terminal scanning (#pane-kiosk), facility gate custody, and shift relief coordination.', 1],
                 ['tech_lead', 'Technical Lead', 'Technical Lead', 'L4_ALL_ACCESS', 'Production', 'Supervises Video, Sound, Lighting, Electrical, Rigging, and Interpretation operations.', 1],
+                ['security_manager', 'Security Manager', 'Security Manager', 'L4_ALL_ACCESS', 'Security', 'Reviews initial event support requests, approves Support Staff deployments, and confirms which Security/Support crew to deploy.', 1],
                 ['technician', 'Stage & Audio Technician', 'Stage & Audio Technician', 'L2_TECH_STAGE', 'Sound', 'Configures FOH audio arrays, monitor consoles, and mic systems on stage and FOH.', 1],
                 ['sound_engineer', 'Lead Sound Engineer', 'Lead Sound Engineer', 'L2_TECH_STAGE', 'Sound', 'Lead acoustic calibration and sound engineering for live events and concert tours.', 0],
                 ['lighting_tech', 'Lighting Technician', 'Lighting Technician', 'L2_TECH_STAGE', 'Lighting', 'DMX universes routing, moving-head fixtures, dimmer racks and stage wash fixtures.', 0],
@@ -396,6 +397,7 @@ function ensureRolesTable(PDO $pdo): void
                 ['event_coordinator', 'Event Coordinator', 'Event Coordinator', 'L4_ALL_ACCESS', 'Production', 'Coordinates event schedules, Technical Lead assignments, and cross-department crew readiness.', 1],
                 ['electrical_tech', 'Electrical Technician', 'Electrical Technician', 'L2_TECH_STAGE', 'Electrical', 'Manages 3-phase distros, generator sync, power load balancing, and stage electrical safety.', 0],
                 ['interpretation_tech', 'Interpretation Technician', 'Interpretation Technician', 'L2_TECH_STAGE', 'Interpretation', 'Sets up Bosch/IR interpretation booths, delegate receivers, and multilingual audio routing.', 0],
+                ['security_manager', 'Security Manager', 'Security Manager', 'L4_ALL_ACCESS', 'Security', 'Reviews initial event support requests, approves Support Staff deployments, and confirms which Security/Support crew to deploy.', 1],
                 ['support_staff', 'Support Staff', 'Support Staff', 'L1_VENUE_BASIC', 'Support Staff', 'Site runners, hospitality loaders, cable assistants, and rapid venue turnaround support.', 0],
             ];
             $chkStmt = $pdo->prepare("SELECT COUNT(*) FROM `roles` WHERE `role_key` = ?");
@@ -547,7 +549,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,security_manager,stock_manager',
             'sort_order' => 1,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -564,7 +566,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'events',
             'badge_id' => 'sidebar-events-count',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,security_manager,stock_manager,stock_controller',
             'sort_order' => 2,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -598,7 +600,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,stock_manager,stock_controller,technician,sound_engineer,lighting_tech,video_director,electrical_tech,interpretation_tech,stage_manager,rigging_lead,support_staff,user,security,driver',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,security_manager,stock_manager,stock_controller,technician,sound_engineer,lighting_tech,video_director,electrical_tech,interpretation_tech,stage_manager,rigging_lead,support_staff,user,security,driver',
             'sort_order' => 4,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -688,7 +690,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'calltime',
             'badge_id' => 'sidebar-active-calltime-pill',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,security_manager,stock_manager',
             'sort_order' => 2,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -724,7 +726,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'standalone_portals',
             'badge_id' => 'sidebar-portals-count',
             'badge_text' => '04',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,stock_manager,tech_lead,technical_lead,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,stock_manager,tech_lead,technical_lead,security_manager,stock_controller',
             'sort_order' => 4,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -778,7 +780,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,security_manager,stock_manager,stock_controller',
             'sort_order' => 7,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -796,7 +798,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,security_manager,stock_manager,stock_controller',
             'sort_order' => 8,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -814,7 +816,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,security_manager,stock_manager,stock_controller',
             'sort_order' => 9,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -832,7 +834,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,security_manager,stock_manager',
             'sort_order' => 10,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -904,7 +906,7 @@ function getDefaultNavigationItems(): array
             'badge_type' => 'none',
             'badge_id' => '',
             'badge_text' => '',
-            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,stock_manager,stock_controller',
+            'allowed_roles' => 'admin,administrator,manager,project_manager,event_coordinator,tech_lead,technical_lead,security_manager,stock_manager,stock_controller',
             'sort_order' => 14,
             'is_enabled' => 1,
             'is_system' => 1,
@@ -942,7 +944,7 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
             try {
                 $vSt = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_schema_version' LIMIT 1");
                 $vSt->execute();
-                if ((string) ($vSt->fetchColumn() ?: '') === '20261124_v29') {
+                if ((string) ($vSt->fetchColumn() ?: '') === '20261128_v30') {
                     $navVerifiedDbs[$currentDb] = true;
                     return;
                 }
@@ -1291,7 +1293,25 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
             $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_dispatch_flow_label_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
         }
 
-        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_schema_version', '20261124_v29') ON DUPLICATE KEY UPDATE `setting_value` = '20261124_v29'")->execute();
+        // One-time migration: grant security_manager access to core operational navigation items
+        $migSecMgrNav = $pdo->prepare("SELECT `setting_value` FROM `app_settings` WHERE `setting_key` = 'nav_migrated_security_manager_v1' LIMIT 1");
+        $migSecMgrNav->execute();
+        if (!$migSecMgrNav->fetchColumn()) {
+            $smNavKeys = ['overview', 'events', 'attendees', 'set_calltime', 'standalone_portals', 'system_settings', 'settings_flow', 'settings_relief', 'settings_dispatch', 'settings_pwa'];
+            $smPlaceholders = implode(',', array_fill(0, count($smNavKeys), '?'));
+            $smStmt = $pdo->prepare("
+                UPDATE `navigation_items`
+                SET `allowed_roles` = CONCAT(`allowed_roles`, ',security_manager')
+                WHERE `is_system` = 1
+                  AND `nav_key` IN ({$smPlaceholders})
+                  AND LOWER(TRIM(`allowed_roles`)) != 'all'
+                  AND FIND_IN_SET('security_manager', REPLACE(LOWER(`allowed_roles`), ' ', '')) = 0
+            ");
+            $smStmt->execute($smNavKeys);
+            $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_migrated_security_manager_v1', '1') ON DUPLICATE KEY UPDATE `setting_value` = '1'")->execute();
+        }
+
+        $pdo->prepare("INSERT INTO `app_settings` (`setting_key`, `setting_value`) VALUES ('nav_schema_version', '20261128_v30') ON DUPLICATE KEY UPDATE `setting_value` = '20261128_v30'")->execute();
         $navVerifiedDbs[$currentDb] = true;
     } catch (Throwable $e) {}
 }
@@ -1299,7 +1319,7 @@ function ensureNavigationTables(PDO $pdo, bool $forceReset = false): void
 function classifyRollCallRoleCategory(string $roleKey): string
 {
     $r = strtolower(trim($roleKey));
-    if (in_array($r, ['stock_manager', 'admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'technical_lead'], true)) {
+    if (in_array($r, ['stock_manager', 'admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'technical_lead', 'security_manager'], true)) {
         return 'supervisor';
     }
     if ($r === 'stock_controller') {
@@ -2116,6 +2136,7 @@ function formatRoleDisplay(string $role): string
         'stock_controller' => 'Gate Controller',
         'stock_manager' => 'Site Manager',
         'tech_lead' => 'Technical Lead',
+        'security_manager' => 'Security Manager',
         'project_manager' => 'Project Manager',
         'event_coordinator' => 'Event Coordinator',
         'electrical_tech' => 'Electrical Technician',
@@ -2229,13 +2250,13 @@ function isCallerEventScopedRole(?array $caller): bool
         return false;
     }
     $role = strtolower(trim((string) ($caller['role'] ?? '')));
-    return in_array($role, ['tech_lead', 'technical_lead', 'project_manager', 'event_coordinator'], true);
+    return in_array($role, ['tech_lead', 'technical_lead', 'security_manager', 'project_manager', 'event_coordinator'], true);
 }
 
 function isPlaceholderLeadershipValue(?string $rawVal): bool
 {
     $v = strtolower(trim((string) $rawVal));
-    return $v === '' || in_array($v, ['tech lead', 'technical lead', 'operations pm', 'project manager', 'event coordinator', 'unassigned'], true);
+    return $v === '' || in_array($v, ['tech lead', 'technical lead', 'security manager', 'operations pm', 'project manager', 'event coordinator', 'unassigned'], true);
 }
 
 /**
@@ -2276,6 +2297,7 @@ function canCallerAccessEventRecord(array $ev, ?array $caller, array $resolvedAs
     };
 
     $tlVal = (string) ($ev['tech_lead'] ?? '');
+    $smVal = (string) ($ev['security_manager'] ?? '');
     $pmVal = (string) ($ev['project_manager'] ?? '');
     $ecVal = (string) ($ev['event_coordinator'] ?? '');
 
@@ -2287,6 +2309,16 @@ function canCallerAccessEventRecord(array $ev, ?array $caller, array $resolvedAs
         if (isPlaceholderLeadershipValue($tlVal) && $callerId > 0) {
             return (int) ($ev['created_by_id'] ?? 0) === $callerId
                 || (int) ($ev['tech_lead_approved_by'] ?? 0) === $callerId;
+        }
+        return false;
+    }
+    if ($callerRole === 'security_manager') {
+        if ($matchesCallerIdentity($smVal)) {
+            return true;
+        }
+        if (isPlaceholderLeadershipValue($smVal) && $callerId > 0) {
+            return (int) ($ev['created_by_id'] ?? 0) === $callerId
+                || (int) ($ev['security_manager_approved_by'] ?? 0) === $callerId;
         }
         return false;
     }
@@ -2383,7 +2415,7 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
                     $allowedTiers[] = 'L3_STOCK_CTRL';
                     $allowedTiers[] = 'L3';
                 }
-                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'stock_manager'];
+                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'security_manager', 'stock_manager'];
                 if (!in_array($targetTier, $allowedTiers, true) || in_array($targetRole, $disallowedRoles, true)) {
                     return ['ok' => false, 'error' => 'Permission denied: Site Managers can only manage facility crew (L1/L2) or Gate Controllers (L3).'];
                 }
@@ -2393,9 +2425,19 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
                 $targetTier = strtoupper(trim((string)($context['clearance_level'] ?? 'L2')));
                 $targetRole = strtolower(trim((string)($context['role'] ?? 'technician')));
                 $allowedTiers = ['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L1', 'L2'];
-                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'stock_manager'];
+                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'security_manager', 'stock_manager'];
                 if (!in_array($targetTier, $allowedTiers, true) || in_array($targetRole, $disallowedRoles, true)) {
                     return ['ok' => false, 'error' => 'Permission denied: Technical Leads can only onboard technical crew with Level 1 or Level 2 clearance.'];
+                }
+            }
+            // 3b. Security Manager can onboard Support & Security crew with L1/L2 clearance
+            if ($role === 'security_manager') {
+                $targetTier = strtoupper(trim((string)($context['clearance_level'] ?? 'L1')));
+                $targetRole = strtolower(trim((string)($context['role'] ?? 'support_staff')));
+                $allowedTiers = ['L1_VENUE_BASIC', 'L2_TECH_STAGE', 'L1', 'L2'];
+                $disallowedRoles = ['admin', 'administrator', 'manager', 'project_manager', 'event_coordinator', 'tech_lead', 'technical_lead', 'security_manager', 'stock_manager', 'stock_controller'];
+                if (!in_array($targetTier, $allowedTiers, true) || in_array($targetRole, $disallowedRoles, true)) {
+                    return ['ok' => false, 'error' => 'Permission denied: Security Managers can only onboard Support & Security crew with Level 1 or Level 2 clearance.'];
                 }
             }
             // 4. Standard crew cannot add users
@@ -2445,9 +2487,26 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             break;
 
         case 'save_event_dept_confirmation':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead', 'security_manager'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Department confirmations require Technical Lead, Security Manager, or Administrator privileges.'];
+            }
+            break;
+
         case 'approve_event_tech_lead':
             if (!in_array($role, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead'], true)) {
-                return ['ok' => false, 'error' => 'Permission denied: Technical Lead approval and department confirmations require Technical Lead or Administrator privileges.'];
+                return ['ok' => false, 'error' => 'Permission denied: Technical Lead approval requires Technical Lead or Administrator privileges.'];
+            }
+            break;
+
+        case 'approve_event_security_manager':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'security_manager'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Tier 4 Support request approval requires Security Manager or Administrator privileges.'];
+            }
+            break;
+
+        case 'assign_event_support_staff':
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'security_manager', 'project_manager', 'event_coordinator'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Confirming Support Staff deployments requires Security Manager, Project Manager, Event Coordinator, or Administrator privileges.'];
             }
             break;
 
@@ -2458,15 +2517,15 @@ function canCallerPerformAction(string $action, ?array $caller, array $context =
             break;
 
         case 'fulfill_support_request':
-            if (!in_array($role, ['admin', 'administrator', 'manager', 'stock_manager', 'project_manager', 'event_coordinator'], true)) {
-                return ['ok' => false, 'error' => 'Permission denied: Fulfilling Support Staff requests requires Site Manager, Project Manager, Event Coordinator, or Administrator privileges.'];
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'security_manager', 'stock_manager', 'project_manager', 'event_coordinator'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Fulfilling Support Staff requests requires Security Manager, Site Manager, Project Manager, Event Coordinator, or Administrator privileges.'];
             }
             break;
 
         case 'start_random_roll_call':
         case 'resolve_roll_call_entry':
-            if (!in_array($role, ['admin', 'administrator', 'manager', 'stock_manager', 'tech_lead', 'technical_lead', 'project_manager', 'event_coordinator', 'stock_controller'], true)) {
-                return ['ok' => false, 'error' => 'Permission denied: Managing Random Roll-Call checks requires Supervisor, Tech Lead, Gate Controller, or Administrator privileges.'];
+            if (!in_array($role, ['admin', 'administrator', 'manager', 'stock_manager', 'tech_lead', 'technical_lead', 'security_manager', 'project_manager', 'event_coordinator', 'stock_controller'], true)) {
+                return ['ok' => false, 'error' => 'Permission denied: Managing Random Roll-Call checks requires Supervisor, Tech Lead, Security Manager, Gate Controller, or Administrator privileges.'];
             }
             break;
 
@@ -2588,24 +2647,25 @@ function getRoleCapabilitiesSpec(): array
         ],
         'tier4_support' => [
             'tier_key' => 'tier4_support',
-            'tier_title' => 'Tier 4 · Operations Ground Support',
-            'roles' => ['support_staff', 'driver', 'security', 'user'],
-            'role_titles' => 'Support Staff (Runners, Drivers, Venue Crew)',
-            'clearance' => 'L1 · Event Venue Only',
+            'tier_title' => 'Tier 4 · Security Manager & Support Staff',
+            'roles' => ['security_manager', 'support_staff', 'driver', 'security', 'user'],
+            'role_titles' => 'Security Manager (L4) → Support Staff (Security, Drivers, Runners, Venue Crew)',
+            'clearance' => 'L4 Security Manager · L1 Support Staff',
             'allowed_actions' => [
-                'Confirm or decline support deployment slots',
-                'Venue gate check-in / check-out via Anti-Shadowing QR',
-                'Respond to Random Roll-Call presence checks',
-                'View assigned venue status & personal Digital Crew Pass',
+                'Security Manager approves initial Tier 1 support request in parallel with Tech Lead',
+                'Security Manager selects & directly confirms which Support Staff to deploy',
+                'Support Staff receive confirmed shift + Pass QR immediately on their workspace',
+                'Venue gate check-in / check-out & Random Roll-Call participation',
             ],
             'restricted_actions' => [
-                'Blocked from Stock Warehouses (L1 perimeter rule) & admin endpoints',
+                'Security Manager manages Support Staff only (does not alter Tech Lead’s 6 technical branches)',
+                'Support Staff (L1) are blocked from Stock Warehouses & admin endpoints',
             ],
             'flow_steps' => [
-                '1. Fulfilled from Tier 1/2 Support Staff Request by Site Manager / Coordinator',
-                '2. Confirm assigned venue support shift',
-                '3. Check in at Event Venue gate (Warehouse gates auto-denied)',
-                '4. Verify presence on Random Roll-Call & Check out on departure',
+                '1. Tier 1 Command assigns Security Manager & optional Support Staff headcount on Create Event',
+                '2. Security Manager approves the support request in parallel with Tech Lead (Tier 2)',
+                '3. Security Manager selects & confirms Support Staff to deploy (auto-confirmed on roster)',
+                '4. Deployed Support Staff check in at Event Venue gate & verify presence on Random Roll-Call',
             ],
         ],
         'site_ops' => [
@@ -2955,6 +3015,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $pm = trim((string) ($er['project_manager'] ?? ''));
         $ec = trim((string) ($er['event_coordinator'] ?? ''));
         $tl = trim((string) ($er['tech_lead'] ?? ''));
+        $sm = trim((string) ($er['security_manager'] ?? ''));
         $leadName = $tl ?: ($pm ?: ($ec ?: 'Technical Lead'));
         $leadLabel = ($tl ? 'Tech Lead: ' . $tl : ($pm ? 'Project Manager: ' . $pm : ($ec ? 'Event Coordinator: ' . $ec : 'Tech Lead: ' . $leadName)));
 
@@ -3028,6 +3089,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'project_manager' => $pm,
             'event_coordinator' => $ec,
             'tech_lead' => $tl,
+            'security_manager' => $sm,
             'lead_name' => $leadName,
             'lead_label' => $leadLabel,
             'min_clearance' => 'L1 / L2 / L3 / L4 Authorized',
@@ -3052,6 +3114,11 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'tech_lead_approved_by_name' => !empty($er['tech_lead_approved_by']) ? ($userIdToName[(int) $er['tech_lead_approved_by']] ?? '') : '',
             'tech_lead_approved_at' => $er['tech_lead_approved_at'] ?? null,
             'tech_lead_approval_note' => trim((string) ($er['tech_lead_approval_note'] ?? '')),
+            'security_manager_approved' => ((int) ($er['security_manager_approved'] ?? 0) === 1),
+            'security_manager_approved_by' => !empty($er['security_manager_approved_by']) ? (int) $er['security_manager_approved_by'] : null,
+            'security_manager_approved_by_name' => !empty($er['security_manager_approved_by']) ? ($userIdToName[(int) $er['security_manager_approved_by']] ?? '') : '',
+            'security_manager_approved_at' => $er['security_manager_approved_at'] ?? null,
+            'security_manager_approval_note' => trim((string) ($er['security_manager_approval_note'] ?? '')),
             'is_active' => isset($er['is_active']) ? (int) $er['is_active'] : 1,
             'disabled_reason' => trim((string) ($er['disabled_reason'] ?? '')),
             'disabled_by_id' => !empty($er['disabled_by_id']) ? (int) $er['disabled_by_id'] : null,
@@ -3750,6 +3817,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         $isAdmin = in_array($cRole, ['admin', 'manager', 'administrator'], true);
         $isEventCommand = in_array($cRole, ['project_manager', 'event_coordinator'], true) || $isAdmin;
         $isTechLead = in_array($cRole, ['tech_lead', 'technical_lead'], true) || $isAdmin;
+        $isSecurityMgr = ($cRole === 'security_manager') || $isAdmin;
         $isStockMgr = $cRole === 'stock_manager' || $isAdmin;
         $isStockCtrl = $cRole === 'stock_controller';
 
@@ -3757,33 +3825,38 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             'is_admin' => $isAdmin,
             'is_event_command' => $isEventCommand,
             'is_tech_lead' => $isTechLead,
+            'is_security_manager' => $isSecurityMgr,
             'is_stock_manager' => $isStockMgr,
             'is_stock_controller' => $isStockCtrl,
-            'can_add_user' => $isAdmin || $isEventCommand || $isTechLead || $isStockMgr,
+            'can_add_user' => $isAdmin || $isEventCommand || $isTechLead || $isSecurityMgr || $isStockMgr,
             'can_delete_user' => $isAdmin,
             'can_edit_tiers' => $isAdmin,
             'can_assign_event_crew' => $isTechLead || $isEventCommand || $isAdmin,
+            'can_approve_support_dispatch' => $isSecurityMgr || $isAdmin,
+            'can_assign_support_staff' => $isSecurityMgr || $isEventCommand || $isAdmin,
             'can_send_event_requirements' => $isEventCommand || $isAdmin,
             'can_request_support_staff' => $isEventCommand || $isTechLead || $isAdmin,
-            'can_fulfill_support_staff' => $isStockMgr || $isEventCommand || $isAdmin,
+            'can_fulfill_support_staff' => $isSecurityMgr || $isStockMgr || $isEventCommand || $isAdmin,
             'can_set_call_time' => $isTechLead || $isEventCommand || $isAdmin || $isStockMgr,
             'can_manage_warehouses' => $isStockMgr || $isAdmin,
             'can_approve_shift_requests' => $isAdmin || $isStockMgr || $isEventCommand,
             'can_request_shift_relief' => $isAdmin || $isEventCommand || $isStockMgr || $isStockCtrl || $isTechLead,
             'can_assign_controller_checkpoint' => $isAdmin || $isStockMgr,
-            'can_trigger_random_rollcall' => $isAdmin || $isEventCommand || $isTechLead || $isStockMgr || $isStockCtrl,
-            'max_assignable_tier' => $isAdmin ? 'L4' : ($isStockMgr ? 'L3' : ($isTechLead ? 'L2' : 'none')),
+            'can_trigger_random_rollcall' => $isAdmin || $isEventCommand || $isTechLead || $isSecurityMgr || $isStockMgr || $isStockCtrl,
+            'max_assignable_tier' => $isAdmin ? 'L4' : ($isStockMgr ? 'L3' : (($isTechLead || $isSecurityMgr) ? 'L2' : 'none')),
             'delegation_summary' => $isAdmin
                 ? 'Full Administrator — All digital and physical systems unconstrained.'
                 : ($isEventCommand
-                    ? 'Event Command (PM / Coordinator) — Authorized to create events, send requirements to Tech Lead, request Support Staff, and manage rosters.'
+                    ? 'Event Command (PM / Coordinator) — Authorized to create events, send requirements to Tech Lead, assign Security Manager, and manage rosters.'
                     : ($isTechLead
                         ? 'Technical Lead — Authorized to set Call Times, assign technicians across 6 branches, and onboard technical personnel (L1/L2).'
-                        : ($isStockMgr
-                            ? 'Site Manager — Authorized for facility gates, support fulfillment, controller relief approvals, and site crew onboarding.'
-                            : ($isStockCtrl
-                                ? 'Gate Controller — Strictly locked to one assigned Gate Terminal; cross-gate relief requires Administrator or Site Manager approval.'
-                                : 'Standard Personnel — Confirm event assignments, present rotating pass QR / scan venue QR, and respond to roll-call checks.')))),
+                        : ($isSecurityMgr
+                            ? 'Security Manager — Authorized to review initial Tier 4 support requests, confirm which Support Staff to deploy, and oversee on-site security roll-call.'
+                            : ($isStockMgr
+                                ? 'Site Manager — Authorized for facility gates, support fulfillment, controller relief approvals, and site crew onboarding.'
+                                : ($isStockCtrl
+                                    ? 'Gate Controller — Strictly locked to one assigned Gate Terminal; cross-gate relief requires Administrator or Site Manager approval.'
+                                    : 'Standard Personnel — Confirm event assignments, present rotating pass QR / scan venue QR, and respond to roll-call checks.'))))),
         ];
     }
 
@@ -6273,6 +6346,13 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $rawCallTime = trim((string) ($_POST['call_time'] ?? $jsonBody['call_time'] ?? '08:00'));
         $hasTlIn = array_key_exists('tech_lead', $_POST) || array_key_exists('tech_lead', $jsonBody);
         $techLead = trim((string) ($_POST['tech_lead'] ?? $jsonBody['tech_lead'] ?? ''));
+        $hasSmIn = array_key_exists('security_manager', $_POST) || array_key_exists('security_manager', $jsonBody);
+        $securityManagerRaw = trim((string) ($_POST['security_manager'] ?? $jsonBody['security_manager'] ?? ''));
+        $securityManager = isPlaceholderLeadershipValue($securityManagerRaw) ? '' : $securityManagerRaw;
+        $hasSupportCountIn = array_key_exists('support_staff_count', $_POST) || array_key_exists('support_staff_count', $jsonBody);
+        $supportCountIn = max(0, min(99, (int) ($_POST['support_staff_count'] ?? $jsonBody['support_staff_count'] ?? 0)));
+        $hasSupportNotesIn = array_key_exists('support_notes', $_POST) || array_key_exists('support_notes', $jsonBody);
+        $supportNotesIn = trim((string) ($_POST['support_notes'] ?? $jsonBody['support_notes'] ?? ''));
         $hasPmIn = array_key_exists('project_manager', $_POST) || array_key_exists('project_manager', $jsonBody);
         $hasCoordIn = array_key_exists('event_coordinator', $_POST) || array_key_exists('event_coordinator', $jsonBody);
         $projectManager = trim((string) ($_POST['project_manager'] ?? $jsonBody['project_manager'] ?? ''));
@@ -6319,9 +6399,27 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $reqsJsonIn = json_encode([
                     'branches' => $cleanBranches,
                     'notes' => trim((string) ($reqsRawIn['notes'] ?? '')),
+                    'support_notes' => $hasSupportNotesIn ? $supportNotesIn : trim((string) ($reqsRawIn['support_notes'] ?? '')),
                     'updated_at' => date('Y-m-d H:i:s'),
                 ]);
             }
+        } elseif (($hasSupportCountIn || $hasSupportNotesIn) && $eventId === '' && ($supportCountIn > 0 || $supportNotesIn !== '')) {
+            $cleanBranches = [
+                'Video' => 0,
+                'Sound' => 0,
+                'Lighting' => 0,
+                'Electrical' => 0,
+                'Rigging' => 0,
+                'Interpretation' => 0,
+                'Support Staff' => $supportCountIn,
+            ];
+            $reqsJsonIn = json_encode([
+                'branches' => $cleanBranches,
+                'notes' => '',
+                'support_notes' => $supportNotesIn,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+            $hasReqsIn = true;
         }
 
         if ($eventPinRaw !== '' && !preg_match('/^[A-Za-z0-9]{4,12}$/', $eventPinRaw)) {
@@ -6353,6 +6451,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $assignedRosterJson = json_encode([
                 'project_manager' => trim((string) ($assignedRosterIn['project_manager'] ?? $projectManager)),
                 'tech_lead' => trim((string) ($assignedRosterIn['tech_lead'] ?? $techLead)),
+                'security_manager' => trim((string) ($assignedRosterIn['security_manager'] ?? $securityManager)),
                 'departments' => $normDepts,
                 'support_staff' => $supportIds,
             ]);
@@ -6446,11 +6545,25 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 }
 
                 $targetIds = array_map('intval', array_keys($userBranches));
-                $existingSt = $pdo->prepare("SELECT `user_id` FROM `event_crew_assignments` WHERE `event_id` = ?");
+                $existingSt = $pdo->prepare("SELECT `user_id`, `branch_dept` FROM `event_crew_assignments` WHERE `event_id` = ?");
                 $existingSt->execute([$realEventId]);
-                $existingIds = array_map('intval', $existingSt->fetchAll(PDO::FETCH_COLUMN));
+                $existingRows = $existingSt->fetchAll(PDO::FETCH_ASSOC);
+                $existingIds = [];
+                $existingSupportIds = [];
+                foreach ($existingRows as $exRow) {
+                    $exUid = (int) ($exRow['user_id'] ?? 0);
+                    if ($exUid <= 0) continue;
+                    $existingIds[] = $exUid;
+                    if (strcasecmp(trim((string) ($exRow['branch_dept'] ?? '')), 'Support Staff') === 0) {
+                        $existingSupportIds[] = $exUid;
+                    }
+                }
+                $preserveExistingSupport = in_array(strtolower(trim($actorRole)), ['tech_lead', 'technical_lead'], true);
 
                 $removedIds = array_diff($existingIds, $targetIds);
+                if ($preserveExistingSupport && !empty($existingSupportIds)) {
+                    $removedIds = array_diff($removedIds, $existingSupportIds);
+                }
                 if (!empty($removedIds)) {
                     $delSt = $pdo->prepare("DELETE FROM `event_crew_assignments` WHERE `event_id` = ? AND `user_id` = ?");
                     foreach ($removedIds as $remId) {
@@ -6563,7 +6676,71 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 exit;
             }
             $oldTechLead = trim((string) ($existingEvRow['tech_lead'] ?? ''));
+            $oldSecurityManager = trim((string) ($existingEvRow['security_manager'] ?? ''));
+            $effSecurityManager = $hasSmIn ? $securityManager : $oldSecurityManager;
+            $securityManagerChanged = $hasSmIn && (strcasecmp($effSecurityManager, $oldSecurityManager) !== 0);
             $hasExistingTechLead = !isPlaceholderLeadershipValue($oldTechLead);
+            // Preserve existing Security Manager & confirmed Support Staff when a Tech Lead updates technical branches
+            if ($isCallerTlOnly && ($hasRosterIn || $hasAssignedTechsIn)) {
+                $existingRosterDec = json_decode((string) ($existingEvRow['assigned_roster_json'] ?? ''), true);
+                $existingSupportPool = is_array($existingRosterDec)
+                    ? array_values(array_unique(array_filter(array_map('intval', (array) ($existingRosterDec['support_staff'] ?? [])))))
+                    : [];
+                try {
+                    $exSupSt = $pdo->prepare("SELECT `user_id` FROM `event_crew_assignments` WHERE `event_id` = ? AND `branch_dept` = 'Support Staff'");
+                    $exSupSt->execute([$realEventId]);
+                    $existingSupportPool = array_values(array_unique(array_merge($existingSupportPool, array_map('intval', $exSupSt->fetchAll(PDO::FETCH_COLUMN)))));
+                } catch (Throwable $e) {}
+                if (!empty($existingSupportPool)) {
+                    $assignedTechsInt = array_values(array_unique(array_merge($assignedTechsInt, $existingSupportPool)));
+                    if (is_array($assignedRosterIn)) {
+                        $assignedRosterIn['support_staff'] = $existingSupportPool;
+                        $assignedRosterIn['security_manager'] = $effSecurityManager;
+                        $normDeptsKeep = [];
+                        foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'] as $dk) {
+                            $normDeptsKeep[$dk] = array_values(array_unique(array_filter(array_map('intval', (array) ($assignedRosterIn['departments'][$dk] ?? [])))));
+                        }
+                        $assignedRosterJson = json_encode([
+                            'project_manager' => trim((string) ($assignedRosterIn['project_manager'] ?? $effPmVal)),
+                            'tech_lead' => trim((string) ($assignedRosterIn['tech_lead'] ?? ($techLead !== '' ? $techLead : $oldTechLead))),
+                            'security_manager' => $effSecurityManager,
+                            'departments' => $normDeptsKeep,
+                            'support_staff' => $existingSupportPool,
+                        ]);
+                    }
+                }
+            } elseif ($hasRosterIn && is_array($assignedRosterIn) && !$hasSmIn && $effSecurityManager !== '') {
+                $decCurRoster = json_decode((string) ($assignedRosterJson ?? ''), true);
+                if (is_array($decCurRoster) && empty($decCurRoster['security_manager'])) {
+                    $decCurRoster['security_manager'] = $effSecurityManager;
+                    $assignedRosterJson = json_encode($decCurRoster);
+                }
+            }
+            // Merge optional Create Event Support Staff headcount & notes into existing requirements_json without wiping technical branches
+            if (!$hasReqsIn && ($hasSupportCountIn || $hasSupportNotesIn)) {
+                $existingReqsDec = json_decode((string) ($existingEvRow['requirements_json'] ?? ''), true);
+                if (!is_array($existingReqsDec)) {
+                    $existingReqsDec = ['branches' => [], 'notes' => '', 'support_notes' => ''];
+                }
+                $mergedBranches = [];
+                foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation', 'Support Staff'] as $bk) {
+                    $mergedBranches[$bk] = max(0, min(99, (int) ($existingReqsDec['branches'][$bk] ?? 0)));
+                }
+                if ($hasSupportCountIn) {
+                    $mergedBranches['Support Staff'] = $supportCountIn;
+                }
+                $mergedSupportNotes = $hasSupportNotesIn ? $supportNotesIn : trim((string) ($existingReqsDec['support_notes'] ?? ''));
+                $hasAnyBranchReq = array_sum($mergedBranches) > 0 || trim((string) ($existingReqsDec['notes'] ?? '')) !== '' || $mergedSupportNotes !== '';
+                if ($hasAnyBranchReq || !empty($existingEvRow['requirements_json'])) {
+                    $reqsJsonIn = json_encode([
+                        'branches' => $mergedBranches,
+                        'notes' => trim((string) ($existingReqsDec['notes'] ?? '')),
+                        'support_notes' => $mergedSupportNotes,
+                        'updated_at' => date('Y-m-d H:i:s'),
+                    ]);
+                    $hasReqsIn = true;
+                }
+            }
             $oldPmEffective = !isPlaceholderLeadershipValue($oldPmRaw)
                 ? $oldPmRaw
                 : (!isPlaceholderLeadershipValue($oldCoordRaw) ? $oldCoordRaw : '');
@@ -6603,6 +6780,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 "`duration_label` = ?",
                 "`call_time` = ?",
                 "`tech_lead` = CASE WHEN ? != '' THEN ? ELSE `tech_lead` END",
+                "`security_manager` = ?",
                 "`project_manager` = ?",
                 "`event_coordinator` = ?",
                 "`terminal_pin` = CASE WHEN ? != '' THEN ? ELSE `terminal_pin` END",
@@ -6617,6 +6795,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $effDurLabel,
                 $formattedTime,
                 $techLead, $techLead,
+                $effSecurityManager,
                 $effPmVal,
                 $effCoordVal,
                 $eventPinRaw, $eventPinRaw,
@@ -6669,6 +6848,9 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $setClauses[] = "`tech_lead_approved` = 1, `tech_lead_approved_by` = ?, `tech_lead_approved_at` = NOW()";
                 $updParams[] = (int) ($caller['id'] ?? 1);
             }
+            if ($securityManagerChanged) {
+                $setClauses[] = "`security_manager_approved` = 0, `security_manager_approved_by` = NULL, `security_manager_approved_at` = NULL, `security_manager_approval_note` = NULL";
+            }
 
             if ($hasEffTechLead && ((int) ($existingEvRow['tech_lead_approved'] ?? 0) !== 1) && !($isTlOrAdminCaller && $crewAssignedNow && $callerMatchesTl)) {
                 $setClauses[] = "`dispatch_status` = 'awaiting_approval_from_tech_lead'";
@@ -6710,6 +6892,9 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     $leadNotes = [];
                     if ($techLeadChanged) {
                         $leadNotes[] = "Tech Lead: " . ($oldTechLead !== '' ? $oldTechLead : 'Unassigned') . " → {$effTechLead}";
+                    }
+                    if ($securityManagerChanged) {
+                        $leadNotes[] = "Security Manager: " . ($oldSecurityManager !== '' ? $oldSecurityManager : 'None') . " → " . ($effSecurityManager !== '' ? $effSecurityManager : 'None');
                     }
                     if (strcasecmp($oldPmRaw, $effPmVal) !== 0) {
                         $leadNotes[] = "PM: " . ($oldPmRaw !== '' ? $oldPmRaw : 'None') . " → " . ($effPmVal !== '' ? $effPmVal : 'None');
@@ -6754,21 +6939,26 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $newLoc = $locationIn !== '' ? $locationIn : 'Kigali Event Venue';
             $newPin = $eventPinRaw !== '' ? $eventPinRaw : '1234';
             $hasAssignedTechLead = ($techLead !== '' && strtolower($techLead) !== 'tech lead');
+            $hasAssignedSecurityManager = ($securityManager !== '' && !isPlaceholderLeadershipValue($securityManager));
             $isTlOrAdminCreator = in_array($callerRoleLower, ['admin', 'administrator', 'manager', 'tech_lead', 'technical_lead'], true);
             $creatorMatchesTl = $isCallerAdmin
                 || !$hasAssignedTechLead
                 || ($callerDisplayName !== '' && strcasecmp($callerDisplayName, $techLead) === 0);
             $initTechLeadApproved = ($hasAssignedTechLead && $isTlOrAdminCreator && !empty($assignedTechsInt) && $creatorMatchesTl) ? 1 : 0;
             if ($hasAssignedTechLead) {
-                $initDispatchStatus = $initTechLeadApproved === 1 ? 'staffing_in_progress' : 'awaiting_approval_from_tech_lead';
+                $initDispatchStatus = $initTechLeadApproved === 1
+                    ? ($hasAssignedSecurityManager ? 'awaiting_approval_from_security_manager' : 'staffing_in_progress')
+                    : 'awaiting_approval_from_tech_lead';
+            } elseif ($hasAssignedSecurityManager) {
+                $initDispatchStatus = 'awaiting_approval_from_security_manager';
             } elseif ($hasReqsIn && $reqsJsonIn !== null) {
                 $initDispatchStatus = 'requirements_sent';
             } else {
                 $initDispatchStatus = 'draft';
             }
             $stmtIns = $pdo->prepare("
-                INSERT INTO `events` (`id`, `title`, `location`, `date`, `start_date`, `end_date`, `duration_days`, `duration_label`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`, `checkin_policy`, `require_visual_match`, `requirements_json`, `dispatch_status`, `requirements_sent_by`, `requirements_sent_at`, `tech_lead_approved`, `tech_lead_approved_by`, `tech_lead_approved_at`, `created_by_id`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO `events` (`id`, `title`, `location`, `date`, `start_date`, `end_date`, `duration_days`, `duration_label`, `call_time`, `project_manager`, `event_coordinator`, `tech_lead`, `security_manager`, `assigned_technician`, `assigned_roster_json`, `geofence_radius_m`, `lat`, `lng`, `terminal_pin`, `image`, `checkin_policy`, `require_visual_match`, `requirements_json`, `dispatch_status`, `requirements_sent_by`, `requirements_sent_at`, `tech_lead_approved`, `tech_lead_approved_by`, `tech_lead_approved_at`, `created_by_id`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmtIns->execute([
                 $newEventId,
@@ -6783,6 +6973,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $projectManager !== '' ? $projectManager : ($isCallerAdmin ? '' : 'Operations PM'),
                 '',
                 $techLead !== '' ? $techLead : 'Tech Lead',
+                $securityManager,
                 json_encode($assignedTechsInt),
                 $assignedRosterJson,
                 $geofenceRadiusM,
@@ -6809,6 +7000,9 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             } elseif ($initTechLeadApproved === 1 && $hasAssignedTechLead) {
                 $createdSummary .= " — Approved & staffed by Tech Lead ({$techLead})";
             }
+            if ($hasAssignedSecurityManager) {
+                $createdSummary .= " · Tier 4 Support assigned to Security Manager ({$securityManager})";
+            }
             logEventDispatchAction(
                 $pdo,
                 $newEventId,
@@ -6816,7 +7010,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 (string) ($caller['role'] ?? 'project_manager'),
                 'event_created',
                 $createdSummary,
-                ['checkin_policy' => $checkinPolicyIn, 'has_requirements' => ($reqsJsonIn !== null), 'dispatch_status' => $initDispatchStatus]
+                ['checkin_policy' => $checkinPolicyIn, 'has_requirements' => ($reqsJsonIn !== null), 'dispatch_status' => $initDispatchStatus, 'security_manager' => $securityManager]
             );
             if (!empty($assignedTechsInt) || is_array($assignedRosterIn)) {
                 $syncDispatchAssignments(
@@ -6827,6 +7021,8 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     (string) ($caller['role'] ?? 'project_manager'),
                     $titleIn
                 );
+            } else {
+                recalculateEventDispatchStatus($pdo, $newEventId);
             }
             $msg = "Event Venue \"{$titleIn}\" created successfully.";
         }
@@ -9110,7 +9306,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
 
         $isSupervisorOrGate = in_array($callerRole, [
             'admin', 'manager', 'administrator', 'project_manager', 'event_coordinator',
-            'tech_lead', 'technical_lead', 'stock_manager', 'stock_controller',
+            'tech_lead', 'technical_lead', 'security_manager', 'stock_manager', 'stock_controller',
         ], true);
         $wantsMyOnly = ($myOnlyParam === '1' || $myOnlyParam === 'true');
         if ($wantsMyOnly && !$caller) {
@@ -11533,9 +11729,15 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 $summaryParts[] = "{$bk}:{$cnt}";
             }
         }
+        $prevReqsDec = json_decode((string) ($evRow['requirements_json'] ?? ''), true);
+        $prevSupportNotes = is_array($prevReqsDec) ? trim((string) ($prevReqsDec['support_notes'] ?? '')) : '';
+        $supportNotesParam = array_key_exists('support_notes', $_POST) || array_key_exists('support_notes', $jsonBody)
+            ? trim((string) ($_POST['support_notes'] ?? $jsonBody['support_notes'] ?? ''))
+            : $prevSupportNotes;
         $reqObj = [
             'branches' => $cleanBranches,
             'notes' => $reqNotes,
+            'support_notes' => $supportNotesParam,
             'sent_by_name' => (string) ($caller['full_name'] ?? 'PM / Coordinator'),
             'updated_at' => date('Y-m-d H:i:s'),
         ];
@@ -11610,6 +11812,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         ");
         $ins->execute([$realId, (int) $caller['id'], json_encode($cleanRoles), $reqNotes]);
         $reqId = (int) $pdo->lastInsertId();
+        recalculateEventDispatchStatus($pdo, $realId);
 
         logEventDispatchAction(
             $pdo,
@@ -11679,19 +11882,37 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'support_staff' => [],
             ];
         }
+        $callerRoleFulfill = strtolower(trim((string) ($caller['role'] ?? '')));
+        $autoConfirmSupport = in_array($callerRoleFulfill, ['security_manager', 'admin', 'administrator', 'manager'], true);
+
         $rosterArr['support_staff'] = array_values(array_unique(array_merge(array_map('intval', (array) ($rosterArr['support_staff'] ?? [])), $uIds)));
         $flatTechs = json_decode((string) ($evRow['assigned_technician'] ?? '[]'), true) ?: [];
         $flatTechs = array_values(array_unique(array_merge(array_map('intval', (array) $flatTechs), $uIds)));
 
-        $pdo->prepare("UPDATE `events` SET `assigned_technician` = ?, `assigned_roster_json` = ? WHERE `id` = ?")
-            ->execute([json_encode($flatTechs), json_encode($rosterArr), $realEventId]);
+        if ($autoConfirmSupport && ((int) ($evRow['security_manager_approved'] ?? 0) !== 1)) {
+            $pdo->prepare("UPDATE `events` SET `assigned_technician` = ?, `assigned_roster_json` = ?, `security_manager_approved` = 1, `security_manager_approved_by` = ?, `security_manager_approved_at` = NOW() WHERE `id` = ?")
+                ->execute([json_encode($flatTechs), json_encode($rosterArr), (int) $caller['id'], $realEventId]);
+        } else {
+            $pdo->prepare("UPDATE `events` SET `assigned_technician` = ?, `assigned_roster_json` = ? WHERE `id` = ?")
+                ->execute([json_encode($flatTechs), json_encode($rosterArr), $realEventId]);
+        }
 
         $uUpd = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'event_venue', `assigned_checkpoint_id` = ? WHERE `id` = ?");
-        $ecaUpsert = $pdo->prepare("
-            INSERT INTO `event_crew_assignments` (`event_id`, `user_id`, `branch_dept`, `role_slot`, `assigned_by_id`, `confirmation_status`)
-            VALUES (?, ?, 'Support Staff', 'Support Crew', ?, 'pending')
-            ON DUPLICATE KEY UPDATE `branch_dept` = IF(`branch_dept` = '', 'Support Staff', `branch_dept`)
-        ");
+        $ecaUpsert = $autoConfirmSupport
+            ? $pdo->prepare("
+                INSERT INTO `event_crew_assignments` (`event_id`, `user_id`, `branch_dept`, `role_slot`, `assigned_by_id`, `confirmation_status`, `decline_reason`, `responded_at`)
+                VALUES (?, ?, 'Support Staff', 'Support Crew', ?, 'confirmed', NULL, NOW())
+                ON DUPLICATE KEY UPDATE
+                    `branch_dept` = IF(`branch_dept` = '' OR `branch_dept` = 'Support Staff', 'Support Staff', `branch_dept`),
+                    `confirmation_status` = 'confirmed',
+                    `decline_reason` = NULL,
+                    `responded_at` = NOW()
+            ")
+            : $pdo->prepare("
+                INSERT INTO `event_crew_assignments` (`event_id`, `user_id`, `branch_dept`, `role_slot`, `assigned_by_id`, `confirmation_status`)
+                VALUES (?, ?, 'Support Staff', 'Support Crew', ?, 'pending')
+                ON DUPLICATE KEY UPDATE `branch_dept` = IF(`branch_dept` = '', 'Support Staff', `branch_dept`)
+            ");
         foreach ($uIds as $suid) {
             $uUpd->execute([$realEventId, $suid]);
             $ecaUpsert->execute([$realEventId, $suid, (int) $caller['id']]);
@@ -11834,6 +12055,266 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'dispatch_status' => $newStatus,
                 'tech_lead_approved' => true,
                 'message' => "Request approved by {$approverName} — Tier 2 · Tech Lead is now unlocked.",
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'approve_event_security_manager') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('approve_event_security_manager', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $evIdIn = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $noteIn = trim((string) ($_POST['note'] ?? $jsonBody['note'] ?? ''));
+        if ($evIdIn === '') {
+            echo json_encode(['ok' => false, 'error' => 'event_id is required.']);
+            exit;
+        }
+        $evChk = $pdo->prepare("SELECT `id`, `title`, `security_manager`, `security_manager_approved`, `is_active` FROM `events` WHERE `id` = ? OR CRC32(`id`) = ? LIMIT 1");
+        $evChk->execute([$evIdIn, $evIdIn]);
+        $evRow = $evChk->fetch(PDO::FETCH_ASSOC);
+        if (!$evRow) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Event not found.']);
+            exit;
+        }
+        $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+        $isAdminApprover = in_array($callerRole, ['admin', 'administrator', 'manager'], true);
+        if (((int) ($evRow['is_active'] ?? 1) === 0) && !$isAdminApprover) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'This event is currently disabled. Only an Administrator can re-enable or delete it.']);
+            exit;
+        }
+        $assignedSm = trim((string) ($evRow['security_manager'] ?? ''));
+        $hasSpecificSm = !isPlaceholderLeadershipValue($assignedSm);
+        $callerFull = trim((string) ($caller['full_name'] ?? ''));
+        $callerUser = trim((string) ($caller['username'] ?? ''));
+        if (!$isAdminApprover && $hasSpecificSm && strcasecmp($callerFull, $assignedSm) !== 0 && strcasecmp($callerUser, $assignedSm) !== 0) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => "Only the assigned Security Manager ({$assignedSm}) or an Administrator can approve this support request."]);
+            exit;
+        }
+        $realEventId = (string) $evRow['id'];
+        $evTitle = (string) ($evRow['title'] ?? ('Event #' . $realEventId));
+        $approverName = $callerFull !== '' ? $callerFull : ($callerUser !== '' ? $callerUser : 'Security Manager');
+        $updSm = $hasSpecificSm ? $assignedSm : $approverName;
+
+        $pdo->prepare("
+            UPDATE `events`
+            SET `security_manager` = ?, `security_manager_approved` = 1, `security_manager_approved_by` = ?, `security_manager_approved_at` = NOW(), `security_manager_approval_note` = ?
+            WHERE `id` = ?
+        ")->execute([
+            $updSm,
+            (int) ($caller['id'] ?? 1),
+            $noteIn !== '' ? substr($noteIn, 0, 255) : null,
+            $realEventId,
+        ]);
+
+        $newStatus = recalculateEventDispatchStatus($pdo, $realEventId);
+        logEventDispatchAction(
+            $pdo,
+            $realEventId,
+            (int) ($caller['id'] ?? 1),
+            (string) ($caller['role'] ?? 'security_manager'),
+            'security_manager_approved',
+            "Approved Tier 4 Support request for {$evTitle} ({$approverName}) — Support Staff selection ready" . ($noteIn !== '' ? ": {$noteIn}" : ''),
+            ['dispatch_status' => $newStatus, 'security_manager_approved' => true]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'dispatch_status' => $newStatus,
+                'security_manager_approved' => true,
+                'message' => "Tier 4 Support request approved by {$approverName} — confirm which Support Staff to deploy.",
+            ]
+        ));
+        exit;
+    }
+
+    if ($action === 'assign_event_support_staff') {
+        $caller = getCallerUser($pdo);
+        $authCheck = canCallerPerformAction('assign_event_support_staff', $caller);
+        if (!$authCheck['ok']) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => $authCheck['error']]);
+            exit;
+        }
+        $evIdIn = trim((string) ($_POST['event_id'] ?? $jsonBody['event_id'] ?? ''));
+        $noteIn = trim((string) ($_POST['note'] ?? $jsonBody['note'] ?? ''));
+        $allowEmpty = ((string) ($_POST['allow_empty'] ?? $jsonBody['allow_empty'] ?? '0')) === '1';
+        $uIdsRaw = $_POST['user_ids'] ?? $jsonBody['user_ids'] ?? [];
+        if (is_string($uIdsRaw)) {
+            $uIdsRaw = json_decode($uIdsRaw, true) ?: [];
+        }
+        $uIds = array_values(array_unique(array_filter(array_map('intval', (array) $uIdsRaw))));
+        if ($evIdIn === '') {
+            echo json_encode(['ok' => false, 'error' => 'event_id is required.']);
+            exit;
+        }
+        if (empty($uIds) && !$allowEmpty) {
+            echo json_encode(['ok' => false, 'error' => 'Select at least one Support Staff member to confirm for deployment.']);
+            exit;
+        }
+
+        $evRow = fetchAuthorizedEventOrFail(
+            $pdo,
+            $evIdIn,
+            $caller,
+            'Event not found.',
+            'Permission denied: You can only confirm Support Staff for events assigned to you.'
+        );
+        $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
+        $isAdminCaller = in_array($callerRole, ['admin', 'administrator', 'manager'], true);
+        $assignedSm = trim((string) ($evRow['security_manager'] ?? ''));
+        $hasSpecificSm = !isPlaceholderLeadershipValue($assignedSm);
+        $callerFull = trim((string) ($caller['full_name'] ?? ''));
+        $callerUser = trim((string) ($caller['username'] ?? ''));
+        $callerMatchesSm = ($callerFull !== '' && strcasecmp($callerFull, $assignedSm) === 0)
+            || ($callerUser !== '' && strcasecmp($callerUser, $assignedSm) === 0);
+
+        if (!$isAdminCaller) {
+            if ($callerRole === 'security_manager' && $hasSpecificSm && !$callerMatchesSm) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => "Only the assigned Security Manager ({$assignedSm}) or an Administrator can confirm Support Staff for this event."]);
+                exit;
+            }
+            if (in_array($callerRole, ['project_manager', 'event_coordinator'], true) && $hasSpecificSm) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => "Support Staff deployment is owned by the assigned Security Manager ({$assignedSm})."]);
+                exit;
+            }
+        }
+
+        $realEventId = (string) $evRow['id'];
+        $evTitle = (string) ($evRow['title'] ?? ('Event #' . $realEventId));
+        $approverName = $callerFull !== '' ? $callerFull : ($callerUser !== '' ? $callerUser : 'Security Manager');
+        $updSm = $hasSpecificSm ? $assignedSm : ($callerRole === 'security_manager' ? $approverName : $assignedSm);
+
+        // Preserve Tech Lead's 6 technical branches untouched; replace only support_staff in assigned_roster_json
+        $rosterArr = json_decode((string) ($evRow['assigned_roster_json'] ?? ''), true);
+        if (!is_array($rosterArr)) {
+            $rosterArr = [
+                'project_manager' => (string) ($evRow['project_manager'] ?? ''),
+                'event_coordinator' => (string) ($evRow['event_coordinator'] ?? ''),
+                'tech_lead' => (string) ($evRow['tech_lead'] ?? ''),
+                'security_manager' => $updSm,
+                'departments' => ['Video' => [], 'Sound' => [], 'Lighting' => [], 'Electrical' => [], 'Rigging' => [], 'Interpretation' => []],
+                'support_staff' => [],
+            ];
+        }
+        $rosterArr['security_manager'] = $updSm;
+        $rosterArr['support_staff'] = $uIds;
+
+        // Collect all technical (non-Support Staff) user IDs to keep flat assigned_technician union accurate
+        $techBranchIds = [];
+        foreach (['Video', 'Sound', 'Lighting', 'Electrical', 'Rigging', 'Interpretation'] as $dk) {
+            foreach ((array) ($rosterArr['departments'][$dk] ?? []) as $tid) {
+                $tInt = (int) $tid;
+                if ($tInt > 0) $techBranchIds[] = $tInt;
+            }
+        }
+        try {
+            $nonSupSt = $pdo->prepare("SELECT `user_id` FROM `event_crew_assignments` WHERE `event_id` = ? AND `branch_dept` != 'Support Staff'");
+            $nonSupSt->execute([$realEventId]);
+            foreach ($nonSupSt->fetchAll(PDO::FETCH_COLUMN) as $tid) {
+                $tInt = (int) $tid;
+                if ($tInt > 0) $techBranchIds[] = $tInt;
+            }
+        } catch (Throwable $e) {}
+        $techBranchIds = array_values(array_unique($techBranchIds));
+        $flatUnionIds = array_values(array_unique(array_merge($techBranchIds, $uIds)));
+
+        $pdo->prepare("
+            UPDATE `events`
+            SET `security_manager` = ?,
+                `security_manager_approved` = 1,
+                `security_manager_approved_by` = COALESCE(`security_manager_approved_by`, ?),
+                `security_manager_approved_at` = COALESCE(`security_manager_approved_at`, NOW()),
+                `security_manager_approval_note` = CASE WHEN ? != '' THEN ? ELSE `security_manager_approval_note` END,
+                `assigned_roster_json` = ?,
+                `assigned_technician` = ?
+            WHERE `id` = ?
+        ")->execute([
+            $updSm,
+            (int) ($caller['id'] ?? 1),
+            $noteIn !== '' ? substr($noteIn, 0, 255) : '',
+            $noteIn !== '' ? substr($noteIn, 0, 255) : '',
+            json_encode($rosterArr),
+            json_encode($flatUnionIds),
+            $realEventId,
+        ]);
+
+        // Sync ONLY Support Staff rows in event_crew_assignments as immediately 'confirmed'
+        $exSupSt = $pdo->prepare("SELECT `user_id` FROM `event_crew_assignments` WHERE `event_id` = ? AND `branch_dept` = 'Support Staff'");
+        $exSupSt->execute([$realEventId]);
+        $existingSupIds = array_map('intval', $exSupSt->fetchAll(PDO::FETCH_COLUMN));
+        $removedSupIds = array_diff($existingSupIds, $uIds);
+        $crcVal = (string) (is_numeric($realEventId) ? (int) $realEventId : crc32($realEventId));
+        if (!empty($removedSupIds)) {
+            $delSup = $pdo->prepare("DELETE FROM `event_crew_assignments` WHERE `event_id` = ? AND `branch_dept` = 'Support Staff' AND `user_id` = ?");
+            $clrUserCp = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = NULL, `assigned_checkpoint_id` = NULL WHERE `id` = ? AND `assigned_checkpoint_type` = 'event_venue' AND (`assigned_checkpoint_id` = ? OR `assigned_checkpoint_id` = ?)");
+            foreach ($removedSupIds as $remUid) {
+                $delSup->execute([$realEventId, $remUid]);
+                if (!in_array($remUid, $techBranchIds, true)) {
+                    $clrUserCp->execute([$remUid, $realEventId, $crcVal]);
+                }
+            }
+        }
+
+        $uUpd = $pdo->prepare("UPDATE `users` SET `assigned_checkpoint_type` = 'event_venue', `assigned_checkpoint_id` = ? WHERE `id` = ?");
+        $ecaUpsert = $pdo->prepare("
+            INSERT INTO `event_crew_assignments` (`event_id`, `user_id`, `branch_dept`, `role_slot`, `assigned_by_id`, `confirmation_status`, `decline_reason`, `responded_at`)
+            VALUES (?, ?, 'Support Staff', 'Support Crew', ?, 'confirmed', NULL, NOW())
+            ON DUPLICATE KEY UPDATE
+                `branch_dept` = IF(`branch_dept` = '' OR `branch_dept` = 'Support Staff', 'Support Staff', `branch_dept`),
+                `confirmation_status` = 'confirmed',
+                `decline_reason` = NULL,
+                `responded_at` = NOW()
+        ");
+        foreach ($uIds as $suid) {
+            $uUpd->execute([$realEventId, $suid]);
+            $ecaUpsert->execute([$realEventId, $suid, (int) ($caller['id'] ?? 1)]);
+        }
+
+        // Auto-fulfill any pending ad-hoc support requests on this event once Security Manager confirms Support Staff
+        if (!empty($uIds)) {
+            try {
+                $pdo->prepare("
+                    UPDATE `event_support_requests`
+                    SET `status` = 'fulfilled', `fulfilled_by_id` = ?, `assigned_user_ids_json` = ?, `fulfilled_at` = NOW()
+                    WHERE `event_id` = ? AND `status` = 'pending'
+                ")->execute([(int) ($caller['id'] ?? 1), json_encode($uIds), $realEventId]);
+            } catch (Throwable $e) {}
+        }
+
+        $newStatus = recalculateEventDispatchStatus($pdo, $realEventId);
+        $supCount = count($uIds);
+        logEventDispatchAction(
+            $pdo,
+            $realEventId,
+            (int) ($caller['id'] ?? 1),
+            (string) ($caller['role'] ?? 'security_manager'),
+            'security_manager_support_confirmed',
+            "{$approverName} confirmed {$supCount} Tier 4 Support Staff deployment(s) for {$evTitle}" . ($noteIn !== '' ? " — {$noteIn}" : ''),
+            ['assigned_user_ids' => $uIds, 'confirmed_count' => $supCount, 'dispatch_status' => $newStatus]
+        );
+
+        echo json_encode(array_merge(
+            buildFullPayload($pdo, $activeDb, $reqCpType, $reqCpId),
+            [
+                'ok' => true,
+                'dispatch_status' => $newStatus,
+                'security_manager_approved' => true,
+                'support_user_ids' => $uIds,
+                'message' => $supCount > 0
+                    ? "Confirmed {$supCount} Support Staff member(s) for {$evTitle}."
+                    : "Updated Support Staff roster for {$evTitle}.",
             ]
         ));
         exit;
