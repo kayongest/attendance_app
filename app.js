@@ -212,6 +212,17 @@
     eventCrewAssignments: {},
     eventSupportRequests: [],
     myPendingAssignments: [],
+    myAttendanceLogs: [],
+    techLogsActionFilter: 'all',
+    techLogsRange: 'recent',
+    techLogsDateFrom: '',
+    techLogsDateTo: '',
+    techLogsSearch: '',
+    techLogsPage: 1,
+    techLogsPerPage: 8,
+    techLogsReportRows: [],
+    techLogsLoading: false,
+    techLogsWindowLabel: '',
     eventDispatchLogs: [],
     selectedDispatchTier: 'tier1_command',
     pendingFaceMatchScan: null,
@@ -806,6 +817,9 @@
     if (Array.isArray(data.myPendingAssignments)) {
       state.myPendingAssignments = data.myPendingAssignments;
     }
+    if (Array.isArray(data.myAttendanceLogs)) {
+      state.myAttendanceLogs = data.myAttendanceLogs;
+    }
     if (Array.isArray(data.eventDispatchLogs)) {
       state.eventDispatchLogs = data.eventDispatchLogs;
     }
@@ -1082,6 +1096,22 @@
     }
     state.myPendingRollCall = null;
     state.myPendingAssignments = [];
+    state.myAttendanceLogs = [];
+    state.techLogsReportRows = [];
+    state.techLogsActionFilter = 'all';
+    state.techLogsRange = 'recent';
+    state.techLogsDateFrom = '';
+    state.techLogsDateTo = '';
+    state.techLogsSearch = '';
+    state.techLogsPage = 1;
+    state.techLogsLoading = false;
+    state.techLogsWindowLabel = '';
+    const techRangeSel = document.getElementById('tech-logs-range-select');
+    if (techRangeSel) techRangeSel.value = 'recent';
+    const techSearchInp = document.getElementById('tech-logs-search-input');
+    if (techSearchInp) techSearchInp.value = '';
+    const techCustomEl = document.getElementById('tech-logs-custom-dates');
+    if (techCustomEl) techCustomEl.style.display = 'none';
     state.readNotifIds = new Set();
     state.currentUser = nextUser || null;
     renderAll();
@@ -1782,7 +1812,8 @@
     }
   }
 
-  function switchScreen(screenKey, scrollToId = null) {
+  function switchScreen(screenKey, scrollToId = null, opts = {}) {
+    const isSilentRedirect = Boolean(opts && opts.silent);
     if (screenKey !== 'terminals') {
       stopCameraScanner();
     }
@@ -1839,20 +1870,19 @@
       const isTech = rawRole === 'tech_lead' || rawRole === 'technical_lead';
       const isStockMgr = rawRole === 'stock_manager';
       const isEvtCmd = rawRole === 'project_manager' || rawRole === 'event_coordinator';
+      const fallbackScreen = getDefaultPermittedScreenForCurrentUser();
 
-      if (isStockCtrl) {
-        showToast('Access Scoped: Gate Controllers are scoped to Gate Kiosk (#pane-kiosk) at their assigned terminal.');
-        screenKey = 'terminals';
-        scrollToId = 'pane-kiosk';
-      } else if (isTech || isEvtCmd) {
-        showToast('Access Restricted: Section requires Administrator privileges.');
-        screenKey = 'overview';
-      } else if (isStockMgr) {
-        showToast('Access Restricted: Section requires Administrator privileges.');
-        screenKey = 'overview';
-      } else {
-        showToast('Access Restricted: Crew members are scoped to Personal Badge & Gate Kiosk view.');
-        screenKey = 'terminals';
+      if (!isSilentRedirect && screenKey !== fallbackScreen) {
+        if (isStockCtrl) {
+          showToast('Access Scoped: Gate Controllers are scoped to Gate Kiosk (#pane-kiosk) at their assigned terminal.');
+        } else if (isTech || isEvtCmd || isStockMgr) {
+          showToast('Access Restricted: Section requires Administrator privileges.');
+        } else {
+          showToast('Access Restricted: Crew members are scoped to Technician Workspace & Personal Badge view.');
+        }
+      }
+      screenKey = fallbackScreen;
+      if (screenKey === 'terminals') {
         scrollToId = 'pane-kiosk';
       }
     }
@@ -1860,13 +1890,19 @@
     const resolvedKey = screenKey;
     state.activeScreen = resolvedKey;
     if (resolvedKey === 'terminals' && wasScreen !== 'terminals') {
-      state.terminalScreenLocked = true;
-      localStorage.setItem('ability_terminal_screen_locked', '1');
-      const errEl = document.getElementById('terminal-unlock-error');
-      const pinInp = document.getElementById('terminal-unlock-pin-input');
-      if (errEl) errEl.textContent = '';
-      if (pinInp) pinInp.value = '';
-      renderTerminalLockScreen();
+      if (isCurrentUserTechnician()) {
+        renderTerminalLockScreen();
+        renderMyAssignmentsInboxCard();
+        renderTechnicianAttendanceLogs();
+      } else {
+        state.terminalScreenLocked = true;
+        localStorage.setItem('ability_terminal_screen_locked', '1');
+        const errEl = document.getElementById('terminal-unlock-error');
+        const pinInp = document.getElementById('terminal-unlock-pin-input');
+        if (errEl) errEl.textContent = '';
+        if (pinInp) pinInp.value = '';
+        renderTerminalLockScreen();
+      }
     }
     const screens = {
       overview: document.getElementById('screen-overview'),
@@ -1933,7 +1969,7 @@
       'dispatch-flow': 'Dispatch Flow',
       users: 'Staff, Technicians & Role Management',
       attendees: 'Staff ID Badges',
-      terminals: 'Terminals (#pane-kiosk)',
+      terminals: isCurrentUserTechnician() ? 'Technician Workspace' : 'Terminals (#pane-kiosk)',
       'shift-relief': 'Shift Relief & Swaps',
       calltime: 'Set Call Time',
       rollcall: 'On-Site Roll-Call',
@@ -1974,8 +2010,14 @@
         if (scrollToId === 'pane-kiosk') {
           const el = document.getElementById('pane-kiosk');
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (scrollToId) {
+          const el = document.getElementById(scrollToId);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else {
           window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        if (isCurrentUserTechnician()) {
+          return;
         }
         if (state.terminalScreenLocked) {
           const pinInp = document.getElementById('terminal-unlock-pin-input');
@@ -2135,6 +2177,8 @@
     renderTechLeadRosterCard();
     renderMyRollCallAlertBanner();
     renderMyAssignmentsInboxCard();
+    renderTerminalLockScreen();
+    renderTechnicianAttendanceLogs();
     renderCrewDigitalPassCard();
     renderKioskVenueQrDeck();
     renderCrewTables();
@@ -2273,6 +2317,7 @@
     if (state.myPendingRollCall) {
       const rc = state.myPendingRollCall;
       const rcKey = `rollcall-ping-${rc.session_id}-${rc.entry_id}`;
+      const isTechOnlyUser = isCurrentUserTechnician();
       const canOpenAttendees = isScreenPermittedForCurrentUser('attendees');
       items.unshift({
         id: rcKey,
@@ -2282,15 +2327,16 @@
         desc: 'Verify you are still inside the venue via GPS geo-fence or live Gate QR before deadline.',
         time: `${Math.max(1, Math.ceil(Number(rc.seconds_left || 60) / 60))}m left`,
         unread: !state.readNotifIds.has(rcKey),
-        targetScreen: canOpenAttendees ? 'attendees' : 'rollcall',
-        targetScrollId: canOpenAttendees ? 'my-rollcall-alert-card' : 'page-rc-my-alert-card',
-        actionHint: canOpenAttendees ? 'Staff ID Badges · Verify →' : 'Roll-Call →',
+        targetScreen: isTechOnlyUser ? 'terminals' : (canOpenAttendees ? 'attendees' : 'rollcall'),
+        targetScrollId: isTechOnlyUser ? 'pane-kiosk-rollcall-alert-card' : (canOpenAttendees ? 'my-rollcall-alert-card' : 'page-rc-my-alert-card'),
+        actionHint: isTechOnlyUser ? 'Workspace · Verify →' : (canOpenAttendees ? 'Staff ID Badges · Verify →' : 'Roll-Call →'),
       });
     }
 
     // 6. Pending Event Dispatch Confirmation for Crew / Techs / Support
     const pendingAssigns = (state.myPendingAssignments || []).filter((a) => String(a.confirmation_status) === 'pending');
     if (pendingAssigns.length > 0) {
+      const isTechOnlyUser = isCurrentUserTechnician();
       pendingAssigns.slice(0, 5).forEach((a) => {
         const asgKey = `event-asg-pending-${a.event_id}-${a.id}`;
         items.unshift({
@@ -2301,11 +2347,11 @@
           desc: `Branch: ${a.branch_dept || 'Crew'} · Call-time ${a.call_time || '08:00'} · Click to open & confirm`,
           time: a.event_date || 'Pending',
           unread: !state.readNotifIds.has(asgKey),
-          targetScreen: 'attendees',
-          targetScrollId: 'my-assignments-inbox-card',
+          targetScreen: isTechOnlyUser ? 'terminals' : 'attendees',
+          targetScrollId: isTechOnlyUser ? 'pane-kiosk-assignments-card' : 'my-assignments-inbox-card',
           targetEventId: String(a.event_id || ''),
           targetTierKey: String(a.branch_dept || '').toLowerCase() === 'support staff' ? 'tier4_support' : 'tier3_technicians',
-          actionHint: 'Staff ID Badges · Confirm →',
+          actionHint: isTechOnlyUser ? 'Assignments · Confirm →' : 'Staff ID Badges · Confirm →',
         });
       });
     }
@@ -2647,6 +2693,11 @@
     if (normalizedKey === 'analytics' || normalizedKey === 'access-matrix') {
       return false;
     }
+    // Technician / Field Crew home workspace (#screen-terminals: Pending Assignments + Personal Attendance Logs)
+    // is always permitted even if the Gate Scanner nav item was restricted in Navigation Menu CRUD.
+    if (normalizedKey === 'terminals' && isCurrentUserTechnician()) {
+      return true;
+    }
     const navItems = state.navigationConfig?.items || [];
     if (Array.isArray(navItems) && navItems.length > 0) {
       const navMatch = navItems.find((it) => String(it.nav_target) === String(normalizedKey));
@@ -2675,6 +2726,28 @@
     }
     // Field Crew / Technicians / Support Staff:
     return ['dispatch-flow', 'attendees', 'terminals', 'rollcall'].includes(normalizedKey);
+  }
+
+  function getDefaultPermittedScreenForCurrentUser() {
+    if (isCurrentUserTechnician()) {
+      return 'terminals';
+    }
+    if (isCurrentUserStockController()) {
+      if (isScreenPermittedForCurrentUser('terminals')) return 'terminals';
+      if (isScreenPermittedForCurrentUser('attendees')) return 'attendees';
+    }
+    if (isScreenPermittedForCurrentUser('overview')) {
+      return 'overview';
+    }
+    const navItems = state.navigationConfig?.items || [];
+    const firstAllowed = navItems.find((it) => {
+      const target = String(it.nav_target || '');
+      return target && !target.startsWith('settings:') && !target.startsWith('action:') && isNavItemPermittedForCurrentUser(it);
+    });
+    if (firstAllowed) {
+      return String(firstAllowed.nav_target);
+    }
+    return isCurrentUserStockController() ? 'terminals' : 'overview';
   }
 
   function canCurrentUserManageWarehouses() {
@@ -2962,10 +3035,9 @@
 
     // 8. Auto-redirect if active screen is not permitted for new role
     if (!isScreenPermittedForCurrentUser(state.activeScreen)) {
-      if (isStockCtrl || isTechCrew) {
-        switchScreen('terminals', 'pane-kiosk');
-      } else {
-        switchScreen('overview');
+      const fallbackScreen = getDefaultPermittedScreenForCurrentUser();
+      if (fallbackScreen && fallbackScreen !== state.activeScreen) {
+        switchScreen(fallbackScreen, fallbackScreen === 'terminals' ? 'pane-kiosk' : null, { silent: true });
       }
     }
 
@@ -3516,6 +3588,18 @@
   }
 
   function renderTerminalLockScreen() {
+    const isTechWorkspace = isCurrentUserTechnician();
+    const screenTerminals = document.getElementById('screen-terminals');
+    const pageTitleEl = document.getElementById('terminals-page-title');
+    const pageSubEl = document.getElementById('terminals-page-subtitle');
+    const pageActionsEl = document.getElementById('terminals-page-actions');
+    const cpControlsBar = document.getElementById('terminals-checkpoint-controls-bar');
+    const heroHeader = document.getElementById('kiosk-scanner-hero-header');
+    const techLogsCard = document.getElementById('pane-kiosk-tech-logs-card');
+    const offlineBar = document.getElementById('kiosk-offline-sync-bar');
+    const cameraPanel = document.getElementById('kiosk-camera-panel');
+    const venueQrDeck = document.getElementById('kiosk-venue-qr-deck');
+
     const locked = Boolean(state.terminalScreenLocked);
     const heroCard = document.getElementById('pane-kiosk');
     const chip = document.getElementById('kiosk-scanner-station-chip');
@@ -3532,6 +3616,39 @@
     const cpName = state.activeCheckpoint?.name || 'Ndera Warehouse';
     const cpCode = state.activeCheckpoint?.code ? ` (${state.activeCheckpoint.code})` : '';
     const isStock = state.checkpointType === 'stock_warehouse';
+
+    if (screenTerminals) {
+      screenTerminals.classList.toggle('is-technician-workspace', isTechWorkspace);
+    }
+
+    if (isTechWorkspace) {
+      if (pageTitleEl) pageTitleEl.textContent = 'Technician Workspace';
+      if (pageSubEl) pageSubEl.textContent = 'Confirm scheduled event dispatch assignments and review your personal Check-In & Check-Out attendance logs.';
+      if (pageActionsEl) pageActionsEl.style.display = 'none';
+      if (cpControlsBar) cpControlsBar.style.display = 'none';
+      if (heroHeader) heroHeader.style.display = 'none';
+      if (heroCard) heroCard.classList.remove('is-terminal-locked');
+      if (quickbar) quickbar.style.display = 'none';
+      if (scanForm) scanForm.style.display = 'none';
+      if (offlineBar) offlineBar.style.display = 'none';
+      if (cameraPanel) cameraPanel.style.display = 'none';
+      if (venueQrDeck) venueQrDeck.style.display = 'none';
+      if (lockPanel) lockPanel.style.display = 'none';
+      if (techLogsCard) techLogsCard.style.display = 'flex';
+      stopCameraScanner();
+      if (terminalLockClockTimer) {
+        clearInterval(terminalLockClockTimer);
+        terminalLockClockTimer = null;
+      }
+      return;
+    }
+
+    if (pageTitleEl) pageTitleEl.textContent = 'Terminals';
+    if (pageSubEl) pageSubEl.textContent = 'Live Gate Terminal Barcode & Badge Scanner (#pane-kiosk), active shift call-time controls, and checkpoint verification.';
+    if (pageActionsEl) pageActionsEl.style.display = '';
+    if (cpControlsBar) cpControlsBar.style.display = '';
+    if (heroHeader) heroHeader.style.display = '';
+    if (techLogsCard) techLogsCard.style.display = 'none';
 
     if (heroCard) heroCard.classList.toggle('is-terminal-locked', locked);
     if (chip) {
@@ -3732,27 +3849,134 @@
     } catch (e) { }
   }
 
+  function ensurePassQrRotationTimer() {
+    if (state.passQrTimer) return;
+    state.passQrTimer = setInterval(() => {
+      if (document.hidden || !state.currentUser) return;
+      const inlineBox = document.getElementById('crew-pass-qr-box');
+      const modalEl = document.getElementById('tech-pass-qr-modal');
+      const modalOpen = Boolean(modalEl && modalEl.classList.contains('open'));
+      if (!inlineBox && !modalOpen) return;
+      const secInSlice = Math.floor(Date.now() / 1000) % 30;
+      const labelTxt = state.passQrData?.token
+        ? `Anti-Shadowing QR · Rotates in ${Math.max(1, 30 - secInSlice)}s`
+        : 'Static Fallback Badge QR';
+      const timerEl = document.getElementById('crew-pass-rotate-label');
+      if (timerEl && state.passQrData?.token) timerEl.textContent = labelTxt;
+      const modalTimerEl = document.getElementById('tech-pass-modal-rotate-label');
+      if (modalTimerEl && modalOpen) modalTimerEl.textContent = labelTxt;
+      if (Math.floor(Date.now() / 30000) !== Number(state.passQrSlice)) {
+        fetchLiveDynamicPassQr(false);
+      }
+    }, 1000);
+  }
+
   function renderCrewDigitalPassQrOnly() {
-    const qrBox = document.getElementById('crew-pass-qr-box');
-    const timerEl = document.getElementById('crew-pass-rotate-label');
-    const tokenEl = document.getElementById('crew-pass-live-code');
-    if (!qrBox) return;
     const tok = state.passQrData && state.passQrData.token ? String(state.passQrData.token) : '';
     const meCrew = (state.crew || []).find((c) => Number(c.id) === Number(state.currentUser?.id)) || state.currentUser;
     const fallbackCode = meCrew?.badge_code || `REW-BADGE-${String(meCrew?.id || 0).padStart(4, '0')}`;
     const payloadStr = tok || fallbackCode;
-    if (window.AbilityQRCode && typeof window.AbilityQRCode.toSvg === 'function') {
-      qrBox.innerHTML = window.AbilityQRCode.toSvg(payloadStr, 140);
-    } else {
-      qrBox.innerHTML = buildBadgeQrSvg(payloadStr);
+    const secs = Math.max(1, 30 - (Math.floor(Date.now() / 1000) % 30));
+    const timerTxt = tok ? `Anti-Shadowing QR · Rotates in ${secs}s` : 'Static Fallback Badge QR';
+    const tokenTxt = tok ? `${tok.slice(0, 18)}… (30s Dynamic)` : fallbackCode;
+
+    const qrBox = document.getElementById('crew-pass-qr-box');
+    const timerEl = document.getElementById('crew-pass-rotate-label');
+    const tokenEl = document.getElementById('crew-pass-live-code');
+    if (qrBox) {
+      if (window.AbilityQRCode && typeof window.AbilityQRCode.toSvg === 'function') {
+        qrBox.innerHTML = window.AbilityQRCode.toSvg(payloadStr, 140);
+      } else {
+        qrBox.innerHTML = buildBadgeQrSvg(payloadStr);
+      }
+      if (tokenEl) tokenEl.textContent = tokenTxt;
+      if (timerEl) timerEl.textContent = timerTxt;
     }
-    if (tokenEl) {
-      tokenEl.textContent = tok ? `${tok.slice(0, 18)}… (30s Dynamic)` : fallbackCode;
+
+    const modalQrBox = document.getElementById('tech-pass-modal-qr-box');
+    const modalTimerEl = document.getElementById('tech-pass-modal-rotate-label');
+    const modalTokenEl = document.getElementById('tech-pass-modal-live-code');
+    if (modalQrBox) {
+      if (window.AbilityQRCode && typeof window.AbilityQRCode.toSvg === 'function') {
+        modalQrBox.innerHTML = window.AbilityQRCode.toSvg(payloadStr, 196);
+      } else {
+        modalQrBox.innerHTML = buildBadgeQrSvg(payloadStr);
+      }
+      if (modalTokenEl) modalTokenEl.textContent = tokenTxt;
+      if (modalTimerEl) modalTimerEl.textContent = timerTxt;
     }
-    if (timerEl) {
-      const secs = Math.max(1, 30 - (Math.floor(Date.now() / 1000) % 30));
-      timerEl.textContent = tok ? `Anti-Shadowing QR · Rotates in ${secs}s` : 'Static Fallback Badge QR';
+  }
+
+  function openTechnicianPassQrModal(assignment = null) {
+    const modal = document.getElementById('tech-pass-qr-modal');
+    if (!modal || !state.currentUser) return;
+    const meCrew = (state.crew || []).find((c) => Number(c.id) === Number(state.currentUser.id)) || state.currentUser;
+    const fullName = meCrew.full_name || state.currentUser.full_name || 'Crew Member';
+    const roleLabel = meCrew.role_display || meCrew.role || 'Technician';
+    const dept = meCrew.department || 'Operations';
+    const clearance = meCrew.clearance_code || 'L2';
+    const badgeCode = meCrew.badge_code || `REW-BADGE-${String(meCrew.id || 0).padStart(4, '0')}`;
+    const dailySt = String(meCrew.daily_state || 'ready').toLowerCase();
+    const stLabel = dailySt === 'checked_in'
+      ? `Checked In${meCrew.last_checkpoint_name ? ' · ' + meCrew.last_checkpoint_name : ''}`
+      : (dailySt === 'checked_out' ? 'Checked Out' : 'Ready for Check-In');
+    const stClass = dailySt === 'checked_in'
+      ? 'status-badge-green-sm'
+      : (dailySt === 'checked_out' ? 'status-badge-blue-sm' : 'status-badge-neutral-sm');
+
+    const eventBar = document.getElementById('tech-pass-modal-event-bar');
+    if (eventBar) {
+      if (assignment && assignment.event_title) {
+        eventBar.style.display = 'flex';
+        eventBar.innerHTML = `
+          <div>
+            <strong>${escapeHtml(assignment.event_title)}</strong>
+            <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">
+              ${escapeHtml(assignment.event_location || 'Assigned Venue')} · ${escapeHtml(assignment.event_date || '')} · Call-Time ${escapeHtml(assignment.call_time || '08:00')}
+            </div>
+          </div>
+          <span class="status-badge status-badge-purple-sm">${escapeHtml(assignment.branch_dept || dept)}</span>
+        `;
+      } else {
+        eventBar.style.display = 'none';
+        eventBar.innerHTML = '';
+      }
     }
+
+    const badgeCodeEl = document.getElementById('tech-pass-modal-badge-code');
+    if (badgeCodeEl) badgeCodeEl.textContent = badgeCode;
+
+    const identityEl = document.getElementById('tech-pass-modal-identity');
+    if (identityEl) {
+      identityEl.innerHTML = `
+        <div class="tech-pass-modal-id-row">
+          <div>
+            <div style="font-size: 13.5px; font-weight: 700; color: var(--text-primary);">${escapeHtml(fullName)}</div>
+            <div style="font-size: 11.5px; color: var(--text-secondary);">${escapeHtml(roleLabel)} · ${escapeHtml(dept)}</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span class="tier-code-badge tier-code-${escapeHtml(clearance)}">${escapeHtml(clearance)}</span>
+            <span class="status-badge ${stClass}">${escapeHtml(stLabel)}</span>
+          </div>
+        </div>
+        <p style="margin: 6px 0 0; font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+          Present this live 30-second QR code to the Gate Controller at the venue entrance to record your Check-In or Check-Out.
+        </p>
+      `;
+    }
+
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    renderCrewDigitalPassQrOnly();
+    fetchLiveDynamicPassQr(false);
+    ensurePassQrRotationTimer();
+  }
+
+  function closeTechnicianPassQrModal() {
+    const modal = document.getElementById('tech-pass-qr-modal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
   }
 
   function renderCrewDigitalPassCard() {
@@ -3847,21 +4071,7 @@
       }
     });
 
-    if (!state.passQrTimer) {
-      state.passQrTimer = setInterval(() => {
-        if (document.hidden || !state.currentUser) return;
-        const box = document.getElementById('crew-pass-qr-box');
-        if (!box) return;
-        const secInSlice = Math.floor(Date.now() / 1000) % 30;
-        const timerEl = document.getElementById('crew-pass-rotate-label');
-        if (timerEl && state.passQrData?.token) {
-          timerEl.textContent = `Anti-Shadowing QR · Rotates in ${Math.max(1, 30 - secInSlice)}s`;
-        }
-        if (Math.floor(Date.now() / 30000) !== Number(state.passQrSlice)) {
-          fetchLiveDynamicPassQr(false);
-        }
-      }, 1000);
-    }
+    ensurePassQrRotationTimer();
   }
 
   async function refreshKioskVenueQr() {
@@ -6447,6 +6657,7 @@
     const targets = [
       document.getElementById('my-rollcall-alert-card'),
       document.getElementById('page-rc-my-alert-card'),
+      document.getElementById('pane-kiosk-rollcall-alert-card'),
     ].filter(Boolean);
     if (!targets.length) return;
     const ping = state.myPendingRollCall;
@@ -6471,6 +6682,11 @@
       </div>
     `;
     targets.forEach((el) => {
+      if (el.id === 'pane-kiosk-rollcall-alert-card' && !isCurrentUserTechnician()) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        return;
+      }
       el.style.display = 'block';
       el.innerHTML = html;
       el.querySelector('.js-self-verify-rollcall-btn')?.addEventListener('click', () => handleSelfRespondRollCall(ping.entry_id, false));
@@ -6534,11 +6750,134 @@
     });
   }
 
+  function formatShortAssignmentTimestamp(rawTs) {
+    if (!rawTs) return '';
+    const d = new Date(String(rawTs).replace(' ', 'T'));
+    if (Number.isNaN(d.getTime())) return String(rawTs).slice(0, 16);
+    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function resolveAssignmentShiftState(a) {
+    const st = String(a?.confirmation_status || 'pending').toLowerCase();
+    if (st !== 'confirmed') {
+      return {
+        phase: st,
+        pillHtml: '',
+        respondedNote: a?.responded_at ? `Updated ${formatShortAssignmentTimestamp(a.responded_at)}` : '',
+        canWithdraw: st !== 'declined',
+        isCompletedOrPast: false,
+        showPassQr: false,
+      };
+    }
+
+    const curUid = Number(state.currentUser?.id || 0);
+    const logsSource = (Array.isArray(state.myAttendanceLogs) && state.myAttendanceLogs.length > 0)
+      ? state.myAttendanceLogs
+      : (state.activityTimeline || []).filter((r) => curUid <= 0 || Number(r.user_id || 0) === curUid);
+
+    const evNumId = Number(a.event_numeric_id || 0) || (Number(a.event_id) > 0 ? Number(a.event_id) : 0);
+    const evTitleLow = String(a.event_title || '').trim().toLowerCase();
+    const evLocLow = String(a.event_location || '').trim().toLowerCase();
+    const evStartDate = String(a.event_date || '').slice(0, 10);
+    const evEndDate = String(a.event_end_date || evStartDate || '').slice(0, 10);
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    const matchingLogs = logsSource.filter((r) => {
+      if (String(r.access_status || 'granted').toLowerCase() === 'denied') return false;
+      if (String(r.checkpoint_type || '').toLowerCase() !== 'event_venue') return false;
+      const cpId = Number(r.checkpoint_id || 0);
+      const cpNameLow = String(r.checkpoint_name || '').trim().toLowerCase();
+      if (evNumId > 0 && cpId === evNumId) return true;
+      if (evTitleLow && cpNameLow === evTitleLow) return true;
+      if (evLocLow && cpNameLow && (cpNameLow === evLocLow || cpNameLow.includes(evLocLow) || evLocLow.includes(cpNameLow))) {
+        const logDate = String(r.scanned_date || r.scanned_at || '').slice(0, 10);
+        if (!evStartDate || !logDate || (logDate >= evStartDate && logDate <= (evEndDate || evStartDate))) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    const latestMatch = matchingLogs[0] || null;
+    const latestCheckIn = matchingLogs.find((r) => String(r.scan_action || '').toLowerCase() === 'check_in') || null;
+    const latestCheckOut = matchingLogs.find((r) => String(r.scan_action || '').toLowerCase() === 'check_out') || null;
+    const shortTime = (r) => {
+      if (!r) return '';
+      if (r.scanned_time) return String(r.scanned_time).replace(/:\d{2}\s*(AM|PM)$/i, ' $1');
+      const m = String(r.formatted_time || '').match(/(\d{1,2}:\d{2})(?::\d{2})?\s*(AM|PM)/i);
+      return m ? `${m[1]} ${m[2].toUpperCase()}` : '';
+    };
+
+    const meCrew = (state.crew || []).find((c) => Number(c.id) === curUid) || state.currentUser;
+    const crewCpLow = String(meCrew?.last_checkpoint_name || '').trim().toLowerCase();
+    const isCrewOnThisEvent = Boolean(
+      meCrew &&
+      String(meCrew.daily_state || '').toLowerCase() === 'checked_in' &&
+      String(meCrew.last_checkpoint_type || '').toLowerCase() === 'event_venue' &&
+      ((evNumId > 0 && Number(meCrew.last_checkpoint_id || 0) === evNumId) ||
+        (evTitleLow && crewCpLow === evTitleLow) ||
+        (evLocLow && crewCpLow && (crewCpLow === evLocLow || crewCpLow.includes(evLocLow))))
+    );
+
+    const respondedNote = a.responded_at ? `Confirmed ${formatShortAssignmentTimestamp(a.responded_at)}` : '';
+
+    if (isCrewOnThisEvent || (latestMatch && String(latestMatch.scan_action || '').toLowerCase() === 'check_in')) {
+      const inTxt = shortTime(latestCheckIn) || meCrew?.check_in_time || '';
+      return {
+        phase: 'on_site',
+        pillHtml: `<span class="status-badge status-badge-green-sm">🟢 On-Site${inTxt ? ` · Checked In ${escapeHtml(inTxt)}` : ''}</span>`,
+        respondedNote,
+        canWithdraw: false,
+        isCompletedOrPast: false,
+        showPassQr: true,
+      };
+    }
+
+    if (latestCheckOut) {
+      const inTxt = latestCheckOut.paired_in_time || shortTime(latestCheckIn);
+      const outTxt = shortTime(latestCheckOut);
+      const durTxt = (latestCheckOut.duration_label && latestCheckOut.duration_label !== '—') ? ` (${latestCheckOut.duration_label})` : '';
+      const spanTxt = inTxt && outTxt
+        ? ` · In ${inTxt} → Out ${outTxt}${durTxt}`
+        : (outTxt ? ` · Out ${outTxt}${durTxt}` : '');
+      return {
+        phase: 'shift_completed',
+        pillHtml: `<span class="status-badge status-badge-blue-sm">✓ Shift Completed${escapeHtml(spanTxt)}</span>`,
+        respondedNote,
+        canWithdraw: false,
+        isCompletedOrPast: true,
+        showPassQr: false,
+      };
+    }
+
+    const effectiveEnd = evEndDate || evStartDate;
+    if (effectiveEnd && /^\d{4}-\d{2}-\d{2}$/.test(effectiveEnd) && effectiveEnd < todayIso) {
+      return {
+        phase: 'past_event',
+        pillHtml: '<span class="status-badge status-badge-neutral-sm">Event Date Passed</span>',
+        respondedNote,
+        canWithdraw: false,
+        isCompletedOrPast: true,
+        showPassQr: true,
+      };
+    }
+
+    return {
+      phase: 'awaiting_checkin',
+      pillHtml: '<span class="status-badge status-badge-green-sm">✓ Confirmed · Awaiting Check-In</span>',
+      respondedNote,
+      canWithdraw: true,
+      isCompletedOrPast: false,
+      showPassQr: true,
+    };
+  }
+
   function renderAssignmentInboxIntoCard(card, opts = {}) {
     if (!card) return;
     const myAsg = sortAssignmentsPendingFirst(opts.assignments);
     const pendingSupReqs = Array.isArray(opts.pendingSupReqs) ? opts.pendingSupReqs : [];
-    const showTechInbox = Boolean(opts.showAssignments && myAsg.length > 0);
+    const alwaysShowEmpty = Boolean(opts.alwaysShowEmpty);
+    const showTechInbox = Boolean(opts.showAssignments && (myAsg.length > 0 || alwaysShowEmpty));
     const showSupInbox = Boolean(opts.showSupportReqs && pendingSupReqs.length > 0);
     if (!showTechInbox && !showSupInbox) {
       card.style.display = 'none';
@@ -6550,35 +6889,96 @@
     const pendingCount = myAsg.filter((a) => String(a.confirmation_status || 'pending').toLowerCase() === 'pending').length;
     const confirmedCount = myAsg.filter((a) => String(a.confirmation_status || '').toLowerCase() === 'confirmed').length;
     const headerTitle = opts.kioskMode
-      ? (pendingCount > 0 ? 'Pending Event Dispatch Assignments' : 'My Event Dispatch Assignments')
+      ? ((pendingCount > 0 || myAsg.length === 0) ? 'Pending Event Dispatch Assignments' : 'My Event Dispatch Assignments')
       : 'My Event Dispatch Assignments';
     const statusBadgeHtml = pendingCount > 0
       ? `<span class="status-badge status-badge-amber-sm">${pendingCount} Pending Confirmation</span>`
-      : (confirmedCount > 0 ? `<span class="status-badge status-badge-green-sm">✓ ${confirmedCount} Confirmed</span>` : '');
+      : (confirmedCount > 0
+        ? `<span class="status-badge status-badge-green-sm">✓ ${confirmedCount} Confirmed</span>`
+        : `<span class="status-badge status-badge-neutral-sm">0 Pending</span>`);
 
-    const asgRowsHtml = myAsg.map((a) => {
+    const enrichedAsg = myAsg.map((a) => ({ asg: a, shift: resolveAssignmentShiftState(a) }));
+    const activeAsg = enrichedAsg.filter((x) => !x.shift.isCompletedOrPast);
+    const pastAsg = enrichedAsg.filter((x) => x.shift.isCompletedOrPast);
+
+    const buildAssignmentRowHtml = ({ asg: a, shift }) => {
       const st = String(a.confirmation_status || 'pending').toLowerCase();
       const targetTier = String(a.branch_dept || '').toLowerCase() === 'support staff' ? 'tier4_support' : 'tier3_technicians';
+      const isConfirmed = st === 'confirmed';
+      const metaParts = [
+        a.event_location || '',
+        a.event_date || '',
+        `Call-Time ${a.call_time || '08:00'}`,
+        `Lead: ${a.tech_lead || 'Tech Lead'}`,
+      ].filter(Boolean);
+      if (isConfirmed && shift.respondedNote) {
+        metaParts.push(shift.respondedNote);
+      }
+
+      const actionsHtml = isConfirmed
+        ? `
+          ${shift.showPassQr ? `<button type="button" class="btn btn-primary-32 js-show-my-pass-qr" data-event-id="${escapeHtml(a.event_id)}">🪪 Show My Pass QR</button>` : ''}
+          ${shift.canWithdraw ? `<button type="button" class="btn btn-secondary-32-sm js-decline-my-assignment tech-asg-withdraw-btn" data-event-id="${escapeHtml(a.event_id)}" data-is-withdraw="1">Withdraw</button>` : ''}
+          ${canJumpDispatch ? `<button type="button" class="btn btn-secondary-32-sm js-open-assignment-dispatch" data-event-id="${escapeHtml(a.event_id)}" data-tier-key="${escapeHtml(targetTier)}">Dispatch Flow →</button>` : ''}
+        `
+        : `
+          <button type="button" class="btn btn-primary-32 js-confirm-my-assignment" data-event-id="${escapeHtml(a.event_id)}" style="background:#059669;border-color:#059669;">✓ Confirm</button>
+          ${st !== 'declined' ? `<button type="button" class="btn btn-secondary-32-sm js-decline-my-assignment" data-event-id="${escapeHtml(a.event_id)}" style="color:#dc2626;border-color:#fecaca;">✕ Decline</button>` : ''}
+          ${canJumpDispatch ? `<button type="button" class="btn btn-secondary-32-sm js-open-assignment-dispatch" data-event-id="${escapeHtml(a.event_id)}" data-tier-key="${escapeHtml(targetTier)}">Dispatch Flow →</button>` : ''}
+        `;
+
       return `
-        <div class="rc-entry-row">
+        <div class="rc-entry-row tech-asg-row is-phase-${escapeHtml(shift.phase)}">
           <div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <strong>${escapeHtml(a.event_title || 'Event')}</strong>
               <span class="assign-status-pill ${escapeHtml(st)}">${escapeHtml(st)}</span>
               <span class="status-badge status-badge-purple-sm">${escapeHtml(a.branch_dept || 'Crew')}</span>
+              ${shift.pillHtml}
             </div>
-            <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px;">
-              ${escapeHtml(a.event_location || '')} · ${escapeHtml(a.event_date || '')} · Call-Time ${escapeHtml(a.call_time || '08:00')} · Lead: ${escapeHtml(a.tech_lead || 'Tech Lead')}
+            <div style="font-size:11.5px;color:var(--text-secondary);margin-top:3px;">
+              ${escapeHtml(metaParts.join(' · '))}
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            ${st !== 'confirmed' ? `<button type="button" class="btn btn-primary-32 js-confirm-my-assignment" data-event-id="${escapeHtml(a.event_id)}" style="background:#059669;border-color:#059669;">✓ Confirm</button>` : ''}
-            ${st !== 'declined' ? `<button type="button" class="btn btn-secondary-32-sm js-decline-my-assignment" data-event-id="${escapeHtml(a.event_id)}" style="color:#dc2626;border-color:#fecaca;">✕ Decline</button>` : ''}
-            ${canJumpDispatch ? `<button type="button" class="btn btn-secondary-32-sm js-open-assignment-dispatch" data-event-id="${escapeHtml(a.event_id)}" data-tier-key="${escapeHtml(targetTier)}">Dispatch Flow →</button>` : ''}
+            ${actionsHtml}
           </div>
         </div>
       `;
-    }).join('');
+    };
+
+    let asgRowsHtml = '';
+    if (myAsg.length === 0) {
+      asgRowsHtml = `
+        <div class="rc-entry-row tech-empty-assignment-row">
+          <div>
+            <strong style="font-size:13px;">No pending event dispatch assignments</strong>
+            <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px;">
+              Scheduled event deployments assigned by Command or your Tech Lead will appear here for confirmation.
+            </div>
+          </div>
+        </div>
+      `;
+    } else {
+      const activeHtml = activeAsg.map(buildAssignmentRowHtml).join('');
+      const isPastOpen = state.techPastAssignmentsOpen !== undefined
+        ? Boolean(state.techPastAssignmentsOpen)
+        : (activeAsg.length === 0);
+      const pastHtml = pastAsg.length > 0
+        ? `
+          <details class="tech-past-assignments-group" ${isPastOpen ? 'open' : ''}>
+            <summary class="tech-past-assignments-summary">
+              <span>Completed / Past Deployments (${pastAsg.length})</span>
+              <span class="tech-past-assignments-hint">${isPastOpen ? 'Hide ▴' : 'Show ▾'}</span>
+            </summary>
+            <div class="tech-past-assignments-list">
+              ${pastAsg.map(buildAssignmentRowHtml).join('')}
+            </div>
+          </details>
+        `
+        : '';
+      asgRowsHtml = activeHtml + pastHtml;
+    }
 
     const supRowsHtml = showSupInbox ? `
       <div style="margin-top:${showTechInbox ? '12px' : '0'};padding-top:${showTechInbox ? '10px' : '0'};${showTechInbox ? 'border-top:1px solid var(--border-color);' : ''}">
@@ -6601,8 +7001,9 @@
               <h3 class="directory-title-18" style="margin:0;font-size:15px;">${headerTitle}</h3>
               ${statusBadgeHtml}
             </div>
-            <p class="directory-desc" style="margin:2px 0 0;font-size:11.5px;">Confirm or decline scheduled event deployments assigned by Command / Tech Lead.</p>
+            <p class="directory-desc" style="margin:2px 0 0;font-size:11.5px;">Confirm or decline scheduled event deployments assigned by Command / Tech Lead, then present your 30s Pass QR at the venue gate.</p>
           </div>
+          ${opts.kioskMode ? `<button type="button" class="btn btn-secondary-32-sm js-header-show-my-pass-qr" title="Open your 30-second rotating Digital Crew Pass QR">🪪 My Pass QR</button>` : ''}
         </div>
         ${asgRowsHtml}
       ` : ''}
@@ -6614,10 +7015,25 @@
     });
     card.querySelectorAll('.js-decline-my-assignment').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const reason = window.prompt('Optional reason for declining this event assignment:', 'Schedule conflict');
+        const isWithdraw = btn.getAttribute('data-is-withdraw') === '1';
+        const promptLabel = isWithdraw
+          ? 'Enter a brief reason for withdrawing from this confirmed event assignment:'
+          : 'Optional reason for declining this event assignment:';
+        const reason = window.prompt(promptLabel, 'Schedule conflict');
         if (reason === null) return;
         respondMyEventAssignment(btn.getAttribute('data-event-id'), 'declined', reason);
       });
+    });
+    card.querySelectorAll('.js-show-my-pass-qr').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const evId = String(btn.getAttribute('data-event-id') || '');
+        const matched = myAsg.find((item) => String(item.event_id) === evId) || null;
+        openTechnicianPassQrModal(matched);
+      });
+    });
+    card.querySelector('.js-header-show-my-pass-qr')?.addEventListener('click', () => {
+      const firstConfirmed = myAsg.find((item) => String(item.confirmation_status || '').toLowerCase() === 'confirmed') || null;
+      openTechnicianPassQrModal(firstConfirmed);
     });
     card.querySelectorAll('.js-open-assignment-dispatch').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -6632,6 +7048,14 @@
       switchScreen('settings');
       switchSettingsTab('dispatch');
     });
+    const pastGroup = card.querySelector('.tech-past-assignments-group');
+    if (pastGroup) {
+      pastGroup.addEventListener('toggle', () => {
+        state.techPastAssignmentsOpen = pastGroup.open;
+        const hintEl = pastGroup.querySelector('.tech-past-assignments-hint');
+        if (hintEl) hintEl.textContent = pastGroup.open ? 'Hide ▴' : 'Show ▾';
+      });
+    }
   }
 
   function renderMyAssignmentsInboxCard() {
@@ -6647,15 +7071,262 @@
       kioskMode: false,
     });
 
+    const isTechUser = isCurrentUserTechnician();
     const pendingCount = myAsg.filter((a) => String(a.confirmation_status || 'pending').toLowerCase() === 'pending').length;
-    const showKioskAssignments = myAsg.length > 0 && (isCurrentUserTechnician() || pendingCount > 0);
+    const showKioskAssignments = isTechUser || (myAsg.length > 0 && pendingCount > 0);
     renderAssignmentInboxIntoCard(document.getElementById('pane-kiosk-assignments-card'), {
       assignments: myAsg,
       pendingSupReqs: [],
       showAssignments: showKioskAssignments,
+      alwaysShowEmpty: isTechUser,
       showSupportReqs: false,
       kioskMode: true,
     });
+  }
+
+  async function fetchTechnicianAttendanceLogs(range = state.techLogsRange || 'recent') {
+    state.techLogsRange = range;
+    if (range === 'recent') {
+      state.techLogsReportRows = [];
+      state.techLogsWindowLabel = '';
+      state.techLogsLoading = false;
+      state.techLogsPage = 1;
+      renderTechnicianAttendanceLogs();
+      return;
+    }
+
+    state.techLogsLoading = true;
+    state.techLogsPage = 1;
+    renderTechnicianAttendanceLogs();
+
+    try {
+      const params = new URLSearchParams({ action: 'attendance_report', my_only: '1', range });
+      if (range === 'custom') {
+        if (state.techLogsDateFrom) params.set('date_from', state.techLogsDateFrom);
+        if (state.techLogsDateTo) params.set('date_to', state.techLogsDateTo);
+      }
+      const res = await fetch(`api.php?${params.toString()}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (res.ok && data && data.ok) {
+        state.techLogsReportRows = Array.isArray(data.rows) ? data.rows : [];
+        state.techLogsWindowLabel = data.window_label || '';
+      } else {
+        showToast((data && data.error) || 'Could not load personal attendance logs.');
+      }
+    } catch (_) {
+      showToast('Network error loading personal attendance logs.');
+    } finally {
+      state.techLogsLoading = false;
+      renderTechnicianAttendanceLogs();
+    }
+  }
+
+  function renderTechnicianAttendanceLogs() {
+    const card = document.getElementById('pane-kiosk-tech-logs-card');
+    if (!card) return;
+    if (!isCurrentUserTechnician() || !state.currentUser) {
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = 'flex';
+
+    const curUid = Number(state.currentUser.id || 0);
+    const useReportRows = state.techLogsRange && state.techLogsRange !== 'recent';
+    let baseRows = [];
+    if (useReportRows) {
+      baseRows = Array.isArray(state.techLogsReportRows) ? state.techLogsReportRows : [];
+    } else if (Array.isArray(state.myAttendanceLogs) && state.myAttendanceLogs.length > 0) {
+      baseRows = state.myAttendanceLogs;
+    } else {
+      baseRows = (state.activityTimeline || []).filter((r) => Number(r.user_id || 0) === curUid);
+    }
+
+    // Enforce user scoping on the client as well
+    const ownRows = baseRows.filter((r) => curUid <= 0 || Number(r.user_id || 0) === curUid);
+
+    const checkInRows = ownRows.filter((r) => String(r.access_status || 'granted').toLowerCase() !== 'denied' && String(r.scan_action || '').toLowerCase() === 'check_in');
+    const checkOutRows = ownRows.filter((r) => String(r.access_status || 'granted').toLowerCase() !== 'denied' && String(r.scan_action || '').toLowerCase() === 'check_out');
+    const totalMinutes = checkOutRows.reduce((sum, r) => sum + Math.max(0, Number(r.duration_minutes || 0)), 0);
+    const totalHoursLabel = totalMinutes > 0
+      ? (Math.floor(totalMinutes / 60) > 0
+        ? `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`
+        : `${totalMinutes}m`)
+      : '0h';
+
+    const latestRow = ownRows[0] || null;
+    let lastActivityLabel = '—';
+    if (latestRow) {
+      const lAct = String(latestRow.scan_action || '').toLowerCase();
+      const lTag = String(latestRow.access_status || '').toLowerCase() === 'denied'
+        ? 'Denied'
+        : (lAct === 'check_out' ? 'Out' : (lAct === 'access_verify' ? 'Verified' : 'In'));
+      const shortT = latestRow.scanned_time
+        ? String(latestRow.scanned_time).replace(/:\d{2}\s*(AM|PM)$/i, ' $1')
+        : (latestRow.formatted_time || '');
+      lastActivityLabel = shortT ? `${lTag} · ${shortT}` : lTag;
+    }
+
+    const meCrew = (state.crew || []).find((c) => Number(c.id) === curUid) || state.currentUser;
+    const dailySt = String(meCrew?.daily_state || 'ready').toLowerCase();
+    const shiftBadgeEl = document.getElementById('tech-logs-shift-state-badge');
+    if (shiftBadgeEl) {
+      if (dailySt === 'checked_in') {
+        shiftBadgeEl.className = 'status-badge status-badge-green-sm';
+        shiftBadgeEl.textContent = meCrew?.last_checkpoint_name
+          ? `Checked In · ${meCrew.last_checkpoint_name}`
+          : 'Checked In · On-Site';
+      } else if (dailySt === 'checked_out') {
+        shiftBadgeEl.className = 'status-badge status-badge-blue-sm';
+        shiftBadgeEl.textContent = 'Checked Out';
+      } else {
+        shiftBadgeEl.className = 'status-badge status-badge-neutral-sm';
+        shiftBadgeEl.textContent = 'Standby';
+      }
+    }
+
+    const totalBadgeEl = document.getElementById('tech-logs-total-badge');
+    if (totalBadgeEl) {
+      totalBadgeEl.textContent = `${ownRows.length} Log${ownRows.length === 1 ? '' : 's'}`;
+    }
+    const subtitleEl = document.getElementById('tech-logs-subtitle');
+    if (subtitleEl) {
+      const rangeNote = useReportRows && state.techLogsWindowLabel
+        ? ` · Showing ${state.techLogsWindowLabel}`
+        : '';
+      subtitleEl.textContent = `Your personal Check-In and Check-Out gate attendance history across event venues and facility gates${rangeNote}.`;
+    }
+
+    const kpiInEl = document.getElementById('tech-logs-kpi-in');
+    const kpiOutEl = document.getElementById('tech-logs-kpi-out');
+    const kpiHoursEl = document.getElementById('tech-logs-kpi-hours');
+    const kpiLastEl = document.getElementById('tech-logs-kpi-last');
+    if (kpiInEl) kpiInEl.textContent = String(checkInRows.length);
+    if (kpiOutEl) kpiOutEl.textContent = String(checkOutRows.length);
+    if (kpiHoursEl) kpiHoursEl.textContent = totalHoursLabel;
+    if (kpiLastEl) kpiLastEl.textContent = lastActivityLabel;
+
+    const tabAllEl = document.getElementById('tech-logs-tab-all');
+    const tabInEl = document.getElementById('tech-logs-tab-in');
+    const tabOutEl = document.getElementById('tech-logs-tab-out');
+    if (tabAllEl) tabAllEl.textContent = String(ownRows.length);
+    if (tabInEl) tabInEl.textContent = String(checkInRows.length);
+    if (tabOutEl) tabOutEl.textContent = String(checkOutRows.length);
+
+    document.querySelectorAll('.js-tech-log-tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-log-action') === state.techLogsActionFilter);
+    });
+
+    const q = String(state.techLogsSearch || '').trim().toLowerCase();
+    const actionFilter = state.techLogsActionFilter || 'all';
+    const filtered = ownRows.filter((r) => {
+      const act = String(r.scan_action || 'check_in').toLowerCase();
+      const access = String(r.access_status || 'granted').toLowerCase();
+      if (actionFilter === 'check_in' && (act !== 'check_in' || access === 'denied')) return false;
+      if (actionFilter === 'check_out' && (act !== 'check_out' || access === 'denied')) return false;
+      if (q) {
+        const hay = `${r.checkpoint_name || ''} ${r.action_title || ''} ${r.notes || ''} ${r.formatted_time || ''} ${r.scanned_date || ''} ${r.punctuality_status || ''} ${act} ${access}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const perPage = state.techLogsPerPage || 8;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+    if (state.techLogsPage > totalPages) state.techLogsPage = totalPages;
+    if (state.techLogsPage < 1) state.techLogsPage = 1;
+    const startIdx = (state.techLogsPage - 1) * perPage;
+    const pageRows = filtered.slice(startIdx, startIdx + perPage);
+
+    const listEl = document.getElementById('tech-logs-list');
+    if (listEl) {
+      if (state.techLogsLoading) {
+        listEl.innerHTML = `<div class="tech-logs-empty">Loading your Check-In &amp; Check-Out logs…</div>`;
+      } else if (pageRows.length === 0) {
+        const emptyHint = actionFilter === 'check_in'
+          ? 'No Check-In logs found for the selected filter.'
+          : (actionFilter === 'check_out'
+            ? 'No Check-Out logs found for the selected filter.'
+            : 'No Check-In or Check-Out logs recorded yet for this date range.');
+        listEl.innerHTML = `<div class="tech-logs-empty"><strong>No matching attendance logs</strong><span>${escapeHtml(emptyHint)}</span></div>`;
+      } else {
+        listEl.innerHTML = pageRows.map((item) => {
+          const isDenied = String(item.access_status || 'granted').toLowerCase() === 'denied';
+          const act = String(item.scan_action || 'check_in').toLowerCase();
+          const isOut = !isDenied && act === 'check_out';
+          const isVerify = !isDenied && act === 'access_verify';
+          const isStock = String(item.checkpoint_type || '') === 'stock_warehouse';
+          const cpName = item.checkpoint_name || (isStock ? 'Facility Gate' : 'Event Venue');
+          const fmtTime = item.formatted_time || `${item.scanned_date || ''} • ${item.scanned_time || ''}`.trim();
+          const punct = String(item.punctuality_status || '').toLowerCase();
+          const dirPill = isDenied
+            ? '<span class="tech-log-dir-pill is-denied">✕ Denied</span>'
+            : (isOut
+              ? '<span class="tech-log-dir-pill is-out">↗ Check-Out</span>'
+              : (isVerify
+                ? '<span class="tech-log-dir-pill is-verify">✓ Verified</span>'
+                : '<span class="tech-log-dir-pill is-in">↘ Check-In</span>'));
+
+          let punctPill = '';
+          if (!isDenied && act === 'check_in') {
+            if (punct === 'late') {
+              punctPill = '<span class="status-badge status-badge-amber-sm">Late</span>';
+            } else if (punct === 'grace') {
+              punctPill = '<span class="status-badge status-badge-amber-sm">Grace Window</span>';
+            } else {
+              punctPill = '<span class="status-badge status-badge-green-sm">On Time</span>';
+            }
+          }
+
+          const durationPill = (!isDenied && isOut && item.duration_label && item.duration_label !== '—')
+            ? `<span class="ts-mini-pill in" title="Paired shift duration${item.paired_in_time ? ` (In: ${escapeHtml(item.paired_in_time)})` : ''}">⏱ ${escapeHtml(item.duration_label)}</span>`
+            : '';
+          const pairedNote = (!isDenied && isOut && item.paired_in_time)
+            ? ` · Shift In: ${escapeHtml(item.paired_in_time)}`
+            : '';
+          const nightBadge = item.is_night_shift
+            ? '<span class="status-badge status-badge-purple-sm">Night Shift</span>'
+            : '';
+          const transitBadge = item.is_transit
+            ? '<span class="status-badge status-badge-purple-sm">Transit</span>'
+            : '';
+          const noteText = isDenied && item.denial_reason
+            ? item.denial_reason
+            : (item.notes || '');
+
+          return `
+            <div class="tech-log-row ${isDenied ? 'is-denied' : (isOut ? 'is-out' : 'is-in')}">
+              <div class="tech-log-row-left">
+                <div class="tech-log-row-top">
+                  ${dirPill}
+                  <strong class="tech-log-cp-name">${escapeHtml(cpName)}</strong>
+                  <span class="status-badge status-badge-neutral-sm">${isStock ? 'Facility Gate' : 'Event Venue'}</span>
+                </div>
+                <div class="tech-log-row-meta">
+                  <span>${escapeHtml(fmtTime)}${pairedNote}</span>
+                </div>
+                ${noteText ? `<div class="tech-log-row-note">${escapeHtml(noteText)}</div>` : ''}
+              </div>
+              <div class="tech-log-row-right">
+                ${punctPill}
+                ${durationPill}
+                ${nightBadge}
+                ${transitBadge}
+                <span class="status-badge ${isDenied ? 'status-badge-red-sm' : 'status-badge-green-sm'}">${isDenied ? 'Denied' : 'Granted'}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    const pageInfoEl = document.getElementById('tech-logs-page-info');
+    if (pageInfoEl) {
+      pageInfoEl.textContent = `Page ${state.techLogsPage} of ${totalPages} (${filtered.length} log${filtered.length === 1 ? '' : 's'})`;
+    }
+    const prevBtn = document.getElementById('tech-logs-prev-btn');
+    const nextBtn = document.getElementById('tech-logs-next-btn');
+    if (prevBtn) prevBtn.disabled = state.techLogsPage <= 1;
+    if (nextBtn) nextBtn.disabled = state.techLogsPage >= totalPages;
   }
 
   async function respondMyEventAssignment(eventId, decision, declineReason = '') {
@@ -17499,9 +18170,17 @@
         const sEl = document.getElementById('directory-search-suggest');
         if (sEl) sEl.style.display = 'none';
       }
-      // Quick '/' key to focus barcode scanner anytime
+      // Quick '/' key to focus barcode scanner (or personal log search for technicians)
       if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement || {}).tagName)) {
         e.preventDefault();
+        if (isCurrentUserTechnician() && state.activeScreen === 'terminals') {
+          const techSearch = document.getElementById('tech-logs-search-input');
+          if (techSearch) {
+            techSearch.focus();
+            techSearch.select();
+          }
+          return;
+        }
         if (state.terminalScreenLocked) {
           const pinInp = document.getElementById('terminal-unlock-pin-input');
           if (pinInp) {
@@ -22608,6 +23287,99 @@
     const applyRangeBtn = document.getElementById('timeline-apply-range-btn');
     const exportCsvBtn = document.getElementById('timeline-export-csv-btn');
     const printBtn = document.getElementById('timeline-print-btn');
+
+    // Technician Personal Check-In & Check-Out Logs Controls (#pane-kiosk-tech-logs-card)
+    document.querySelectorAll('.js-tech-log-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.techLogsActionFilter = btn.getAttribute('data-log-action') || 'all';
+        state.techLogsPage = 1;
+        renderTechnicianAttendanceLogs();
+      });
+    });
+    const techLogsSearchInp = document.getElementById('tech-logs-search-input');
+    if (techLogsSearchInp) {
+      techLogsSearchInp.addEventListener('input', (e) => {
+        state.techLogsSearch = e.target.value || '';
+        state.techLogsPage = 1;
+        renderTechnicianAttendanceLogs();
+      });
+    }
+    const techLogsRangeSel = document.getElementById('tech-logs-range-select');
+    const techLogsCustomDates = document.getElementById('tech-logs-custom-dates');
+    const techLogsDateFrom = document.getElementById('tech-logs-date-from');
+    const techLogsDateTo = document.getElementById('tech-logs-date-to');
+    const techLogsApplyRangeBtn = document.getElementById('tech-logs-apply-range-btn');
+    if (techLogsRangeSel) {
+      techLogsRangeSel.addEventListener('change', (e) => {
+        const val = e.target.value || 'recent';
+        if (techLogsCustomDates) {
+          techLogsCustomDates.style.display = val === 'custom' ? 'flex' : 'none';
+        }
+        if (val === 'custom') {
+          const todayIso = new Date().toISOString().slice(0, 10);
+          if (techLogsDateFrom && !techLogsDateFrom.value) techLogsDateFrom.value = todayIso;
+          if (techLogsDateTo && !techLogsDateTo.value) techLogsDateTo.value = todayIso;
+          state.techLogsDateFrom = techLogsDateFrom?.value || todayIso;
+          state.techLogsDateTo = techLogsDateTo?.value || todayIso;
+          fetchTechnicianAttendanceLogs('custom');
+        } else {
+          fetchTechnicianAttendanceLogs(val);
+        }
+      });
+    }
+    if (techLogsApplyRangeBtn) {
+      techLogsApplyRangeBtn.addEventListener('click', () => {
+        state.techLogsDateFrom = techLogsDateFrom?.value || '';
+        state.techLogsDateTo = techLogsDateTo?.value || '';
+        fetchTechnicianAttendanceLogs('custom');
+      });
+    }
+    const techLogsRefreshBtn = document.getElementById('tech-logs-refresh-btn');
+    if (techLogsRefreshBtn) {
+      techLogsRefreshBtn.addEventListener('click', async () => {
+        if (state.techLogsRange && state.techLogsRange !== 'recent') {
+          await fetchTechnicianAttendanceLogs(state.techLogsRange);
+        } else {
+          await fetchBootstrap(true, { force: true });
+        }
+        showToast('Attendance logs refreshed.');
+      });
+    }
+    const techLogsPrevBtn = document.getElementById('tech-logs-prev-btn');
+    if (techLogsPrevBtn) {
+      techLogsPrevBtn.addEventListener('click', () => {
+        if (state.techLogsPage > 1) {
+          state.techLogsPage -= 1;
+          renderTechnicianAttendanceLogs();
+        }
+      });
+    }
+    const techLogsNextBtn = document.getElementById('tech-logs-next-btn');
+    if (techLogsNextBtn) {
+      techLogsNextBtn.addEventListener('click', () => {
+        state.techLogsPage += 1;
+        renderTechnicianAttendanceLogs();
+      });
+    }
+
+    // Technician Digital Crew Pass QR Modal bindings
+    const passModal = document.getElementById('tech-pass-qr-modal');
+    document.getElementById('close-tech-pass-qr-modal')?.addEventListener('click', closeTechnicianPassQrModal);
+    document.getElementById('tech-pass-modal-done-btn')?.addEventListener('click', closeTechnicianPassQrModal);
+    document.getElementById('tech-pass-modal-rotate-btn')?.addEventListener('click', () => {
+      fetchLiveDynamicPassQr(true);
+      showToast('Pass QR rotated.');
+    });
+    if (passModal) {
+      passModal.addEventListener('click', (e) => {
+        if (e.target === passModal) closeTechnicianPassQrModal();
+      });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && passModal && passModal.classList.contains('open')) {
+        closeTechnicianPassQrModal();
+      }
+    });
 
     if (camToggleBtn) {
       camToggleBtn.addEventListener('click', () => {

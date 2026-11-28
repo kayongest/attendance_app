@@ -26,7 +26,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Marvel:ital,wght@0,400;0,700;1,400;1,700&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/driver/driver.css" />
-  <link rel="stylesheet" href="styles.css?v=20261124_v38" />
+  <link rel="stylesheet" href="styles.css?v=20261128_v41" />
 </head>
 
 <body>
@@ -1713,13 +1713,13 @@
         <div class="overview-top-block">
           <div class="page-intro">
             <div class="page-intro-heading">
-              <h1 class="page-title">Terminals</h1>
-              <p class="page-subtitle">
+              <h1 class="page-title" id="terminals-page-title">Terminals</h1>
+              <p class="page-subtitle" id="terminals-page-subtitle">
                 Live Gate Terminal Barcode &amp; Badge Scanner (#pane-kiosk), active shift call-time controls, and
                 checkpoint verification.
               </p>
             </div>
-            <div class="page-actions">
+            <div class="page-actions" id="terminals-page-actions">
               <button type="button" class="btn btn-secondary-38" data-action="go-attendees">
                 <img src="assets/nav-attendees-inactive.svg" alt="" class="svg-icon" />
                 <span>View ID Badges &amp; Crew Roster</span>
@@ -1745,7 +1745,7 @@
           </div>
 
           <!-- Checkpoint & Scan Mode Selector Bar -->
-          <div class="checkpoint-controls-bar">
+          <div class="checkpoint-controls-bar" id="terminals-checkpoint-controls-bar">
             <div class="checkpoint-left-group">
               <div class="cp-type-toggle" role="group" aria-label="Checkpoint Type">
                 <button type="button" class="cp-type-btn js-cp-type-btn active-stock" data-cp-type="stock_warehouse">
@@ -1778,9 +1778,12 @@
           </div>
         </div>
 
+        <!-- Random Roll-Call Alert Banner for Logged-In Technician (#pane-kiosk-rollcall-alert-card) -->
+        <section class="as-banner-card" id="pane-kiosk-rollcall-alert-card" style="display: none; margin-bottom: 14px;"></section>
+
         <!-- Dedicated On-Page Gate Scanner Hero Deck (#pane-kiosk) -->
         <section class="kiosk-scanner-hero-card" id="pane-kiosk">
-          <div class="kiosk-scanner-hero-header">
+          <div class="kiosk-scanner-hero-header" id="kiosk-scanner-hero-header">
             <div class="kiosk-scanner-hero-title">
               <span class="station-live-dot" id="terminal-hero-live-dot"></span>
               <h3>Gate Terminal Barcode &amp; Badge Scanner</h3>
@@ -1979,6 +1982,96 @@
                 <div class="terminal-unlock-error" id="terminal-unlock-error" style="display: none;"></div>
               </form>
             </div>
+          </div>
+        </section>
+
+        <!-- Technician Personal Check-In & Check-Out Logs (#pane-kiosk-tech-logs-card) -->
+        <section class="directory-card tech-attendance-logs-card" id="pane-kiosk-tech-logs-card" style="display: none;">
+          <div class="tech-logs-header">
+            <div class="tech-logs-heading">
+              <div class="directory-title-row">
+                <h2 class="directory-title-18" style="margin: 0;">My Check-In &amp; Check-Out Logs</h2>
+                <span class="status-badge status-badge-purple-sm" id="tech-logs-total-badge">0 Logs</span>
+                <span class="status-badge status-badge-neutral-sm" id="tech-logs-shift-state-badge">Standby</span>
+              </div>
+              <p class="directory-desc" id="tech-logs-subtitle" style="margin: 3px 0 0;">
+                Your personal Check-In and Check-Out gate attendance history across event venues and facility gates.
+              </p>
+            </div>
+            <div class="tech-logs-header-actions">
+              <button type="button" class="btn btn-secondary-32-sm" id="tech-logs-refresh-btn"
+                title="Refresh my Check-In &amp; Check-Out logs">
+                <img src="assets/refresh-cw.svg" alt="" class="svg-icon" />
+                <span>Refresh</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tech-logs-kpi-strip" id="tech-logs-kpi-strip">
+            <div class="tech-logs-kpi-pill">
+              <span class="tech-logs-kpi-label">Check-Ins</span>
+              <strong class="tech-logs-kpi-value is-in" id="tech-logs-kpi-in">0</strong>
+            </div>
+            <div class="tech-logs-kpi-pill">
+              <span class="tech-logs-kpi-label">Check-Outs</span>
+              <strong class="tech-logs-kpi-value is-out" id="tech-logs-kpi-out">0</strong>
+            </div>
+            <div class="tech-logs-kpi-pill">
+              <span class="tech-logs-kpi-label">Hours Logged</span>
+              <strong class="tech-logs-kpi-value is-hours" id="tech-logs-kpi-hours">0h</strong>
+            </div>
+            <div class="tech-logs-kpi-pill">
+              <span class="tech-logs-kpi-label">Last Activity</span>
+              <strong class="tech-logs-kpi-value is-meta" id="tech-logs-kpi-last">—</strong>
+            </div>
+          </div>
+
+          <div class="status-tabs tech-logs-tabs" id="tech-logs-action-tabs">
+            <button type="button" class="status-tab active js-tech-log-tab" data-log-action="all">
+              <span class="status-tab-label">All Logs</span>
+              <span class="status-tab-count" id="tech-logs-tab-all">0</span>
+            </button>
+            <button type="button" class="status-tab js-tech-log-tab" data-log-action="check_in">
+              <span class="status-tab-label">Check-In</span>
+              <span class="status-tab-count" id="tech-logs-tab-in">0</span>
+            </button>
+            <button type="button" class="status-tab js-tech-log-tab" data-log-action="check_out">
+              <span class="status-tab-label">Check-Out</span>
+              <span class="status-tab-count" id="tech-logs-tab-out">0</span>
+            </button>
+          </div>
+
+          <div class="tech-logs-filter-bar">
+            <label class="table-search-box tech-logs-search-box" for="tech-logs-search-input">
+              <img src="assets/search-table.svg" alt="" class="svg-icon" />
+              <input type="text" id="tech-logs-search-input" class="table-search-input"
+                placeholder="Search by venue, facility gate, or notes..." autocomplete="off" />
+            </label>
+            <select id="tech-logs-range-select" class="timeline-scope-select tech-logs-range-select"
+              aria-label="Filter logs by date range">
+              <option value="recent">All Recent Logs</option>
+              <option value="today">Today</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="all">All Time History</option>
+              <option value="custom">Custom Date Range…</option>
+            </select>
+          </div>
+
+          <div class="shift-report-custom-dates tech-logs-custom-dates" id="tech-logs-custom-dates" style="display: none;">
+            <input type="date" id="tech-logs-date-from" class="timeline-date-input" aria-label="From date" />
+            <span style="font-size: 11px; color: var(--text-muted);">to</span>
+            <input type="date" id="tech-logs-date-to" class="timeline-date-input" aria-label="To date" />
+            <button type="button" class="btn btn-primary-32" id="tech-logs-apply-range-btn"
+              style="height: 28px; padding: 0 12px; font-size: 11px;">Apply</button>
+          </div>
+
+          <div class="tech-logs-list" id="tech-logs-list"></div>
+
+          <div class="timeline-pagination-bar tech-logs-pagination">
+            <button type="button" class="btn btn-secondary-32-sm" id="tech-logs-prev-btn">← Prev</button>
+            <span class="timeline-page-info" id="tech-logs-page-info">Page 1 of 1 (0 logs)</span>
+            <button type="button" class="btn btn-secondary-32-sm" id="tech-logs-next-btn">Next →</button>
           </div>
         </section>
       </main>
@@ -7324,6 +7417,38 @@
     </div>
   </div>
 
+  <!-- Technician Digital Crew Pass QR Modal (30s Anti-Shadowing Rotating QR) -->
+  <div class="modal-backdrop" id="tech-pass-qr-modal" aria-hidden="true">
+    <div class="modal-card tech-pass-modal-card" role="dialog" aria-modal="true"
+      aria-labelledby="tech-pass-modal-title">
+      <div class="tech-pass-modal-header">
+        <div>
+          <span class="crew-pass-kicker">MY DIGITAL CREW PASS · 30S DYNAMIC QR</span>
+          <h3 class="modal-title" id="tech-pass-modal-title" style="margin: 2px 0 0;">Gate Check-In / Check-Out Pass</h3>
+        </div>
+        <button type="button" class="btn btn-secondary-32-sm" id="close-tech-pass-qr-modal" aria-label="Close Pass QR">✕</button>
+      </div>
+
+      <div class="tech-pass-modal-event-bar" id="tech-pass-modal-event-bar" style="display: none;"></div>
+
+      <div class="tech-pass-modal-qr-stage">
+        <div class="tech-pass-modal-qr-box" id="tech-pass-modal-qr-box"></div>
+        <div class="tech-pass-modal-timer" id="tech-pass-modal-rotate-label">Anti-Shadowing QR · Rotates every 30s</div>
+        <div class="tech-pass-modal-codes">
+          <span class="crew-pass-badge-code" id="tech-pass-modal-badge-code">REW-BADGE-0000</span>
+          <span class="crew-pass-rfid" id="tech-pass-modal-live-code">Loading live token…</span>
+        </div>
+      </div>
+
+      <div class="tech-pass-modal-identity" id="tech-pass-modal-identity"></div>
+
+      <div class="modal-actions" style="margin-top: 14px; justify-content: space-between;">
+        <button type="button" class="btn btn-secondary-32-sm" id="tech-pass-modal-rotate-btn">↻ Rotate QR Now</button>
+        <button type="button" class="btn btn-primary-32" id="tech-pass-modal-done-btn">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Reusable App Confirm Modal (Replaces native browser confirm/prompt) -->
   <div class="modal-backdrop" id="app-confirm-modal" aria-hidden="true">
     <div class="modal-card" style="width: 420px; max-width: 94vw;" role="dialog" aria-modal="true"
@@ -7365,7 +7490,7 @@
 
   <script src="assets/vendor/driver/driver.js.iife.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
-  <script src="app.js?v=20261124_v38"></script>
+  <script src="app.js?v=20261128_v41"></script>
 </body>
 
 </html>

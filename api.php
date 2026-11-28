@@ -3635,6 +3635,115 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
 
     $authUserId = (int) ($_SESSION['auth_user_id'] ?? 0);
     $currentUser = ($authUserId > 0 && isset($crewById[$authUserId])) ? $crewById[$authUserId] : null;
+
+    // 9b. Load personal Check-In & Check-Out attendance logs for the logged-in user
+    $myAttendanceLogs = [];
+    if ($authUserId > 0) {
+        try {
+            $myLogStmt = $pdo->prepare("
+                SELECT *
+                FROM (
+                    SELECT
+                        al.`id`, al.`user_id`, al.`badge_code`, al.`checkpoint_type`, al.`checkpoint_id`,
+                        al.`checkpoint_name`, al.`scan_action`, al.`access_status`, al.`denial_reason`,
+                        al.`punctuality_status`, al.`notes`, al.`scanned_at`
+                    FROM `attendance_logs` al
+                    WHERE al.`user_id` = ?
+                    ORDER BY al.`scanned_at` DESC, al.`id` DESC
+                    LIMIT 150
+                ) recent_my_logs
+                ORDER BY `scanned_at` ASC, `id` ASC
+            ");
+            $myLogStmt->execute([$authUserId]);
+            $myRawLogs = $myLogStmt->fetchAll(PDO::FETCH_ASSOC);
+            $myOpenCheckins = [];
+            $myMember = $crewById[$authUserId] ?? null;
+            foreach ($myRawLogs as $r) {
+                $actionType = strtolower((string) ($r['scan_action'] ?? 'check_in'));
+                $accessSt = strtolower((string) ($r['access_status'] ?? 'granted'));
+                $punctSt = strtolower((string) ($r['punctuality_status'] ?? 'on_time'));
+                $cpTypeRow = (string) ($r['checkpoint_type'] ?? 'event_venue');
+                $cpIdRow = (int) ($r['checkpoint_id'] ?? 1);
+                $cpNameRow = (string) ($r['checkpoint_name'] ?: ($cpTypeRow === 'stock_warehouse' ? 'Ndera Warehouse' : 'Event Venue'));
+                $notesRow = (string) ($r['notes'] ?? '');
+                $scanTs = strtotime((string) $r['scanned_at']) ?: time();
+                $scanHour = (int) date('G', $scanTs);
+                $isTransitRow = (stripos($notesRow, 'Transit departure') !== false || stripos($notesRow, 'Transferred') !== false || stripos($notesRow, 'Arrived on site from') !== false);
+                $durationMinutes = null;
+                $durationLabel = '—';
+                $pairedInTime = null;
+                $isOvernightLog = ($scanHour >= 18 || $scanHour < 8);
+
+                if ($accessSt !== 'denied' && $actionType === 'check_in') {
+                    $inRec = [
+                        'ts' => $scanTs,
+                        'hour' => $scanHour,
+                        'date' => date('Y-m-d', $scanTs),
+                        'short' => date('h:i A', $scanTs),
+                    ];
+                    $myOpenCheckins[$cpTypeRow . ':' . $cpIdRow] = $inRec;
+                    $myOpenCheckins['_last'] = $inRec;
+                } elseif ($accessSt !== 'denied' && $actionType === 'check_out') {
+                    $cpKeyMatch = $cpTypeRow . ':' . $cpIdRow;
+                    $inInfo = $myOpenCheckins[$cpKeyMatch] ?? ($myOpenCheckins['_last'] ?? null);
+                    if ($inInfo && $scanTs >= $inInfo['ts']) {
+                        $mins = max(1, (int) round(($scanTs - $inInfo['ts']) / 60));
+                        $durationMinutes = $mins;
+                        $hrs = intdiv($mins, 60);
+                        $rem = $mins % 60;
+                        $durationLabel = $hrs > 0 ? "{$hrs}h {$rem}m" : "{$rem}m";
+                        $pairedInTime = $inInfo['short'];
+                        if ($inInfo['hour'] >= 18 || $inInfo['hour'] < 6 || $inInfo['date'] !== date('Y-m-d', $scanTs)) {
+                            $isOvernightLog = true;
+                        }
+                        unset($myOpenCheckins[$cpKeyMatch], $myOpenCheckins['_last']);
+                    }
+                }
+
+                if ($accessSt === 'denied') {
+                    $actionTitleRow = 'Access Denied at ' . ($cpTypeRow === 'stock_warehouse' ? 'Facility Gate — ' : 'Venue — ') . $cpNameRow;
+                } elseif ($actionType === 'check_out') {
+                    $actionTitleRow = (stripos($notesRow, 'Transit departure') !== false)
+                        ? ('Transit Departure from ' . $cpNameRow)
+                        : (($cpTypeRow === 'stock_warehouse' ? 'Checked Out from Facility Gate — ' : 'Checked Out from Venue — ') . $cpNameRow);
+                } elseif ($actionType === 'access_verify') {
+                    $actionTitleRow = 'Verified Clearance at ' . $cpNameRow;
+                } else {
+                    $actionTitleRow = (stripos($notesRow, 'Arrived on site from') !== false)
+                        ? ('Arrived at Venue — ' . $cpNameRow . ' (Transferred from Stock)')
+                        : (($cpTypeRow === 'stock_warehouse' ? 'Checked In at Facility Gate — ' : 'Checked In at Venue — ') . $cpNameRow);
+                }
+
+                $myAttendanceLogs[] = [
+                    'id' => (int) $r['id'],
+                    'user_id' => $authUserId,
+                    'full_name' => $myMember ? $myMember['full_name'] : ('Staff #' . $authUserId),
+                    'role' => $myMember ? $myMember['role_display'] : 'Technician',
+                    'department' => $myMember ? $myMember['department'] : 'Operations',
+                    'badge_code' => $myMember ? $myMember['badge_code'] : formatRewBadgeCode($authUserId, $r['badge_code'] ?? null),
+                    'checkpoint_type' => $cpTypeRow,
+                    'checkpoint_id' => $cpIdRow,
+                    'checkpoint_name' => $cpNameRow,
+                    'scan_action' => $actionType,
+                    'access_status' => $accessSt,
+                    'denial_reason' => (string) ($r['denial_reason'] ?? ''),
+                    'punctuality_status' => $punctSt,
+                    'notes' => $notesRow,
+                    'is_transit' => $isTransitRow,
+                    'action_title' => $actionTitleRow,
+                    'scanned_at' => (string) $r['scanned_at'],
+                    'scanned_date' => date('Y-m-d', $scanTs),
+                    'scanned_time' => date('h:i:s A', $scanTs),
+                    'formatted_time' => date('M j, Y • h:i:s A', $scanTs),
+                    'paired_in_time' => $pairedInTime,
+                    'duration_minutes' => $durationMinutes,
+                    'duration_label' => $durationLabel,
+                    'is_night_shift' => $isOvernightLog,
+                ];
+            }
+            $myAttendanceLogs = array_reverse($myAttendanceLogs);
+        } catch (Throwable $e) {}
+    }
     if ($currentUser) {
         $cRole = strtolower(trim((string)($currentUser['role'] ?? 'user')));
         $cClearance = strtoupper(trim((string)($currentUser['clearance_code'] ?? 'L1')));
@@ -3891,9 +4000,11 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
             if ($authUserId > 0 && $uId === $authUserId) {
                 $evMeta = $evByAnyId[$eId] ?? null;
                 $myPendingAssignments[] = array_merge($rec, [
+                    'event_numeric_id' => $evMeta ? (int) ($evMeta['id'] ?? 0) : 0,
                     'event_title' => $evMeta ? $evMeta['title'] : ('Event #' . $eId),
                     'event_location' => $evMeta ? $evMeta['location'] : '',
-                    'event_date' => $evMeta ? $evMeta['date'] : '',
+                    'event_date' => $evMeta ? ($evMeta['start_date'] ?? $evMeta['date'] ?? '') : '',
+                    'event_end_date' => $evMeta ? ($evMeta['end_date'] ?? $evMeta['date'] ?? '') : '',
                     'call_time' => $evMeta ? $evMeta['call_time'] : '08:00',
                     'tech_lead' => $evMeta ? $evMeta['tech_lead'] : '',
                     'project_manager' => $evMeta ? $evMeta['project_manager'] : '',
@@ -4033,6 +4144,7 @@ function buildFullPayload(PDO $pdo, string $activeDb, string $reqCheckpointType 
         'crew' => $crew,
         'hourlyTraffic' => array_values($hourlyBuckets),
         'activityTimeline' => $activityTimeline,
+        'myAttendanceLogs' => $myAttendanceLogs,
         'shiftRequests' => $shiftRequests,
         'pendingShiftRequestCount' => $pendingShiftRequestCount,
         'defaultVerification' => $defaultVerification,
@@ -8990,15 +9102,28 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $dateToIn = trim((string) ($_GET['date_to'] ?? $_POST['date_to'] ?? $jsonBody['date_to'] ?? ''));
         $filterCpType = trim((string) ($_GET['checkpoint_type'] ?? $_POST['checkpoint_type'] ?? $jsonBody['checkpoint_type'] ?? 'all'));
         $filterCpIdRaw = trim((string) ($_GET['checkpoint_id'] ?? $_POST['checkpoint_id'] ?? $jsonBody['checkpoint_id'] ?? ''));
+        $myOnlyParam = strtolower(trim((string) ($_GET['my_only'] ?? $_POST['my_only'] ?? $jsonBody['my_only'] ?? '0')));
 
         $caller = getCallerUser($pdo);
         $callerRole = strtolower(trim((string) ($caller['role'] ?? '')));
         $lookup = loadCheckpointsLookup($pdo);
 
+        $isSupervisorOrGate = in_array($callerRole, [
+            'admin', 'manager', 'administrator', 'project_manager', 'event_coordinator',
+            'tech_lead', 'technical_lead', 'stock_manager', 'stock_controller',
+        ], true);
+        $wantsMyOnly = ($myOnlyParam === '1' || $myOnlyParam === 'true');
+        if ($wantsMyOnly && !$caller) {
+            http_response_code(401);
+            echo json_encode(['ok' => false, 'error' => 'Sign in required to view personal attendance logs.']);
+            exit;
+        }
+        $scopedUserId = ($caller && (!$isSupervisorOrGate || $wantsMyOnly)) ? (int) ($caller['id'] ?? 0) : 0;
+
         $scopedCpType = ($filterCpType !== '' && $filterCpType !== 'all') ? $filterCpType : 'all';
         $scopedCpId = ($filterCpIdRaw !== '' && $filterCpIdRaw !== '0' && $filterCpIdRaw !== 'all') ? (int) $filterCpIdRaw : 0;
 
-        if ($callerRole === 'stock_controller') {
+        if ($callerRole === 'stock_controller' && $scopedUserId === 0) {
             $assignedType = trim((string) ($caller['assigned_checkpoint_type'] ?? ''));
             $assignedId = trim((string) ($caller['assigned_checkpoint_id'] ?? ''));
             if ($assignedType === '' || $assignedId === '') {
@@ -9028,8 +9153,16 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
         $todayStr = date('Y-m-d');
         $nowHour = (int) date('G');
         $isNightFilter = false;
+        $applyDateBounds = true;
+        $fromDt = '';
+        $toDt = '';
 
-        if ($range === 'night_shift') {
+        if ($range === 'all' || $range === 'recent') {
+            $applyDateBounds = false;
+            $startDate = '';
+            $endDate = $todayStr;
+            $windowLabel = 'All Attendance History';
+        } elseif ($range === 'night_shift') {
             $isNightFilter = true;
             if ($dateFromIn !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFromIn)) {
                 $startDate = $dateFromIn;
@@ -9044,6 +9177,12 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $fromDt = $startDate . ' 18:00:00';
             $toDt = $endDate . ' 09:00:00';
             $windowLabel = 'Night Shift (' . date('M j', strtotime($startDate)) . ' 18:00 → ' . date('M j', strtotime($endDate)) . ' 09:00)';
+        } elseif ($range === '30d') {
+            $startDate = date('Y-m-d', strtotime('-29 days'));
+            $endDate = $todayStr;
+            $fromDt = $startDate . ' 00:00:00';
+            $toDt = $endDate . ' 23:59:59';
+            $windowLabel = 'Last 30 Days (' . date('M j', strtotime($startDate)) . ' – ' . date('M j, Y', strtotime($endDate)) . ')';
         } elseif ($range === '7d') {
             $startDate = date('Y-m-d', strtotime('-6 days'));
             $endDate = $todayStr;
@@ -9067,8 +9206,18 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $windowLabel = 'Today (' . date('M j, Y') . ')';
         }
 
-        $where = ["al.`scanned_at` >= ?", "al.`scanned_at` <= ?"];
-        $params = [$fromDt, $toDt];
+        $where = [];
+        $params = [];
+        if ($applyDateBounds) {
+            $where[] = "al.`scanned_at` >= ?";
+            $where[] = "al.`scanned_at` <= ?";
+            $params[] = $fromDt;
+            $params[] = $toDt;
+        }
+        if ($scopedUserId > 0) {
+            $where[] = "al.`user_id` = ?";
+            $params[] = $scopedUserId;
+        }
         if ($scopedCpType !== 'all') {
             $where[] = "al.`checkpoint_type` = ?";
             $params[] = $scopedCpType;
@@ -9077,30 +9226,35 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
             $where[] = "al.`checkpoint_id` = ?";
             $params[] = $scopedCpId;
         }
+        $whereSql = count($where) > 0 ? ('WHERE ' . implode(' AND ', $where)) : '';
 
         $rptSql = "
-            SELECT
-                al.`id`,
-                al.`user_id`,
-                al.`badge_code`,
-                al.`checkpoint_type`,
-                al.`checkpoint_id`,
-                al.`checkpoint_name`,
-                al.`scan_action`,
-                al.`access_status`,
-                al.`denial_reason`,
-                al.`punctuality_status`,
-                al.`notes`,
-                al.`scanned_at`,
-                u.`full_name`,
-                u.`username`,
-                u.`role`,
-                u.`department`
-            FROM `attendance_logs` al
-            LEFT JOIN `users` u ON u.`id` = al.`user_id`
-            WHERE " . implode(' AND ', $where) . "
-            ORDER BY al.`scanned_at` ASC, al.`id` ASC
-            LIMIT 1000
+            SELECT *
+            FROM (
+                SELECT
+                    al.`id`,
+                    al.`user_id`,
+                    al.`badge_code`,
+                    al.`checkpoint_type`,
+                    al.`checkpoint_id`,
+                    al.`checkpoint_name`,
+                    al.`scan_action`,
+                    al.`access_status`,
+                    al.`denial_reason`,
+                    al.`punctuality_status`,
+                    al.`notes`,
+                    al.`scanned_at`,
+                    u.`full_name`,
+                    u.`username`,
+                    u.`role`,
+                    u.`department`
+                FROM `attendance_logs` al
+                LEFT JOIN `users` u ON u.`id` = al.`user_id`
+                {$whereSql}
+                ORDER BY al.`scanned_at` DESC, al.`id` DESC
+                LIMIT 1000
+            ) rpt_recent
+            ORDER BY `scanned_at` ASC, `id` ASC
         ";
         $rptStmt = $pdo->prepare($rptSql);
         $rptStmt->execute($params);
@@ -9118,14 +9272,18 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
 
         foreach ($rawLogs as $r) {
             $uid = (int) ($r['user_id'] ?? 0);
-            $actionType = (string) ($r['scan_action'] ?? 'check_in');
-            $accessSt = (string) ($r['access_status'] ?? 'granted');
+            $actionType = strtolower((string) ($r['scan_action'] ?? 'check_in'));
+            $accessSt = strtolower((string) ($r['access_status'] ?? 'granted'));
             $punctSt = strtolower((string) ($r['punctuality_status'] ?? 'on_time'));
+            $cpTypeRow = (string) ($r['checkpoint_type'] ?? 'event_venue');
             $scanTs = strtotime((string) $r['scanned_at']) ?: time();
             $scanHour = (int) date('G', $scanTs);
             $cpNameRow = (string) ($r['checkpoint_name'] ?? 'Gate Checkpoint');
+            $notesRow = (string) ($r['notes'] ?? '');
+            $isTransitRow = (stripos($notesRow, 'Transit departure') !== false || stripos($notesRow, 'Transferred') !== false || stripos($notesRow, 'Arrived on site from') !== false);
             $durationMinutes = null;
             $durationLabel = '—';
+            $pairedInTime = null;
             $isOvernightLog = ($scanHour >= 18 || $scanHour < 8);
 
             if ($uid > 0) {
@@ -9143,6 +9301,7 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     'ts' => $scanTs,
                     'hour' => $scanHour,
                     'date' => date('Y-m-d', $scanTs),
+                    'short' => date('h:i A', $scanTs),
                     'checkpoint' => $cpNameRow,
                 ];
             } elseif ($actionType === 'check_out') {
@@ -9154,12 +9313,27 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                     $hrs = intdiv($mins, 60);
                     $rem = $mins % 60;
                     $durationLabel = $hrs > 0 ? "{$hrs}h {$rem}m" : "{$rem}m";
+                    $pairedInTime = $inInfo['short'];
                     $totalClosedMinutes += $mins;
                     if ($inInfo['hour'] >= 18 || $inInfo['hour'] < 6 || $inInfo['date'] !== date('Y-m-d', $scanTs)) {
                         $isOvernightLog = true;
                     }
                     unset($openCheckins[$uid]);
                 }
+            }
+
+            if ($accessSt === 'denied') {
+                $actionTitleRow = 'Access Denied at ' . ($cpTypeRow === 'stock_warehouse' ? 'Facility Gate — ' : 'Venue — ') . $cpNameRow;
+            } elseif ($actionType === 'check_out') {
+                $actionTitleRow = (stripos($notesRow, 'Transit departure') !== false)
+                    ? ('Transit Departure from ' . $cpNameRow)
+                    : (($cpTypeRow === 'stock_warehouse' ? 'Checked Out from Facility Gate — ' : 'Checked Out from Venue — ') . $cpNameRow);
+            } elseif ($actionType === 'access_verify') {
+                $actionTitleRow = 'Verified Clearance at ' . $cpNameRow;
+            } else {
+                $actionTitleRow = (stripos($notesRow, 'Arrived on site from') !== false)
+                    ? ('Arrived at Venue — ' . $cpNameRow . ' (Transferred from Stock)')
+                    : (($cpTypeRow === 'stock_warehouse' ? 'Checked In at Facility Gate — ' : 'Checked In at Venue — ') . $cpNameRow);
             }
 
             $enrichedRows[] = [
@@ -9169,17 +9343,21 @@ function resolveCheckpointByName(PDO $pdo, string $rawName): ?array
                 'role' => formatRoleDisplay((string) ($r['role'] ?? 'technician')),
                 'department' => (string) ($r['department'] ?? 'Operations'),
                 'badge_code' => formatRewBadgeCode($uid, $r['badge_code'] ?? null),
-                'checkpoint_type' => (string) ($r['checkpoint_type'] ?? 'event_venue'),
+                'checkpoint_type' => $cpTypeRow,
                 'checkpoint_id' => (int) ($r['checkpoint_id'] ?? 1),
                 'checkpoint_name' => $cpNameRow,
                 'scan_action' => $actionType,
                 'access_status' => $accessSt,
                 'denial_reason' => $r['denial_reason'] ?? null,
                 'punctuality_status' => $punctSt,
-                'notes' => (string) ($r['notes'] ?? ''),
+                'notes' => $notesRow,
+                'is_transit' => $isTransitRow,
+                'action_title' => $actionTitleRow,
                 'scanned_at' => (string) $r['scanned_at'],
                 'scanned_date' => date('Y-m-d', $scanTs),
                 'scanned_time' => date('h:i:s A', $scanTs),
+                'formatted_time' => date('M j, Y • h:i:s A', $scanTs),
+                'paired_in_time' => $pairedInTime,
                 'duration_minutes' => $durationMinutes,
                 'duration_label' => $durationLabel,
                 'is_night_shift' => $isOvernightLog,
